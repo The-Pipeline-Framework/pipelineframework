@@ -77,12 +77,24 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             // Extract pipeline step models based on explicit YAML step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
             stepModels = addProviderBoundaryModels(ctx, stepDefinitions, stepModels, ctxWarningLogger);
+            // Root contract validation remains scoped to root models. Local definition models are
+            // generated below, but their semantic flow is owned by each definition's v3 branch plan.
+            new PipelineStepContractValidator().validate(ctx, stepModels);
+            Map<String, List<PipelineStepModel>> localDefinitionModels = new LinkedHashMap<>();
+            for (var entry : ctx.getParsedPipelineDefinitionCatalog().localDefinitions().entrySet()) {
+                List<org.pipelineframework.processor.ir.StepDefinition> directSteps = entry.getValue().stream()
+                    .filter(step -> step.kind() != StepKind.PIPELINE)
+                    .toList();
+                List<PipelineStepModel> models = extractStepModelsFromYaml(ctx, directSteps, ctxWarningLogger);
+                localDefinitionModels.put(entry.getKey(), List.copyOf(models));
+                stepModels.addAll(models);
+            }
+            ctx.setLocalDefinitionStepModels(Map.copyOf(localDefinitionModels));
             // Some template-driven YAMLs declare logical steps without resolvable execution classes
             // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
             if (stepModels.isEmpty()) {
                 stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
             }
-            new PipelineStepContractValidator().validate(ctx, stepModels);
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
@@ -250,6 +262,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case QUERY -> {
                 yield createQueryStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case PIPELINE -> null;
         };
     }
 

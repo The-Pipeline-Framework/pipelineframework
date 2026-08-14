@@ -63,7 +63,8 @@ public record PipelineTemplateConfig(
     PipelineTemplateMaterialization materialization,
     String inputContract,
     String outputContract,
-    PipelineTemplateTypeModel typeModel
+    PipelineTemplateTypeModel typeModel,
+    Map<String, PipelineTemplateDefinition> pipelines
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -91,6 +92,8 @@ public record PipelineTemplateConfig(
         inputContract = normalize(inputContract);
         outputContract = normalize(outputContract);
         typeModel = typeModel == null ? PipelineTemplateTypeModel.fromLegacy(messages, unions) : typeModel;
+        validateMap(pipelines, "pipelines");
+        pipelines = pipelines == null ? Map.of() : Map.copyOf(pipelines);
     }
 
     /**
@@ -147,7 +150,21 @@ public record PipelineTemplateConfig(
     ) {
         this(version, appName, basePackage, transport, platform, messages, unions, sources, publish, steps, aspects,
             input, output, materialization, inputContract, outputContract,
-            PipelineTemplateTypeModel.fromLegacy(messages, unions));
+            PipelineTemplateTypeModel.fromLegacy(messages, unions), Map.of());
+    }
+
+    /** Backward-compatible constructor shape before local definition catalogs were added. */
+    public PipelineTemplateConfig(
+        int version, String appName, String basePackage, String transport, PipelinePlatform platform,
+        Map<String, PipelineTemplateMessage> messages, Map<String, PipelineTemplateUnion> unions,
+        Map<String, PipelineObjectSourceConfig> sources, Map<String, PipelineObjectPublishConfig> publish,
+        List<PipelineTemplateStep> steps, Map<String, PipelineTemplateAspect> aspects,
+        PipelineInputBoundaryConfig input, PipelineOutputBoundaryConfig output,
+        PipelineTemplateMaterialization materialization, String inputContract, String outputContract,
+        PipelineTemplateTypeModel typeModel
+    ) {
+        this(version, appName, basePackage, transport, platform, messages, unions, sources, publish, steps, aspects,
+            input, output, materialization, inputContract, outputContract, typeModel, Map.of());
     }
 
     /**

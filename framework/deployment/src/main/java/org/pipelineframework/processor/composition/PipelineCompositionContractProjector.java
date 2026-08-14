@@ -44,6 +44,9 @@ public final class PipelineCompositionContractProjector {
         Objects.requireNonNull(graph, "graph must not be null");
         Map<PipelineReference, CardinalitySemantics> invocationCardinalities = invocationCardinalities(graph);
         List<PipelineCompositionDefinition> definitions = graph.definitions().values().stream()
+            .sorted(Comparator
+                .comparing((PipelineDefinition definition) -> !definition.reference().equals(graph.root().reference()))
+                .thenComparing(definition -> definition.reference().logicalId()))
             .map(definition -> projectDefinition(definition, graph.root().reference(), invocationCardinalities))
             .sorted(Comparator.comparing(PipelineCompositionDefinition::definitionId))
             .toList();

@@ -17,6 +17,8 @@
 package org.pipelineframework;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -194,7 +196,11 @@ public class PipelineRunner implements AutoCloseable {
                 input == null ? "null" : input.getClass().getName()));
         }
 
-        List<Object> orderedSteps = stepOrderer.orderSteps(steps);
+        // A nested definition is compiler-linked in its canonical authored order.  It deliberately
+        // does not consult the root order.json, which only describes root admission execution.
+        List<Object> orderedSteps = rootInvocation
+            ? stepOrderer.orderSteps(steps)
+            : Collections.unmodifiableList(new ArrayList<>(steps));
         if (startStepIndex < 0 || startStepIndex > orderedSteps.size()) {
             throw new IllegalArgumentException("startStepIndex is out of range: " + startStepIndex);
         }

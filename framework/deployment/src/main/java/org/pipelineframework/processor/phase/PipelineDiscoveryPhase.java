@@ -28,6 +28,7 @@ import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.parser.StepDefinitionParser;
+import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
 
 /**
  * Discovers and loads pipeline configuration, aspects, and semantic models.
@@ -156,8 +157,9 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setPipelineTemplateConfig(templateConfig);
 
         // Parse step definitions from YAML
-        List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
-        ctx.setStepDefinitions(stepDefinitions);
+        ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(configPath, messager);
+        ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
+        ctx.setStepDefinitions(parsedDefinitions.rootSteps());
         validateCheckpointBoundaries(templateConfig, ctx, messager);
 
         // Load runtime mapping config (optional)
@@ -377,27 +379,27 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param messager the messager used to emit diagnostics, may be null
      * @return a list of StepDefinition parsed from the template; empty if none or on error
      */
-    private List<StepDefinition> parseStepDefinitions(Optional<Path> configPath, Messager messager) {
+    private ParsedPipelineDefinitionCatalog parseStepDefinitions(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
-            return List.of();
+            return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
 
         StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
             reportDiagnostic(messager, kind, message));
         try {
-            return parser.parseStepDefinitions(configPath.get());
+            return parser.parseDefinitionCatalog(configPath.get());
         } catch (IOException e) {
             reportDiagnostic(
                 messager,
                 Diagnostic.Kind.ERROR,
                 "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
-            return List.of();
+            return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         } catch (Exception e) {
             reportDiagnostic(
                 messager,
                 Diagnostic.Kind.ERROR,
                 "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
-            return List.of();
+            return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
     }
 

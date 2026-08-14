@@ -24,6 +24,71 @@ class PipelineGenerationPhaseIntegrationTest {
     Path tempDir;
 
     @Test
+    void generatesLocalPipelineInvocationBeanFromV3Catalog() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), "<project><modelVersion>4.0.0</modelVersion><groupId>x</groupId><artifactId>x</artifactId><version>1</version></project>");
+        Path moduleDir = projectRoot.resolve("catalog-module");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
+        Path config = projectRoot.resolve("pipeline.yaml");
+        Files.writeString(config, """
+            version: 3
+            appName: Catalog
+            basePackage: com.example.catalog
+            transport: LOCAL
+            contract: { input: Value, output: Value }
+            types:
+              Value: { fields: [[id, string]] }
+            pipelines:
+              inner:
+                input: Value
+                output: Value
+                steps:
+                  - { name: X, service: com.example.catalog.XService, cardinality: ONE_TO_ONE, input: Value, output: Value, java: { input: com.example.catalog.Value, output: com.example.catalog.Value } }
+                  - { name: Y, service: com.example.catalog.YService, cardinality: ONE_TO_ONE, input: Value, output: Value, java: { input: com.example.catalog.Value, output: com.example.catalog.Value } }
+            steps:
+              - { name: A, service: com.example.catalog.AService, cardinality: ONE_TO_ONE, input: Value, output: Value, java: { input: com.example.catalog.Value, output: com.example.catalog.Value } }
+              - { name: Call inner, pipeline: inner, cardinality: ONE_TO_ONE, input: Value, output: Value, java: { input: com.example.catalog.Value, output: com.example.catalog.Value } }
+              - { name: C, service: com.example.catalog.CService, cardinality: ONE_TO_ONE, input: Value, output: Value, java: { input: com.example.catalog.Value, output: com.example.catalog.Value } }
+            """);
+
+        Compilation compilation = Compiler.javac().withProcessors(new PipelineStepProcessor()).withOptions(
+            "-Apipeline.config=" + config.toString().replace('\\', '/'),
+            "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
+            "-Apipeline.transport=LOCAL")
+            .compile(
+                JavaFileObjects.forSourceString("com.example.catalog.Value", "package com.example.catalog; public class Value { }") ,
+                service("com.example.catalog.AService"), service("com.example.catalog.XService"),
+                service("com.example.catalog.YService"), service("com.example.catalog.CService"));
+
+        assertThat(compilation).succeeded();
+        Path invocation = findGeneratedClass(generatedSourcesDir, "PipelineInvocation_root_Call_inner");
+        assertTrue(Files.exists(invocation), "Expected generated local pipeline invocation source; found "
+            + generatedJavaFiles(generatedSourcesDir));
+        String source = Files.readString(invocation);
+        assertTrue(source.contains("PipelineInvocationSteps.<Value, Value>oneToOne"));
+        assertTrue(source.contains("java.util.List.of(child0, child1)"));
+        var contract = compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "pipeline-contract.json").orElseThrow();
+        assertTrue(contract.getCharContent(true).toString().contains("composition"));
+        var order = compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "order.json").orElseThrow();
+        String orderJson = order.getCharContent(true).toString();
+        assertTrue(orderJson.contains("PipelineInvocation_root_Call_inner"));
+        assertFalse(orderJson.contains("ProcessXLocalClientStep"),
+            "Child order must be injected by the invocation bean, not appended to root order.json");
+    }
+
+    private static javax.tools.JavaFileObject service(String name) {
+        return JavaFileObjects.forSourceString(name, """
+            package com.example.catalog;
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+            public class %s implements ReactiveService<Value, Value> {
+              public Uni<Value> process(Value input) { return Uni.createFrom().item(input); }
+            }
+            """.formatted(name.substring(name.lastIndexOf('.') + 1)));
+    }
+
+    @Test
     void generatesLocalClientArtifactsThroughProcessorPipeline() throws IOException {
         Path projectRoot = tempDir;
         Files.writeString(projectRoot.resolve("pom.xml"), """

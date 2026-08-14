@@ -49,6 +49,10 @@ public class PipelineOrderMetadataGenerator {
      * @throws IOException if creating or writing the resource file fails
      */
     public void writeOrderMetadata(PipelineCompilationContext ctx) throws IOException {
+        if (!ctx.getGeneratedRootPipelineStepClasses().isEmpty()) {
+            writeExplicitRootOrder(ctx.getGeneratedRootPipelineStepClasses());
+            return;
+        }
         PipelineYamlConfig config = loadPipelineConfig(ctx);
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
             return;
@@ -97,6 +101,22 @@ public class PipelineOrderMetadataGenerator {
             try (var writer = resourceFile.openWriter()) {
                 writer.write(gson.toJson(metadata));
             }
+        }
+    }
+
+    /**
+     * Writes compiler-linked root execution order directly. Local child definitions intentionally
+     * have no order resource: generated invocation beans inject their complete ordered child set.
+     */
+    private void writeExplicitRootOrder(List<String> rootSteps) throws IOException {
+        if (processingEnv == null) {
+            return;
+        }
+        PipelineOrderMetadata metadata = new PipelineOrderMetadata(List.copyOf(rootSteps));
+        javax.tools.FileObject resourceFile = processingEnv.getFiler()
+            .createResource(StandardLocation.CLASS_OUTPUT, "", ORDER_RESOURCE, (javax.lang.model.element.Element[]) null);
+        try (var writer = resourceFile.openWriter()) {
+            writer.write(gson.toJson(metadata));
         }
     }
 

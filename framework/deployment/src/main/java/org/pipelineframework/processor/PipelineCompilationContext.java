@@ -25,6 +25,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
+import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -59,8 +60,17 @@ public class PipelineCompilationContext {
     @Setter
     private PipelineBranchingPlan branchingPlan;
     @Setter
+    private Map<org.pipelineframework.processor.composition.PipelineReference, PipelineBranchingPlan>
+        localDefinitionBranchingPlans;
+    @Setter
     @Getter(AccessLevel.NONE)
     private ResolvedPipelineDefinitionGraph resolvedPipelineDefinitionGraph;
+    @Setter
+    private ParsedPipelineDefinitionCatalog parsedPipelineDefinitionCatalog;
+    @Setter
+    private Map<String, List<PipelineStepModel>> localDefinitionStepModels;
+    @Setter
+    private List<String> generatedRootPipelineStepClasses;
     @Setter
     private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
     @Setter
@@ -119,6 +129,10 @@ public class PipelineCompilationContext {
         this.pipelineTemplateConfig = null;
         this.stepDefinitions = List.of();
         this.branchingPlan = null;
+        this.localDefinitionBranchingPlans = Map.of();
+        this.parsedPipelineDefinitionCatalog = new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
+        this.localDefinitionStepModels = Map.of();
+        this.generatedRootPipelineStepClasses = List.of();
         this.resolvedRepresentationRegistry = new ResolvedRepresentationRegistry();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();

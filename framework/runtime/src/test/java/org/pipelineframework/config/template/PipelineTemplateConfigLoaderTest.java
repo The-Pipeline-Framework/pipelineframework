@@ -21,6 +21,93 @@ class PipelineTemplateConfigLoaderTest {
     Path tempDir;
 
     @Test
+    void loadsV3LocalPipelineCatalogThroughTheOrdinaryStepGrammar() throws Exception {
+        Path configPath = tempDir.resolve("v3-local-pipelines.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Local catalog
+            basePackage: com.example.local
+            transport: LOCAL
+            contract:
+              input: Value
+              output: Value
+            types:
+              Value:
+                fields: [[id, string]]
+            pipelines:
+              inner:
+                input: Value
+                output: Value
+                steps:
+                  - name: X
+                    cardinality: ONE_TO_ONE
+                    input: Value
+                    output: Value
+                  - name: Y
+                    cardinality: ONE_TO_ONE
+                    input: Value
+                    output: Value
+            steps:
+              - name: Call inner
+                cardinality: ONE_TO_ONE
+                input: Value
+                output: Value
+                pipeline: inner
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(List.of("inner"), config.pipelines().keySet().stream().toList());
+        assertEquals(List.of("X", "Y"), config.pipelines().get("inner").steps().stream()
+            .map(PipelineTemplateStep::name).toList());
+        assertEquals("inner", config.steps().getFirst().pipelineReference());
+    }
+
+    @Test
+    void rejectsDuplicateV3LocalPipelineIds() throws Exception {
+        Path configPath = tempDir.resolve("duplicate-v3-local-pipelines.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Duplicate catalog
+            basePackage: com.example.local
+            contract: { input: Value, output: Value }
+            types: { Value: { fields: [[id, string]] } }
+            pipelines:
+              inner: { input: Value, output: Value, steps: [{ name: X, cardinality: ONE_TO_ONE, input: Value, output: Value }] }
+              inner: { input: Value, output: Value, steps: [{ name: Y, cardinality: ONE_TO_ONE, input: Value, output: Value }] }
+            steps: [{ name: Root, cardinality: ONE_TO_ONE, input: Value, output: Value }]
+            """);
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("duplicate key inner"), exception.getMessage());
+    }
+
+    @Test
+    void rejectsPipelineCompositionSyntaxBeforeV3() throws Exception {
+        Path catalog = tempDir.resolve("v2-pipeline-catalog.yaml");
+        Files.writeString(catalog, """
+            version: 2
+            pipelines: { inner: { input: Value, output: Value, steps: [] } }
+            steps: []
+            """);
+        IllegalStateException catalogFailure = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(catalog));
+        assertEquals("Top-level 'pipelines' requires version: 3", catalogFailure.getMessage());
+
+        Path invocation = tempDir.resolve("v2-pipeline-invocation.yaml");
+        Files.writeString(invocation, """
+            version: 2
+            steps:
+              - { name: Call inner, pipeline: inner }
+            """);
+        IllegalStateException invocationFailure = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invocation));
+        assertEquals("Step property 'pipeline' requires version: 3", invocationFailure.getMessage());
+    }
+
+    @Test
     void loadsTemplateConfigWithDefaults() throws Exception {
         String yaml = """
             version: 2

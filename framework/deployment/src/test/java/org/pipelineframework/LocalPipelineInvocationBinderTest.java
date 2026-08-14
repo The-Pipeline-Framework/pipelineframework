@@ -422,6 +422,9 @@ class LocalPipelineInvocationBinderTest {
     @Test
     void nestedFailuresAndCancellationUseTheOuterReactiveSubscription() throws Exception {
         setObjectPublishRunner(ObjectPublishRunner.disabled());
+        // This proof covers propagation, not retry policy. Disable the default exponential retries
+        // so a deliberate failure is observed immediately rather than after the full backoff window.
+        runner.pipelineConfig.defaults().retryLimit(0);
         PipelineReference innerReference = new PipelineReference("reactive-inner");
         PipelineDefinition inner = definition(
             innerReference,
