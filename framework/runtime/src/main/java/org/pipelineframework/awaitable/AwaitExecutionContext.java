@@ -1,5 +1,7 @@
 package org.pipelineframework.awaitable;
 
+import java.util.Map;
+
 /**
  * Internal queue-async execution context used by generated await steps.
  */
@@ -8,6 +10,7 @@ public final class AwaitExecutionContext {
     private final String executionId;
     private final AwaitContinuationMode continuationMode;
     private final TerminalOutputOwnership terminalOutputOwnership;
+    private final Map<String, Object> traceMetadata;
     private int currentStepIndex;
 
     public AwaitExecutionContext(String tenantId, String executionId, int currentStepIndex) {
@@ -16,7 +19,8 @@ public final class AwaitExecutionContext {
             executionId,
             currentStepIndex,
             AwaitContinuationMode.LIVE_IF_SUPPORTED,
-            TerminalOutputOwnership.TRANSITION_WORKER);
+            TerminalOutputOwnership.TRANSITION_WORKER,
+            Map.of());
     }
 
     /**
@@ -35,6 +39,17 @@ public final class AwaitExecutionContext {
         AwaitContinuationMode continuationMode,
         TerminalOutputOwnership terminalOutputOwnership
     ) {
+        this(tenantId, executionId, currentStepIndex, continuationMode, terminalOutputOwnership, Map.of());
+    }
+
+    public AwaitExecutionContext(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        AwaitContinuationMode continuationMode,
+        TerminalOutputOwnership terminalOutputOwnership,
+        Map<String, Object> traceMetadata
+    ) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
@@ -51,6 +66,7 @@ public final class AwaitExecutionContext {
         this.terminalOutputOwnership = java.util.Objects.requireNonNull(
             terminalOutputOwnership,
             "terminalOutputOwnership must not be null");
+        this.traceMetadata = Map.copyOf(java.util.Objects.requireNonNull(traceMetadata, "traceMetadata must not be null"));
     }
 
     public String tenantId() {
@@ -81,6 +97,10 @@ public final class AwaitExecutionContext {
      */
     public TerminalOutputOwnership terminalOutputOwnership() {
         return terminalOutputOwnership;
+    }
+
+    public Map<String, Object> traceMetadata() {
+        return traceMetadata;
     }
 
     public void currentStepIndex(int currentStepIndex) {

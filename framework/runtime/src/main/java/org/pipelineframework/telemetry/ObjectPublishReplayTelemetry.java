@@ -6,12 +6,13 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 
 /**
@@ -34,11 +35,27 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
     private final LongCounter failedCounter;
     private final DoubleHistogram writeDurationHistogram;
 
-    @Inject
-    PipelineTelemetry telemetry;
+    private final PipelineReplayTelemetry replayTelemetry;
+    private final TelemetryPolicy policy;
+    private final TelemetryRuntime runtime;
 
-    public ObjectPublishReplayTelemetry() {
-        var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+    @Inject
+    public ObjectPublishReplayTelemetry(
+        TelemetryRuntime runtime, TelemetryPolicySource policySource, PipelineReplayTelemetry replayTelemetry) {
+        this(runtime, policySource.telemetryPolicy(), replayTelemetry);
+    }
+
+    public ObjectPublishReplayTelemetry(TelemetryRuntime runtime) {
+        this(runtime, new TelemetryPolicy(true, true, true, false, false, false,
+            Duration.ofSeconds(30), 10d, 3, RetryAmplificationGuardMode.FAIL_FAST), null);
+    }
+
+    private ObjectPublishReplayTelemetry(
+        TelemetryRuntime runtime, TelemetryPolicy policy, PipelineReplayTelemetry replayTelemetry) {
+        this.runtime = runtime;
+        this.policy = policy;
+        this.replayTelemetry = replayTelemetry;
+        var meter = runtime.meter("org.pipelineframework");
         groupedCounter = meter.counterBuilder("tpf.object_publish.grouped.total")
             .setDescription("Total Object Publish grouping operations")
             .setUnit("events")
@@ -76,9 +93,11 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
     @Override
     public void grouped(String targetName, int itemCount, int groupCount) {
         Attributes metricAttributes = metricAttributes(targetName, null);
-        groupedCounter.add(1, metricAttributes);
-        groupedItemsCounter.add(Math.max(0, itemCount), metricAttributes);
-        groupedGroupsCounter.add(Math.max(0, groupCount), metricAttributes);
+        if (policy.metricsEnabled()) {
+            groupedCounter.add(1, metricAttributes);
+            groupedItemsCounter.add(Math.max(0, itemCount), metricAttributes);
+            groupedGroupsCounter.add(Math.max(0, groupCount), metricAttributes);
+        }
         Map<String, String> replayAttributes = new LinkedHashMap<>();
         replayAttributes.put("itemCount", Integer.toString(itemCount));
         replayAttributes.put("groupCount", Integer.toString(groupCount));
@@ -88,20 +107,32 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
     @Override
     public void published(String targetName, String provider, String objectKey, long bytes) {
         Attributes attributes = metricAttributes(targetName, provider);
-        publishedCounter.add(1, attributes);
-        publishedBytesCounter.add(Math.max(0L, bytes), attributes);
+        if (policy.metricsEnabled()) {
+            publishedCounter.add(1, attributes);
+            publishedBytesCounter.add(Math.max(0L, bytes), attributes);
+        }
         emit("object_publish_published", targetName, provider, objectKey, Long.toString(bytes), Map.of());
+        if (!policy.tracingEnabled()) return;
+        Span span = runtime.tracer("org.pipelineframework")
+            .spanBuilder("tpf.terminal.publication.completed")
+            .startSpan();
+        try {
+            span.setAttribute("tpf.object_publish.target", normalize(targetName));
+            span.setAttribute("tpf.object_publish.provider", normalize(provider));
+        } finally {
+            span.end();
+        }
     }
 
     @Override
     public void skipped(String targetName) {
-        skippedCounter.add(1, metricAttributes(targetName, null));
+        if (policy.metricsEnabled()) skippedCounter.add(1, metricAttributes(targetName, null));
         emit("object_publish_skipped", targetName, null, null, null, Map.of());
     }
 
     @Override
     public void failed(String targetName, String provider, String objectKey, Throwable failure) {
-        failedCounter.add(1, metricAttributes(targetName, provider));
+        if (policy.metricsEnabled()) failedCounter.add(1, metricAttributes(targetName, provider));
         Map<String, String> attributes = new LinkedHashMap<>();
         if (failure != null) {
             attributes.put("errorType", failure.getClass().getName());
@@ -110,6 +141,20 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
             }
         }
         emit("object_publish_failed", targetName, provider, objectKey, null, attributes);
+        if (!policy.tracingEnabled()) return;
+        Span span = runtime.tracer("org.pipelineframework")
+            .spanBuilder("tpf.terminal.publication.failed")
+            .startSpan();
+        try {
+            span.setAttribute("tpf.object_publish.target", normalize(targetName));
+            span.setAttribute("tpf.object_publish.provider", normalize(provider));
+            span.setStatus(StatusCode.ERROR);
+            if (failure != null) {
+                span.recordException(failure);
+            }
+        } finally {
+            span.end();
+        }
     }
 
     @Override
@@ -117,9 +162,11 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
         if (duration == null) {
             return;
         }
-        writeDurationHistogram.record(
-            Math.max(0.0d, duration.toNanos() / 1_000_000.0d),
-            metricAttributes(targetName, provider));
+        if (policy.metricsEnabled()) {
+            writeDurationHistogram.record(
+                Math.max(0.0d, duration.toNanos() / 1_000_000.0d),
+                metricAttributes(targetName, provider));
+        }
     }
 
     private void emit(
@@ -139,8 +186,8 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
         if (extraAttributes != null) {
             attributes.putAll(extraAttributes);
         }
-        if (telemetry != null) {
-            telemetry.recordConnectorReplayEvent(STEP, SERVICE, event, null, STEP, attributes);
+        if (policy.replayEnabled() && replayTelemetry != null) {
+            replayTelemetry.recordConnectorReplayEvent(STEP, SERVICE, event, null, STEP, attributes);
         }
     }
 

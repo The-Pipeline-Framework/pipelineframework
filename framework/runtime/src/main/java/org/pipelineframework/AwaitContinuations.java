@@ -92,7 +92,8 @@ class AwaitContinuations {
         executionStateStore,
         workDispatcher,
         segmentBoundaryLedger,
-        lifecycleRecorder);
+        lifecycleRecorder,
+        awaitCoordinator.awaitTelemetry());
     this.itemizedFlow = new ItemizedAwaitContinuationFlow(
         executionStateStore,
         workDispatcher,

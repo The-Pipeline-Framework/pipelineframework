@@ -267,7 +267,8 @@ public class AwaitStepSupport {
             context.executionId(),
             context.currentStepIndex(),
             context.continuationMode(),
-            context.terminalOutputOwnership());
+            context.terminalOutputOwnership(),
+            context.traceMetadata());
     }
 
     @SuppressWarnings("unchecked")

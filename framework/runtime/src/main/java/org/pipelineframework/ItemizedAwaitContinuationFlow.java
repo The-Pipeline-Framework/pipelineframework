@@ -12,10 +12,10 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
@@ -106,13 +106,13 @@ class ItemizedAwaitContinuationFlow {
       AwaitItemContinuationHandler itemContinuationHandler,
       long nowEpochMs) {
     if (record == null || unit == null || !unit.dispatchComplete()) {
-      AwaitCompletionMetrics.recordEarlyCompletionHeld(record, unit);
+      telemetry().recordEarlyCompletionHeld(record, unit);
       return Uni.createFrom().voidItem();
     }
     Uni<Optional<ExecutionRecord<Object, Object>>> parentLookup =
         executionStateStore.getExecution(record.tenantId(), record.executionId());
     if (parentLookup == null) {
-      AwaitCompletionMetrics.recordEarlyCompletionHeld(record, unit);
+      telemetry().recordEarlyCompletionHeld(record, unit);
       return Uni.createFrom().voidItem();
     }
     return parentLookup
@@ -282,7 +282,7 @@ class ItemizedAwaitContinuationFlow {
       AwaitItemContinuationHandler itemContinuationHandler,
       long nowEpochMs) {
     if (plan instanceof AwaitContinuationPlan.HoldCompletion held) {
-      AwaitCompletionMetrics.recordEarlyCompletionHeld(held.interaction(), held.unit());
+      telemetry().recordEarlyCompletionHeld(held.interaction(), held.unit());
       return Uni.createFrom().voidItem();
     }
     if (plan instanceof AwaitContinuationPlan.DispatchItemContinuations dispatch) {
@@ -590,7 +590,7 @@ class ItemizedAwaitContinuationFlow {
               release.unit().expectedItemCount(),
               release.unit().completedItemCount(),
               release.unit().dispatchComplete()));
-          AwaitCompletionMetrics.recordResumeReleased(release.unit());
+          telemetry().recordResumeReleased(release.unit());
         })
         .replaceWithVoid();
   }
@@ -632,6 +632,11 @@ class ItemizedAwaitContinuationFlow {
                 record.unitId(),
                 record.interactionId(),
                 record.itemIndex()));
+  }
+
+  private AwaitTelemetry telemetry() {
+    AwaitTelemetry telemetry = awaitCoordinator == null ? null : awaitCoordinator.awaitTelemetry();
+    return telemetry == null ? AwaitTelemetry.disabled() : telemetry;
   }
 
   private static long retryDelayMs(int attempt) {

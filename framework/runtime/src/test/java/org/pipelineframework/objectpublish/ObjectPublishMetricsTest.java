@@ -28,6 +28,7 @@ import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.telemetry.ObjectPublishReplayTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 
 class ObjectPublishMetricsTest {
 
@@ -54,7 +55,7 @@ class ObjectPublishMetricsTest {
         ObjectPublishRunner runner = new ObjectPublishRunner(
             config(),
             new ObjectTargetRegistry(List.of(provider)),
-            new ObjectPublishReplayTelemetry());
+            new ObjectPublishReplayTelemetry(TelemetryRuntimes.global()));
 
         runner.publishItems(List.of(new TestOutput("a", "one"))).await().indefinitely();
         runner.publishItems(List.of()).await().indefinitely();
@@ -74,7 +75,7 @@ class ObjectPublishMetricsTest {
         ObjectPublishRunner runner = new ObjectPublishRunner(
             config(),
             new ObjectTargetRegistry(List.of(new FailingProvider())),
-            new ObjectPublishReplayTelemetry());
+            new ObjectPublishReplayTelemetry(TelemetryRuntimes.global()));
 
         assertThrows(RuntimeException.class, () ->
             runner.publishItems(List.of(new TestOutput("a", "one"))).await().indefinitely());

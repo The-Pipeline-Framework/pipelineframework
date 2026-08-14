@@ -25,7 +25,9 @@ import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.PipelineControlFlowException;
 import org.pipelineframework.telemetry.ApmCompatibilityMetrics;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.RetryAmplificationTelemetry;
 import org.pipelineframework.telemetry.RetryAmplificationGuard;
 import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 import org.pipelineframework.telemetry.RpcMetrics;
@@ -41,7 +43,10 @@ class ExecutionHooks {
   private static final String ORCHESTRATOR_METHOD = "Run";
 
   @Inject
-  PipelineTelemetry telemetry;
+  PipelineRunTelemetry runTelemetry;
+
+  @Inject
+  RetryAmplificationTelemetry retryAmplification;
 
   private final ScheduledExecutorService killSwitchExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {
@@ -69,7 +74,7 @@ class ExecutionHooks {
   <T> Multi<T> attachMultiHooks(
       Multi<T> multi,
       StopWatch watch,
-      PipelineTelemetry.RunContext runContext) {
+      PipelineRunContext runContext) {
     Multi<T> guarded = attachRetryAmplificationGuard(multi, runContext);
     long[] startTime = new long[1];
     return guarded
@@ -107,7 +112,7 @@ class ExecutionHooks {
   <T> Uni<T> attachUniHooks(
       Uni<T> uni,
       StopWatch watch,
-      PipelineTelemetry.RunContext runContext) {
+      PipelineRunContext runContext) {
     Uni<T> guarded = attachRetryAmplificationGuard(uni, runContext);
     long[] startTime = new long[1];
     return guarded
@@ -137,23 +142,23 @@ class ExecutionHooks {
 
   private <T> Multi<T> attachRetryAmplificationGuard(
       Multi<T> multi,
-      PipelineTelemetry.RunContext runContext) {
-    if (telemetry == null || !telemetry.retryAmplificationGuardEnabled()) {
+      PipelineRunContext runContext) {
+    if (retryAmplification == null || !retryAmplification.retryAmplificationGuardEnabled()) {
       return multi;
     }
-    Duration interval = telemetry.retryAmplificationCheckInterval();
-    RetryAmplificationGuardMode mode = telemetry.retryAmplificationMode();
+    Duration interval = retryAmplification.retryAmplificationCheckInterval();
+    RetryAmplificationGuardMode mode = retryAmplification.retryAmplificationMode();
     return multi.plug(upstream -> new RetryAmplificationGuardMulti<>(upstream, interval, mode, runContext));
   }
 
   private <T> Uni<T> attachRetryAmplificationGuard(
       Uni<T> uni,
-      PipelineTelemetry.RunContext runContext) {
-    if (telemetry == null || !telemetry.retryAmplificationGuardEnabled()) {
+      PipelineRunContext runContext) {
+    if (retryAmplification == null || !retryAmplification.retryAmplificationGuardEnabled()) {
       return uni;
     }
-    Duration interval = telemetry.retryAmplificationCheckInterval();
-    RetryAmplificationGuardMode mode = telemetry.retryAmplificationMode();
+    Duration interval = retryAmplification.retryAmplificationCheckInterval();
+    RetryAmplificationGuardMode mode = retryAmplification.retryAmplificationMode();
     AtomicBoolean logged = new AtomicBoolean(false);
     return Uni.createFrom().emitter(emitter -> {
       AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
@@ -175,7 +180,7 @@ class ExecutionHooks {
           });
       cancellableRef.set(cancellable);
       ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
-        telemetry.retryAmplificationTrigger(runContext).ifPresent(trigger -> {
+        retryAmplification.retryAmplificationTrigger(runContext).ifPresent(trigger -> {
           if (!logged.compareAndSet(false, true)) {
             return;
           }
@@ -221,12 +226,12 @@ class ExecutionHooks {
         action);
   }
 
-  private void abortRun(PipelineTelemetry.RunContext runContext, Throwable failure) {
+  private void abortRun(PipelineRunContext runContext, Throwable failure) {
     if (runContext == null) {
-      telemetry.abortActiveRun(failure);
+      runTelemetry.abortActiveRun(failure);
       return;
     }
-    telemetry.abortRun(runContext, failure);
+    runTelemetry.abortRun(runContext, failure);
   }
 
   private boolean isControlFlow(Throwable failure) {
@@ -267,13 +272,13 @@ class ExecutionHooks {
   private final class RetryAmplificationGuardMulti<T> extends AbstractMultiOperator<T, T> {
     private final Duration interval;
     private final RetryAmplificationGuardMode mode;
-    private final PipelineTelemetry.RunContext runContext;
+    private final PipelineRunContext runContext;
 
     private RetryAmplificationGuardMulti(
         Multi<? extends T> upstream,
         Duration interval,
         RetryAmplificationGuardMode mode,
-        PipelineTelemetry.RunContext runContext) {
+        PipelineRunContext runContext) {
       super(upstream);
       this.interval = interval;
       this.mode = mode;
@@ -290,7 +295,7 @@ class ExecutionHooks {
 
   private final class RetryAmplificationProcessor<T> extends MultiOperatorProcessor<T, T> {
     private final RetryAmplificationGuardMode mode;
-    private final PipelineTelemetry.RunContext runContext;
+    private final PipelineRunContext runContext;
     private final AtomicBoolean logged;
     private final ScheduledFuture<?> future;
 
@@ -298,7 +303,7 @@ class ExecutionHooks {
         MultiSubscriber<? super T> downstream,
         Duration interval,
         RetryAmplificationGuardMode mode,
-        PipelineTelemetry.RunContext runContext) {
+        PipelineRunContext runContext) {
       super(downstream);
       this.mode = mode;
       this.runContext = runContext;
@@ -336,7 +341,7 @@ class ExecutionHooks {
     }
 
     private void checkGuard() {
-      telemetry.retryAmplificationTrigger(runContext).ifPresent(trigger -> {
+      retryAmplification.retryAmplificationTrigger(runContext).ifPresent(trigger -> {
         if (!logged.compareAndSet(false, true)) {
           return;
         }

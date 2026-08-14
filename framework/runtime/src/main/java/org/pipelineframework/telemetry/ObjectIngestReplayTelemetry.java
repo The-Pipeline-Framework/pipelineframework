@@ -5,7 +5,6 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -28,11 +27,25 @@ public class ObjectIngestReplayTelemetry implements ObjectIngestTelemetry {
     private final LongCounter duplicateCounter;
     private final LongCounter failedCounter;
 
-    @Inject
-    PipelineTelemetry telemetry;
+    private final PipelineReplayTelemetry replayTelemetry;
+    private final TelemetryPolicy policy;
 
-    public ObjectIngestReplayTelemetry() {
-        var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+    @Inject
+    public ObjectIngestReplayTelemetry(
+        TelemetryRuntime runtime, TelemetryPolicySource policySource, PipelineReplayTelemetry replayTelemetry) {
+        this(runtime, policySource.telemetryPolicy(), replayTelemetry);
+    }
+
+    public ObjectIngestReplayTelemetry(TelemetryRuntime runtime) {
+        this(runtime, new TelemetryPolicy(true, true, false, false, false, false,
+            java.time.Duration.ofSeconds(30), 10d, 3, RetryAmplificationGuardMode.FAIL_FAST), null);
+    }
+
+    private ObjectIngestReplayTelemetry(
+        TelemetryRuntime runtime, TelemetryPolicy policy, PipelineReplayTelemetry replayTelemetry) {
+        this.policy = policy;
+        this.replayTelemetry = replayTelemetry;
+        var meter = runtime.meter("org.pipelineframework");
         listedCounter = meter.counterBuilder("tpf.object_ingest.list.total")
             .setDescription("Total Object Ingest listing attempts")
             .setUnit("events")
@@ -57,27 +70,30 @@ public class ObjectIngestReplayTelemetry implements ObjectIngestTelemetry {
 
     @Override
     public void listed(String sourceName, String provider, int count) {
+        if (!policy.metricsEnabled() && !policy.replayEnabled()) return;
         Attributes attributes = metricAttributes(sourceName, provider);
-        listedCounter.add(1, attributes);
-        listedObjectCounter.add(Math.max(0, count), attributes);
+        if (policy.metricsEnabled()) {
+            listedCounter.add(1, attributes);
+            listedObjectCounter.add(Math.max(0, count), attributes);
+        }
         emit("object_ingest_listed", sourceName, provider, null, Map.of("count", Integer.toString(count)));
     }
 
     @Override
     public void submitted(String sourceName, String provider, String key) {
-        submittedCounter.add(1, metricAttributes(sourceName, provider));
+        if (policy.metricsEnabled()) submittedCounter.add(1, metricAttributes(sourceName, provider));
         emit("object_ingest_submitted", sourceName, provider, key, Map.of());
     }
 
     @Override
     public void duplicate(String sourceName, String provider, String key) {
-        duplicateCounter.add(1, metricAttributes(sourceName, provider));
+        if (policy.metricsEnabled()) duplicateCounter.add(1, metricAttributes(sourceName, provider));
         emit("object_ingest_duplicate", sourceName, provider, key, Map.of());
     }
 
     @Override
     public void failed(String sourceName, String provider, String key, Throwable failure) {
-        failedCounter.add(1, metricAttributes(sourceName, provider));
+        if (policy.metricsEnabled()) failedCounter.add(1, metricAttributes(sourceName, provider));
         Map<String, String> attributes = new LinkedHashMap<>();
         if (failure != null) {
             attributes.put("errorType", failure.getClass().getName());
@@ -103,8 +119,8 @@ public class ObjectIngestReplayTelemetry implements ObjectIngestTelemetry {
         if (extraAttributes != null) {
             attributes.putAll(extraAttributes);
         }
-        if (telemetry != null) {
-            telemetry.recordConnectorReplayEvent(STEP, SERVICE, event, STEP, null, attributes);
+        if (policy.replayEnabled() && replayTelemetry != null) {
+            replayTelemetry.recordConnectorReplayEvent(STEP, SERVICE, event, STEP, null, attributes);
         }
     }
 

@@ -78,7 +78,8 @@ class PipelineRunnerObjectPublishTest {
         runner = new PipelineRunner();
         runner.configFactory = new ConfigFactory();
         runner.pipelineConfig = new PipelineConfig();
-        runner.telemetry = telemetry;
+        runner.runTelemetry = telemetry;
+        runner.stepTelemetry = telemetry;
         runner.stepOrderer = stepOrderer;
         runner.parallelismPolicyResolver = parallelismPolicyResolver;
         runner.cacheSupportFactory = cacheSupportFactory;

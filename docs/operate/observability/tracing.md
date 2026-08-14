@@ -37,7 +37,21 @@ try (Scope ignored = tracer.spanBuilder("payment.validate").startScopedSpan()) {
 
 ## Context Propagation
 
-For streaming pipelines, ensure context is carried across async boundaries and emitted in downstream services. Use MDC for logs and OpenTelemetry context for traces.
+For streaming pipelines, context must cover actual asynchronous execution from subscription to
+completion, failure, or cancellation; instrumenting only publisher construction is not enough.
+Use MDC for logs and OpenTelemetry context for traces.
+
+TPF preserves parent/child context while work remains live. A deliberately durable or asynchronous
+boundary may begin a separate physical trace only when the downstream span retains an explicit
+OpenTelemetry span link to the originating execution journey. Correlation attributes are supplemental
+diagnostics, not a substitute for parentage or a span link. A downstream Await completion or
+continuation span that is neither a valid child nor deliberately linked is an accidental rootless
+span and should be treated as a conformance failure.
+
+For the representative CSV Payments journey, trace proof follows transition-worker dispatch,
+Await interaction creation, provider dispatch, completion admission, live handoff, scalar
+continuation, and terminal publication. The Tempo dashboard includes an explicit diagnostic for
+unlinked/rootless Await completions; it is not a substitute for checking the journey spans.
 
 ## Tracing Strategy
 
@@ -56,6 +70,7 @@ TPF runtime tracing also emits:
 - `tpf.step.retry`
 - `tpf.step.success`
 - `tpf.step.error`
+- `tpf.step.cancelled`
 
 For replay JSON versus live Tempo usage, see
 [Replay & Live Topology](/operate/observability/replay).

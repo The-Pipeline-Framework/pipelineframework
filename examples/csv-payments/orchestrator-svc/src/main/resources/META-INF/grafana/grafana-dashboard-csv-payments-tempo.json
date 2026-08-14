@@ -1,86 +1,69 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
-  "id": null,
-  "links": [],
-  "liveNow": false,
+  "uid": "csv-payments-tempo-proof",
+  "title": "CSV Payments — Await Trace Proof",
+  "schemaVersion": 41,
+  "version": 2,
+  "tags": ["csv-payments", "tempo", "telemetry-proof"],
+  "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
-      "datasource": {
-        "type": "-- Grafana --",
-        "uid": "-- Grafana --"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 14,
-        "x": 0,
-        "y": 0
-      },
       "id": 1,
-      "options": {
-        "content": "## Tempo live topology\n\nThis dashboard is the tracing entrypoint for `csv-payments`.\n\nUse **Grafana Explore -> Tempo -> Service Graph** for the live topology view. That graph is built from real-time spans and their relationships, not from Prometheus scrape intervals.\n\nRecommended flow:\n\n1. Open **Explore**\n2. Select the **Tempo** datasource\n3. Switch to **Service Graph** for topology\n4. Switch to **Search** or **TraceQL** for single-run drill-down\n\nThe Prometheus dashboard remains separate and focuses on throughput, latency, queue depth, inflight, and retry pressure.\n\nThe replay viewer remains separate and consumes `csv-payments-replay.json` for deterministic playback.",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.2.0",
-      "title": "How To Use This Surface",
-      "type": "text"
+      "type": "text",
+      "title": "Trace proof profile",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": { "mode": "markdown", "content": "This dashboard is bound to the **telemetry-capable CSV Payments developer profile**. It requires tracing capability and OTLP routing to Tempo. The self-host container profile, which intentionally disables telemetry, is validated as disabled and must not be used for this proof.\n\nA live boundary preserves parent/child context. A durable boundary may start a new physical trace only when its semantic span carries an OpenTelemetry link to the durable origin; the final panel exposes accidental rootless Await continuation spans." }
     },
     {
-      "datasource": {
-        "type": "-- Grafana --",
-        "uid": "-- Grafana --"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 10,
-        "x": 14,
-        "y": 0
-      },
       "id": 2,
-      "options": {
-        "content": "## TraceQL quick queries\n\n```traceql\n{ name = \"tpf.pipeline.run\" && resource.service.name = \"orchestrator-svc\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.pipeline\"] = \"csv-payments\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && (span[\"tpf.step\"] = \"ProcessApprovedPaymentStatus\" || span[\"tpf.step\"] = \"ProcessUnapprovedPaymentStatus\" || span[\"tpf.step\"] = \"ProcessFinalizePaymentOutput\") }\n```\n\nSpan events emitted by the framework:\n\n- `tpf.step.start`\n- `tpf.step.emit`\n- `tpf.step.retry`\n- `tpf.step.success`\n- `tpf.step.error`",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.2.0",
-      "title": "TraceQL Hints",
-      "type": "text"
+      "type": "table",
+      "title": "Pipeline and transition dispatch",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.pipeline.run\" } || { name = \"tpf.transition.dispatched\" }" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "traces",
+      "title": "Await creation and provider admission/dispatch",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.interaction.created\" } || { name = \"tpf.await.provider.dispatch\" } || { name = \"tpf.await.provider.admitted\" }" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "traces",
+      "title": "Completion admission and live handoff",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" } || { name = \"tpf.await.live.handoff\" }" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "traces",
+      "title": "Scalar continuation and terminal publication",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.scalar.continuation\" } || { name = \"tpf.terminal.publication.completed\" }" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "traces",
+      "title": "Disconnected/rootless Await-journey diagnostic",
+      "description": "Any result is a conformance failure: the completion span lacks both continued parentage and the durable origin link.",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" && span[\"tpf.await.origin.linked\"] = false }" },
+        { "refId": "B", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" && span[\"tpf.await.origin.linked\"] = nil }" }
+      ]
     }
-  ],
-  "refresh": "10s",
-  "schemaVersion": 41,
-  "style": "dark",
-  "tags": [
-    "csv-payments",
-    "tempo",
-    "tracing"
-  ],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-15m",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "CSV Payments Tempo Tracing",
-  "version": 1,
-  "weekStart": ""
+  ]
 }

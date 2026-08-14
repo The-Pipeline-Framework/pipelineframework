@@ -21,6 +21,12 @@ quarkus.micrometer.export.prometheus.enabled=true
 quarkus.micrometer.export.prometheus.path=/q/metrics
 ```
 
+Metrics are produced only when the deployable is metrics-capable and the resolved
+`pipeline.telemetry.metrics.enabled` policy is enabled. Prometheus, OTLP, New Relic, or another
+backend then decides where those metrics go; exporter availability is not an instrumentation
+switch. See [Observability Overview](/operate/observability/) for the full capability, policy,
+and exporter model.
+
 ## Dashboards
 
 Pair metrics with Grafana dashboards that show:
@@ -29,6 +35,16 @@ Pair metrics with Grafana dashboards that show:
 2. Throughput per step
 3. Error rate by step
 4. Pipeline end-to-end latency
+
+For an asynchronous boundary, a total-latency panel is not enough. Keep semantic start/end
+boundaries visible so an operator can locate the accumulated time: interaction creation, provider
+admission and dispatch, completion admission, live handoff or durable fallback, continuation, and
+terminal publication. Use stage throughput, p50/p90/p99 histogram panels where supported,
+in-flight or queue state, retries/rejects/timeouts, and publication outcomes together.
+
+Healthy runs may not exercise a retry, reject, fallback, or pressure path. Treat an absent series
+for one of those optional paths as a condition to interpret with the core stage counters, rather
+than as proof that the primary journey is missing.
 
 ## Execution Channels and Signals
 

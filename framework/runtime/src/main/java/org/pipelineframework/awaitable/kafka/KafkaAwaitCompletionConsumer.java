@@ -15,7 +15,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.PipelineExecutionService;
 import org.jboss.logging.Logger;
@@ -35,6 +35,9 @@ public class KafkaAwaitCompletionConsumer {
 
     @Inject
     PipelineExecutionService executionService;
+
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
     Duration notFoundRetryDelay = DEFAULT_NOT_FOUND_RETRY_DELAY;
     int notFoundRetryAttempts = DEFAULT_NOT_FOUND_RETRY_ATTEMPTS;
 
@@ -66,7 +69,7 @@ public class KafkaAwaitCompletionConsumer {
             .thenCompose(ignored -> message.ack())
             .exceptionallyCompose(failure -> {
                 if (isNotFoundFailure(failure)) {
-                    AwaitCompletionMetrics.recordDroppedCompletion("kafka", "not_found");
+                    awaitTelemetry.recordDroppedCompletion("kafka", "not_found");
                     LOG.warnf(
                         failure,
                         "Dropping unresolved Kafka await completion after interaction lookup retries");
@@ -74,7 +77,7 @@ public class KafkaAwaitCompletionConsumer {
                 }
                 if (AwaitCompletionAdmissionFailures.isDeterministic(failure)) {
                     String reason = AwaitCompletionAdmissionFailures.reason(failure);
-                    AwaitCompletionMetrics.recordDroppedCompletion("kafka", reason);
+                    awaitTelemetry.recordDroppedCompletion("kafka", reason);
                     LOG.warnf(failure, "Dropping deterministic Kafka await completion message: reason=%s", reason);
                     return message.ack();
                 }

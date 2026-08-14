@@ -23,7 +23,7 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ItemRejectable;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.step.functional.OneToOne;
 
 /**
@@ -79,7 +79,7 @@ CompletableFuture<O> applyAsync(I in);
             })
             // retry / backoff / jitter
             .onFailure(this::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
+            .invoke(t -> PipelineRetryTelemetry.recordRetry(this.getClass(), t))
             .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())

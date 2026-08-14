@@ -44,6 +44,7 @@ import org.pipelineframework.awaitable.AwaitContinuationMode;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
@@ -91,7 +92,7 @@ class PipelineExecutionServiceTest {
     private AwaitCoordinator awaitCoordinator;
 
     @Mock
-    private PipelineTelemetry.RunContext telemetryContext;
+    private PipelineRunContext telemetryContext;
 
     @BeforeEach
     void setUp() {

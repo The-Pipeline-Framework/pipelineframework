@@ -63,7 +63,14 @@ public class AwaitAdmissionCoordinator {
     @Inject
     PipelineReleaseIdentityResolver releaseIdentityResolver;
 
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
+
     private final Map<String, AwaitAdmissionReservation> reservationsByInteraction = new ConcurrentHashMap<>();
+
+    private AwaitTelemetry telemetry() {
+        return awaitTelemetry == null ? AwaitTelemetry.disabled() : awaitTelemetry;
+    }
 
     public boolean enabled() {
         return stepConfig != null && stepConfig.awaitAdmission().enabled();
@@ -108,7 +115,7 @@ public class AwaitAdmissionCoordinator {
     public void bind(AwaitInteractionRecord interaction, AdmissionLease lease) {
         if (lease != null) {
             boolean locallyTracked = reservationsByInteraction.putIfAbsent(interaction.interactionId(), lease.reservation()) == null;
-            AwaitCompletionMetrics.recordAdmissionAcquired(
+            telemetry().recordAdmissionAcquired(
                 interaction,
                 lease.reused(),
                 lease.reconciledExpired(),
@@ -145,7 +152,7 @@ public class AwaitAdmissionCoordinator {
             return releaseRecoveredReservation(interaction);
         }
         return Uni.createFrom().completionStage(store().release(reservation))
-            .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released, true));
+            .invoke(released -> telemetry().recordAdmissionReleased(interaction, released, true));
     }
 
     /**
@@ -159,7 +166,7 @@ public class AwaitAdmissionCoordinator {
         Optional<AwaitAdmissionReservation> persisted = persistedReservation(interaction);
         if (persisted.isPresent()) {
             return Uni.createFrom().completionStage(store().release(persisted.orElseThrow()))
-                .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released, false));
+                .invoke(released -> telemetry().recordAdmissionReleased(interaction, released, false));
         }
         // A pre-token interaction cannot safely prove ownership of a slot after a restart:
         // the same owner may have reclaimed it with a newer lease. Keep the slot until its

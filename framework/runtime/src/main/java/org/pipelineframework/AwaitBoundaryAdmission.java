@@ -6,7 +6,6 @@ import java.util.function.Supplier;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -94,7 +93,9 @@ class AwaitBoundaryAdmission {
         .onItem().transformToUni(liveAccepted -> {
           Uni<AwaitCompletionResult> handoff = liveAccepted
               ? Uni.createFrom().item(validated)
-                  .invoke(result -> AwaitCompletionMetrics.recordCompletionAdmitted(result.record()))
+                  .invoke(result -> {
+                    recordLiveCompletionTelemetry(result.record());
+                  })
                   .chain(result -> segmentBoundaryLedger.get()
                   .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
                   .replaceWith(result))
@@ -123,7 +124,8 @@ class AwaitBoundaryAdmission {
             .chain(() -> signalLiveAwaitCompletion(validated.record()))
             .onItem().transformToUni(liveAccepted -> {
               Uni<AwaitCompletionResult> handoff = liveAccepted
-                  ? Uni.createFrom().item(validated)
+              ? Uni.createFrom().item(validated)
+                  .invoke(result -> recordLiveHandoffTelemetry(result.record()))
                   : continuations.afterRecordedCompletion(
                       validated,
                       unit,
@@ -134,6 +136,19 @@ class AwaitBoundaryAdmission {
               }
               return awaitCoordinator.releaseAdmission(validated.record()).chain(() -> handoff);
             }));
+  }
+
+  private void recordLiveCompletionTelemetry(AwaitInteractionRecord record) {
+    if (awaitCoordinator.awaitTelemetry() != null) {
+      awaitCoordinator.awaitTelemetry().recordCompletionAdmitted(record);
+      awaitCoordinator.awaitTelemetry().recordLiveHandoff(record);
+    }
+  }
+
+  private void recordLiveHandoffTelemetry(AwaitInteractionRecord record) {
+    if (awaitCoordinator.awaitTelemetry() != null) {
+      awaitCoordinator.awaitTelemetry().recordLiveHandoff(record);
+    }
   }
 
   private AwaitCompletionCommand normalize(AwaitCompletionCommand command) {

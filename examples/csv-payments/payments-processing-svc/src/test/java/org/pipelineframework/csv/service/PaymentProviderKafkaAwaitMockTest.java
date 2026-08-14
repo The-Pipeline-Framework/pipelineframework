@@ -22,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 
 class PaymentProviderKafkaAwaitMockTest {
 
@@ -40,7 +41,9 @@ class PaymentProviderKafkaAwaitMockTest {
           return CompletableFuture.completedFuture(null);
         });
 
-    new PaymentProviderKafkaAwaitMock().consume(message).toCompletableFuture().join();
+    PaymentProviderKafkaAwaitMock provider = new PaymentProviderKafkaAwaitMock(AwaitTelemetry.disabled());
+
+    provider.consume(message).toCompletableFuture().join();
 
     assertThat(nacked).isTrue();
     assertThat(acknowledged).isFalse();

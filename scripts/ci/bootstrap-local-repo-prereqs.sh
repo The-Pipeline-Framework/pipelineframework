@@ -24,20 +24,20 @@ mvn() {
 }
 
 install_framework_plugins_and_connectors() {
-  mvn -N install
-  mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests
+  mvn -N install -Dgpg.skip
+  mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests -Dgpg.skip
 }
 
 install_csv_prereqs() {
-  mvn -N install
-  mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests
-  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -N install
-  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install
+  mvn -N install -Dgpg.skip
+  mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests -Dgpg.skip
+  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -N install -Dgpg.skip
+  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install -Dgpg.skip
 }
 
 install_search_prereqs() {
-  mvn -N install
-  mvn -f "$ROOT_DIR/examples/search/pom.xml" -N install
+  mvn -N install -Dgpg.skip
+  mvn -f "$ROOT_DIR/examples/search/pom.xml" -N install -Dgpg.skip
 }
 
 case "$SCOPE" in

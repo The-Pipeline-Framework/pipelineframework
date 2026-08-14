@@ -24,7 +24,7 @@ import io.smallrye.mutiny.Multi;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.ManyToMany;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 
 /**
  * N -> N
@@ -92,7 +92,7 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, It
             return item;
         })
         .onFailure(this::shouldRetry)
-        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
+        .invoke(t -> PipelineRetryTelemetry.recordRetry(this.getClass(), t))
         .onFailure(this::shouldRetry)
         .retry()
         .withBackOff(retryWait(), maxBackoff())

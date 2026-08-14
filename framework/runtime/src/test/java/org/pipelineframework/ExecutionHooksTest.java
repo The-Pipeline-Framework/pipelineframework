@@ -29,7 +29,8 @@ class ExecutionHooksTest {
     @BeforeEach
     void setUp() {
         hooks = new ExecutionHooks();
-        hooks.telemetry = telemetry;
+        hooks.runTelemetry = telemetry;
+        hooks.retryAmplification = telemetry;
         when(telemetry.retryAmplificationGuardEnabled()).thenReturn(false);
     }
 
