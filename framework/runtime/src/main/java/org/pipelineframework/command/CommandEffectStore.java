@@ -49,6 +49,10 @@ public interface CommandEffectStore {
         return false;
     }
 
+    /**
+     * Records a successful native command output and its sanitized outcome snapshot.
+     * Implementations that preserve native outcome snapshots must override this method.
+     */
     default Uni<CommandEffectRecord> markSucceeded(
         String tenantId,
         String commandId,
@@ -56,7 +60,7 @@ public interface CommandEffectStore {
         CommandOutcomeSnapshot outcome,
         long nowEpochMs
     ) {
-        return io.smallrye.mutiny.Uni.createFrom().failure(new UnsupportedOperationException(
+        return Uni.createFrom().failure(new UnsupportedOperationException(
             "native command outcomes require a CommandEffectStore that persists outcome snapshots"));
     }
 
@@ -71,6 +75,10 @@ public interface CommandEffectStore {
      */
     Uni<CommandEffectRecord> markDlq(String tenantId, String commandId, Throwable failure, long nowEpochMs);
 
+    /**
+     * Records a non-success native command outcome with its durable terminal or retryable state.
+     * Implementations that preserve native outcome snapshots must override this method.
+     */
     default Uni<CommandEffectRecord> markOutcome(
         String tenantId,
         String commandId,
@@ -79,7 +87,7 @@ public interface CommandEffectStore {
         CommandOutcomeSnapshot outcome,
         long nowEpochMs
     ) {
-        return io.smallrye.mutiny.Uni.createFrom().failure(new UnsupportedOperationException(
+        return Uni.createFrom().failure(new UnsupportedOperationException(
             "native command outcomes require a CommandEffectStore that persists outcome snapshots"));
     }
 }

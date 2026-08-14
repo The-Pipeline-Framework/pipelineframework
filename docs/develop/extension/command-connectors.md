@@ -44,6 +44,7 @@ connector:
   policy:
     requireIdempotency: true
     requireReconciliation: true
+    requiredExecutionPosture: AUTOMATED
     requiredExecutionStyle: PROVIDER_MANAGED
     requiredConcurrencyScope: PROVIDER_MANAGED
     minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
@@ -57,12 +58,24 @@ an effect is created or the operation is invoked.
 `CommandOutcome` distinguishes success, retryable failure, terminal failure, ambiguous submission,
 and user action required. Only declared safe correlation or reconciliation references, outcome
 codes, confirmation strengths, and a redacted configuration digest are retained in the effect
-record. Evidence, descriptions, secret references, and resolved handles are not durable metadata.
+record, together with the selected provider and operation major versions. Evidence, descriptions,
+secret references, and resolved handles are not durable metadata.
+
+`AUTOMATED`, `ATTENDED`, and an undeclared conservative posture are operation capabilities; a
+pipeline policy may require one explicitly. A successful outcome must also achieve the policy's
+minimum machine and user confirmation. Insufficient machine confirmation becomes an `AMBIGUOUS`
+barrier, while missing required user confirmation becomes `USER_ACTION_REQUIRED`; neither is
+recorded as success or automatically retried.
+
+Declaring a reference kind in `durableReferenceKinds` is a provider data-classification decision.
+Values must be bounded opaque identifiers such as `TKT-123`, never credentials, tokens, URLs,
+arbitrary evidence, instructions, or provider payloads. TPF filters undeclared kinds and rejects
+non-identifier value shapes, but the provider remains responsible for classifying each declared
+kind as safe for durable storage.
 
 An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
-`FAILED_RETRYABLE` records are deliberately not redispatched in this slice: legal redispatch
-transitions are owned by #545. `BLOCKING` execution and bounded framework-managed concurrency are
-also deferred to #577.
+`FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
+blocking execution or bounded framework-managed concurrency.
 
 ## Command Id Generator
 

@@ -20,15 +20,42 @@ class CommandPolicyValidatorTest {
     private final ConnectorOperationDescriptor command = new ConnectorOperationDescriptor(
         "write.document", ConnectorOperationKind.COMMAND, 1, Optional.empty(),
         Optional.of(new CommandCapabilities(
-            false, true, true, CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true, Set.of("ticket", "request"))));
+            false, true, true, CommandExecutionPosture.AUTOMATED,
+            CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true, Set.of("ticket", "request"))));
 
     @Test
     void acceptsOnlyGuaranteesTheOperationAndCurrentRuntimeCanProvide() {
         assertDoesNotThrow(() -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
             false, true, true,
+            Optional.of(CommandExecutionPosture.AUTOMATED),
             Optional.of(ConnectorExecutionStyle.PROVIDER_MANAGED),
             Optional.of(ConnectorConcurrencyScope.PROVIDER_MANAGED),
             Optional.of(CommandMachineConfirmation.SUBMITTED), true)));
+    }
+
+    @Test
+    void treatsUndeclaredPostureConservativelyAndRejectsPostureMismatch() {
+        ConnectorOperationDescriptor undeclared = new ConnectorOperationDescriptor(
+            "undeclared", ConnectorOperationKind.COMMAND, 1, Optional.empty(),
+            Optional.of(CommandCapabilities.conservative()));
+        CommandPolicy automated = new CommandPolicy(
+            false, false, false,
+            Optional.of(CommandExecutionPosture.AUTOMATED),
+            Optional.empty(), Optional.empty(), Optional.empty(), false);
+
+        IllegalArgumentException missing = assertThrows(
+            IllegalArgumentException.class, () -> CommandPolicyValidator.validate(provider, undeclared, automated));
+        assertEquals("command policy for provider acme.search operation undeclared requires command execution posture "
+            + "AUTOMATED, but the provider declares UNSPECIFIED", missing.getMessage());
+
+        CommandPolicy attended = new CommandPolicy(
+            false, false, false,
+            Optional.of(CommandExecutionPosture.ATTENDED),
+            Optional.empty(), Optional.empty(), Optional.empty(), false);
+        IllegalArgumentException mismatch = assertThrows(
+            IllegalArgumentException.class, () -> CommandPolicyValidator.validate(provider, command, attended));
+        assertEquals("command policy for provider acme.search operation write.document requires command execution posture "
+            + "ATTENDED, but the provider declares AUTOMATED", mismatch.getMessage());
     }
 
     @Test
@@ -42,6 +69,15 @@ class CommandPolicyValidatorTest {
             () -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
                 false, false, false, Optional.of(ConnectorExecutionStyle.BLOCKING), Optional.empty(), Optional.empty(), false)));
         assertEquals("command policy for provider acme.search operation write.document requires framework-managed blocking execution, deferred to #577", blocking.getMessage());
+
+        ConnectorProviderDescriptor blockingProvider = new ConnectorProviderDescriptor(
+            ConnectorProviderId.of("acme.search"), new ConnectorProviderVersion(1, 0), Optional.empty(),
+            Optional.of(new ConnectorExecutionCapabilities(
+                ConnectorExecutionStyle.BLOCKING, ConnectorConcurrencyScope.PROVIDER_MANAGED)));
+        IllegalArgumentException declaredBlocking = assertThrows(IllegalArgumentException.class,
+            () -> CommandPolicyValidator.validate(blockingProvider, command, CommandPolicy.none()));
+        assertEquals("command policy for provider acme.search operation write.document declares blocking execution, "
+            + "which requires framework-managed execution deferred to #577", declaredBlocking.getMessage());
     }
 
     @Test

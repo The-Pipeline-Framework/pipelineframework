@@ -13,6 +13,7 @@ import org.pipelineframework.connector.ConnectorOperationIdentity;
  */
 public record CommandOutcomeSnapshot(
     ConnectorOperationIdentity operationIdentity,
+    int providerMajorVersion,
     ConnectorConfigurationSnapshot configuration,
     CommandEffectStatus outcomeStatus,
     String outcomeCode,
@@ -23,6 +24,9 @@ public record CommandOutcomeSnapshot(
 ) {
     public CommandOutcomeSnapshot {
         operationIdentity = Objects.requireNonNull(operationIdentity, "operation identity must not be null");
+        if (providerMajorVersion < 1) {
+            throw new IllegalArgumentException("command provider major version must be positive");
+        }
         configuration = Objects.requireNonNull(configuration, "command configuration snapshot must not be null");
         outcomeStatus = Objects.requireNonNull(outcomeStatus, "command outcome status must not be null");
         if (outcomeCode == null || outcomeCode.isBlank()) {
@@ -31,5 +35,10 @@ public record CommandOutcomeSnapshot(
         flags = Set.copyOf(Objects.requireNonNull(flags, "command outcome flags must not be null"));
         machineConfirmation = Objects.requireNonNull(machineConfirmation, "machine confirmation must not be null");
         references = List.copyOf(Objects.requireNonNull(references, "command references must not be null"));
+        if (references.size() > CommandReference.MAX_REFERENCES_PER_OUTCOME) {
+            throw new IllegalArgumentException(
+                "command references must not contain more than "
+                    + CommandReference.MAX_REFERENCES_PER_OUTCOME + " values");
+        }
     }
 }

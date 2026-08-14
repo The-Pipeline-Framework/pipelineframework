@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import javax.tools.Diagnostic;
 
@@ -463,7 +464,8 @@ class StepDefinitionParserTest {
             "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
             "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
-            "reconciliationSupported":true,"maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",
+            "reconciliationSupported":true,"executionPosture":"AUTOMATED",
+            "maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",
             "userConfirmationSupported":false,"durableReferenceKinds":["ticket"]}}]}]}
             """);
         Path pipeline = tempDir.resolve("native-command.yaml");
@@ -482,6 +484,7 @@ class StepDefinitionParserTest {
                   policy:
                     requireIdempotency: true
                     requireReconciliation: true
+                    requiredExecutionPosture: "AUTOMATED"
                     requiredExecutionStyle: "PROVIDER_MANAGED"
                     requiredConcurrencyScope: "PROVIDER_MANAGED"
                     minimumMachineConfirmation: "PROVIDER_ACKNOWLEDGED"
@@ -503,7 +506,45 @@ class StepDefinitionParserTest {
             assertEquals(1, step.commandConfig().get("__tpf_native_provider_version"));
             assertEquals("write.document", step.commandConfig().get("__tpf_native_operation"));
             assertEquals(1, step.commandConfig().get("__tpf_native_operation_version"));
+            assertEquals("AUTOMATED", ((Map<?, ?>) step.commandConfig().get("__tpf_native_policy"))
+                .get("requiredExecutionPosture"));
             assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())), diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsUnknownNativeCommandPolicyFields() throws IOException {
+        assertNativeCommandPolicyRejected("unsupportedGuarantee: true", "unsupported field 'unsupportedGuarantee'");
+    }
+
+    @Test
+    void rejectsInvalidNativeCommandPolicyEnumValues() throws IOException {
+        assertNativeCommandPolicyRejected("requiredExecutionStyle: \"NOT_A_STYLE\"",
+            "requiredExecutionStyle has unsupported value 'NOT_A_STYLE'");
+        assertNativeCommandPolicyRejected("requiredExecutionPosture: \"ROBOT\"",
+            "requiredExecutionPosture has unsupported value 'ROBOT'");
+    }
+
+    @Test
+    void usesParserClassLoaderWhenTheThreadContextClassLoaderIsUnavailable() throws IOException {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(null);
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: "Test"
+                basePackage: "com.example"
+                steps:
+                  - name: "Transform"
+                    service: "com.example.TransformService"
+                    input: "com.example.Input"
+                    output: "com.example.Output"
+                """, diagnostics);
+
+            assertEquals(1, steps.size(), diagnostics.toString());
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
         }
     }
 
@@ -2477,6 +2518,49 @@ class StepDefinitionParserTest {
 
     private List<StepDefinition> parse(String yaml) throws IOException {
         return parse(yaml, null);
+    }
+
+    private void assertNativeCommandPolicyRejected(String policy, String expectedDiagnostic) throws IOException {
+        Path metadataRoot = tempDir.resolve("connector-metadata-" + Math.abs(policy.hashCode()));
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
+            "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":true,"maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",
+            "userConfirmationSupported":false,"durableReferenceKinds":["ticket"]}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("invalid-native-policy-" + Math.abs(policy.hashCode()) + ".yaml");
+        Files.writeString(pipeline, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                connector:
+                  provider: "acme.search"
+                  providerVersion: 1
+                  operation: "write.document"
+                  operationVersion: 1
+                  policy:
+                    %s
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+            """.formatted(policy));
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(expectedDiagnostic)), diagnostics.toString());
+        }
     }
 
     private List<StepDefinition> parse(String yaml, List<String> diagnostics) throws IOException {

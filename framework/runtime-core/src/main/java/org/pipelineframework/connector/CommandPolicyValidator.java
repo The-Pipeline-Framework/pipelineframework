@@ -24,6 +24,10 @@ public final class CommandPolicyValidator {
         CommandCapabilities command = operation.commandCapabilities().orElse(CommandCapabilities.conservative());
         ConnectorExecutionCapabilities execution = provider.executionCapabilities()
             .orElse(ConnectorExecutionCapabilities.conservative());
+        if (execution.executionStyle() == ConnectorExecutionStyle.BLOCKING) {
+            throw new IllegalArgumentException(subject
+                + " declares blocking execution, which requires framework-managed execution deferred to #577");
+        }
         if (policy.requireRetryRedrive()) {
             throw new IllegalArgumentException(subject + " requires retry/redrive, but stable-ID redispatch is deferred to #545");
         }
@@ -33,6 +37,15 @@ public final class CommandPolicyValidator {
         if (policy.requireReconciliation() && !command.reconciliationSupported()) {
             throw new IllegalArgumentException(subject + " requires reconciliation support");
         }
+        policy.requiredExecutionPosture().ifPresent(required -> {
+            if (required == CommandExecutionPosture.UNSPECIFIED) {
+                throw new IllegalArgumentException(subject + " must not require unspecified command execution posture");
+            }
+            if (command.executionPosture() != required) {
+                throw new IllegalArgumentException(subject + " requires command execution posture " + required
+                    + ", but the provider declares " + command.executionPosture());
+            }
+        });
         policy.minimumMachineConfirmation().ifPresent(required -> {
             if (!command.maximumMachineConfirmation().satisfies(required)) {
                 throw new IllegalArgumentException(subject + " requires machine confirmation " + required

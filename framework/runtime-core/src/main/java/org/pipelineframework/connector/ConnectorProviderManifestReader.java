@@ -70,8 +70,8 @@ public final class ConnectorProviderManifestReader {
         Map<String, Object> capabilities = object(value.get("executionCapabilities"), "executionCapabilities");
         requireOnly(capabilities, "executionStyle", "concurrencyScope");
         return Optional.of(new ConnectorExecutionCapabilities(
-            ConnectorExecutionStyle.valueOf(string(capabilities, "executionStyle")),
-            ConnectorConcurrencyScope.valueOf(string(capabilities, "concurrencyScope"))));
+            enumValue(ConnectorExecutionStyle.class, string(capabilities, "executionStyle"), "executionStyle"),
+            enumValue(ConnectorConcurrencyScope.class, string(capabilities, "concurrencyScope"), "concurrencyScope")));
     }
 
     private static Optional<CommandCapabilities> optionalCommandCapabilities(Map<String, Object> value) {
@@ -81,7 +81,7 @@ public final class ConnectorProviderManifestReader {
         Map<String, Object> capabilities = object(value.get("commandCapabilities"), "commandCapabilities");
         requireOnly(capabilities,
             "retryRedriveSupported", "providerIdempotencySupported", "reconciliationSupported",
-            "maximumMachineConfirmation", "userConfirmationSupported", "durableReferenceKinds");
+            "executionPosture", "maximumMachineConfirmation", "userConfirmationSupported", "durableReferenceKinds");
         List<String> referenceKinds = array(capabilities, "durableReferenceKinds").stream().map(entry -> {
             if (entry instanceof String string) {
                 return string;
@@ -92,6 +92,9 @@ public final class ConnectorProviderManifestReader {
             bool(capabilities, "retryRedriveSupported"),
             bool(capabilities, "providerIdempotencySupported"),
             bool(capabilities, "reconciliationSupported"),
+            capabilities.containsKey("executionPosture")
+                ? enumValue(CommandExecutionPosture.class, string(capabilities, "executionPosture"), "executionPosture")
+                : CommandExecutionPosture.UNSPECIFIED,
             enumValue(CommandMachineConfirmation.class, string(capabilities, "maximumMachineConfirmation"),
                 "maximumMachineConfirmation"),
             bool(capabilities, "userConfirmationSupported"),

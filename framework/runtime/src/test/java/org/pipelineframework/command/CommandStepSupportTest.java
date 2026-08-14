@@ -1,10 +1,12 @@
 package org.pipelineframework.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -297,6 +299,34 @@ class CommandStepSupportTest {
 
     assertEquals("No CommandConnector found for command 'missing-command'", error.getMessage());
     verify(effectStore).find("tenant", "cmd-doc-1");
+    verifyNoMoreInteractions(effectStore);
+  }
+
+  @Test
+  void preservesNullLegacyConnectorResults() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    CommandConnector<CommandInput, CommandOutput> nullConnector = new CommandConnector<>() {
+      @Override
+      public String command() {
+        return "opensearch-index-document";
+      }
+
+      @Override
+      public Uni<CommandOutput> execute(CommandRequest<CommandInput> request) {
+        return Uni.createFrom().nullItem();
+      }
+    };
+    CommandStepSupport nullResultSupport = new CommandStepSupport(
+        List.of(nullConnector), List.of(store), config(OrchestratorMode.QUEUE_ASYNC));
+
+    CommandOutput output = nullResultSupport
+        .<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("null-result"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    assertNull(output);
+    CommandEffectRecord record = store.find("tenant", "cmd-null-result").await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
+    assertNull(record.output());
   }
 
   @Test
@@ -342,11 +372,11 @@ class CommandStepSupportTest {
             .await().atMost(Duration.ofSeconds(5)));
 
     connector.failure = null;
-    IllegalStateException redispatchFailure = assertThrows(IllegalStateException.class,
+    CommandRetryableOutcomeException redispatchFailure = assertThrows(CommandRetryableOutcomeException.class,
         () -> support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
             .await().atMost(Duration.ofSeconds(5)));
 
-    assertEquals("Command effect record already exists for commandId cmd-doc-1", redispatchFailure.getMessage());
+    assertEquals("command outcome failed_retryable: recorded-retryable-failure", redispatchFailure.getMessage());
     assertEquals(1, connector.calls.get());
     CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
     assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.status());
@@ -366,6 +396,13 @@ class CommandStepSupportTest {
     assertEquals(CommandEffectStatus.DLQ, record.status());
     assertEquals(NonRetryableException.class.getName(), record.errorClass());
     assertEquals("invalid index document", record.errorMessage());
+    connector.failure = null;
+    CommandOutcomeException retained = assertThrows(CommandOutcomeException.class,
+        () -> support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    assertEquals(CommandEffectStatus.DLQ, retained.status());
+    assertEquals("recorded-terminal-failure", retained.outcomeCode());
+    assertEquals(1, connector.calls.get());
     assertTransitionCount("dlq", 1);
     assertDurationCount("dlq", 1);
   }

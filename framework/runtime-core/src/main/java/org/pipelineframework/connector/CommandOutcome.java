@@ -33,7 +33,7 @@ public sealed interface CommandOutcome<O>
             output = Objects.requireNonNull(output, "command outcome output must not be null");
             confirmation = Objects.requireNonNull(confirmation, "command confirmation must not be null");
             flags = copyFlags(flags);
-            references = List.copyOf(Objects.requireNonNull(references, "command references must not be null"));
+            references = copyReferences(references);
         }
 
         public Succeeded(O output, CommandConfirmation confirmation, List<CommandReference> references) {
@@ -114,14 +114,12 @@ public sealed interface CommandOutcome<O>
         implements CommandOutcome<O> {
         public UserActionRequired {
             code = outcomeCode(code);
-            actionDescription = Objects.requireNonNull(actionDescription, "user action description must not be null");
+            if (actionDescription == null || actionDescription.isBlank()) {
+                throw new IllegalArgumentException("user action description must not be blank");
+            }
             confirmation = Objects.requireNonNull(confirmation, "command confirmation must not be null");
             flags = copyFlags(flags);
             references = copyReferences(references);
-        }
-
-        public UserActionRequired(String code, List<CommandReference> references) {
-            this(code, "", CommandConfirmation.none(), Set.of(), references);
         }
 
         public UserActionRequired(String code, String actionDescription, List<CommandReference> references) {
@@ -137,7 +135,14 @@ public sealed interface CommandOutcome<O>
     }
 
     private static List<CommandReference> copyReferences(List<CommandReference> value) {
-        return List.copyOf(Objects.requireNonNull(value, "command references must not be null"));
+        List<CommandReference> references = List.copyOf(
+            Objects.requireNonNull(value, "command references must not be null"));
+        if (references.size() > CommandReference.MAX_REFERENCES_PER_OUTCOME) {
+            throw new IllegalArgumentException(
+                "command references must not contain more than "
+                    + CommandReference.MAX_REFERENCES_PER_OUTCOME + " values");
+        }
+        return references;
     }
 
     private static Set<String> copyFlags(Set<String> value) {

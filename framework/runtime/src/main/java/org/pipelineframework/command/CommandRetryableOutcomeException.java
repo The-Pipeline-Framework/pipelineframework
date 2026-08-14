@@ -7,11 +7,18 @@ public final class CommandRetryableOutcomeException extends RuntimeException {
     private final String outcomeCode;
 
     public CommandRetryableOutcomeException(String outcomeCode) {
-        super("command outcome failed_retryable: " + outcomeCode);
-        this.outcomeCode = outcomeCode;
+        super("command outcome failed_retryable: " + requireCode(outcomeCode));
+        this.outcomeCode = requireCode(outcomeCode);
     }
 
     public String outcomeCode() {
+        return outcomeCode;
+    }
+
+    private static String requireCode(String outcomeCode) {
+        if (outcomeCode == null || outcomeCode.isBlank()) {
+            throw new IllegalArgumentException("command outcome code must not be blank");
+        }
         return outcomeCode;
     }
 }

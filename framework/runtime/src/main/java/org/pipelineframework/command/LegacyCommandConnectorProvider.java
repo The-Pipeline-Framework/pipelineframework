@@ -254,13 +254,17 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
             return adapt(request);
         }
 
+        @SuppressWarnings("unchecked")
         <I, O> CompletionStage<O> dispatchOutput(CommandRequest<I> request) {
-            CommandInvocation<Object, LegacyCommandRequestConfiguration> invocation = new CommandInvocation<>(
-                request.input(), new LegacyCommandRequestConfiguration(request), executionContext(request));
-            return LegacyCompletionStages.map(dispatch(invocation), outcome -> output(outcome, request.descriptor().command()));
+            return (CompletionStage<O>) invoke(request);
         }
 
         private CompletionStage<CommandOutcome<Object>> adapt(CommandRequest<?> request) {
+            return LegacyCompletionStages.map(invoke(request), value -> new CommandOutcome.Succeeded<>(
+                value, org.pipelineframework.connector.CommandConfirmation.none(), List.of()));
+        }
+
+        private CompletionStage<Object> invoke(CommandRequest<?> request) {
             Uni<Object> result;
             try {
                 result = connector.execute(cast(request));
@@ -282,8 +286,7 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
                     "legacy CommandConnector " + connector.getClass().getName()
                         + " returned a Uni without a CompletionStage for command '" + command + "'"));
             }
-            return LegacyCompletionStages.map(stage, value -> new CommandOutcome.Succeeded<>(
-                value, org.pipelineframework.connector.CommandConfirmation.none(), List.of()));
+            return stage;
         }
 
         private static ConnectorExecutionContext executionContext(CommandRequest<?> request) {
@@ -300,13 +303,6 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
             return (CommandRequest<Object>) request;
         }
 
-        @SuppressWarnings("unchecked")
-        private static <O> O output(CommandOutcome<Object> outcome, String command) {
-            if (outcome instanceof CommandOutcome.Succeeded<?> succeeded) {
-                return (O) succeeded.output();
-            }
-            throw new IllegalStateException("legacy CommandConnector operation returned an unsupported outcome for command '" + command + "'");
-        }
     }
 
     private static final class LegacyCompletionStages {

@@ -21,6 +21,6 @@ public record NativeCommandSelector(
     }
 
     public String commandName() {
-        return operationIdentity.providerId().value() + "/" + operationIdentity.operationId();
+        return "native:" + operationIdentity.providerId().value() + "/" + operationIdentity.operationId();
     }
 }

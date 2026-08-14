@@ -252,7 +252,7 @@ PromQL examples:
 # Success ratio by command over 5 minutes.
 sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status="succeeded"}[5m]))
 /
-sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status=~"succeeded|failed_retryable|dlq"}[5m]))
+sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status=~"succeeded|failed_retryable|ambiguous|user_action_required|dlq"}[5m]))
 ```
 
 ```text

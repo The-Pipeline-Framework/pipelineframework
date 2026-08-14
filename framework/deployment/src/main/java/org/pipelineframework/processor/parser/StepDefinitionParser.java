@@ -34,6 +34,7 @@ import org.pipelineframework.config.template.PipelineTemplateStepContractSyntax;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
+import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorConcurrencyScope;
 import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
@@ -105,6 +106,7 @@ public class StepDefinitionParser {
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
     private final ClassLoader providerMetadataClassLoader;
+    private volatile ConnectorProviderManifestCatalog providerManifestCatalog;
 
     /**
      * Creates a StepDefinitionParser that uses a no-op diagnostic reporter.
@@ -134,7 +136,7 @@ public class StepDefinitionParser {
     public StepDefinitionParser(
         BiConsumer<Diagnostic.Kind, String> diagnosticReporter,
         String legacyInternalPackageSuffix) {
-        this(diagnosticReporter, legacyInternalPackageSuffix, Thread.currentThread().getContextClassLoader());
+        this(diagnosticReporter, legacyInternalPackageSuffix, providerMetadataClassLoader());
     }
 
     StepDefinitionParser(
@@ -820,14 +822,31 @@ public class StepDefinitionParser {
             CommandPolicy policy = nativeCommandPolicy(policyMap);
             ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
                 ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion);
-            ConnectorProviderManifestCatalog catalog = ConnectorProviderManifestLoader.load(providerMetadataClassLoader);
-            catalog.validateCommandPolicy(identity, providerVersion, policy);
+            providerManifestCatalog().validateCommandPolicy(identity, providerVersion, policy);
             return Optional.of(new NativeCommandSelection(provider, providerVersion, operation, operationVersion, policyMap));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid native command connector: " + failure.getMessage();
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return Optional.empty();
+        }
+    }
+
+    private static ClassLoader providerMetadataClassLoader() {
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        return contextClassLoader != null ? contextClassLoader : StepDefinitionParser.class.getClassLoader();
+    }
+
+    private ConnectorProviderManifestCatalog providerManifestCatalog() {
+        ConnectorProviderManifestCatalog catalog = providerManifestCatalog;
+        if (catalog != null) {
+            return catalog;
+        }
+        synchronized (this) {
+            if (providerManifestCatalog == null) {
+                providerManifestCatalog = ConnectorProviderManifestLoader.load(providerMetadataClassLoader);
+            }
+            return providerManifestCatalog;
         }
     }
 
@@ -865,6 +884,7 @@ public class StepDefinitionParser {
             nativePolicyBoolean(policy, "requireRetryRedrive"),
             nativePolicyBoolean(policy, "requireIdempotency"),
             nativePolicyBoolean(policy, "requireReconciliation"),
+            nativePolicyEnum(policy, "requiredExecutionPosture", CommandExecutionPosture.class),
             nativePolicyEnum(policy, "requiredExecutionStyle", ConnectorExecutionStyle.class),
             nativePolicyEnum(policy, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             nativePolicyEnum(policy, "minimumMachineConfirmation", CommandMachineConfirmation.class),
@@ -874,7 +894,8 @@ public class StepDefinitionParser {
     private static void rejectUnknownNativePolicyFields(Map<String, Object> policy) {
         Set<String> supported = Set.of(
             "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-            "requiredConcurrencyScope", "minimumMachineConfirmation", "requireUserConfirmation");
+            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireUserConfirmation");
         policy.keySet().stream()
             .filter(field -> !supported.contains(field))
             .sorted()
