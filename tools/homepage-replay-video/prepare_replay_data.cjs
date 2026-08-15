@@ -8,7 +8,7 @@ const FPS = 24;
 const SEGMENTS = {
   ingress: [0.55, 1.5],
   request: [1.7, 5.15],
-  suspend: [5.05, 6.15],
+  awaitInFlight: [5.05, 6.15],
   completion: [6.35, 8.95],
   continuation: [8.55, 10.85],
   publish: [10.75, 11.55],
@@ -546,7 +546,7 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
 function buildHighlights(nodes) {
   return [
     { targetId: nodes.find((node) => node.role === "object-ingest")?.id, kind: "ingest", start: SEGMENTS.ingress[0], end: SEGMENTS.ingress[1], intensity: 1.05, color: "#7af7c6" },
-    { targetId: nodes.find((node) => node.role === "await")?.id, kind: "suspend", start: SEGMENTS.suspend[0], end: SEGMENTS.suspend[1], intensity: 1.25, color: "#95b8ff" },
+    { targetId: nodes.find((node) => node.role === "await")?.id, kind: "await-in-flight", start: SEGMENTS.awaitInFlight[0], end: SEGMENTS.awaitInFlight[1], intensity: 1.25, color: "#95b8ff" },
     { targetId: nodes.find((node) => node.role === "store")?.id, kind: "store", start: SEGMENTS.store[0], end: SEGMENTS.store[1], intensity: 0.85, color: "#76d8ff" },
     { targetId: nodes.find((node) => node.role === "provider")?.id, kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" },
     { targetId: nodes.find((node) => node.role === "object-publish")?.id, kind: "publish", start: SEGMENTS.publish[0], end: SEGMENTS.publish[1], intensity: 1.1, color: "#ffe08a" }

@@ -1,4 +1,5 @@
 import { readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BUILT_IN_REPLAYS_CONFIG } from "../../tools/replay-viewer/built-in-replays.js";
@@ -8,6 +9,10 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 const viewerDir = path.join(repoRoot, "tools", "replay-viewer");
 const appSource = readFileSync(path.join(viewerDir, "app.js"), "utf8");
+
+function sha256(filePath) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
 
 function readStringConstant(name, seen = new Set()) {
   if (seen.has(name)) {
@@ -94,4 +99,15 @@ if (branchStarts.approved !== 907 || branchStarts.unapproved !== 93) {
   );
 }
 
-console.log(`Replay dataset size check passed; startup source '${defaultSourceKey}' is within budget.`);
+const homepageManifestPath = path.join(repoRoot, "docs", "public", "home", "replay-proof-manifest.json");
+const homepageManifest = JSON.parse(readFileSync(homepageManifestPath, "utf8"));
+for (const [relativePath, expectedHash] of Object.entries(homepageManifest.sources ?? {})) {
+  const sourcePath = path.join(repoRoot, relativePath);
+  if (sha256(sourcePath) !== expectedHash) {
+    throw new Error(
+      `Homepage replay asset provenance is stale for ${relativePath}; run npm --prefix docs run build:homepage-video.`,
+    );
+  }
+}
+
+console.log(`Replay dataset and homepage provenance checks passed; startup source '${defaultSourceKey}' is within budget.`);

@@ -369,12 +369,23 @@ Prefix: `pipeline.telemetry`
 
 | Property                      | Type   | Default | Description                                                        |
 |-------------------------------|--------|---------|--------------------------------------------------------------------|
+| `pipeline.telemetry.enabled` | boolean | `false` | Master switch for framework telemetry instrumentation. Signal-specific switches do not override it. |
 | `pipeline.telemetry.item-input-type` | string | none    | Fully-qualified input type used to define the item boundary (build-time only — requires rebuild to take effect). |
 | `pipeline.telemetry.item-output-type` | string | none    | Fully-qualified output type used to define the item boundary (build-time only — requires rebuild to take effect). |
+| `pipeline.telemetry.metrics.enabled` | boolean | `true` | Enable framework metrics when the master switch and artifact metric capability are also enabled. |
+| `pipeline.telemetry.tracing.enabled` | boolean | `false` | Enable framework tracing when the master switch and artifact trace capability are also enabled. |
+| `pipeline.telemetry.tracing.per-item` | boolean | `false` | Enable per-item step spans. Use selectively for high-volume pipelines. |
+| `pipeline.telemetry.tracing.client-spans.force` | boolean | `false` | Force sampled gRPC client spans for the configured allowlist. |
+| `pipeline.telemetry.tracing.client-spans.allowlist` | string | none | Comma-separated exact gRPC service names; an empty allowlist with forcing enabled applies to all services. |
+| `pipeline.telemetry.replay.enabled` | boolean | `false` | Request replay export. Effective replay also requires tracing, per-item spans, topology metadata, and a valid exporter. |
+| `pipeline.telemetry.replay.exporter` | string | `none` | Replay exporter. The supported offline exporter is `file`. |
+| `pipeline.telemetry.replay.file.path` | path | none | Absolute output path used by the file replay exporter. |
 | `pipeline.telemetry.slo.rpc-latency-ms` | number | `1000` | RPC latency threshold (ms) used to emit SLO counters. |
 | `pipeline.telemetry.slo.item-throughput-per-min` | number | `1000` | Item throughput threshold (items/min) used to emit SLO counters. |
 
 Item boundary types are compiled into telemetry metadata; runtime changes do not apply unless you rebuild the project.
+TPF policy cannot add a telemetry signal that the deployable application did not include and enable
+during Quarkus augmentation. Exporter and backend configuration remain deployment concerns.
 
 ### In-flight Probe (Kill Switch)
 
