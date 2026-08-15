@@ -159,6 +159,21 @@ The generated command step calls the generator and connector. TPF also handles:
 
 The connector should not read or write the `CommandEffectStore` directly.
 
+## Pipeline cache replay and Command effect replay
+
+Generated Command steps remain eligible for generic step-result caching. A warm `PREFER_CACHE` or
+`REQUIRE_CACHE` hit returns the versioned cached output without entering `CommandStepSupport`; no effect record is
+created and no provider is invoked. This is pipeline replay, not evidence of a live external effect.
+
+On a cache miss, `CACHE_ONLY`, or `BYPASS_CACHE`, normal Command execution applies. `CommandId` identifies the
+logical external effect and `CommandEffectStore` decides whether to dispatch, return a recorded success, or
+preserve a terminal barrier. The generic cache key is a separate replay identity and follows the configured
+`CacheKeyStrategy` and version tag.
+
+`SKIP_IF_PRESENT` is not valid for Command steps because it could perform a new live effect while deliberately
+leaving an older replay output under the same cache key. Use `PREFER_CACHE`, `REQUIRE_CACHE`, `CACHE_ONLY`, or
+`BYPASS_CACHE` instead.
+
 ## Error Classification
 
 Throw a retryable exception for provider failures that may succeed later, such as transient network errors or `5xx` responses.

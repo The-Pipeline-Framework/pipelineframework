@@ -40,6 +40,8 @@ class CommandClientStepRendererTest {
         String source = generatedSource();
 
         assertTrue(source.contains("implements StepOneToOne<SearchIndexDocument, SearchIndexWriteResult>"));
+        assertTrue(source.contains("CommandStep"));
+        assertTrue(source.contains("CacheKeyTarget"));
         assertTrue(source.contains("CommandStepSupport support"));
         assertTrue(source.contains("CommandStepDescriptorFactory descriptorFactory"));
         assertTrue(source.contains("SearchIndexDocumentCommandIdGenerator commandIdGenerator"));

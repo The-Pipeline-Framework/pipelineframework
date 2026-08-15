@@ -89,8 +89,7 @@ class PipelineCacheReadSupport {
             return false;
         }
         return policy == CachePolicy.RETURN_CACHED
-            || policy == CachePolicy.REQUIRE_CACHE
-            || policy == CachePolicy.CACHE_ONLY;
+            || policy == CachePolicy.REQUIRE_CACHE;
     }
 
     String withVersionPrefix(String key, PipelineContext context) {
