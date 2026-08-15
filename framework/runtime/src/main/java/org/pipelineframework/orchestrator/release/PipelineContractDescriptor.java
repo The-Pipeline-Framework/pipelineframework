@@ -25,7 +25,7 @@ public record PipelineContractDescriptor(
     Map<String, Map<String, Object>> canonicalTypes,
     String canonicalCatalogFingerprint
 ) {
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+    public static final int CURRENT_SCHEMA_VERSION = 3;
     public static final String RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
     public static final String DEFAULT_PIPELINE_ID = "local-pipeline";
     public static final String DEFAULT_CONTRACT_VERSION = "local-contract";

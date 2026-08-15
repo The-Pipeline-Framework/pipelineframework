@@ -2,13 +2,18 @@ package org.pipelineframework.connector;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
+import org.pipelineframework.config.template.PipelineTemplateScalarTypes;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.config.template.PipelineTemplateWrapperConstraints;
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
 /**
  * Strict, dependency-free reader for static provider artifact metadata.
@@ -30,13 +35,13 @@ public final class ConnectorProviderManifestReader {
     private static ConnectorProviderManifest manifest(Map<String, Object> root) {
         requireOnly(root, "schemaVersion", "providers");
         List<ConnectorProviderArtifactDescriptor> providers = array(root, "providers").stream()
-            .map(value -> artifact(object(value, "provider descriptor")))
+            .map(value -> artifact(object(value, "provider descriptor"), integer(root, "schemaVersion")))
             .toList();
         return new ConnectorProviderManifest(integer(root, "schemaVersion"), providers);
     }
 
-    private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value) {
-        requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations");
+    private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value, int schemaVersion) {
+        requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations", "protocolTypes");
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
             ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema,
@@ -48,7 +53,181 @@ public final class ConnectorProviderManifestReader {
         List<ConnectorOperationDescriptor> operations = array(value, "operations").stream()
             .map(entry -> operation(object(entry, "operation descriptor")))
             .toList();
-        return new ConnectorProviderArtifactDescriptor(provider, operations);
+        if (schemaVersion == 1 && value.containsKey("protocolTypes")) {
+            throw new IllegalArgumentException("connector provider manifest schema version 1 cannot declare protocolTypes");
+        }
+        List<ProtocolTypeDescriptor> protocolTypes = value.containsKey("protocolTypes")
+            ? array(value, "protocolTypes").stream()
+                .map(entry -> protocolType(provider.id(), object(entry, "protocol type descriptor"))).toList()
+            : List.of();
+        return new ConnectorProviderArtifactDescriptor(provider, operations, protocolTypes);
+    }
+
+    private static ProtocolTypeDescriptor protocolType(ConnectorProviderId namespace, Map<String, Object> value) {
+        requireOnly(value, "name", "fields", "wraps", "alias", "variants",
+            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
+        String name = string(value, "name");
+        boolean fields = value.containsKey("fields");
+        boolean wraps = value.containsKey("wraps");
+        boolean alias = value.containsKey("alias");
+        boolean variants = value.containsKey("variants");
+        if ((fields ? 1 : 0) + (wraps ? 1 : 0) + (alias ? 1 : 0) + (variants ? 1 : 0) != 1) {
+            throw new IllegalArgumentException("protocol type '" + name
+                + "' must declare exactly one of fields, wraps, alias, or variants");
+        }
+        PipelineTemplateTypeDefinition definition;
+        if (fields) {
+            rejectConstraints(value, name);
+            List<PipelineTemplateTypeDefinition.Field> parsed = array(value, "fields").stream()
+                .map(entry -> protocolField(name, object(entry, "protocol type field"))).toList();
+            if (parsed.stream().map(PipelineTemplateTypeDefinition.Field::name).distinct().count() != parsed.size()) {
+                throw new IllegalArgumentException("protocol type '" + name + "' declares duplicate field names");
+            }
+            definition = new PipelineTemplateTypeDefinition.RecordType(name, parsed);
+        } else if (wraps) {
+            String scalar = string(value, "wraps");
+            if (!PipelineTemplateScalarTypes.isScalar(scalar)) {
+                throw new IllegalArgumentException("protocol type '" + name + "' wraps must reference a supported scalar");
+            }
+            PipelineTemplateWrapperConstraints constraints = protocolConstraints(value, name, scalar);
+            definition = new PipelineTemplateTypeDefinition.WrapperType(
+                name, new PipelineTemplateTypeReference.Scalar(scalar), constraints);
+        } else if (alias) {
+            rejectConstraints(value, name);
+            definition = new PipelineTemplateTypeDefinition.AliasType(name, protocolReference(string(value, "alias"), name));
+        } else {
+            rejectConstraints(value, name);
+            Map<String, Object> declared = object(value.get("variants"), "protocol type variants");
+            if (declared.isEmpty()) {
+                throw new IllegalArgumentException("protocol union '" + name + "' must declare at least one variant");
+            }
+            Map<String, PipelineTemplateTypeDefinition.Variant> parsed = new LinkedHashMap<>();
+            declared.forEach((discriminator, payload) -> {
+                if (!(payload instanceof String type)) {
+                    throw malformed("variants." + discriminator, "string");
+                }
+                PipelineTemplateTypeReference reference = protocolReference(type, name + "." + discriminator);
+                if (!(reference instanceof PipelineTemplateTypeReference.Contributed)) {
+                    throw new IllegalArgumentException("protocol union '" + name + "' variant '" + discriminator
+                        + "' must reference a contributed protocol type");
+                }
+                parsed.put(discriminator, new PipelineTemplateTypeDefinition.Variant(discriminator, reference));
+            });
+            definition = new PipelineTemplateTypeDefinition.UnionType(name, parsed);
+        }
+        return new ProtocolTypeDescriptor(new ProtocolTypeIdentity(namespace, name), definition);
+    }
+
+    private static PipelineTemplateTypeDefinition.Field protocolField(String owner, Map<String, Object> value) {
+        requireOnly(value, "name", "type");
+        String name = string(value, "name");
+        return new PipelineTemplateTypeDefinition.Field(name, protocolReference(string(value, "type"), owner + "." + name));
+    }
+
+    private static PipelineTemplateTypeReference protocolReference(String value, String owner) {
+        String token = value.trim();
+        if (PipelineTemplateScalarTypes.isScalar(token)) {
+            return new PipelineTemplateTypeReference.Scalar(token);
+        }
+        if (token.startsWith("<") && token.endsWith(">") && token.indexOf('<', 1) < 0
+            && token.indexOf('>') == token.length() - 1) {
+            String identity = token.substring(1, token.length() - 1);
+            ProtocolTypeIdentity.of(identity);
+            return new PipelineTemplateTypeReference.Contributed(identity);
+        }
+        throw new IllegalArgumentException("protocol type '" + owner
+            + "' must reference a supported scalar or qualified contributed type, got '" + value + "'");
+    }
+
+    private static PipelineTemplateWrapperConstraints protocolConstraints(
+        Map<String, Object> value,
+        String name,
+        String scalar
+    ) {
+        Optional<Integer> minLength = optionalInteger(value, "minLength");
+        Optional<Integer> maxLength = optionalInteger(value, "maxLength");
+        Optional<String> pattern = optionalString(value, "pattern");
+        Optional<PipelineTemplateWrapperConstraints.Format> format = optionalString(value, "format")
+            .map(entry -> {
+                if (!"email".equals(entry)) {
+                    throw new IllegalArgumentException("protocol type '" + name + "' format must be 'email'");
+                }
+                return PipelineTemplateWrapperConstraints.Format.EMAIL;
+            });
+        Optional<BigDecimal> minimum = optionalDecimal(value, "minimum");
+        Optional<BigDecimal> minimumExclusive = optionalDecimal(value, "minimumExclusive");
+        Optional<BigDecimal> maximum = optionalDecimal(value, "maximum");
+        Optional<BigDecimal> maximumExclusive = optionalDecimal(value, "maximumExclusive");
+        boolean hasString = minLength.isPresent() || maxLength.isPresent() || pattern.isPresent() || format.isPresent();
+        boolean hasNumber = minimum.isPresent() || minimumExclusive.isPresent() || maximum.isPresent() || maximumExclusive.isPresent();
+        if (hasString && !"string".equals(scalar)) {
+            throw new IllegalArgumentException("protocol type '" + name + "' uses string constraints on non-string wrapper");
+        }
+        if (hasNumber && !java.util.Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
+            throw new IllegalArgumentException("protocol type '" + name + "' uses numeric constraints on non-numeric wrapper");
+        }
+        if (pattern.isPresent() && maxLength.isEmpty()) {
+            throw new IllegalArgumentException("protocol type '" + name + "' pattern requires maxLength");
+        }
+        pattern.ifPresent(expression -> {
+            try {
+                Pattern.compile(expression);
+            } catch (PatternSyntaxException exception) {
+                throw new IllegalArgumentException("protocol type '" + name + "' pattern is not supported: "
+                    + exception.getDescription());
+            }
+        });
+        if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
+            throw new IllegalArgumentException("protocol type '" + name + "' minLength must not exceed maxLength");
+        }
+        if (minimum.isPresent() && minimumExclusive.isPresent() || maximum.isPresent() && maximumExclusive.isPresent()) {
+            throw new IllegalArgumentException("protocol type '" + name + "' cannot declare inclusive and exclusive bounds together");
+        }
+        Optional<BigDecimal> lower = minimum.isPresent() ? minimum : minimumExclusive;
+        Optional<BigDecimal> upper = maximum.isPresent() ? maximum : maximumExclusive;
+        if (lower.isPresent() && upper.isPresent()) {
+            int comparison = lower.orElseThrow().compareTo(upper.orElseThrow());
+            if (comparison > 0 || comparison == 0 && (minimumExclusive.isPresent() || maximumExclusive.isPresent())) {
+                throw new IllegalArgumentException("protocol type '" + name + "' declares an empty numeric constraint interval");
+            }
+        }
+        return new PipelineTemplateWrapperConstraints(minLength, maxLength, pattern, format, minimum, minimumExclusive,
+            maximum, maximumExclusive);
+    }
+
+    private static void rejectConstraints(Map<String, Object> value, String name) {
+        for (String key : List.of("minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive",
+            "maximum", "maximumExclusive")) {
+            if (value.containsKey(key)) {
+                throw new IllegalArgumentException("protocol type '" + name + "' can declare '" + key + "' only beside wraps");
+            }
+        }
+    }
+
+    private static Optional<Integer> optionalInteger(Map<String, Object> value, String key) {
+        if (!value.containsKey(key)) {
+            return Optional.empty();
+        }
+        int result = integer(value, key);
+        if (result < 0) {
+            throw new IllegalArgumentException("protocol type constraint '" + key + "' must be non-negative");
+        }
+        return Optional.of(result);
+    }
+
+    private static Optional<String> optionalString(Map<String, Object> value, String key) {
+        return value.containsKey(key) ? Optional.of(string(value, key)) : Optional.empty();
+    }
+
+    private static Optional<BigDecimal> optionalDecimal(Map<String, Object> value, String key) {
+        if (!value.containsKey(key)) {
+            return Optional.empty();
+        }
+        Object raw = value.get(key);
+        if (!(raw instanceof Number)) {
+            throw malformed(key, "number");
+        }
+        return Optional.of(new BigDecimal(raw.toString()).stripTrailingZeros());
     }
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value) {

@@ -1,13 +1,9 @@
 package org.pipelineframework.connector;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
 /**
  * Deterministically validated static provider metadata catalog for compiler/build-time discovery.
@@ -15,6 +11,7 @@ import java.util.Objects;
 public final class ConnectorProviderManifestCatalog {
     private final Map<ConnectorProviderId, ConnectorProviderArtifactDescriptor> providers;
     private final Map<ConnectorOperationIdentity, ConnectorOperationDescriptor> operations;
+    private final Map<ProtocolTypeIdentity, ProtocolTypeDescriptor> protocolTypes;
 
     public ConnectorProviderManifestCatalog(Collection<ConnectorProviderManifest> manifests) {
         Objects.requireNonNull(manifests, "manifests must not be null");
@@ -24,6 +21,7 @@ public final class ConnectorProviderManifestCatalog {
             .toList();
         Map<ConnectorProviderId, ConnectorProviderArtifactDescriptor> providersById = new LinkedHashMap<>();
         Map<ConnectorOperationIdentity, ConnectorOperationDescriptor> operationsById = new LinkedHashMap<>();
+        Map<ProtocolTypeIdentity, ProtocolTypeDescriptor> protocolTypesById = new LinkedHashMap<>();
         for (ConnectorProviderArtifactDescriptor descriptor : descriptors) {
             ConnectorProviderArtifactDescriptor duplicate = providersById.putIfAbsent(descriptor.provider().id(), descriptor);
             if (duplicate != null) {
@@ -35,9 +33,16 @@ public final class ConnectorProviderManifestCatalog {
                     throw new IllegalArgumentException("duplicate connector operation identity in static metadata: " + identity);
                 }
             }
+            for (ProtocolTypeDescriptor protocolType : descriptor.protocolTypes()) {
+                if (protocolTypesById.putIfAbsent(protocolType.identity(), protocolType) != null) {
+                    throw new IllegalArgumentException(
+                        "duplicate protocol type identity in static metadata: " + protocolType.identity());
+                }
+            }
         }
         providers = Collections.unmodifiableMap(new LinkedHashMap<>(providersById));
         operations = Collections.unmodifiableMap(new LinkedHashMap<>(operationsById));
+        protocolTypes = Collections.unmodifiableMap(new LinkedHashMap<>(protocolTypesById));
     }
 
     public List<ConnectorProviderArtifactDescriptor> providers() {
@@ -46,6 +51,10 @@ public final class ConnectorProviderManifestCatalog {
 
     public Map<ConnectorOperationIdentity, ConnectorOperationDescriptor> operations() {
         return operations;
+    }
+
+    public Map<ProtocolTypeIdentity, ProtocolTypeDescriptor> protocolTypes() {
+        return protocolTypes;
     }
 
     public void validateCommandPolicy(

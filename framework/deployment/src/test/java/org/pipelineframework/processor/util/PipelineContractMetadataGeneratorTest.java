@@ -5,9 +5,9 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -25,27 +25,16 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
-import org.pipelineframework.config.template.PipelinePlatform;
-import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.template.PipelineTemplateMaterialization;
-import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
-import org.pipelineframework.config.template.PipelineTemplateTypeModel;
-import org.pipelineframework.config.template.PipelineTemplateTypeReference;
-import org.pipelineframework.processor.PipelineCompilationContext;
-import org.pipelineframework.processor.ir.DeploymentRole;
-import org.pipelineframework.processor.ir.ExecutionMode;
-import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.PipelineTransport;
-import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TypeMapping;
-import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.config.template.*;
+import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -128,6 +117,23 @@ class PipelineContractMetadataGeneratorTest {
             .getAsJsonArray("fields").get(0).getAsJsonObject().getAsJsonObject("type");
         assertEquals("map", nestedMap.get("kind").getAsString());
         assertEquals("Alpha", nestedMap.getAsJsonObject("value").get("id").getAsString());
+    }
+
+    @Test
+    void includesContributedIdentityInReleaseContractAndHash() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path firstOutput = tempDir.resolve("contributed-first");
+        Path secondOutput = tempDir.resolve("contributed-second");
+
+        writeV3Metadata(pipelineYaml, firstOutput, contributedModel("tpf.alpha"));
+        writeV3Metadata(pipelineYaml, secondOutput, contributedModel("tpf.beta"));
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        assertEquals(3, first.get("schemaVersion").getAsInt());
+        assertEquals("tpf.alpha.Alpha", first.getAsJsonObject("canonicalTypes")
+            .getAsJsonObject("Alpha").get("contributedIdentity").getAsString());
+        assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
     }
 
     @Test
@@ -231,6 +237,12 @@ class PipelineContractMetadataGeneratorTest {
             definitions.put("Zeta", zeta);
         }
         return new PipelineTemplateTypeModel(definitions);
+    }
+
+    private static PipelineTemplateTypeModel contributedModel(String namespace) {
+        PipelineTemplateTypeModel base = v3TypeModel(false);
+        return new PipelineTemplateTypeModel(base.definitions(), Map.of(), Map.of(), Map.of(
+            "Alpha", new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "Alpha")));
     }
 
     private PipelineStepModel step(

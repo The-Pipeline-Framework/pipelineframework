@@ -9,9 +9,14 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
+import org.pipelineframework.protocol.ProtocolTypeRegistry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +24,153 @@ class PipelineTemplateConfigLoaderTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void resolvesContributedProtocolTypeInOrdinaryV3Union() throws Exception {
+        Path configPath = write("contributed-union.yaml", """
+            version: 3
+            appName: Protocol Types
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Recommendation:
+                fields:
+                  - [message, string]
+              Decision:
+                variants:
+                  call: <tpf.test.ProtocolCall>
+                  complete: Recommendation
+            contract:
+              input: Recommendation
+              output: Decision
+            steps:
+              - name: Decide
+                cardinality: ONE_TO_ONE
+                input: Recommendation
+                output: Decision
+            """);
+
+        PipelineTemplateConfig config = loader(protocolCall("tpf.test")).load(configPath);
+
+        PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
+            config.typeModel().definition("Decision").orElseThrow();
+        assertEquals("ProtocolCall", decision.variants().get("call").payload().name());
+        assertEquals("tpf.test.ProtocolCall",
+            config.typeModel().contributedTypeIdentity("ProtocolCall").orElseThrow().qualifiedName());
+        assertTrue(config.typeModel().definition("ProtocolCall").isPresent());
+        assertEquals("tpf.test.ProtocolCall", PipelineIdlSnapshot.from(config).types().get("ProtocolCall")
+            .contributedIdentity().orElseThrow());
+    }
+
+    @Test
+    void resolvesUniqueShortReferenceAndReportsUnknownOrAmbiguousReferences() throws Exception {
+        Path unique = write("contributed-short.yaml", protocolUnionYaml("<ProtocolCall>"));
+        PipelineTemplateConfig config = loader(protocolCall("tpf.test")).load(unique);
+        assertTrue(config.typeModel().contains("ProtocolCall"));
+
+        IllegalArgumentException unknown = assertThrows(IllegalArgumentException.class,
+            () -> loader(protocolCall("tpf.test")).load(write("contributed-unknown.yaml", protocolUnionYaml("<Missing>"))));
+        assertTrue(unknown.getMessage().contains("unknown contributed protocol type '<Missing>'"));
+
+        ProtocolTypeRegistry ambiguousRegistry = registry(protocolCall("tpf.alpha"), protocolCall("tpf.beta"));
+        IllegalArgumentException ambiguous = assertThrows(IllegalArgumentException.class,
+            () -> loader(ambiguousRegistry).load(write("contributed-ambiguous.yaml", protocolUnionYaml("<ProtocolCall>"))));
+        assertTrue(ambiguous.getMessage().contains("tpf.alpha.ProtocolCall, tpf.beta.ProtocolCall"));
+    }
+
+    @Test
+    void normalizesContributedContractsAndImportsOnlyTheirDependencyClosure() throws Exception {
+        Path configPath = write("contributed-contracts.yaml", """
+            version: 3
+            appName: Protocol Contracts
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Marker:
+                fields: [[value, string]]
+            contract:
+              input: <tpf.test.ProtocolCall>
+              output: <tpf.test.ProtocolCall>
+            steps:
+              - name: Dispatch
+                cardinality: ONE_TO_ONE
+                input: <ProtocolCall>
+                output: <ProtocolCall>
+                accepts: [<ProtocolCall>]
+            """);
+        ProtocolTypeDescriptor observation = protocolObservation();
+        ProtocolTypeDescriptor call = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "ProtocolCall"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("observation",
+                    new PipelineTemplateTypeReference.Contributed("tpf.test.ProtocolObservation")))));
+        ProtocolTypeDescriptor unused = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "UnusedProtocol"),
+            new PipelineTemplateTypeDefinition.RecordType("UnusedProtocol", List.of()));
+
+        PipelineTemplateConfig config = loader(call, observation, unused).load(configPath);
+
+        assertEquals("ProtocolCall", config.inputContract());
+        assertEquals("ProtocolCall", config.outputContract());
+        assertEquals("ProtocolCall", config.steps().getFirst().inputTypeName());
+        assertEquals(List.of("ProtocolCall"), config.steps().getFirst().accepts());
+        assertTrue(config.typeModel().contains("ProtocolObservation"));
+        assertFalse(config.typeModel().contains("UnusedProtocol"));
+    }
+
+    private Path write(String name, String content) throws Exception {
+        Path path = tempDir.resolve(name);
+        Files.writeString(path, content);
+        return path;
+    }
+
+    private static PipelineTemplateConfigLoader loader(ProtocolTypeDescriptor... descriptors) {
+        return loader(registry(descriptors));
+    }
+
+    private static PipelineTemplateConfigLoader loader(ProtocolTypeRegistry registry) {
+        return new PipelineTemplateConfigLoader(key -> null, key -> null, warning -> { }, registry);
+    }
+
+    private static ProtocolTypeRegistry registry(ProtocolTypeDescriptor... descriptors) {
+        return new ProtocolTypeRegistry(List.of(descriptors), new ConnectorProviderManifestCatalog(List.of()));
+    }
+
+    private static ProtocolTypeDescriptor protocolCall(String namespace) {
+        return new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "ProtocolCall"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")))));
+    }
+
+    private static ProtocolTypeDescriptor protocolObservation() {
+        return new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "ProtocolObservation"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolObservation", List.of(
+                new PipelineTemplateTypeDefinition.Field("value", new PipelineTemplateTypeReference.Scalar("string")))));
+    }
+
+    private static String protocolUnionYaml(String reference) {
+        return """
+            version: 3
+            appName: Protocol Types
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Recommendation:
+                fields:
+                  - [message, string]
+              Decision:
+                variants:
+                  call: %s
+                  complete: Recommendation
+            steps:
+              - name: Decide
+                cardinality: ONE_TO_ONE
+                input: Recommendation
+                output: Decision
+            """.formatted(reference);
+    }
 
     @Test
     void loadsTemplateConfigWithDefaults() throws Exception {

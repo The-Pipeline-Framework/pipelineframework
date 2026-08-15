@@ -194,7 +194,7 @@ Provider IDs are stable lowercase dotted names. Exact-major compatibility is pin
 
 Plain-Java discovery supports explicit provider collections and a host-neutral discovery mechanism such as `ServiceLoader`/provider factories plus static connector artifact metadata.
 
-Native provider artifacts publish `META-INF/pipeline/connector-providers.json` (exact schema to be implemented in #571). The compiler reads metadata without instantiating providers or resolving connections/secrets.
+Native provider artifacts publish `META-INF/pipeline/connector-providers.json`. Manifest schema v2 may also bundle immutable protocol type descriptors under the provider's own namespace. Those descriptors encode exactly the canonical v3 record, wrapper, alias, and union shapes; they are compile-time vocabulary, not operations or an alternative external schema language. The compiler reads and validates the metadata without instantiating providers or resolving connections/secrets. Schema v1 manifests remain valid and contribute no protocol types.
 
 Quarkus/CDI integration is an adapter. The public SPI never calls `CDI.current()` and provider authors must not need Quarkus build-step knowledge.
 

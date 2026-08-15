@@ -45,7 +45,18 @@ public final class PipelineTemplateSchemaExporter {
     },
     "logicalContractReference": {
       "type": "string",
-      "pattern": "^[A-Z][A-Za-z0-9_]*$"
+      "oneOf": [
+        { "pattern": "^[A-Z][A-Za-z0-9_]*$" },
+        { "pattern": "^<[a-z][a-z0-9]*(?:\\\\.[a-z][a-z0-9]*)*\\\\.[A-Z][A-Za-z0-9_]*>$" },
+        { "pattern": "^<[A-Z][A-Za-z0-9_]*>$" }
+      ]
+    },
+    "v3TypeReference": {
+      "type": "string",
+      "oneOf": [
+        { "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] },
+        { "$ref": "#/$defs/logicalContractReference" }
+      ]
     },
     "legacyJavaContract": {
       "type": "string",
@@ -1535,10 +1546,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "accepts": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9_]*$"
-          }
+          "items": { "$ref": "#/$defs/logicalContractReference" }
         },
         "terminal": {
           "type": "boolean"
@@ -1648,10 +1656,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "accepts": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9_]*$"
-          }
+          "items": { "$ref": "#/$defs/logicalContractReference" }
         },
         "terminal": {
           "type": "boolean"
@@ -1936,10 +1941,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "accepts": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9_]*$"
-          }
+          "items": { "$ref": "#/$defs/logicalContractReference" }
         },
         "terminal": {
           "type": "boolean"
@@ -2082,10 +2084,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "accepts": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9_]*$"
-          }
+          "items": { "$ref": "#/$defs/logicalContractReference" }
         },
         "terminal": {
           "type": "boolean"
@@ -2180,10 +2179,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "accepts": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9_]*$"
-          }
+          "items": { "$ref": "#/$defs/logicalContractReference" }
         },
         "terminal": {
           "type": "boolean"
@@ -2221,7 +2217,7 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["name", "type"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
-            "type": { "type": "string", "minLength": 1 }
+            "type": { "$ref": "#/$defs/v3TypeReference" }
           },
           "additionalProperties": false
         },
@@ -2229,7 +2225,7 @@ public final class PipelineTemplateSchemaExporter {
           "type": "array",
           "prefixItems": [
             { "type": "string", "minLength": 1 },
-            { "type": "string", "minLength": 1 }
+            { "$ref": "#/$defs/v3TypeReference" }
           ],
           "minItems": 2,
           "maxItems": 2,
@@ -2306,7 +2302,7 @@ public final class PipelineTemplateSchemaExporter {
           "type": "object",
           "required": ["alias"],
           "properties": {
-            "alias": { "type": "string", "minLength": 1 },
+            "alias": { "$ref": "#/$defs/v3TypeReference" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
@@ -2332,7 +2328,8 @@ public final class PipelineTemplateSchemaExporter {
       "required": ["input", "output"],
       "properties": {
         "input": { "$ref": "#/$defs/logicalContractReference" },
-        "output": { "$ref": "#/$defs/logicalContractReference" }
+        "output": { "$ref": "#/$defs/logicalContractReference" },
+        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } }
       },
       "allOf": [
         {
@@ -2656,12 +2653,10 @@ public final class PipelineTemplateSchemaExporter {
       "description": "Optional logical contracts for a linear v2 pipeline. These coexist with physical input and output boundaries.",
       "properties": {
         "input": {
-          "type": "string",
-          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          "$ref": "#/$defs/logicalContractReference"
         },
         "output": {
-          "type": "string",
-          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          "$ref": "#/$defs/logicalContractReference"
         }
       },
       "additionalProperties": false

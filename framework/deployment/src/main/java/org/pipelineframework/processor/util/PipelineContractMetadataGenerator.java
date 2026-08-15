@@ -5,14 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
@@ -20,20 +13,15 @@ import javax.tools.StandardLocation;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.squareup.javapoet.TypeName;
-import org.pipelineframework.config.pipeline.PipelineYamlAwaitTransport;
-import org.pipelineframework.config.pipeline.PipelineYamlConfig;
-import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
-import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
-import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.pipeline.*;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.PipelineCompilationContext;
-import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
@@ -75,7 +63,9 @@ public class PipelineContractMetadataGenerator {
         String pipelineId = resolvePipelineId(ctx);
         Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
         Map<String, Object> canonicalTypes = canonicalTypes(ctx);
-        int schemaVersion = canonicalTypes.isEmpty() ? 1 : 2;
+        boolean hasContributedTypes = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            && !config.typeModel().contributedTypeIdentities().isEmpty();
+        int schemaVersion = hasContributedTypes ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
@@ -128,6 +118,8 @@ public class PipelineContractMetadataGenerator {
             binding.put("definition", definition);
             binding.put("definitionFingerprint", fingerprint);
             binding.put("runtimeClass", config.basePackage() + ".domain." + entry.getKey());
+            model.contributedTypeIdentity(entry.getKey())
+                .ifPresent(identity -> binding.put("contributedIdentity", identity.qualifiedName()));
             types.put(entry.getKey(), immutableSortedMap(binding));
         }
         return immutableSortedMap(types);

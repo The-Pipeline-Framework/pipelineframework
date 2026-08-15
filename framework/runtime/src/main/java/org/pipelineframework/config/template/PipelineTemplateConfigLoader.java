@@ -36,9 +36,12 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.pipeline.PipelineResources;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
+import org.pipelineframework.protocol.ProtocolTypeRegistry;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -54,6 +57,7 @@ public class PipelineTemplateConfigLoader {
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
+    private final ProtocolTypeRegistry protocolTypeRegistry;
     private boolean warnedAuthoredFieldNumber;
     private boolean warnedOptional;
     private boolean warnedAuthoredUnionNumber;
@@ -85,9 +89,21 @@ public class PipelineTemplateConfigLoader {
         Function<String, String> envLookup,
         Consumer<String> warningReporter
     ) {
+        this(propertyLookup, envLookup, warningReporter, new ProtocolTypeRegistry(
+            List.of(), ConnectorProviderManifestLoader.load(PipelineResources.resolveClassLoader())));
+    }
+
+    /** Creates a loader with explicit contributed protocol vocabulary for plain-Java tooling and tests. */
+    public PipelineTemplateConfigLoader(
+        Function<String, String> propertyLookup,
+        Function<String, String> envLookup,
+        Consumer<String> warningReporter,
+        ProtocolTypeRegistry protocolTypeRegistry
+    ) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
         this.warningReporter = warningReporter == null ? LOG::warning : warningReporter;
+        this.protocolTypeRegistry = Objects.requireNonNull(protocolTypeRegistry, "protocol type registry must not be null");
     }
 
     /**
@@ -211,7 +227,7 @@ public class PipelineTemplateConfigLoader {
         if (rootMap.containsKey("unions")) {
             throw new IllegalStateException("Top-level 'unions' is not supported in version: 3; declare variants under 'types'.");
         }
-        PipelineTemplateTypeModel typeModel = readV3Types(rootMap);
+        V3TypeDeclarations typeDeclarations = readV3Types(rootMap);
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
@@ -227,12 +243,20 @@ public class PipelineTemplateConfigLoader {
         validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
         validateObjectOutputTarget(output, publish);
+        ProtocolTypeResolver.Resolved resolved = new ProtocolTypeResolver(
+            protocolTypeRegistry, typeDeclarations.definitions()).resolve(
+                typeDeclarations.representationMappings(), typeDeclarations.providerConfigurations(),
+                inputContract, outputContract, steps);
+        PipelineTemplateTypeModel typeModel = resolved.typeModel();
+        inputContract = resolved.inputContract();
+        outputContract = resolved.outputContract();
+        steps = resolved.steps();
         validateV3Contracts(typeModel, inputContract, outputContract, steps);
         return new PipelineTemplateConfig(version, appName, basePackage, transport, platform, Map.of(), Map.of(), sources,
             publish, steps, aspects, input, output, materialization, inputContract, outputContract, typeModel);
     }
 
-    private PipelineTemplateTypeModel readV3Types(Map<?, ?> rootMap) {
+    private V3TypeDeclarations readV3Types(Map<?, ?> rootMap) {
         Object typesObj = rootMap.get("types");
         if (!(typesObj instanceof Map<?, ?> typesMap) || typesMap.isEmpty()) {
             throw new IllegalStateException("Version: 3 requires a non-empty top-level 'types' map.");
@@ -257,7 +281,10 @@ public class PipelineTemplateConfigLoader {
                 representationMappings.put(name, mappings);
             }
         }
-        return new PipelineTemplateTypeModel(definitions, representationMappings, providerConfigurations);
+        return new V3TypeDeclarations(
+            Collections.unmodifiableMap(new LinkedHashMap<>(definitions)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(representationMappings)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(providerConfigurations)));
     }
 
     private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
@@ -537,26 +564,39 @@ public class PipelineTemplateConfigLoader {
             if (PipelineTemplateTypeMappings.isV3ScalarType(payload)) {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
             }
-            if (payload.contains("<") || payload.contains(".")) {
+            PipelineTemplateTypeReference reference = readV3Reference(payload, unionName + "." + discriminator);
+            if (reference instanceof PipelineTemplateTypeReference.Scalar) {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
             }
             result.put(discriminator, new PipelineTemplateTypeDefinition.Variant(discriminator,
-                new PipelineTemplateTypeReference.Named(payload)));
+                reference));
         }
         return result;
     }
 
     private PipelineTemplateTypeReference readV3Reference(String value, String owner) {
-        if (value.contains("<") || value.contains(">") || value.contains("[") || value.contains("]")) {
+        String token = value.trim();
+        if (token.startsWith("<") && token.endsWith(">") && token.length() > 2
+            && token.indexOf('<', 1) < 0 && token.indexOf('>') == token.length() - 1) {
+            return new PipelineTemplateTypeReference.Contributed(token.substring(1, token.length() - 1));
+        }
+        if (token.contains("<") || token.contains(">") || token.contains("[") || token.contains("]")) {
             throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.");
         }
-        if (PipelineTemplateTypeMappings.isV3ScalarType(value)) {
-            return new PipelineTemplateTypeReference.Scalar(value);
+        if (PipelineTemplateTypeMappings.isV3ScalarType(token)) {
+            return new PipelineTemplateTypeReference.Scalar(token);
         }
-        if (!PipelineTemplateTypeMappings.isMessageReferenceToken(value)) {
+        if (!PipelineTemplateTypeMappings.isMessageReferenceToken(token)) {
             throw new IllegalStateException("Type '" + owner + "' must reference a supported scalar or named type, got '" + value + "'.");
         }
-        return new PipelineTemplateTypeReference.Named(value);
+        return new PipelineTemplateTypeReference.Named(token);
+    }
+
+    private record V3TypeDeclarations(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings,
+        Map<String, Map<String, Object>> providerConfigurations
+    ) {
     }
 
     private String requiredV3String(Map<?, ?> values, String key, String owner) {

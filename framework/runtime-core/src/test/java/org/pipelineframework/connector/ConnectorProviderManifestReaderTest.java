@@ -3,11 +3,14 @@ package org.pipelineframework.connector;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ConnectorProviderManifestReaderTest {
 
@@ -22,6 +25,64 @@ class ConnectorProviderManifestReaderTest {
         ConnectorProviderManifestCatalog catalog = new ConnectorProviderManifestCatalog(List.of(manifest));
         assertEquals("metadata.provider", catalog.providers().getFirst().provider().id().value());
         assertEquals(1, catalog.operations().size());
+    }
+
+    @Test
+    void readsV2ProtocolTypesAsCanonicalV3Definitions() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[],"protocolTypes":[{"name":"ProtocolCall","fields":[
+            {"name":"operation","type":"string"},{"name":"payload","type":"bytes"}]}]}]}
+            """));
+
+        ConnectorProviderManifestCatalog catalog = new ConnectorProviderManifestCatalog(List.of(manifest));
+        assertEquals(1, catalog.protocolTypes().size());
+        assertEquals("metadata.provider.ProtocolCall",
+            catalog.protocolTypes().keySet().iterator().next().qualifiedName());
+    }
+
+    @Test
+    void preservesV1CompatibilityAndRequiresV2ForProtocolTypes() {
+        ConnectorProviderManifest v1 = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},"operations":[]}]}
+            """));
+        assertTrue(v1.providers().getFirst().protocolTypes().isEmpty());
+
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[]}]}
+                """)));
+        assertTrue(rejected.getMessage().contains("schema version 1 cannot declare protocolTypes"));
+    }
+
+    @Test
+    void rejectsProtocolTypesThatInventAnotherSchemaLanguage() {
+        IllegalArgumentException unqualified = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[{"name":"ProtocolCall","fields":[
+                {"name":"payload","type":"ApplicationType"}]}]}]}
+                """)));
+        assertTrue(unqualified.getMessage().contains("supported scalar or qualified contributed type"));
+
+        IllegalArgumentException unknownShape = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[{"name":"ProtocolCall","jsonSchema":{}}]}]}
+                """)));
+        assertTrue(unknownShape.getMessage().contains("unsupported field 'jsonSchema'"));
+    }
+
+    @Test
+    void rejectsProgrammaticProtocolTypesThatDependOnApplicationTypes() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> new ProtocolTypeDescriptor(
+                new ProtocolTypeIdentity(new ConnectorProviderId("metadata.provider"), "ProtocolCall"),
+                new PipelineTemplateTypeDefinition.AliasType(
+                    "ProtocolCall", new PipelineTemplateTypeReference.Named("ApplicationType"))));
+
+        assertTrue(rejected.getMessage().contains("closed over v3 scalars and qualified contributed references"));
     }
 
     @Test
