@@ -7,6 +7,10 @@ import java.util.Optional;
  * Command-family operation contract. Command outcome semantics are defined by the command runtime work.
  */
 public interface CommandOperation<I, C, O> extends ConnectorOperation {
+    default CommandCapabilities capabilities() {
+        return CommandCapabilities.conservative();
+    }
+
     default Optional<ConnectorConfigSchema<C>> configurationSchema() {
         return Optional.empty();
     }

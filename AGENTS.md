@@ -9,7 +9,7 @@ Core modules:
 - `framework/runtime-core`: framework-neutral TPF abstractions
 - `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
 - `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Springboot))
-- `framework/runtime-api`: framework-neutral API contracts for generated pipeline applications
+- `framework/api`: framework-neutral API contracts for generated pipeline applications
 
 Plugins:
 - `framework/plugins`: cross-cutting side-effect capabilities (persistence, caching, materialisation)
@@ -164,7 +164,7 @@ For planning, PR slicing, roadmap, or architecture tradeoff work, load `AGENTS.p
 
 TPF-specific scoping rules:
 
-- Core semantics usually live under `framework/runtime-core` `framework/runtime` and `framework/deployment`.
+- Core semantics live under `framework/api`, `framework/runtime`, `framework/runtime-*`, and `framework/deployment`.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.
@@ -172,7 +172,8 @@ TPF-specific scoping rules:
 - Docs should be updated with semantic changes, but do not scan all docs unless the affected concept is unclear.
 - Replay/web-ui is relevant when execution semantics, telemetry, step lifecycle, or visual replay state changes.
 - When changing Await/replay lifecycle semantics or refreshing the CSV Payments built-in replay, update the canonical dataset, its docs copy and analysis sidecar, the canonical replay docs, and homepage replay-video assets together. Read `tools/replay-viewer/README.md` before regenerating; validate the live-path event invariants and regenerate `tools/homepage-replay-video` outputs.
-- `tpf-mcp-bridge` is separate; only involve it when template generation, schema export, scaffold generation, or generated project behavior changes.
+- `app-generator` is separate; only involve it when template generation, schema export, scaffold generation, or
+  generated project behavior changes.
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
 - Keep user-facing docs (`design`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
 - Prefer enriching existing canonical docs pages over introducing standalone “feature islands” that duplicate navigation.
@@ -195,6 +196,18 @@ TPF-specific scoping rules:
 - Do not commit or push unless explicitly requested.
 - If unexpected unrelated working-tree changes appear mid-task, stop and ask.
 
+## Maven discipline
+
+- Maven profiles must not be used in this repository (except when forced by dependencies and there is no
+  alternative)
+- Do not replace profiles with Maven properties that select source universes.
+- Do not replace profiles with environment variables that select source universes.
+- Do not hide dead Java files using compiler <excludes>.
+- Do not make CI reconstruct a special build using -P....
+- Do not make release commands reconstruct a special build.
+- Do not make IntelliJ IDEA require profile selection.
+- There must be one canonical Maven reactor/lifecycle.
+
 ## Token Discipline
 
 Prefer Repowise MCP context over broad grep, but do not call every Repowise tool by default. Keep routine implementation context small; load the planning supplement only when the task is actually planning-shaped.
@@ -204,7 +217,7 @@ Prefer Repowise MCP context over broad grep, but do not call every Repowise tool
 
 This repository is indexed by Repowise. Use the Repowise MCP tools for codebase orientation, discovery, implementation context, modification risk, design rationale, and cleanup planning. MCP data reflects the last index run; verify against source files before editing.
 
-Last indexed: 2026-08-04 (commit 67890e1c4). Confidence: 100%.
+Last indexed: 2026-08-12 (commit 53d441bad). Confidence: 100%.
 ### Architecture
 Using tpf-technical-writer for repository-facing documentation language, and I’ll rely on the provided repo summary plus available repo context rather than editing files. I’m pulling the repository overview from the local Repowise index now so the page reflects the indexed architecture rather than only the prompt summary. The Pipeline Framework consumes YAML runtime mappings plus annotated Java pipeline steps, operators, mappers, and configuration, compiles them through build-time validation and code-generation phases, and produces reactive Quarkus runtime artifacts for local, REST, gRPC, and function-oriented pipeline execution. This repository is a Java-first monorepo for building transport-neutral reactive pipeline systems.
 ### Key Modules
@@ -217,11 +230,11 @@ Using tpf-technical-writer for repository-facing documentation language, and I�
 ### Risk Hotspots
 | File | Churn | 90d Commits | Owner |
 |------|-------|-------------|-------|
+| `tools/replay-viewer/datasets/csv-payments-built-in.json` | 100.0th percentile | 10 | mariano.barcia |
 | `framework/runtime/src/main/java/org/pipelineframework/QueueAsyncCoordinator.java` | 100.0th percentile | 36 | mariano.barcia |
 | `tools/replay-viewer/app.js` | 99.9th percentile | 23 | mariano.barcia |
-| `framework/runtime/src/test/java/org/pipelineframework/QueueAsyncCoordinatorTest.java` | 99.9th percentile | 24 | mariano.barcia |
-| `framework/runtime/src/test/java/org/pipelineframework/config/template/PipelineTemplateConfigLoaderTest.java` | 99.8th percentile | 13 | Mariano Barcia |
-| `framework/runtime/src/main/java/org/pipelineframework/config/template/PipelineTemplateConfigLoader.java` | 99.8th percentile | 13 | mariano.barcia |
+| `framework/runtime/src/test/java/org/pipelineframework/QueueAsyncCoordinatorTest.java` | 99.9th percentile | 25 | mariano.barcia |
+| `docs/public/replay-viewer-app/datasets/csv-payments-built-in.json` | 99.8th percentile | 8 | Mariano Barcia |
 
 ### Repowise MCP Workflow
 

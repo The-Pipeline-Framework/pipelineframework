@@ -36,10 +36,11 @@ public final class ConnectorProviderManifestReader {
     }
 
     private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value) {
-        requireOnly(value, "id", "version", "configurationSchema", "operations");
+        requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations");
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
-            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema);
+            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema,
+            optionalExecutionCapabilities(value));
         if (provider.id().isFrameworkReserved()) {
             throw new IllegalArgumentException(
                 "connector provider ID is reserved for framework use: " + provider.id().value());
@@ -51,15 +52,53 @@ public final class ConnectorProviderManifestReader {
     }
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value) {
-        requireOnly(value, "id", "kind", "majorVersion", "configurationSchema");
+        requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities");
         return new ConnectorOperationDescriptor(
             string(value, "id"), ConnectorOperationKind.of(string(value, "kind")), integer(value, "majorVersion"),
-            optionalSchema(value, "configurationSchema"));
+            optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value));
     }
 
     private static ConnectorProviderVersion version(Map<String, Object> value) {
         requireOnly(value, "major", "minor");
         return new ConnectorProviderVersion(integer(value, "major"), integer(value, "minor"));
+    }
+
+    private static Optional<ConnectorExecutionCapabilities> optionalExecutionCapabilities(Map<String, Object> value) {
+        if (!value.containsKey("executionCapabilities")) {
+            return Optional.empty();
+        }
+        Map<String, Object> capabilities = object(value.get("executionCapabilities"), "executionCapabilities");
+        requireOnly(capabilities, "executionStyle", "concurrencyScope");
+        return Optional.of(new ConnectorExecutionCapabilities(
+            enumValue(ConnectorExecutionStyle.class, string(capabilities, "executionStyle"), "executionStyle"),
+            enumValue(ConnectorConcurrencyScope.class, string(capabilities, "concurrencyScope"), "concurrencyScope")));
+    }
+
+    private static Optional<CommandCapabilities> optionalCommandCapabilities(Map<String, Object> value) {
+        if (!value.containsKey("commandCapabilities")) {
+            return Optional.empty();
+        }
+        Map<String, Object> capabilities = object(value.get("commandCapabilities"), "commandCapabilities");
+        requireOnly(capabilities,
+            "retryRedriveSupported", "providerIdempotencySupported", "reconciliationSupported",
+            "executionPosture", "maximumMachineConfirmation", "userConfirmationSupported", "durableReferenceKinds");
+        List<String> referenceKinds = array(capabilities, "durableReferenceKinds").stream().map(entry -> {
+            if (entry instanceof String string) {
+                return string;
+            }
+            throw malformed("durableReferenceKinds", "string array");
+        }).toList();
+        return Optional.of(new CommandCapabilities(
+            bool(capabilities, "retryRedriveSupported"),
+            bool(capabilities, "providerIdempotencySupported"),
+            bool(capabilities, "reconciliationSupported"),
+            capabilities.containsKey("executionPosture")
+                ? enumValue(CommandExecutionPosture.class, string(capabilities, "executionPosture"), "executionPosture")
+                : CommandExecutionPosture.UNSPECIFIED,
+            enumValue(CommandMachineConfirmation.class, string(capabilities, "maximumMachineConfirmation"),
+                "maximumMachineConfirmation"),
+            bool(capabilities, "userConfirmationSupported"),
+            java.util.Set.copyOf(referenceKinds)));
     }
 
     private static Optional<ConnectorConfigSchemaDescriptor> optionalSchema(Map<String, Object> value, String key) {
@@ -155,6 +194,14 @@ public final class ConnectorProviderManifestReader {
 
     private static IllegalArgumentException malformed(String key, String expected) {
         return new IllegalArgumentException("malformed connector provider manifest: field '" + key + "' must be a " + expected);
+    }
+
+    private static <T extends Enum<T>> T enumValue(Class<T> type, String value, String field) {
+        try {
+            return Enum.valueOf(type, value);
+        } catch (IllegalArgumentException exception) {
+            throw malformed(field, type.getSimpleName());
+        }
     }
 
     private static final class JsonParser {

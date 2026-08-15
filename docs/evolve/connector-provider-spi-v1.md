@@ -311,6 +311,8 @@ Schema resources and generated pipeline metadata contain schema identity, saniti
 
 Durable records may contain provider/operation identity, versions, sanitized config digest and only those logical connection identities explicitly required for replay. They must not serialize resolved secrets or runtime handles.
 
+Declaring a correlation or reconciliation reference kind as durable-safe is a provider data-classification decision. Durable reference values are bounded opaque identifiers only; arbitrary evidence, URLs, instructions, credentials, tokens and provider payloads are not reference metadata.
+
 ## Compiler/generated-step integration
 
 Preserve distinct `kind: command` and `kind: query` parser/runtime paths.

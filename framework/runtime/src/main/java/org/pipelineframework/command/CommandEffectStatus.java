@@ -8,6 +8,8 @@ public enum CommandEffectStatus {
     DISPATCHING,
     SUCCEEDED,
     FAILED_RETRYABLE,
+    AMBIGUOUS,
+    USER_ACTION_REQUIRED,
     DLQ,
     FAILED
 }

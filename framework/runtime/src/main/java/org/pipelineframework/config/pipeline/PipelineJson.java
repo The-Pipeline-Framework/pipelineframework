@@ -19,6 +19,7 @@ package org.pipelineframework.config.pipeline;
 import java.io.IOException;
 import java.nio.file.Path;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.DeserializationContext;
@@ -29,6 +30,7 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.util.JsonFormat;
+import org.pipelineframework.connector.ConnectorProviderId;
 
 /**
  * Shared ObjectMapper provider for pipeline JSON operations.
@@ -54,6 +56,7 @@ public final class PipelineJson {
 
     private static ObjectMapper createMapper() {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        mapper.addMixIn(ConnectorProviderId.class, ConnectorProviderIdMixin.class);
         SimpleModule protobufModule = new SimpleModule("pipeline-protobuf-json");
         protobufModule.addSerializer(MessageOrBuilder.class, new ProtobufJsonSerializer());
         mapper.registerModule(protobufModule);
@@ -62,6 +65,11 @@ public final class PipelineJson {
         pathModule.addDeserializer(Path.class, new PathJsonDeserializer());
         mapper.registerModule(pathModule);
         return mapper;
+    }
+
+    private abstract static class ConnectorProviderIdMixin {
+        @JsonIgnore
+        abstract boolean isFrameworkReserved();
     }
 
     private static final class ProtobufJsonSerializer extends StdSerializer<MessageOrBuilder> {
