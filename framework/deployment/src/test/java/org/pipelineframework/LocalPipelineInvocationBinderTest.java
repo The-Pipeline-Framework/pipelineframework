@@ -72,7 +72,8 @@ import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineStepTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -93,7 +94,10 @@ import static org.mockito.Mockito.when;
 class LocalPipelineInvocationBinderTest {
 
     @Mock
-    PipelineTelemetry telemetry;
+    PipelineRunTelemetry runTelemetry;
+
+    @Mock
+    PipelineStepTelemetry.Seam stepTelemetry;
 
     @Mock
     PipelineStepOrderer stepOrderer;
@@ -111,7 +115,8 @@ class LocalPipelineInvocationBinderTest {
         runner = new PipelineRunner();
         runner.configFactory = new ConfigFactory();
         runner.pipelineConfig = new PipelineConfig();
-        runner.telemetry = telemetry;
+        runner.runTelemetry = runTelemetry;
+        runner.stepTelemetry = stepTelemetry;
         runner.stepOrderer = stepOrderer;
         runner.parallelismPolicyResolver = parallelismPolicyResolver;
         runner.cacheSupportFactory = cacheSupportFactory;
@@ -122,16 +127,26 @@ class LocalPipelineInvocationBinderTest {
             .thenReturn(ParallelismPolicy.SEQUENTIAL);
         lenient().when(parallelismPolicyResolver.resolveMaxConcurrency(any())).thenReturn(1);
         lenient().when(cacheSupportFactory.buildCacheReadSupport()).thenReturn(null);
-        lenient().when(telemetry.startRun(any(), anyInt(), any(), anyInt())).thenReturn(null);
-        lenient().when(telemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-        lenient().when(telemetry.instrumentRunCompletion(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-        lenient().when(telemetry.instrumentItemConsumed(any(), any(), any(Multi.class)))
+        lenient().when(runTelemetry.startRun(any(), anyInt(), any(), anyInt()))
+            .thenReturn(PipelineRunTelemetry.nonOwningContext());
+        lenient().when(runTelemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(runTelemetry.instrumentRunCompletion(any(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(stepTelemetry.instrumentItemConsumed(any(), any(), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Multi.class)))
+        lenient().when(stepTelemetry.instrumentItemConsumed(any(), any(), any(Uni.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Uni.class)))
+        lenient().when(stepTelemetry.instrumentItemProduced(any(), any(), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentStepUni(any(), any(), any(), anyBoolean(), any()))
+        lenient().when(stepTelemetry.instrumentItemProduced(any(), any(), any(Uni.class)))
+            .thenAnswer(invocation -> invocation.getArgument(2));
+        lenient().when(stepTelemetry.instrumentStepUni(any(), any(), any(), anyBoolean(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(stepTelemetry.instrumentStepUni(any(), any(), any(), anyBoolean()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(stepTelemetry.instrumentStepMulti(any(), any(), any(), anyBoolean(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(stepTelemetry.instrumentStepMulti(any(), any(), any(), anyBoolean()))
             .thenAnswer(invocation -> invocation.getArgument(1));
     }
 
@@ -193,7 +208,7 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(1, subscriptions.get());
         assertEquals(1, publisher.writeAttempts());
         assertSame(context, observedContext.get());
-        verify(telemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
+        verify(runTelemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
     }
 
     @Test
@@ -235,7 +250,7 @@ class LocalPipelineInvocationBinderTest {
             ((Multi<String>) execution.result()).collect().asList().await().indefinitely());
         assertEquals(1, subscriptions.get());
         assertSame(context, observedContext.get());
-        verify(telemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
+        verify(runTelemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
     }
 
     @Test
@@ -263,7 +278,7 @@ class LocalPipelineInvocationBinderTest {
             Multi.createFrom().items("red", "blue"),
             List.of(reductionStep));
         assertEquals("red-blue", ((Uni<String>) reductionExecution.result()).await().indefinitely());
-        verify(telemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
+        verify(runTelemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
 
         PipelineReference streamingReference = new PipelineReference("stream-inner");
         PipelineDefinition streaming = definition(
@@ -288,7 +303,7 @@ class LocalPipelineInvocationBinderTest {
             List.of(streamingStep));
         assertEquals(List.of("RED", "BLUE"),
             ((Multi<String>) streamingExecution.result()).collect().asList().await().indefinitely());
-        verify(telemetry, times(2)).startRun(any(), anyInt(), any(), anyInt());
+        verify(runTelemetry, times(2)).startRun(any(), anyInt(), any(), anyInt());
     }
 
     @Test

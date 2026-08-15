@@ -182,7 +182,7 @@ public class PipelineRunner implements AutoCloseable {
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
         PipelineRunContext telemetryContext = rootInvocation
             ? runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency)
-            : PipelineRunContext.disabled();
+            : PipelineRunTelemetry.nonOwningContext();
         Object instrumentedInput = rootInvocation ? runTelemetry.instrumentInput(input, telemetryContext) : input;
         PipelineStepTelemetry executionStepTelemetry = rootInvocation
             ? PipelineStepTelemetry.of(stepTelemetry, telemetryContext)
