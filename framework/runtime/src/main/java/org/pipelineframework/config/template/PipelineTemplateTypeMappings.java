@@ -103,7 +103,7 @@ final class PipelineTemplateTypeMappings {
 
     /** Returns whether the token is a scalar supported by the deliberately small v3 type language. */
     static boolean isV3ScalarType(String value) {
-        return isBuiltinType(value) && !"map".equalsIgnoreCase(value.trim());
+        return PipelineTemplateScalarTypes.isScalar(value);
     }
 
     /**

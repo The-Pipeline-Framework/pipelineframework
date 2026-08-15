@@ -198,8 +198,12 @@ no-argument packaging constructor; Quarkus creates non-contextual CDI instances 
 bean so injection, post-construction and destruction remain container-owned.
 
 Native provider packaging derives descriptors from executable provider instances and emits direct
-service registration plus `META-INF/pipeline/connector-providers.json`. The consuming compiler reads
-that metadata without instantiating providers or resolving connections/secrets.
+service registration plus `META-INF/pipeline/connector-providers.json`. Manifest schema v2 may also
+bundle immutable protocol type descriptors under the provider's own namespace. Those descriptors
+encode exactly the canonical v3 record, wrapper, alias, and union shapes; they are compile-time
+vocabulary, not operations or an alternative external schema language. The consuming compiler reads
+and validates the metadata without instantiating providers or resolving connections/secrets. Schema v1
+manifests remain valid and contribute no protocol types.
 
 Quarkus/CDI integration is an adapter. The public SPI never calls `CDI.current()` and provider authors must not need Quarkus build-step knowledge.
 
