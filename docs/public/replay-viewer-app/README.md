@@ -33,6 +33,10 @@ So the viewer only needs one file at import time.
   - `success`
   - `cache_hit`
   - `reject`
+  - Await interaction, admission, durable fallback, and resume lifecycle events
+  - object-ingest and object-publication lifecycle events
+
+The `runParameters` telemetry section records the TPF instrumentation policy captured with the run. It does not prove that the application was built with a particular Quarkus signal capability, that an exporter was configured, or that a backend was available. Use the live metrics and tracing surfaces for those questions.
 
 ## Run locally
 

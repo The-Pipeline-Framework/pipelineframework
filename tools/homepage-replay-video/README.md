@@ -6,6 +6,10 @@ The Blender path has been retired. The homepage asset is now generated from repl
 purpose-built browser-native WebGL scene that emphasizes the async boundary, Kafka/provider handoff, and shared
 persistence/store actor without reusing the replay viewer UI itself.
 
+The cinematic compresses a captured replay into a fixed 12-second presentation. It is not a trace viewer or a
+telemetry conformance proof. The current CSV fixture follows the live-eligible Await path: the highlighted
+provider interval means that completion is in flight, not that the execution entered durable fallback or resume.
+
 ## Source of truth
 
 - Replay source: `tools/replay-viewer/datasets/csv-payments-built-in.json`
@@ -29,6 +33,9 @@ This script:
 2. renders deterministic WebGL frames through Playwright,
 3. captures the poster image, and
 4. encodes the homepage `webm` and `mp4` exports.
+
+It also refreshes `docs/public/home/replay-proof-manifest.json`, whose source hashes let the docs build detect
+stale cinematic assets.
 
 If the environment does not expose the required toolchain automatically, set:
 
