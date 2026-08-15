@@ -32,6 +32,16 @@ import org.pipelineframework.config.pipeline.BranchRoutingRules;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepContractSyntax;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
+import org.pipelineframework.connector.CommandMachineConfirmation;
+import org.pipelineframework.connector.CommandPolicy;
+import org.pipelineframework.connector.CommandExecutionPosture;
+import org.pipelineframework.connector.ConnectorConcurrencyScope;
+import org.pipelineframework.connector.ConnectorExecutionStyle;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
@@ -84,6 +94,7 @@ public class StepDefinitionParser {
         "await",
         "timeout",
         "command",
+        "connector",
         "commandIdGenerator",
         "duplicatePolicy",
         "config",
@@ -94,6 +105,8 @@ public class StepDefinitionParser {
         "runOnVirtualThreads");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
+    private final ClassLoader providerMetadataClassLoader;
+    private volatile ConnectorProviderManifestCatalog providerManifestCatalog;
 
     /**
      * Creates a StepDefinitionParser that uses a no-op diagnostic reporter.
@@ -123,11 +136,20 @@ public class StepDefinitionParser {
     public StepDefinitionParser(
         BiConsumer<Diagnostic.Kind, String> diagnosticReporter,
         String legacyInternalPackageSuffix) {
+        this(diagnosticReporter, legacyInternalPackageSuffix, providerMetadataClassLoader());
+    }
+
+    StepDefinitionParser(
+        BiConsumer<Diagnostic.Kind, String> diagnosticReporter,
+        String legacyInternalPackageSuffix,
+        ClassLoader providerMetadataClassLoader) {
         this.diagnosticReporter = diagnosticReporter == null ? (kind, message) -> {
         } : diagnosticReporter;
         this.legacyInternalPackageSuffix = isBlank(legacyInternalPackageSuffix)
             ? DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX
             : legacyInternalPackageSuffix;
+        this.providerMetadataClassLoader = Objects.requireNonNull(
+            providerMetadataClassLoader, "provider metadata class loader must not be null");
     }
     
     /**
@@ -586,11 +608,42 @@ public class StepDefinitionParser {
                 return null;
             }
             String command = getStringValue(stepData, "command");
-            if (isBlank(command)) {
-                String message = "Skipping step '" + name + "': command steps must declare command";
+            Object connector = stepData.get("connector");
+            Optional<NativeCommandSelection> nativeSelection = Optional.empty();
+            if (!isBlank(command) && connector != null) {
+                String message = "Skipping step '" + name + "': command and connector are mutually exclusive";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
+            }
+            if (isBlank(command) && connector == null) {
+                String message = "Skipping step '" + name + "': command steps must declare command or connector";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (connector != null) {
+                if (!(connector instanceof Map<?, ?> rawConnector)) {
+                    String message = "Skipping step '" + name + "': connector must declare provider and operation";
+                    LOG.warn(message);
+                    report(Diagnostic.Kind.ERROR, message);
+                    return null;
+                }
+                Map<String, Object> connectorMap = new java.util.LinkedHashMap<>();
+                rawConnector.forEach((key, value) -> connectorMap.put(String.valueOf(key), value));
+                String provider = getStringValue(connectorMap, "provider");
+                String operation = getStringValue(connectorMap, "operation");
+                if (isBlank(provider) || isBlank(operation)) {
+                    String message = "Skipping step '" + name + "': connector must declare provider and operation";
+                    LOG.warn(message);
+                    report(Diagnostic.Kind.ERROR, message);
+                    return null;
+                }
+                nativeSelection = validateNativeCommandConnector(name, connectorMap);
+                if (nativeSelection.isEmpty()) {
+                    throw new StepSkippedException();
+                }
+                command = nativeSelection.orElseThrow().commandName();
             }
             String commandIdGeneratorName = getStringValue(stepData, "commandIdGenerator");
             ClassName commandIdGenerator = parseOptionalClassName(commandIdGeneratorName, name, "commandIdGenerator", basePackage, false);
@@ -609,6 +662,9 @@ public class StepDefinitionParser {
             Map<String, Object> commandConfig = parseCommandConfig(stepData, name);
             if (commandConfig == null) {
                 return null;
+            }
+            if (nativeSelection.isPresent()) {
+                commandConfig = nativeSelection.orElseThrow().embed(commandConfig);
             }
             return new StepDefinition(
                 name,
@@ -756,6 +812,151 @@ public class StepDefinitionParser {
     }
 
     @SuppressWarnings("unchecked")
+    private Optional<NativeCommandSelection> validateNativeCommandConnector(String stepName, Map<String, Object> connector) {
+        try {
+            String provider = requiredNativeString(connector, "provider");
+            String operation = requiredNativeString(connector, "operation");
+            int providerVersion = requiredNativeVersion(connector, "providerVersion");
+            int operationVersion = requiredNativeVersion(connector, "operationVersion");
+            Map<String, Object> policyMap = nativePolicyMap(connector.get("policy"));
+            CommandPolicy policy = nativeCommandPolicy(policyMap);
+            ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+                ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion);
+            providerManifestCatalog().validateCommandPolicy(identity, providerVersion, policy);
+            return Optional.of(new NativeCommandSelection(provider, providerVersion, operation, operationVersion, policyMap));
+        } catch (IllegalArgumentException | IllegalStateException failure) {
+            String message = "Skipping step '" + stepName + "': invalid native command connector: " + failure.getMessage();
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return Optional.empty();
+        }
+    }
+
+    private static ClassLoader providerMetadataClassLoader() {
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        return contextClassLoader != null ? contextClassLoader : StepDefinitionParser.class.getClassLoader();
+    }
+
+    private ConnectorProviderManifestCatalog providerManifestCatalog() {
+        ConnectorProviderManifestCatalog catalog = providerManifestCatalog;
+        if (catalog != null) {
+            return catalog;
+        }
+        synchronized (this) {
+            if (providerManifestCatalog == null) {
+                providerManifestCatalog = ConnectorProviderManifestLoader.load(providerMetadataClassLoader);
+            }
+            return providerManifestCatalog;
+        }
+    }
+
+    private static String requiredNativeString(Map<String, Object> connector, String field) {
+        String value = connector.get(field) instanceof String string ? string.trim() : "";
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("connector " + field + " must be a non-blank string");
+        }
+        return value;
+    }
+
+    private static int requiredNativeVersion(Map<String, Object> connector, String field) {
+        Object value = connector.get(field);
+        if (!(value instanceof Number number) || number.intValue() < 1 || number.doubleValue() != number.intValue()) {
+            throw new IllegalArgumentException("connector " + field + " must be a positive integer");
+        }
+        return number.intValue();
+    }
+
+    private static Map<String, Object> nativePolicyMap(Object value) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> rawPolicy)) {
+            throw new IllegalArgumentException("connector policy must be a map");
+        }
+        Map<String, Object> policy = new LinkedHashMap<>();
+        rawPolicy.forEach((key, entry) -> policy.put(String.valueOf(key), entry));
+        return Map.copyOf(policy);
+    }
+
+    private static CommandPolicy nativeCommandPolicy(Map<String, Object> policy) {
+        rejectUnknownNativePolicyFields(policy);
+        return new CommandPolicy(
+            nativePolicyBoolean(policy, "requireRetryRedrive"),
+            nativePolicyBoolean(policy, "requireIdempotency"),
+            nativePolicyBoolean(policy, "requireReconciliation"),
+            nativePolicyEnum(policy, "requiredExecutionPosture", CommandExecutionPosture.class),
+            nativePolicyEnum(policy, "requiredExecutionStyle", ConnectorExecutionStyle.class),
+            nativePolicyEnum(policy, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
+            nativePolicyEnum(policy, "minimumMachineConfirmation", CommandMachineConfirmation.class),
+            nativePolicyBoolean(policy, "requireUserConfirmation"));
+    }
+
+    private static void rejectUnknownNativePolicyFields(Map<String, Object> policy) {
+        Set<String> supported = Set.of(
+            "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
+            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireUserConfirmation");
+        policy.keySet().stream()
+            .filter(field -> !supported.contains(field))
+            .sorted()
+            .findFirst()
+            .ifPresent(field -> {
+                throw new IllegalArgumentException("connector policy has unsupported field '" + field + "'");
+            });
+    }
+
+    private static boolean nativePolicyBoolean(Map<String, Object> policy, String field) {
+        Object value = policy.get(field);
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean result) {
+            return result;
+        }
+        throw new IllegalArgumentException("connector policy " + field + " must be a boolean");
+    }
+
+    private static <T extends Enum<T>> Optional<T> nativePolicyEnum(
+        Map<String, Object> policy,
+        String field,
+        Class<T> enumType
+    ) {
+        Object value = policy.get(field);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof String string)) {
+            throw new IllegalArgumentException("connector policy " + field + " must be a string");
+        }
+        try {
+            return Optional.of(Enum.valueOf(enumType, string));
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalArgumentException("connector policy " + field + " has unsupported value '" + string + "'", failure);
+        }
+    }
+
+    private record NativeCommandSelection(
+        String provider,
+        int providerVersion,
+        String operation,
+        int operationVersion,
+        Map<String, Object> policy
+    ) {
+        private String commandName() {
+            return "native:" + provider + "/" + operation;
+        }
+
+        private Map<String, Object> embed(Map<String, Object> configuration) {
+            Map<String, Object> embedded = new LinkedHashMap<>(configuration);
+            embedded.put("__tpf_native_provider", provider);
+            embedded.put("__tpf_native_provider_version", providerVersion);
+            embedded.put("__tpf_native_operation", operation);
+            embedded.put("__tpf_native_operation_version", operationVersion);
+            embedded.put("__tpf_native_policy", policy);
+            return Map.copyOf(embedded);
+        }
+    }
+
     private Map<String, QueryDefinition> parseQueryDefinitions(Map<String, Object> templateData) {
         Object queriesObj = templateData.get("queries");
         if (!(queriesObj instanceof Map<?, ?> queriesMap)) {

@@ -171,9 +171,9 @@ The repository also keeps a 10k self-host acceptance with the unchanged 180-seco
 Command telemetry has two layers:
 
 1. the pipeline layer, where the command appears in `tpf.step` spans, step metrics, and replay topology like other authored steps;
-2. the effect layer, where `tpf.command.effect.*` metrics and the command effect store record pending, dispatching, succeeded, retryable failure, duplicate handling, or terminal DLQ state.
+2. the effect layer, where `tpf.command.effect.*` metrics and the command effect store record pending, dispatching, succeeded, retryable failure, ambiguous submission, user action required, duplicate handling, or terminal DLQ state.
 
-That split is intentional. The step span shows where the pipeline spent time. Command effect metrics support dashboards and SLOs. The effect record preserves command-id detail for investigation and replay. Use provider telemetry for external backlog and provider-side latency.
+That split is intentional. The step span shows where the pipeline spent time. Command effect metrics support dashboards and SLOs. The effect record preserves command-id detail and sanitized native outcome metadata for investigation and replay. Use provider telemetry for external backlog and provider-side latency; raw provider evidence, credentials, secrets, and resolved handles are not recorded there.
 
 Example command replay checks:
 

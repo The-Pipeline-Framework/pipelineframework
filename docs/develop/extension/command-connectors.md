@@ -19,12 +19,63 @@ For YAML setup, see [Command Steps](/deploy/orchestrator-runtime/command). This 
 
 ## What You Implement
 
+The existing `CommandConnector<I, O>` path below remains supported without migration. It is the
+legacy compatibility path and uses Mutiny inside the Quarkus runtime.
+
 A command step needs two application classes:
 
 1. `CommandIdGenerator<I>` for the command input type
 2. `CommandConnector<I, O>` for the command input and output types
 
 Keep both classes typed. Do not implement command connectors as `CommandConnector<Object, Object>`.
+
+## Native Provider Commands
+
+Native connector providers use the host-neutral `CommandOperation<I, C, O>` SPI. They return a
+JDK `CompletionStage<CommandOutcome<O>>`; Mutiny, CDI, and Quarkus types do not appear in that
+public provider contract. Select one from YAML instead of `command`, never alongside it:
+
+```yaml
+connector:
+  provider: acme.search
+  providerVersion: 1
+  operation: write.document
+  operationVersion: 1
+  policy:
+    requireIdempotency: true
+    requireReconciliation: true
+    requiredExecutionPosture: AUTOMATED
+    requiredExecutionStyle: PROVIDER_MANAGED
+    requiredConcurrencyScope: PROVIDER_MANAGED
+    minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+```
+
+Provider metadata in `META-INF/pipeline/connector-providers.json` is validated during compilation;
+the provider is not constructed for that check. The operation configuration remains the step's
+`config` map, but TPF binds it to the provider's declared immutable configuration record before
+an effect is created or the operation is invoked.
+
+`CommandOutcome` distinguishes success, retryable failure, terminal failure, ambiguous submission,
+and user action required. Only declared safe correlation or reconciliation references, outcome
+codes, confirmation strengths, and a redacted configuration digest are retained in the effect
+record, together with the selected provider and operation major versions. Evidence, descriptions,
+secret references, and resolved handles are not durable metadata.
+
+`AUTOMATED`, `ATTENDED`, and an undeclared conservative posture are operation capabilities; a
+pipeline policy may require one explicitly. A successful outcome must also achieve the policy's
+minimum machine and user confirmation. Insufficient machine confirmation becomes an `AMBIGUOUS`
+barrier, while missing required user confirmation becomes `USER_ACTION_REQUIRED`; neither is
+recorded as success or automatically retried.
+
+Declaring a reference kind in `durableReferenceKinds` is a provider data-classification decision.
+Values must be bounded opaque identifiers such as `TKT-123`, never credentials, tokens, URLs,
+arbitrary evidence, instructions, or provider payloads. TPF filters undeclared kinds and rejects
+non-identifier value shapes, but the provider remains responsible for classifying each declared
+kind as safe for durable storage.
+
+An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
+`FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
+blocking execution or bounded framework-managed concurrency.
 
 ## Command Id Generator
 

@@ -13,6 +13,33 @@ import org.junit.jupiter.api.Test;
 class PipelineYamlConfigLoaderTest {
 
     @Test
+    void loadsNativeCommandSelectorIntoTheRuntimeDescriptorConfiguration() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Document"
+                kind: "command"
+                connector:
+                  provider: " acme.search "
+                  providerVersion: 1
+                  operation: " write.document "
+                  operationVersion: 2
+                  policy:
+                    requireIdempotency: true
+                config:
+                  target: orders
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        assertEquals("native:acme.search/write.document", step.command());
+        assertEquals("acme.search", step.commandConfig().get("__tpf_native_provider"));
+        assertEquals(1, step.commandConfig().get("__tpf_native_provider_version"));
+        assertEquals("write.document", step.commandConfig().get("__tpf_native_operation"));
+        assertEquals(2, step.commandConfig().get("__tpf_native_operation_version"));
+        assertEquals("orders", step.commandConfig().get("target"));
+    }
+
+    @Test
     void loadsCheckpointBoundaryDeclarations() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"

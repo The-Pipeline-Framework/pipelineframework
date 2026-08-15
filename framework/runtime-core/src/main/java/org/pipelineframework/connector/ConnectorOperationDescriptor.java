@@ -10,7 +10,8 @@ public record ConnectorOperationDescriptor(
     String id,
     ConnectorOperationKind kind,
     int majorVersion,
-    Optional<ConnectorConfigSchemaDescriptor> configurationSchema
+    Optional<ConnectorConfigSchemaDescriptor> configurationSchema,
+    Optional<CommandCapabilities> commandCapabilities
 ) {
     public ConnectorOperationDescriptor {
         id = ConnectorProviderId.require(id, "operation ID");
@@ -19,9 +20,22 @@ public record ConnectorOperationDescriptor(
             throw new IllegalArgumentException("operation major version must be positive");
         }
         configurationSchema = Objects.requireNonNull(configurationSchema, "configuration schema must not be null");
+        commandCapabilities = Objects.requireNonNull(commandCapabilities, "command capabilities must not be null");
+        if (commandCapabilities.isPresent() && !ConnectorOperationKind.COMMAND.equals(kind)) {
+            throw new IllegalArgumentException("command capabilities require command operation kind");
+        }
     }
 
     public ConnectorOperationDescriptor(String id, ConnectorOperationKind kind, int majorVersion) {
-        this(id, kind, majorVersion, Optional.empty());
+        this(id, kind, majorVersion, Optional.empty(), Optional.empty());
+    }
+
+    public ConnectorOperationDescriptor(
+        String id,
+        ConnectorOperationKind kind,
+        int majorVersion,
+        Optional<ConnectorConfigSchemaDescriptor> configurationSchema
+    ) {
+        this(id, kind, majorVersion, configurationSchema, Optional.empty());
     }
 }

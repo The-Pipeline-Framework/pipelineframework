@@ -80,6 +80,59 @@ class ConnectorProviderManifestReaderTest {
         assertEquals("connector provider ID is reserved for framework use: tpf.external", rejected.getMessage());
     }
 
+    @Test
+    void reportsMalformedExecutionCapabilitiesWithManifestDiagnostics() {
+        IllegalArgumentException executionStyle = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "executionCapabilities":{"executionStyle":"ASYNC","concurrencyScope":"PROVIDER_MANAGED"},"operations":[]}]}
+                """)));
+        assertEquals("malformed connector provider manifest: field 'executionStyle' must be a ConnectorExecutionStyle",
+            executionStyle.getMessage());
+
+        IllegalArgumentException concurrencyScope = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "executionCapabilities":{"executionStyle":"NON_BLOCKING","concurrencyScope":"BOUNDED"},"operations":[]}]}
+                """)));
+        assertEquals("malformed connector provider manifest: field 'concurrencyScope' must be a ConnectorConcurrencyScope",
+            concurrencyScope.getMessage());
+    }
+
+    @Test
+    void readsCommandExecutionPostureAndDefaultsUndeclaredPostureConservatively() {
+        ConnectorProviderManifest declared = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"write","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":false,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}}]}]}
+            """));
+        assertEquals(CommandExecutionPosture.AUTOMATED, declared.providers().getFirst().operations().getFirst()
+            .commandCapabilities().orElseThrow().executionPosture());
+
+        ConnectorProviderManifest undeclared = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"write","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":false,
+            "reconciliationSupported":false,"maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}}]}]}
+            """));
+        assertEquals(CommandExecutionPosture.UNSPECIFIED, undeclared.providers().getFirst().operations().getFirst()
+            .commandCapabilities().orElseThrow().executionPosture());
+
+        IllegalArgumentException invalid = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"write","kind":"tpf:command","majorVersion":1,
+                "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":false,
+                "reconciliationSupported":false,"executionPosture":"ROBOT","maximumMachineConfirmation":"NONE",
+                "userConfirmationSupported":false,"durableReferenceKinds":[]}}]}]}
+                """)));
+        assertEquals("malformed connector provider manifest: field 'executionPosture' must be a CommandExecutionPosture",
+            invalid.getMessage());
+    }
+
     private static ByteArrayInputStream input(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }

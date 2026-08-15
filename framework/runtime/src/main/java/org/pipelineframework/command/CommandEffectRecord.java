@@ -1,5 +1,8 @@
 package org.pipelineframework.command;
 
+import java.util.Objects;
+import java.util.Optional;
+
 /**
  * Recorded command effect state.
  */
@@ -14,10 +17,42 @@ public record CommandEffectRecord(
     Object output,
     String errorClass,
     String errorMessage,
+    Optional<CommandOutcomeSnapshot> outcome,
     long createdAtEpochMs,
     long updatedAtEpochMs
 ) {
+    public CommandEffectRecord(
+        String tenantId,
+        String executionId,
+        String stepId,
+        String command,
+        String commandId,
+        CommandEffectStatus status,
+        Object input,
+        Object output,
+        String errorClass,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs
+    ) {
+        this(
+            tenantId,
+            executionId,
+            stepId,
+            command,
+            commandId,
+            status,
+            input,
+            output,
+            errorClass,
+            errorMessage,
+            Optional.empty(),
+            createdAtEpochMs,
+            updatedAtEpochMs);
+    }
+
     public CommandEffectRecord {
+        outcome = outcome == null ? Optional.empty() : outcome;
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
@@ -59,6 +94,7 @@ public record CommandEffectRecord(
             output,
             errorClass,
             errorMessage,
+            outcome,
             createdAtEpochMs,
             nowEpochMs);
     }
@@ -75,6 +111,24 @@ public record CommandEffectRecord(
             commandOutput,
             null,
             null,
+            outcome,
+            createdAtEpochMs,
+            nowEpochMs);
+    }
+
+    public CommandEffectRecord succeeded(Object commandOutput, CommandOutcomeSnapshot snapshot, long nowEpochMs) {
+        return new CommandEffectRecord(
+            tenantId,
+            executionId,
+            stepId,
+            command,
+            commandId,
+            CommandEffectStatus.SUCCEEDED,
+            input,
+            commandOutput,
+            null,
+            null,
+            Optional.of(Objects.requireNonNull(snapshot, "command outcome snapshot must not be null")),
             createdAtEpochMs,
             nowEpochMs);
     }
@@ -101,6 +155,31 @@ public record CommandEffectRecord(
             output,
             failureClass,
             failureMessage,
+            outcome,
+            createdAtEpochMs,
+            nowEpochMs);
+    }
+
+    public CommandEffectRecord failedWithStatus(
+        CommandEffectStatus failureStatus,
+        Throwable failure,
+        CommandOutcomeSnapshot snapshot,
+        long nowEpochMs
+    ) {
+        String failureClass = failure == null ? null : failure.getClass().getName();
+        String failureMessage = failure == null ? null : failure.getMessage();
+        return new CommandEffectRecord(
+            tenantId,
+            executionId,
+            stepId,
+            command,
+            commandId,
+            failureStatus,
+            input,
+            output,
+            failureClass,
+            failureMessage,
+            Optional.of(Objects.requireNonNull(snapshot, "command outcome snapshot must not be null")),
             createdAtEpochMs,
             nowEpochMs);
     }

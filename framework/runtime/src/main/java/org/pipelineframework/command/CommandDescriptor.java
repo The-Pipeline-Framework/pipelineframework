@@ -1,6 +1,7 @@
 package org.pipelineframework.command;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Runtime descriptor for one generated command step.
@@ -12,7 +13,8 @@ public record CommandDescriptor(
     String outputType,
     String commandIdGenerator,
     CommandDuplicatePolicy duplicatePolicy,
-    Map<String, Object> config
+    Map<String, Object> config,
+    Optional<NativeCommandSelector> nativeSelector
 ) {
     public CommandDescriptor {
         if (stepId == null || stepId.isBlank()) {
@@ -32,5 +34,39 @@ public record CommandDescriptor(
         }
         duplicatePolicy = duplicatePolicy == null ? CommandDuplicatePolicy.RETURN_RECORDED : duplicatePolicy;
         config = config == null ? Map.of() : Map.copyOf(config);
+        nativeSelector = nativeSelector == null ? Optional.empty() : nativeSelector;
+    }
+
+    public CommandDescriptor(
+        String stepId,
+        String command,
+        String inputType,
+        String outputType,
+        String commandIdGenerator,
+        CommandDuplicatePolicy duplicatePolicy,
+        Map<String, Object> config
+    ) {
+        this(stepId, command, inputType, outputType, commandIdGenerator, duplicatePolicy, config, Optional.empty());
+    }
+
+    public static CommandDescriptor nativeCommand(
+        String stepId,
+        NativeCommandSelector selector,
+        String inputType,
+        String outputType,
+        String commandIdGenerator,
+        CommandDuplicatePolicy duplicatePolicy,
+        Map<String, Object> config
+    ) {
+        NativeCommandSelector requiredSelector = java.util.Objects.requireNonNull(selector, "native command selector must not be null");
+        return new CommandDescriptor(
+            stepId,
+            requiredSelector.commandName(),
+            inputType,
+            outputType,
+            commandIdGenerator,
+            duplicatePolicy,
+            config,
+            Optional.of(requiredSelector));
     }
 }
