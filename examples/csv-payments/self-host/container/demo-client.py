@@ -240,6 +240,9 @@ def wait_status(args, execution_id, timeout_seconds):
             if status == "SUCCEEDED":
                 print(f"Execution {execution_id} succeeded")
                 return last
+            if status == "REMOTE_OUTCOME_UNKNOWN":
+                raise RuntimeError(
+                    f"Execution {execution_id} remote outcome unknown: {json.dumps(last, sort_keys=True)}")
             if status in {"FAILED", "DLQ"}:
                 raise RuntimeError(f"Execution {execution_id} failed: {json.dumps(last, sort_keys=True)}")
         sleep_for = min(interval + random.uniform(0, 0.25), max(0.0, deadline - time.time()))
@@ -298,12 +301,30 @@ def assert_output_record_count(output, expected_record_count):
     if expected_record_count <= 0:
         return
     with output.open("r", encoding="utf-8", newline="") as generated:
-        reader = csv.reader(generated)
-        next(reader, None)
-        actual_record_count = sum(1 for _ in reader)
+        reader = csv.DictReader(generated)
+        if not reader.fieldnames or "CSV Id" not in reader.fieldnames:
+            raise RuntimeError(f"CSV output {output} does not contain the required CSV Id column")
+        csv_ids = []
+        for row in reader:
+            csv_id = row.get("CSV Id", "").strip()
+            if not csv_id:
+                raise RuntimeError(f"CSV output {output} contains a row without a CSV Id")
+            csv_ids.append(csv_id)
+
+    actual_record_count = len(csv_ids)
     if actual_record_count != expected_record_count:
         raise RuntimeError(
             f"CSV output {output} has {actual_record_count} records; expected {expected_record_count}")
+    distinct_csv_ids = set(csv_ids)
+    if len(distinct_csv_ids) != actual_record_count:
+        raise RuntimeError(f"CSV output {output} contains duplicate CSV Id values")
+    expected_csv_ids = {str(record_id) for record_id in range(1, expected_record_count + 1)}
+    if distinct_csv_ids != expected_csv_ids:
+        missing = sorted(expected_csv_ids - distinct_csv_ids, key=int)
+        unexpected = sorted(distinct_csv_ids - expected_csv_ids)
+        raise RuntimeError(
+            f"CSV output {output} does not preserve the generated input IDs; "
+            f"missing={missing[:10]}, unexpected={unexpected[:10]}")
     print(f"CSV output record count matches expected {expected_record_count}")
 
 

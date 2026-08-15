@@ -37,7 +37,36 @@ TPF_CSV_ADMISSION_PROFILE=burst TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-pay
 The `slow` profile delays every completion. The `burst` profile holds completions until its configured
 batch size and flushes the final partial batch. Both profiles verify the LocalStack admission-table peak
 never exceeds `pipeline.max-concurrency`, that reservations are empty after handoff, and that one durable
-await interaction and one output row exist for every generated input row.
+await interaction and one distinct output CSV ID exist for every generated input row.
+
+## HA Scale Profiles And Budgets
+
+The scheduled HA matrix runs 10,000 generated records through every `sqs`/`kafka` and `slow`/`burst`
+combination. Its profiles prove different properties:
+
+| Profile | Primary property | Timing contract |
+| --- | --- | --- |
+| `burst` | Scale: exact 10,000 records, no duplicated output CSV IDs, bounded Await admission, and drained reservations. | An optional `TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS` is a throughput gate. It is intentionally independent from the transition transport deadline and must be set from a measured healthy HA baseline or an explicit service objective. |
+| `slow` | Backpressure/liveness: intentional provider latency fills the bounded Await window, pauses further admission, and still drains reservations after eventual progress. | No throughput SLO: the fixture deadline bounds the experiment, not the intentionally delayed provider. |
+
+This is deliberately not the LGTM/operator proof: that proof runs in one local orchestrator JVM at the
+default pipeline concurrency of 250. The HA matrix retains the coordinator-to-REST-worker transition
+boundary and limits the profiles to pipeline concurrency 25. `sqs` and `kafka` use the same generated
+workload and semantic assertions, while their provider request/completion fixtures remain transport-specific.
+The `slow` fixture delays each completion; the `burst` fixture sends zero-delay completions in batches.
+
+Three limits are deliberately separate:
+
+| Variable | Default in the HA matrix | Meaning |
+| --- | --- | --- |
+| `TPF_CSV_TRANSITION_TRANSPORT_DEADLINE` | `PT180S` | Coordinator-to-worker REST call lifetime for one remote live transition. This remains the existing transport guard; changing it alone is not a throughput or ownership fix. |
+| `TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS` | `300` | Total time available to submit the flow, observe terminal status, and validate the output. |
+| `TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS` | unset | Explicit burst-throughput budget. It is evaluated only after a semantically successful flow, so a transport failure cannot be misreported as a performance result. |
+
+Every run writes `ha-scale-budget-report.json` beside the admission observation. A failed run names the
+exceeded `remote-outcome-unknown`, `transition-transport`, `fixture-run`, `performance`, or `execution`
+category instead of treating all failures as a generic timeout. Establish a burst performance value only
+from a healthy run that completes before the transport guard.
 
 The script:
 
@@ -67,6 +96,9 @@ Set `TPF_SKIP_FRAMEWORK_INSTALL=true` or `TPF_SKIP_CONTAINER_BUILD=true` for fas
 | `TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS` | `25` for `slow`, `0` for `burst` |
 | `TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE` | `1` for `slow`, `25` for `burst` |
 | `TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY` | `PT0.25S` for `burst` |
+| `TPF_CSV_TRANSITION_TRANSPORT_DEADLINE` | `PT180S` |
+| `TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS` | `300` |
+| `TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS` | unset; an explicit burst-only performance gate |
 | `TPF_TENANT_ID` | `csv-demo` |
 | `TPF_PIPELINE_ID` | `org.pipelineframework.csv` |
 | `TPF_COORDINATOR_PORT` | `8082` |

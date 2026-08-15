@@ -342,7 +342,7 @@ services:
         -Dpipeline.orchestrator.worker.lifecycle.provider=dynamo
         -Dpipeline.orchestrator.worker.lifecycle.stale-after=PT2M
         -Dpipeline.orchestrator.worker.rest.base-url=http://worker:8182
-        -Dpipeline.orchestrator.worker.rest.request-timeout=PT180S
+        -Dpipeline.orchestrator.worker.rest.request-timeout=${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE:-PT180S}
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
         -Dtpf.await.sqs.poller.enabled=${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-false}
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
