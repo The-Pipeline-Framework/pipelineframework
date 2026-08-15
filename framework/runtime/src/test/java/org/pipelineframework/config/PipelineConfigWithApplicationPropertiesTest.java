@@ -70,6 +70,8 @@ class PipelineConfigWithApplicationPropertiesTest {
                 "BUFFER",
                 defaults.backpressureStrategy(),
                 "Default backpressureStrategy should be BUFFER");
+        assertEquals(64, pipelineConfig.maxRecursiveDepth(),
+            "Default maximum recursive depth should be bounded");
     }
 
     @Test

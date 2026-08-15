@@ -63,6 +63,7 @@ import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
+import org.pipelineframework.invocation.PipelineInvocationContext;
 
 @ApplicationScoped
 class PipelineStepExecutor {
@@ -106,7 +107,7 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
-            contextSnapshot, awaitContextSnapshot, "$root", -1);
+            contextSnapshot, awaitContextSnapshot, "$root", -1, java.util.Optional.empty());
     }
 
     @SuppressWarnings("unchecked")
@@ -121,6 +122,24 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContextSnapshot,
         String definitionId,
         int definitionTerminalStepIndex) {
+        return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
+            contextSnapshot, awaitContextSnapshot, definitionId, definitionTerminalStepIndex,
+            java.util.Optional.empty());
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
@@ -143,7 +162,7 @@ class PipelineStepExecutor {
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOne(stepOneToOne, current, parallel, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
@@ -166,7 +185,7 @@ class PipelineStepExecutor {
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
             var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOne(adapter, current, false, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
             var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
             return applyOneToMany(adapter, current, false, maxConcurrency, stepTelemetry,
@@ -329,6 +348,33 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         StepBranchingDescriptor branchingDescriptor) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot,
+            branchingDescriptor,
+            java.util.Optional.empty());
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        StepBranchingDescriptor branchingDescriptor,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         return applyOneToOne(
             step,
             current,
@@ -338,7 +384,8 @@ class PipelineStepExecutor {
             cacheReadSupport,
             contextSnapshot,
             awaitContextSnapshot,
-            branchingDescriptor);
+            branchingDescriptor,
+            invocationContext);
     }
 
     @SuppressWarnings({"unchecked"})
@@ -351,7 +398,8 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
-        StepBranchingDescriptor branchingDescriptor) {
+        StepBranchingDescriptor branchingDescriptor,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         if (current instanceof Uni<?>) {
             Uni<I> input = telemetry.consume(step.getClass(), (Uni<I>) current);
             Uni<O> result = input
@@ -369,7 +417,8 @@ class PipelineStepExecutor {
                         contextSnapshot,
                         awaitContextSnapshot,
                         telemetry,
-                        replayScope)
+                        replayScope,
+                        invocationContext)
                         .onItem().transformToUni(enforced -> applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
                     return telemetry.instrument(step.getClass(), scoped, false, replayScope);
@@ -395,7 +444,8 @@ class PipelineStepExecutor {
                             contextSnapshot,
                             awaitContextSnapshot,
                             telemetry,
-                            replayScope)
+                            replayScope,
+                            invocationContext)
                             .onItem().transformToUni(enforced ->
                                 applyCachePolicy(step, enforced, contextSnapshot))
                             .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
@@ -420,7 +470,8 @@ class PipelineStepExecutor {
                         contextSnapshot,
                         awaitContextSnapshot,
                         telemetry,
-                        replayScope)
+                        replayScope,
+                        invocationContext)
                         .onItem().transformToUni(enforced ->
                             applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
@@ -488,7 +539,8 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         PipelineStepTelemetry telemetry,
-        PipelineStepTelemetry.ReplayScope replayScope) {
+        PipelineStepTelemetry.ReplayScope replayScope,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         CachePolicy policy = cacheReadSupport == null
             ? contextCachePolicy(contextSnapshot)
             : cacheReadSupport.resolvePolicy(contextSnapshot);
@@ -500,7 +552,7 @@ class PipelineStepExecutor {
                         + "PREFER_CACHE, REQUIRE_CACHE, CACHE_ONLY, or BYPASS_CACHE")));
         }
         if (cacheReadSupport == null) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
@@ -513,7 +565,7 @@ class PipelineStepExecutor {
             }
         }
         if (step instanceof CacheReadBypass) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
@@ -532,10 +584,11 @@ class PipelineStepExecutor {
                 return withPipelineContext(contextSnapshot, () -> {
                     PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                     return executeOneToOne(
-                        step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, key);
+                        step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, key,
+                        invocationContext);
                 });
             }
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
@@ -556,7 +609,8 @@ class PipelineStepExecutor {
             return withPipelineContext(contextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.MISS);
                 return executeOneToOne(
-                    step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, Optional.empty());
+                    step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, Optional.empty(),
+                    invocationContext);
             });
         }
         String key = resolvedKey.orElseThrow();
@@ -570,7 +624,7 @@ class PipelineStepExecutor {
                         PipelineCacheStatusHolder.set(CacheStatus.MISS);
                         return executeOneToOne(
                             step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy,
-                            Optional.of(key));
+                            Optional.of(key), invocationContext);
                     });
                 }
                 if (cached.isPresent()) {
@@ -607,7 +661,7 @@ class PipelineStepExecutor {
                     PipelineCacheStatusHolder.set(CacheStatus.MISS);
                     return executeOneToOne(
                         step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy,
-                        Optional.of(key));
+                        Optional.of(key), invocationContext);
                 });
             });
     }
@@ -619,10 +673,12 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContextSnapshot,
         PipelineCacheReadSupport cacheReadSupport,
         CachePolicy policy,
-        Optional<String> cacheKey
+        Optional<String> cacheKey,
+        java.util.Optional<PipelineInvocationContext> invocationContext
     ) {
         Uni<O> execution = withStepExecutionUni(
-            contextSnapshot, awaitContextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            contextSnapshot, awaitContextSnapshot, invocationContext,
+            () -> step.apply(Uni.createFrom().item(item)));
         if (!(step instanceof ProviderQueryStep queryStep)
             || policy == CachePolicy.BYPASS_CACHE
             || policy == CachePolicy.REQUIRE_CACHE
@@ -732,6 +788,17 @@ class PipelineStepExecutor {
         Supplier<Uni<T>> supplier
     ) {
         return DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier);
+    }
+
+    static <T> Uni<T> withStepExecutionUni(
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        java.util.Optional<PipelineInvocationContext> invocationContext,
+        Supplier<Uni<T>> supplier
+    ) {
+        return invocationContext
+            .map(value -> DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, value, supplier))
+            .orElseGet(() -> DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier));
     }
 
     static <T> Multi<T> withStepExecutionMulti(

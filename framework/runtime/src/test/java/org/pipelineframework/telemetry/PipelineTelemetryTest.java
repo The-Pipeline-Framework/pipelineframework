@@ -387,6 +387,11 @@ class PipelineTelemetryTest {
     }
 
     static final class TestPipelineStepConfig implements PipelineStepConfig {
+
+        @Override
+        public Integer maxRecursiveDepth() {
+            return 64;
+        }
         private final StepConfig defaults = new TestStepConfig();
         private final TelemetryConfig telemetry = new TestTelemetryConfig();
         private final KillSwitchConfig killSwitch = new TestKillSwitchConfig();

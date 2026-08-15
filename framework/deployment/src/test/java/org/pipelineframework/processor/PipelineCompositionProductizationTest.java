@@ -355,7 +355,7 @@ class PipelineCompositionProductizationTest {
     }
 
     @Test
-    void rejectsDirectAndTransitiveStaticCyclesWithDefinitionPath() throws Exception {
+    void acceptsDirectSelfRecursionAndRejectsTransitiveStaticCyclesWithDefinitionPath() throws Exception {
         Compilation direct = compile("direct-cycle", diagnosticYaml("""
             loop:
               input: A
@@ -365,8 +365,7 @@ class PipelineCompositionProductizationTest {
             """, """
             - { name: Call loop, pipeline: loop, cardinality: ONE_TO_ONE, input: A, output: A, java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A } }
             """), diagnosticSources()).compilation();
-        assertThat(direct).failed();
-        assertThat(direct).hadErrorContaining("Static pipeline definition cycle is not supported: loop -> loop");
+        assertThat(direct).succeededWithoutWarnings();
 
         Compilation transitive = compile("transitive-cycle", diagnosticYaml("""
             first:

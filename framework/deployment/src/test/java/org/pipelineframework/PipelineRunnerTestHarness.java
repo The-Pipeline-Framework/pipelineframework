@@ -98,6 +98,11 @@ public final class PipelineRunnerTestHarness {
         PipelineStepOrderer orderer,
         ObjectPublishRunner publisher
     ) {
+        public Harness maxRecursiveDepth(int maximumDepth) {
+            runner.pipelineConfig.maxRecursiveDepth(maximumDepth);
+            return this;
+        }
+
         public void verifyRootOrderAppliedOnce() {
             verify(orderer, times(1)).orderSteps(any());
         }

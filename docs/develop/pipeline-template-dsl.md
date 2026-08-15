@@ -268,6 +268,48 @@ contract:
 
 Propagation never guesses across a union, a branch, or a predecessor without one concrete output. Those contracts stay explicit.
 
+### Local pipeline composition and bounded recursion
+
+`pipelines` declares compile-time local definitions. A `pipeline` step invokes a named definition as an ordinary typed step; the compiler links the definition into the root release contract, and the runtime returns its result to the caller without creating another execution or publishing another terminal output.
+
+```yaml
+pipelines:
+  process-attempt:
+    input: AttemptState
+    output: AttemptResult
+    steps:
+      - name: Decide
+        service: com.example.DecideService
+        input: AttemptState
+        output: Decision
+      - name: Continue
+        pipeline: process-attempt
+        input: Decision
+        output: AttemptResult
+        accepts: [ContinueDecision]
+      - name: Complete
+        service: com.example.CompleteService
+        input: Decision
+        output: AttemptResult
+        accepts: [CompleteDecision]
+      - name: Return
+        service: com.example.ReturnService
+        input: AttemptResult
+        output: AttemptResult
+        terminal: true
+
+steps:
+  - name: Run attempt
+    pipeline: process-attempt
+    input: AttemptState
+    output: AttemptResult
+    terminal: true
+```
+
+Direct self-recursion is a structured nested invocation, not a jump to an earlier step. Each invocation continues forward through its own ordered steps, and ordinary union routing plus `accepts` supplies the base case. Recursive definitions currently require an aggregate `ONE_TO_ONE` contract. Mutual recursion, recursive streaming cardinalities, and Await inside a nested definition are not supported.
+
+The runtime bounds recursive depth with `pipeline.max-recursive-depth` (default `64`). A value of `0` allows composition but rejects the first recursive call. Reaching the configured depth is valid; attempting the next call fails immediately with a non-retryable `PipelineRecursionLimitExceededException`.
+
 ## Java bindings and mappers
 
 Step `input` and `output` always name logical pipeline contracts. For an inspectable local service or operator, TPF infers Java execution types from the signature and resolved mappers. Use `java` to assert that inference, resolve an ambiguity, or supply the coordinator-side binding when the service is outside the compiling module.

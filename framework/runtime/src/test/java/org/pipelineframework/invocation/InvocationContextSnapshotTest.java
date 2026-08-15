@@ -1,5 +1,7 @@
 package org.pipelineframework.invocation;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +30,7 @@ class InvocationContextSnapshotTest {
         AwaitExecutionContextHolder.clear();
         PipelineExecutionContextHolder.clear();
         PipelineRunContextHolder.clear();
+        PipelineInvocationContextHolder.clear();
     }
 
     @AfterEach
@@ -37,6 +40,7 @@ class InvocationContextSnapshotTest {
         AwaitExecutionContextHolder.clear();
         PipelineExecutionContextHolder.clear();
         PipelineRunContextHolder.clear();
+        PipelineInvocationContextHolder.clear();
     }
 
     @Test
@@ -171,5 +175,24 @@ class InvocationContextSnapshotTest {
         snapshot.run(() -> assertTrue(PipelineRunContextHolder.get().isEmpty()));
 
         assertEquals(existing, PipelineRunContextHolder.get().orElseThrow());
+    }
+
+    @Test
+    void installsAndRestoresRecursiveInvocationContext() {
+        PipelineInvocationContext previous = PipelineInvocationContext.root(8)
+            .enterRecursive("outer", "call-child");
+        PipelineInvocationContext scoped = PipelineInvocationContext.root(3)
+            .enterRecursive("agent", "recur");
+        PipelineInvocationContextHolder.set(previous);
+
+        InvocationContextSnapshot snapshot = new InvocationContextSnapshot(
+            null,
+            null,
+            Optional.empty(),
+            true,
+            Optional.of(scoped));
+        snapshot.run(() -> assertEquals(scoped, PipelineInvocationContextHolder.get().orElseThrow()));
+
+        assertEquals(previous, PipelineInvocationContextHolder.get().orElseThrow());
     }
 }

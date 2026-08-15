@@ -23,6 +23,10 @@ interface PipelineInvocationStrategy {
         return true;
     }
 
+    default Optional<PipelineInvocationContext> invocationContext() {
+        return Optional.empty();
+    }
+
     void recordTermination(long startNanos, Throwable failure, boolean cancelled);
 
     String nullUniMessage();
@@ -34,11 +38,14 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
     private final PipelineContext pipelineContext;
     private final AwaitExecutionContext awaitContext;
     private final Optional<PipelineRunContext> runContext;
+    private final Optional<PipelineInvocationContext> invocationContext;
 
-    StepInvocationStrategy(PipelineContext pipelineContext, AwaitExecutionContext awaitContext) {
+    StepInvocationStrategy(PipelineContext pipelineContext, AwaitExecutionContext awaitContext,
+            Optional<PipelineInvocationContext> invocationContext) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
         this.runContext = PipelineRunContextHolder.get();
+        this.invocationContext = Objects.requireNonNull(invocationContext, "invocationContext must not be null");
     }
 
     @Override
@@ -59,6 +66,11 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
     @Override
     public boolean inheritRunContext() {
         return runContext.isEmpty();
+    }
+
+    @Override
+    public Optional<PipelineInvocationContext> invocationContext() {
+        return invocationContext;
     }
 
     @Override
