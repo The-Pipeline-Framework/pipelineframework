@@ -16,6 +16,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.RemoteTransitionOutcomeUnknownException;
 import org.pipelineframework.orchestrator.TransitionWorkerFailureException;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -50,6 +51,15 @@ class ExecutionFailureHandler {
       WorkDispatcher workDispatcher,
       DeadLetterPublisher deadLetterPublisher) {
     long now = System.currentTimeMillis();
+    Optional<RemoteTransitionOutcomeUnknownException> remoteOutcomeUnknown = remoteOutcomeUnknown(failure);
+    if (remoteOutcomeUnknown.isPresent()) {
+      return preserveRemoteOutcomeUnknown(
+          record,
+          transitionKey,
+          remoteOutcomeUnknown.orElseThrow(),
+          executionStateStore,
+          now);
+    }
     Optional<CircuitDeferral> circuitDeferral = circuitDeferral(failure);
     if (circuitDeferral.isPresent()) {
       return deferCircuit(record, transitionKey, circuitDeferral.orElseThrow(), executionStateStore, workDispatcher,
@@ -168,6 +178,36 @@ class ExecutionFailureHandler {
           return workDispatcher.enqueueDelayed(new ExecutionWorkItem(record.tenantId(), record.executionId()),
               Duration.ofMillis(Math.max(0L, nextDue - System.currentTimeMillis())));
         });
+  }
+
+  private Uni<Void> preserveRemoteOutcomeUnknown(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      RemoteTransitionOutcomeUnknownException unknown,
+      ExecutionStateStore executionStateStore,
+      long nowEpochMs) {
+    LOG.warnf(
+        unknown,
+        "event=remote_transition_outcome_unknown executionId=%s tenantId=%s attempt=%d transitionKey=%s "
+            + "protocol=%s target=%s elapsedMs=%d deadlineMs=%d "
+            + "decision=automatic_retry_suppressed recovery=operator_redrive_after_confirmed_disposition",
+        record.executionId(),
+        record.tenantId(),
+        record.attempt(),
+        transitionKey,
+        unknown.protocol(),
+        unknown.target(),
+        unknown.elapsedMillis(),
+        unknown.deadlineMillis());
+    return executionStateStore.markRemoteOutcomeUnknown(
+            record.tenantId(),
+            record.executionId(),
+            record.version(),
+            transitionKey,
+            "REMOTE_OUTCOME_UNKNOWN",
+            unknown.getMessage(),
+            nowEpochMs)
+        .replaceWithVoid();
   }
 
   private Uni<Void> terminalCircuitDeferral(
@@ -295,6 +335,13 @@ class ExecutionFailureHandler {
           protectionUnavailable.protection().notBefore().toEpochMilli()));
     }
     return Optional.empty();
+  }
+
+  private static Optional<RemoteTransitionOutcomeUnknownException> remoteOutcomeUnknown(Throwable failure) {
+    if (failure == null) {
+      return Optional.empty();
+    }
+    return findThrowable(failure, RemoteTransitionOutcomeUnknownException.class);
   }
 
   private static <T extends Throwable> Optional<T> findThrowable(

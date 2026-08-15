@@ -140,6 +140,40 @@ class QueueAsyncRedriveFlowTest {
   }
 
   @Test
+  void remoteOutcomeUnknownRequiresExplicitReplayAdmissionBeforeRequeue() {
+    ExecutionRecord<Object, Object> unknown = record(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, 4L, 2);
+    ExecutionRecord<Object, Object> redriven = record(ExecutionStatus.QUEUED, 5L, 3);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(Optional.of(unknown)));
+
+    IllegalStateException error = assertThrows(
+        IllegalStateException.class,
+        () -> flow.redrive("tenant-1", "exec-1", null, false, "retry").await().indefinitely());
+
+    assertEquals("Execution exec-1 cannot be re-driven from status REMOTE_OUTCOME_UNKNOWN", error.getMessage());
+    verify(executionStateStore, never()).redriveTerminalExecution(
+        any(), any(), anyLong(), org.mockito.ArgumentMatchers.anyBoolean(), any(), anyLong());
+    verify(workDispatcher, never()).enqueueNow(any());
+
+    when(executionStateStore.redriveTerminalExecution(
+            eq("tenant-1"),
+            eq("exec-1"),
+            eq(4L),
+            eq(true),
+            eq("redrive:exec-1:4"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(redriven)));
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+    ExecutionRedriveResult result = flow.redrive(
+            "tenant-1", "exec-1", null, true, ExecutionRedriveIntent.REPLAY, "confirmed disposition")
+        .await().indefinitely();
+
+    assertEquals(ExecutionStatus.QUEUED, result.status());
+    verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+  }
+
+  @Test
   void deliberateCommandRetryUsesIntentAwareAtomicStoreAdmission() {
     ExecutionRecord<Object, Object> terminal = record(ExecutionStatus.FAILED, 4L, 2);
     ExecutionRecord<Object, Object> redriven = record(ExecutionStatus.QUEUED, 5L, 3);

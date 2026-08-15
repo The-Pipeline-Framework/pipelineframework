@@ -80,7 +80,9 @@ record ExecutionRedrivePlan(
   }
 
   private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
-    return status == ExecutionStatus.DLQ || (allowFailed && status == ExecutionStatus.FAILED);
+    return status == ExecutionStatus.DLQ
+        || (allowFailed && (status == ExecutionStatus.FAILED
+            || status == ExecutionStatus.REMOTE_OUTCOME_UNKNOWN));
   }
 
   private static String normalizeReason(String reason) {

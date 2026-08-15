@@ -22,6 +22,7 @@ authoritative for exact syntax and release support.
 | [0011](./0011-runtime-deployment-configuration-and-telemetry.md) | Separate runtime layout, build topology, transport, configuration lifetime, and telemetry policy. |
 | [0012](./0012-failure-recovery-and-handoff.md) | Keep business outcomes, item rejection, runtime recovery, effects, and handoff ownership distinct. |
 | [0013](./0013-change-the-semantic-owner-boldly.md) | Change the owning abstraction coherently; impact determines rigor, not semantic placement. |
+| [0014](./0014-remote-transition-outcome-uncertainty.md) | Keep remote caller timeout ambiguity under durable coordinator authority. |
 
 ## Maintenance
 

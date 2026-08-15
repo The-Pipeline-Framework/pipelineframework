@@ -228,6 +228,21 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Records a remote transition whose caller deadline elapsed without confirming that the
+     * remote worker stopped or completed. This state must not be eligible for automatic retry.
+     *
+     * @return the updated execution when its version still matches
+     */
+    Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        long nowEpochMs);
+
+    /**
      * Defers an execution whose dependency invocation was denied before it started.
      *
      * <p>This transition deliberately preserves {@code attempt}; circuit deferrals are bounded by
