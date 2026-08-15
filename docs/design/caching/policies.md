@@ -27,6 +27,20 @@ Set `pipeline.cache.policy`:
 
 * SKIP_IF_PRESENT only checks existence, it doesn’t read or overwrite.
 
+For Command steps, use this matrix:
+
+| Policy | Command behavior |
+| --- | --- |
+| PREFER_CACHE | A hit replays the cached pipeline output. A miss executes Command effect semantics and then writes the output. |
+| REQUIRE_CACHE | A hit replays the cached pipeline output. A miss fails before Command effect lookup or dispatch. |
+| CACHE_ONLY | No pre-read. Execute Command effect semantics and write the resulting output. |
+| BYPASS_CACHE | No cache I/O. Execute Command effect semantics only. |
+| SKIP_IF_PRESENT | Rejected because it can execute a live effect while retaining an older replay output under the same key. |
+
+Pipeline replay identity and Command effect identity are independent. A cache hit does not create a
+`CommandEffectRecord`; when the Command runtime does execute, stable-`CommandId` replay remains governed solely
+by `CommandEffectStore`.
+
 Execution intents:
 
 1. Normal production run → PREFER_CACHE

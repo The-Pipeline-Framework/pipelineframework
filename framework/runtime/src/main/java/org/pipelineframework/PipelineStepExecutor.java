@@ -37,6 +37,7 @@ import org.pipelineframework.cache.CachePolicyEnforcer;
 import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
@@ -421,6 +422,16 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContextSnapshot,
         PipelineStepTelemetry telemetry,
         PipelineStepTelemetry.ReplayScope replayScope) {
+        CachePolicy policy = cacheReadSupport == null
+            ? contextCachePolicy(contextSnapshot)
+            : cacheReadSupport.resolvePolicy(contextSnapshot);
+        if (step instanceof CommandStep && policy == CachePolicy.SKIP_IF_PRESENT) {
+            return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
+                new CachePolicyViolation(
+                    "Cache policy SKIP_IF_PRESENT is not supported for Command steps because it can execute "
+                        + "a live external effect while retaining an older pipeline replay output; use "
+                        + "PREFER_CACHE, REQUIRE_CACHE, CACHE_ONLY, or BYPASS_CACHE")));
+        }
         if (cacheReadSupport == null) {
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
@@ -433,7 +444,6 @@ class PipelineStepExecutor {
                 return step.apply(Uni.createFrom().item(item));
             });
         }
-        CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
         if (!cacheReadSupport.shouldRead(policy)) {
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
@@ -491,6 +501,12 @@ class PipelineStepExecutor {
                     return step.apply(Uni.createFrom().item(item));
                 });
             });
+    }
+
+    private static CachePolicy contextCachePolicy(PipelineContext context) {
+        return context == null || context.cachePolicy() == null
+            ? CachePolicy.RETURN_CACHED
+            : CachePolicy.fromConfig(context.cachePolicy());
     }
 
     static <T> T withPipelineContext(PipelineContext context, Supplier<T> supplier) {
