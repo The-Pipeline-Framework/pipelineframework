@@ -16,6 +16,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.RemoteTransitionOutcomeUnknownException;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
@@ -53,6 +54,15 @@ class ExecutionFailureHandler {
     if (circuitDeferral.isPresent()) {
       return deferCircuit(record, transitionKey, circuitDeferral.orElseThrow(), executionStateStore, workDispatcher,
           deadLetterPublisher, now);
+    }
+    Optional<RemoteTransitionOutcomeUnknownException> remoteOutcomeUnknown = remoteOutcomeUnknown(failure);
+    if (remoteOutcomeUnknown.isPresent()) {
+      return preserveRemoteOutcomeUnknown(
+          record,
+          transitionKey,
+          remoteOutcomeUnknown.orElseThrow(),
+          executionStateStore,
+          now);
     }
     int nextAttempt = record.attempt() + 1;
     FailureClassification classification = classifyFailure(failure);
@@ -247,6 +257,43 @@ class ExecutionFailureHandler {
       return new FailureClassification(false, controlFlow);
     }
     return new FailureClassification(true, failure);
+  }
+
+  private Uni<Void> preserveRemoteOutcomeUnknown(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      RemoteTransitionOutcomeUnknownException unknown,
+      ExecutionStateStore executionStateStore,
+      long nowEpochMs) {
+    LOG.warnf(
+        unknown,
+        "event=remote_transition_outcome_unknown executionId=%s tenantId=%s attempt=%d transitionKey=%s "
+            + "protocol=%s target=%s elapsedMs=%d deadlineMs=%d "
+            + "decision=automatic_retry_suppressed recovery=operator_redrive_after_confirmed_disposition",
+        record.executionId(),
+        record.tenantId(),
+        record.attempt(),
+        transitionKey,
+        unknown.protocol(),
+        unknown.target(),
+        unknown.elapsedMillis(),
+        unknown.deadlineMillis());
+    return executionStateStore.markRemoteOutcomeUnknown(
+            record.tenantId(),
+            record.executionId(),
+            record.version(),
+            transitionKey,
+            "REMOTE_OUTCOME_UNKNOWN",
+            unknown.getMessage(),
+            nowEpochMs)
+        .replaceWithVoid();
+  }
+
+  private static Optional<RemoteTransitionOutcomeUnknownException> remoteOutcomeUnknown(Throwable failure) {
+    Throwable candidate = findThrowable(failure, RemoteTransitionOutcomeUnknownException.class);
+    return candidate instanceof RemoteTransitionOutcomeUnknownException outcomeUnknown
+        ? Optional.of(outcomeUnknown)
+        : Optional.empty();
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {

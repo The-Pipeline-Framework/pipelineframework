@@ -44,6 +44,22 @@ class ExecutionRedrivePlanTest {
   }
 
   @Test
+  void remoteOutcomeUnknownRequiresExplicitFailedRedrive() {
+    ExecutionRecord<Object, Object> record = record(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, 2L);
+
+    IllegalStateException error = assertThrows(
+        IllegalStateException.class,
+        () -> ExecutionRedrivePlan.from(record, null, false, "retry"));
+
+    assertEquals("Execution exec-1 cannot be re-driven from status REMOTE_OUTCOME_UNKNOWN", error.getMessage());
+
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(record, null, true, "confirmed disposition");
+
+    assertEquals(2L, plan.expectedVersion());
+    assertEquals("confirmed disposition", plan.normalizedReason());
+  }
+
+  @Test
   void staleExpectedVersionIsRejectedBeforeEffects() {
     ExecutionRecord<Object, Object> record = record(ExecutionStatus.DLQ, 7L);
 

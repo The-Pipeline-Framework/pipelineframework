@@ -12,6 +12,11 @@ public enum ExecutionStatus {
     WAITING_EXTERNAL,
     /** Execution failed transiently and is waiting for its retry due time. */
     WAIT_RETRY,
+    /**
+     * A remote transition exceeded its caller deadline without a confirmed worker disposition.
+     * Automatic retry is forbidden until an operator explicitly re-drives after reconciliation.
+     */
+    REMOTE_OUTCOME_UNKNOWN,
     /** Execution completed successfully and has a persisted result payload. */
     SUCCEEDED,
     /** Execution reached a terminal failure before dead-letter publication. */
