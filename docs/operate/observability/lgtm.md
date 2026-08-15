@@ -47,13 +47,13 @@ For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested
 The CSV self-host HA profile does not emit telemetry in this verification setup, so do not expect it
 to populate either Grafana dashboard. See the
 [CSV Payments runbook](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments)
-for the fast verification and opt-in 10k operator-proof commands.
+for the fast verification run and 10,000-item dashboard workload commands.
 
-The fast CSV proof validates the required semantic stages and Await trace continuity with a small
-input. The opt-in 10k proof is the operator-dashboard workload: it gives rate, percentile, pressure,
-and publication panels enough samples to be useful. Do not use the small semantic proof to judge
-dashboard shape, and do not require a healthy 10k run to fabricate retry, reject, timeout, or durable
-fallback activity that it did not exercise.
+The fast verification run validates the required semantic stages and Await trace continuity with a
+small input. The 10,000-item dashboard workload gives rate, percentile, pressure, and publication
+panels enough samples to be useful. Do not use the fast verification run to judge dashboard shape.
+A healthy 10,000-item run is not expected to produce retry, reject, timeout, or durable fallback
+activity.
 
 ## Tempo versus Prometheus
 

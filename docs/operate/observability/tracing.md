@@ -41,8 +41,11 @@ Add application spans around domain-specific external calls or expensive transfo
 hotspots visible:
 
 ```java
-try (Scope ignored = tracer.spanBuilder("payment.validate").startScopedSpan()) {
+Span span = tracer.spanBuilder("payment.validate").startSpan();
+try (Scope ignored = span.makeCurrent()) {
     // validation work
+} finally {
+    span.end();
 }
 ```
 
