@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.StreamSupport;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -160,8 +161,14 @@ class PipelineContractMetadataGeneratorTest {
         assertEquals(3, contract.get("schemaVersion").getAsInt());
         assertTrue(contract.get("contractVersion").getAsString().startsWith("sha256:"));
         assertEquals("outer", contract.getAsJsonObject("composition").get("rootDefinitionId").getAsString());
-        assertEquals("ROOT_TERMINAL", contract.getAsJsonObject("composition").getAsJsonArray("definitions")
-            .get(0).getAsJsonObject().getAsJsonArray("continuations").get(2).getAsJsonObject().get("kind").getAsString());
+        JsonArray definitions = contract.getAsJsonObject("composition").getAsJsonArray("definitions");
+        JsonObject projectedOuter = StreamSupport.stream(definitions.spliterator(), false)
+            .map(element -> element.getAsJsonObject())
+            .filter(definition -> "outer".equals(definition.get("definitionId").getAsString()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("ROOT_TERMINAL", projectedOuter.getAsJsonArray("continuations")
+            .get(2).getAsJsonObject().get("kind").getAsString());
     }
 
     @Test

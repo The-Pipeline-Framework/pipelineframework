@@ -53,9 +53,12 @@ public record PipelineCompositionDescriptor(String rootDefinitionId, List<Pipeli
                 }
             }
             PipelineCompositionContinuation terminal = definition.continuations().getLast();
-            if (definition.definitionId().equals(rootDefinitionId)
-                != (terminal.kind() == PipelineCompositionContinuationKind.ROOT_TERMINAL)) {
-                throw new IllegalArgumentException("only the root definition may have ROOT_TERMINAL continuation");
+            PipelineCompositionContinuationKind expectedTerminalKind = definition.definitionId().equals(rootDefinitionId)
+                ? PipelineCompositionContinuationKind.ROOT_TERMINAL
+                : PipelineCompositionContinuationKind.RETURN;
+            if (terminal.kind() != expectedTerminalKind) {
+                throw new IllegalArgumentException("composition definition '" + definition.definitionId()
+                    + "' must end with " + expectedTerminalKind + " continuation");
             }
         }
         if (!definitions.isEmpty()) {

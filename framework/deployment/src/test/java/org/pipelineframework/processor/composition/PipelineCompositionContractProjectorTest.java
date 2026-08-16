@@ -19,6 +19,7 @@ package org.pipelineframework.processor.composition;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,35 @@ import org.pipelineframework.orchestrator.composition.PipelineCompositionContinu
 import org.pipelineframework.orchestrator.composition.PipelineCompositionDescriptor;
 
 class PipelineCompositionContractProjectorTest {
+
+    @Test
+    void canonicalizesDefinitionOrderIndependentlyOfResolvedMapInsertionOrder() {
+        PipelineReference root = new PipelineReference("z-root");
+        PipelineReference child = new PipelineReference("a-child");
+        PipelineDefinition childDefinition = definition(child, "Value", "Value",
+            PipelineDefinitionStep.direct("x", "Value", "Value", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition rootDefinition = definition(root, "Value", "Value",
+            PipelineDefinitionStep.pipeline("invoke", "Value", "Value", child));
+        ResolvedPipelineDefinitionGraph linked = linker(Map.of(child, childDefinition)).link(rootDefinition);
+
+        Map<PipelineReference, PipelineDefinition> childFirst = new LinkedHashMap<>();
+        childFirst.put(child, childDefinition);
+        childFirst.put(root, rootDefinition);
+        ResolvedPipelineDefinitionGraph reordered = new ResolvedPipelineDefinitionGraph(
+            linked.root(),
+            childFirst,
+            linked.rootCardinality(),
+            linked.invocationBindings(),
+            linked.continuationRoutes());
+
+        PipelineCompositionContractProjector projector = new PipelineCompositionContractProjector();
+        PipelineCompositionDescriptor first = projector.project(linked);
+        PipelineCompositionDescriptor second = projector.project(reordered);
+
+        assertEquals(first.definitions(), second.definitions());
+        assertEquals(List.of("a-child", "z-root"),
+            first.definitions().stream().map(definition -> definition.definitionId()).toList());
+    }
 
     @Test
     void projectsStructuredReturnRoutesRatherThanFlattenedExecutableLocations() {

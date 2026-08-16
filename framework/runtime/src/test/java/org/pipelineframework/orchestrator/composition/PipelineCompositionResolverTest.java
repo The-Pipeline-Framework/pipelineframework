@@ -76,6 +76,34 @@ class PipelineCompositionResolverTest {
         assertEquals("composition definition is unreachable from root: unused", failure.getMessage());
     }
 
+    @Test
+    void rejectsNonRootDefinitionWithoutReturnContinuation() {
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionDescriptor("outer", List.of(
+                definition("outer", List.of(invocation(0, "call-inner", "inner")),
+                    continuation("call-inner", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")),
+                definition("inner", List.of(direct(0, "done")),
+                    continuation("done", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")))));
+
+        assertEquals(
+            "composition definition 'inner' must end with RETURN continuation",
+            failure.getMessage());
+    }
+
+    @Test
+    void rejectsTerminalNextLocalBeforeDescriptorMaterialization() {
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionDescriptor("outer", List.of(
+                definition("outer", List.of(invocation(0, "call-inner", "inner")),
+                    continuation("call-inner", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")),
+                definition("inner", List.of(direct(0, "done")),
+                    continuation("done", PipelineCompositionContinuationKind.NEXT_LOCAL, "done")))));
+
+        assertEquals("terminal definition node cannot have NEXT_LOCAL continuation", failure.getMessage());
+    }
+
     private static PipelineStaticLocation next(PipelineCompositionResolver.ResolvedContinuation continuation) {
         return assertInstanceOf(PipelineCompositionResolver.ResolvedContinuation.Next.class, continuation).location();
     }

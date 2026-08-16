@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +45,7 @@ public final class PipelineCompositionContractProjector {
         Map<PipelineReference, CardinalitySemantics> invocationCardinalities = invocationCardinalities(graph);
         List<PipelineCompositionDefinition> definitions = graph.definitions().values().stream()
             .map(definition -> projectDefinition(definition, graph.root().reference(), invocationCardinalities))
+            .sorted(Comparator.comparing(PipelineCompositionDefinition::definitionId))
             .toList();
         return new PipelineCompositionDescriptor(graph.root().reference().logicalId(), definitions);
     }
