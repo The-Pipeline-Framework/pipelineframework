@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.google.protobuf.StringValue;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.ProtobufMessageParser;
+import org.pipelineframework.cache.QueryNotFoundCacheEntry;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 
@@ -38,6 +39,18 @@ class RedisCacheProviderCodecTest {
 
         assertTrue(decoded.isPresent());
         assertEquals(input, decoded.get());
+    }
+
+    @Test
+    void queryNotFoundMarkerSurvivesTheExistingJsonCacheEnvelope() {
+        RedisCacheProvider provider = new RedisCacheProvider();
+        provider.objectMapper = new ObjectMapper();
+        QueryNotFoundCacheEntry input = new QueryNotFoundCacheEntry("customer-missing");
+
+        String serialized = provider.serialize(input).orElseThrow();
+        Optional<Object> decoded = provider.deserialize(serialized, "query-key");
+
+        assertEquals(Optional.of(input), decoded);
     }
 
     @Test

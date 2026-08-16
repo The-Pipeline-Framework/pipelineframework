@@ -22,15 +22,19 @@ final class ConnectorDescriptors {
     static ConnectorOperationDescriptor operation(ConnectorOperation operation) {
         Optional<ConnectorConfigSchemaDescriptor> configurationSchema = Optional.empty();
         Optional<CommandCapabilities> commandCapabilities = Optional.empty();
+        Optional<QueryCapabilities> queryCapabilities = Optional.empty();
         if (operation instanceof CommandOperation<?, ?, ?> command) {
             configurationSchema = command.configurationSchema().map(ConnectorConfigSchema::descriptor);
             commandCapabilities = optional(
                 command.capabilities(), CommandCapabilities.conservative(), "command operation capabilities");
         } else if (operation instanceof QueryOperation<?, ?, ?> query) {
             configurationSchema = query.configurationSchema().map(ConnectorConfigSchema::descriptor);
+            queryCapabilities = optional(
+                query.capabilities(), QueryCapabilities.conservative(), "query operation capabilities");
         }
         return new ConnectorOperationDescriptor(
-            operation.id(), kind(operation), operation.majorVersion(), configurationSchema, commandCapabilities);
+            operation.id(), kind(operation), operation.majorVersion(), configurationSchema,
+            commandCapabilities, queryCapabilities);
     }
 
     static ConnectorOperationKind kind(ConnectorOperation operation) {

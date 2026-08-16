@@ -650,6 +650,69 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void validatesNegativeCacheTtlAgainstStaticQueryCapabilities() throws IOException {
+        Path metadataRoot = tempDir.resolve("query-cache-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "operations":[{"id":"invoice.find","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE","maximumNegativeCacheTtl":"PT30S"}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("query-negative-cache.yaml");
+        Files.writeString(pipeline, nativeQueryWithNegativeCacheTtl("PT20S"));
+        List<String> validDiagnostics = new ArrayList<>();
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> valid = new StepDefinitionParser(
+                (kind, message) -> validDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(1, valid.size(), validDiagnostics.toString());
+            assertEquals(List.of("invoiceId"), valid.getFirst().queryKeyFields());
+            assertTrue(validDiagnostics.stream().noneMatch(message -> message.startsWith("ERROR")),
+                validDiagnostics.toString());
+
+            Files.writeString(pipeline, nativeQueryWithNegativeCacheTtl("PT31S"));
+            List<String> invalidDiagnostics = new ArrayList<>();
+            List<StepDefinition> invalid = new StepDefinitionParser(
+                (kind, message) -> invalidDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(invalid.isEmpty());
+            assertTrue(invalidDiagnostics.stream().anyMatch(message ->
+                message.contains("negativeCacheTtl PT31S") && message.contains("maximum PT30S")),
+                invalidDiagnostics.toString());
+        }
+    }
+
+    private static String nativeQueryWithNegativeCacheTtl(String ttl) {
+        return """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Find invoice
+                kind: query
+                operation: invoice.find
+                using: work
+                negativeCacheTtl: %s
+                capture:
+                  keyFields: [invoiceId]
+                input: FindInvoice
+                output: Invoice
+                java:
+                  input: com.example.FindInvoice
+                  output: com.example.Invoice
+            """.formatted(ttl);
+    }
+
+    @Test
     void rejectsInvalidBindingConfigBeforeOperationSelection() throws IOException {
         Path metadataRoot = tempDir.resolve("invalid-binding-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");

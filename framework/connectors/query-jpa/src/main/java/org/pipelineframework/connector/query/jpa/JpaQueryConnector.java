@@ -16,6 +16,7 @@ import org.hibernate.reactive.mutiny.Mutiny;
 import org.pipelineframework.query.FrameworkQueryConnector;
 import org.pipelineframework.query.QueryRequest;
 import org.pipelineframework.connector.ConnectorOperation;
+import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorProvider;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderVersion;
@@ -65,14 +66,21 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
 
     @Override
     public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
+        try {
+            return queryOne(JpaQueryPlan.from(request.descriptor()), request.input(), outputType);
+        } catch (RuntimeException ex) {
+            return CompletableFuture.failedStage(ex);
+        }
+    }
+
+    private <O> CompletionStage<O> queryOne(JpaQueryPlan plan, Object input, Class<O> outputType) {
         if (sessionFactory.isEmpty() || sessionFactory.orElseThrow().isUnsatisfied()) {
             return CompletableFuture.failedStage(new IllegalStateException(
                 "No Hibernate Reactive SessionFactory is available for connector jpa"));
         }
         try {
-            JpaQueryPlan plan = JpaQueryPlan.from(request.descriptor());
             Class<?> entityType = plan.entityType();
-            return sessionFactory.orElseThrow().get().withSession(session -> executeQuery(session, plan, request.input(), entityType))
+            return sessionFactory.orElseThrow().get().withSession(session -> executeQuery(session, plan, input, entityType))
                 .onItem().transform(rows -> projectSingle(plan, rows, outputType))
                 .subscribeAsCompletionStage();
         } catch (RuntimeException ex) {
@@ -100,16 +108,31 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
         return JpaQueryProjection.project(rows.getFirst(), outputType, plan.projection());
     }
 
-    private final class JpaFindOneOperation implements QueryOperation<Object, QueryRequest<?>, Object> {
+    private final class JpaFindOneOperation implements QueryOperation<Object, JpaFindOneConfiguration, Object> {
+        private static final ConnectorConfigSchema<JpaFindOneConfiguration> CONFIGURATION_SCHEMA =
+            ConnectorConfigSchema.record(JpaFindOneConfiguration.class, "jpa.query.find.one", 1);
+
         @Override
         public String id() {
             return "find.one";
         }
 
         @Override
-        public CompletionStage<QueryOutcome<Object>> query(QueryInvocation<Object, QueryRequest<?>, Object> invocation) {
-            QueryRequest<?> request = new QueryRequest<>(invocation.configuration().descriptor(), invocation.input());
-            return queryOne(request, invocation.outputType()).handle((output, failure) -> {
+        public Optional<ConnectorConfigSchema<JpaFindOneConfiguration>> configurationSchema() {
+            return Optional.of(CONFIGURATION_SCHEMA);
+        }
+
+        @Override
+        public CompletionStage<QueryOutcome<Object>> query(
+            QueryInvocation<Object, JpaFindOneConfiguration, Object> invocation
+        ) {
+            JpaQueryPlan plan;
+            try {
+                plan = JpaQueryPlan.from(id(), invocation.configuration());
+            } catch (RuntimeException failure) {
+                return CompletableFuture.failedStage(failure);
+            }
+            return queryOne(plan, invocation.input(), invocation.outputType()).handle((output, failure) -> {
                 if (failure == null) {
                     return new QueryOutcome.Found<>(output);
                 }

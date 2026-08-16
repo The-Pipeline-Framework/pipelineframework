@@ -97,7 +97,7 @@ public class ConnectorRegistryLifecycle {
         if (definitions == null || definitions.isEmpty()) {
             return ConnectorBindingRegistry.empty();
         }
-        return ConnectorBindingRegistry.fromProviders(
+        return ConnectorBindingRegistry.fromProvidersAllowingUnavailable(
             definitions,
             providers == null ? List.of() : providers);
     }
@@ -110,7 +110,7 @@ public class ConnectorRegistryLifecycle {
         if (definitions == null || definitions.isEmpty()) {
             return ConnectorBindingRegistry.empty();
         }
-        return ConnectorBindingRegistry.fromProviders(
+        return ConnectorBindingRegistry.fromProvidersAllowingUnavailable(
             definitions,
             providers == null ? List.of() : providers,
             instanceFactory);

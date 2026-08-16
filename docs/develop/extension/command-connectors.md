@@ -138,6 +138,51 @@ An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provi
 `FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
 blocking execution or bounded framework-managed concurrency.
 
+## Native Provider Queries
+
+The same named provider binding can expose a unary `QueryOperation<I, C, O>`. Select it with the
+shared operation-first grammar; there is no separate provider-first Query selector:
+
+```yaml
+connectors:
+  search:
+    provider: acme.search
+    version: 1
+
+steps:
+  - name: Find document
+    kind: query
+    operation: find.document
+    operationVersion: 1
+    using: search
+    config:
+      index: orders
+    negativeCacheTtl: PT20S
+```
+
+TPF binds `config` to the operation's immutable configuration record before invocation. Provider
+authors receive a typed `QueryInvocation` and return a JDK
+`CompletionStage<QueryOutcome<O>>`. `Found` supplies the step output. `NotFound` becomes the typed
+non-retryable `QueryNotFoundException`; `TemporarilyUnavailable` remains retryable, while
+`AuthenticationRequired` and `TerminalFailure` are non-retryable failures. Public provider code
+does not depend on Mutiny, CDI, or Quarkus.
+
+Query capabilities are conservative when omitted. `LIVE_ONLY` requires `BYPASS_CACHE`.
+`CACHEABLE` permits the ordinary pipeline cache policies; a declared `maximumCacheAge` requires
+the configured positive cache TTL to be no greater than that maximum. Without a provider maximum,
+a positive TTL is not required.
+
+`negativeCacheTtl` is optional. It is valid only when the operation declares a maximum negative
+cache TTL, must not exceed that maximum, and stores only a bounded internal `NotFound` marker.
+It does not cache authentication, temporary availability, terminal failures, provider payloads,
+or arbitrary metadata.
+
+Pipeline cache replay, execution-scoped Query capture replay, and a live provider observation are
+separate paths. A generic cache hit returns before Query runtime. After a cache miss that permits
+execution, an existing Query capture is replayed before resolving the provider. Only a miss in
+both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
+[Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
+
 ## Command Id Generator
 
 The command id must be stable for the same business command. Do not include the current time, a random UUID, or a process-local counter.

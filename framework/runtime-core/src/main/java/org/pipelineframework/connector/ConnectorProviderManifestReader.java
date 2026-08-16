@@ -52,10 +52,12 @@ public final class ConnectorProviderManifestReader {
     }
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value) {
-        requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities");
+        requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities",
+            "queryCapabilities");
         return new ConnectorOperationDescriptor(
             string(value, "id"), ConnectorOperationKind.of(string(value, "kind")), integer(value, "majorVersion"),
-            optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value));
+            optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value),
+            optionalQueryCapabilities(value));
     }
 
     private static ConnectorProviderVersion version(Map<String, Object> value) {
@@ -99,6 +101,29 @@ public final class ConnectorProviderManifestReader {
                 "maximumMachineConfirmation"),
             bool(capabilities, "userConfirmationSupported"),
             java.util.Set.copyOf(referenceKinds)));
+    }
+
+    private static Optional<QueryCapabilities> optionalQueryCapabilities(Map<String, Object> value) {
+        if (!value.containsKey("queryCapabilities")) {
+            return Optional.empty();
+        }
+        Map<String, Object> capabilities = object(value.get("queryCapabilities"), "queryCapabilities");
+        requireOnly(capabilities, "cacheability", "maximumCacheAge", "maximumNegativeCacheTtl");
+        return Optional.of(new QueryCapabilities(
+            enumValue(QueryCacheability.class, string(capabilities, "cacheability"), "cacheability"),
+            optionalDuration(capabilities, "maximumCacheAge"),
+            optionalDuration(capabilities, "maximumNegativeCacheTtl")));
+    }
+
+    private static Optional<java.time.Duration> optionalDuration(Map<String, Object> value, String key) {
+        if (!value.containsKey(key)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(java.time.Duration.parse(string(value, key)));
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw malformed(key, "ISO-8601 duration");
+        }
     }
 
     private static Optional<ConnectorConfigSchemaDescriptor> optionalSchema(Map<String, Object> value, String key) {

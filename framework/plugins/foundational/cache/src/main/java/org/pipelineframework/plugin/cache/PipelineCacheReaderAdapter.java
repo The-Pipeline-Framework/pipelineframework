@@ -16,6 +16,7 @@
 
 package org.pipelineframework.plugin.cache;
 
+import java.time.Duration;
 import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -23,13 +24,14 @@ import jakarta.inject.Inject;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.cache.PipelineCacheWriter;
 
 /**
  * Cache plugin adapter that exposes cache reads to the pipeline runtime.
  */
 @ApplicationScoped
 @Unremovable
-public class PipelineCacheReaderAdapter implements PipelineCacheReader {
+public class PipelineCacheReaderAdapter implements PipelineCacheReader, PipelineCacheWriter {
 
     @Inject
     CacheManager cacheManager;
@@ -54,5 +56,10 @@ public class PipelineCacheReaderAdapter implements PipelineCacheReader {
     @Override
     public Uni<Boolean> exists(String key) {
         return cacheManager.exists(key);
+    }
+
+    @Override
+    public Uni<Void> put(String key, Object value, Duration ttl) {
+        return cacheManager.cache(key, value, ttl).replaceWithVoid();
     }
 }

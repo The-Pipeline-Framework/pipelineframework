@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -115,6 +117,56 @@ class QueryClientStepRendererTest {
         assertTrue(exception.getMessage().contains("does not match .common.domain, .common.dto, or .service"));
     }
 
+    @Test
+    void generatedLocalNativeQueryCarriesStaticCacheRequirements() throws Exception {
+        Path metadataRoot = tempDir.resolve("connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.lookup","version":{"major":1,"minor":0},
+            "operations":[{"id":"customer.find","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE","maximumCacheAge":"PT5M",
+            "maximumNegativeCacheTtl":"PT30S"}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipeline, """
+            basePackage: com.example
+            transport: LOCAL
+            connectors:
+              lookup:
+                provider: acme.lookup
+                version: 1
+            steps:
+              - name: Load Customer Risk
+                kind: query
+                operation: customer.find
+                using: lookup
+                negativeCacheTtl: PT20S
+            """);
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            PipelineStepModel model = model(
+                ClassName.get("com.example.common.domain", "CustomerRiskLookup"),
+                ClassName.get("com.example.common.domain", "CustomerRiskSnapshot"));
+
+            new QueryClientStepRenderer().render(model, generationContext(Map.of(
+                "pipeline.config", pipeline.toString(),
+                "pipeline.transport", "LOCAL")));
+
+            String source = Files.readString(tempDir.resolve(
+                "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+            assertTrue(source.contains("ProviderQueryStep"));
+            assertTrue(source.contains("QueryCacheRequirements queryCacheRequirements()"));
+            assertTrue(source.contains("ConnectorProviderId.of(\"acme.lookup\")"));
+            assertTrue(source.contains("\"customer.find\""));
+            assertTrue(source.contains("Duration.parse(\"PT5M\")"));
+            assertTrue(source.contains("Duration.parse(\"PT20S\")"));
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
     private PipelineStepModel model(ClassName inputType, ClassName outputType) {
         return new PipelineStepModel.Builder()
             .serviceName("LoadCustomerRisk")
@@ -131,8 +183,12 @@ class QueryClientStepRendererTest {
     }
 
     private GenerationContext generationContext(String transport) {
+        return generationContext(Map.of("pipeline.transport", transport));
+    }
+
+    private GenerationContext generationContext(Map<String, String> options) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
+        when(processingEnv.getOptions()).thenReturn(options);
         return new GenerationContext(
             processingEnv,
             tempDir,

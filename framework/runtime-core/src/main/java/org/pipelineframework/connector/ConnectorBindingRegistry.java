@@ -78,6 +78,14 @@ public final class ConnectorBindingRegistry {
         return fromProviders(definitions, providers, instanceFactory, false);
     }
 
+    static ConnectorBindingRegistry fromProvidersAllowingUnavailable(
+        Collection<ConnectorBindingDefinition> definitions,
+        Collection<? extends ConnectorProvider<?>> providers,
+        ConnectorProviderInstanceFactory instanceFactory
+    ) {
+        return fromProviders(definitions, providers, instanceFactory, true);
+    }
+
     private static ConnectorBindingRegistry fromProviders(
         Collection<ConnectorBindingDefinition> definitions,
         Collection<? extends ConnectorProvider<?>> providers,

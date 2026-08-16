@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringReader;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -529,6 +530,52 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("native-binding:work/invoice.find", query.queryId());
         assertEquals(2, query.operationSelection().orElseThrow().operationVersion());
         assertEquals("invoices", query.commandConfig().get("index"));
+    }
+
+    @Test
+    void loadsBoundedNegativeCachingOnlyForProviderBackedQueries() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Find invoice
+                kind: query
+                operation: invoice.find
+                using: work
+                negativeCacheTtl: PT20S
+            """));
+
+        assertEquals(Duration.ofSeconds(20), config.steps().getFirst().negativeCacheTtl().orElseThrow());
+
+        IllegalArgumentException legacy = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                steps:
+                  - name: Find invoice
+                    kind: query
+                    query: invoice-by-id
+                    negativeCacheTtl: PT20S
+                """)));
+        assertTrue(legacy.getMessage().contains("only for provider-backed Query steps"));
+
+        IllegalArgumentException invalid = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                connectors:
+                  work:
+                    provider: acme.work
+                    version: 1
+                steps:
+                  - name: Find invoice
+                    kind: query
+                    operation: invoice.find
+                    using: work
+                    negativeCacheTtl: PT0S
+                """)));
+        assertTrue(invalid.getMessage().contains("must be a positive ISO-8601 duration"));
     }
 
     @Test

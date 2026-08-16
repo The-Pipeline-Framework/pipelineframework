@@ -56,6 +56,7 @@ public final class ConnectorConfigurationValidator {
             case DECIMAL -> value instanceof Number;
             case ENUM -> value instanceof String string && field.enumValues().contains(string);
             case DURATION -> validDuration(value);
+            case MAP -> value instanceof java.util.Map<?, ?>;
         };
         if (!valid) {
             throw failure(subject, schema, field.name(), "expected " + field.type() + " value");

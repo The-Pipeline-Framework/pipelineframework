@@ -121,6 +121,20 @@ public final class ConnectorProviderManifestCatalog {
         CommandPolicyValidator.validate(provider.provider(), operation, policy);
     }
 
+    public QueryCapabilities requireQueryCapabilities(
+        ConnectorOperationIdentity identity,
+        int expectedProviderMajorVersion
+    ) {
+        Objects.requireNonNull(identity, "query operation identity must not be null");
+        ConnectorOperationDescriptor operation = requireOperation(
+            identity.providerId(),
+            expectedProviderMajorVersion,
+            identity.operationId(),
+            ConnectorOperationKind.QUERY,
+            identity.majorVersion());
+        return operation.queryCapabilities().orElse(QueryCapabilities.conservative());
+    }
+
     private static void validateConfiguration(
         java.util.Optional<ConnectorConfigSchemaDescriptor> schema,
         ConnectorConfigurationDocument configuration,

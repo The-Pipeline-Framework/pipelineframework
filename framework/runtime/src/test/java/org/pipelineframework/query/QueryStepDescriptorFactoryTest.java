@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -66,6 +68,14 @@ class QueryStepDescriptorFactoryTest {
 
     @Test
     void nativeQueryDescriptorRefersToTheNamedBindingWithoutProviderConstruction() throws Exception {
+        Path metadataRoot = tempDir.resolve("connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "operations":[{"id":"document.find","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE"}}]}]}
+            """);
         Path explicit = tempDir.resolve("native-query.yaml");
         Files.writeString(explicit, """
             basePackage: org.example
@@ -80,23 +90,32 @@ class QueryStepDescriptorFactoryTest {
                 using: search
                 config:
                   index: orders
+                capture:
+                  keyFields: [documentId]
                 input: org.example.DocumentQuery
                 output: org.example.Document
             """);
         System.setProperty("pipeline.config", explicit.toString());
 
-        QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
-        try {
-            QueryStepDescriptor descriptor = factory.descriptor(
-                "ProcessFindDocumentService",
-                "org.example.DocumentQuery",
-                "org.example.Document").await().atMost(Duration.ofSeconds(2));
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessFindDocumentService",
+                    "org.example.DocumentQuery",
+                    "org.example.Document").await().atMost(Duration.ofSeconds(2));
 
-            assertEquals("search", descriptor.nativeSelector().orElseThrow().binding().value());
-            assertEquals("document.find", descriptor.nativeSelector().orElseThrow().operationIdentity().operationId());
-            assertEquals("orders", descriptor.config().get("index"));
+                assertEquals("search", descriptor.nativeSelector().orElseThrow().binding().value());
+                assertEquals("document.find", descriptor.nativeSelector().orElseThrow().operationIdentity().operationId());
+                assertEquals("orders", descriptor.config().get("index"));
+                assertEquals(List.of("documentId"), descriptor.keyFields());
+            } finally {
+                factory.shutdown();
+            }
         } finally {
-            factory.shutdown();
+            Thread.currentThread().setContextClassLoader(previous);
         }
     }
 
