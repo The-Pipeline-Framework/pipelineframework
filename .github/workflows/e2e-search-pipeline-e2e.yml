@@ -22,6 +22,7 @@ concurrency:
 env:
   MAVEN_OPTS: -Xmx2g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  QUARKUS_JIB_BASE_JVM_IMAGE: "registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24@sha256:fbbc47a9e8db4da498b2ca3f51ddf583f6f0df8104cd1e1eec689b2ed095dee9"
 
 jobs:
   search-pipeline-e2e:
