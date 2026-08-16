@@ -48,6 +48,7 @@ import org.pipelineframework.telemetry.PipelineRunTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -144,6 +145,21 @@ class PipelineRunnerObjectPublishTest {
 
         assertEquals(List.of(new TestTerminalOutput("file-a", "line-1")), result.get(5, TimeUnit.SECONDS));
         assertEquals("line-1\n", provider.body());
+    }
+
+    @Test
+    void rejectsNullRunTelemetryContextAtTheOwnershipBoundary() {
+        when(telemetry.startRun(any(), anyInt(), any(), anyInt())).thenReturn(null);
+
+        NullPointerException failure = assertThrows(
+            NullPointerException.class,
+            () -> runner.runFromStepUntilWithContext(
+                Uni.createFrom().item(new TestTerminalOutput("file-a", "line-1")),
+                List.of(new IdentityStep()),
+                0,
+                1));
+
+        assertEquals("PipelineRunTelemetry.startRun must not return null", failure.getMessage());
     }
 
     @Test

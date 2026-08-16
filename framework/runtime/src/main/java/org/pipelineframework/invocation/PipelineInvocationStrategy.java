@@ -58,7 +58,7 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
 
     @Override
     public boolean inheritRunContext() {
-        return false;
+        return runContext.isEmpty();
     }
 
     @Override

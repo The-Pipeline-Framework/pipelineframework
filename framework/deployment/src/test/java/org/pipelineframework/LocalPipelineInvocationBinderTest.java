@@ -80,10 +80,10 @@ import org.pipelineframework.telemetry.PipelineStepTelemetry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -454,12 +454,14 @@ class LocalPipelineInvocationBinderTest {
             Multi.createFrom().item("input"),
             List.of(cancellableInvocation));
 
+        AtomicReference<Object> unexpectedSignal = new AtomicReference<>();
         var subscription = ((Multi<String>) active.result()).subscribe().with(
-            ignored -> fail("The pending child must not emit before cancellation"),
-            failureSignal -> fail("The pending child must not fail before cancellation"));
+            item -> unexpectedSignal.compareAndSet(null, item),
+            failureSignal -> unexpectedSignal.compareAndSet(null, failureSignal));
         assertTrue(childSubscribed.await(2, TimeUnit.SECONDS));
         subscription.cancel();
         assertTrue(childCancelled.await(2, TimeUnit.SECONDS));
+        assertNull(unexpectedSignal.get(), "The pending child must not signal before cancellation");
     }
 
     @Test

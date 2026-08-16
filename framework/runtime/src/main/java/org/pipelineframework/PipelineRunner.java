@@ -205,7 +205,9 @@ public class PipelineRunner implements AutoCloseable {
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
         PipelineRunContext telemetryContext = rootInvocation
-            ? runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency)
+            ? Objects.requireNonNull(
+                runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency),
+                "PipelineRunTelemetry.startRun must not return null")
             : owningRunContext.orElseGet(PipelineRunTelemetry::nonOwningContext);
         Object instrumentedInput = rootInvocation ? runTelemetry.instrumentInput(input, telemetryContext) : input;
         PipelineStepTelemetry executionStepTelemetry = rootInvocation || owningRunContext.isPresent()
@@ -235,7 +237,7 @@ public class PipelineRunner implements AutoCloseable {
                         awaitContext.continuationMode(),
                         awaitContext.terminalOutputOwnership(),
                         PipelineTracingSupport.capture(
-                            telemetryContext == null || telemetryContext.span() == null
+                            telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
                                 : telemetryContext.span().getSpanContext()));
 

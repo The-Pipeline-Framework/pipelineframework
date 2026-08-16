@@ -27,10 +27,33 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
 import org.pipelineframework.runtime.core.resilience.CircuitScope;
 import org.pipelineframework.runtime.core.resilience.InMemoryCircuitBreaker;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
 
 class PipelineInvocationRuntimeTest {
     private final PipelineInvocationRuntime runtime = new PipelineInvocationRuntime();
     private final TestBoundary boundary = new TestBoundary();
+
+    @Test
+    void stepInvocationWithoutAssemblyContextInheritsSubscriptionRunContext() {
+        PipelineRunContextHolder.clear();
+        PipelineRunContext ambient = PipelineRunTelemetry.nonOwningContext();
+        AtomicReference<PipelineRunContext> observed = new AtomicReference<>();
+        Uni<String> invocation = runtime.invokeStepUni(null, null, () -> {
+            observed.set(PipelineRunContextHolder.get().orElseThrow());
+            return Uni.createFrom().item("ok");
+        });
+
+        try {
+            String result = PipelineRunContextHolder.call(ambient, () -> invocation.await().indefinitely());
+
+            assertEquals("ok", result);
+            assertSame(ambient, observed.get());
+        } finally {
+            PipelineRunContextHolder.clear();
+        }
+    }
 
     @Test
     void transportUniReturnsOriginalItem() {
