@@ -116,13 +116,19 @@ class CardinalitySemanticsTest {
 
     @Test
     void composeIsClosedForEverySequenceThroughDepthSeven() {
+        int maximumDepth = 7;
         Set<CardinalitySemantics> observed = EnumSet.noneOf(CardinalitySemantics.class);
         int[] evaluated = {0};
-        for (int depth = 1; depth <= 7; depth++) {
+        for (int depth = 1; depth <= maximumDepth; depth++) {
             composeAll(depth, new ArrayList<>(), observed, evaluated);
         }
 
-        assertEquals(21_844, evaluated[0]);
+        int alternatives = CardinalitySemantics.values().length;
+        int expected = 0;
+        for (int depth = 1; depth <= maximumDepth; depth++) {
+            expected += (int) Math.pow(alternatives, depth);
+        }
+        assertEquals(expected, evaluated[0]);
         assertEquals(EnumSet.allOf(CardinalitySemantics.class), observed);
     }
 

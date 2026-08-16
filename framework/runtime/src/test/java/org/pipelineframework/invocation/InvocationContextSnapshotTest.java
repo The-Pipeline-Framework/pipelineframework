@@ -3,6 +3,7 @@ package org.pipelineframework.invocation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,9 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
 
 class InvocationContextSnapshotTest {
 
@@ -23,6 +27,7 @@ class InvocationContextSnapshotTest {
         PipelineContextHolder.clear();
         AwaitExecutionContextHolder.clear();
         PipelineExecutionContextHolder.clear();
+        PipelineRunContextHolder.clear();
     }
 
     @AfterEach
@@ -31,6 +36,7 @@ class InvocationContextSnapshotTest {
         PipelineContextHolder.clear();
         AwaitExecutionContextHolder.clear();
         PipelineExecutionContextHolder.clear();
+        PipelineRunContextHolder.clear();
     }
 
     @Test
@@ -121,5 +127,49 @@ class InvocationContextSnapshotTest {
         snapshot.run(() -> {
             assertEquals(pipelineCtx, PipelineContextHolder.get());
         });
+    }
+
+    @Test
+    void installsAndRestoresOwningPipelineRunContext() {
+        PipelineRunContext previous = PipelineRunTelemetry.nonOwningContext();
+        PipelineRunContext owning = mock(PipelineRunContext.class);
+        PipelineRunContextHolder.set(previous);
+        PipelineContext pipelineContext = new PipelineContext("v1", "tenant", "default");
+        AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant", "execution", 1);
+        InvocationContextSnapshot snapshot = new InvocationContextSnapshot(
+            pipelineContext,
+            awaitContext,
+            java.util.Optional.of(owning));
+
+        snapshot.run(() -> assertEquals(owning, PipelineRunContextHolder.get().orElseThrow()));
+
+        assertEquals(previous, PipelineRunContextHolder.get().orElseThrow());
+    }
+
+    @Test
+    void twoArgumentSnapshotInheritsExistingPipelineRunContext() {
+        PipelineRunContext existing = mock(PipelineRunContext.class);
+        PipelineRunContextHolder.set(existing);
+        InvocationContextSnapshot snapshot = new InvocationContextSnapshot(
+            new PipelineContext("v1", "tenant", "default"),
+            new AwaitExecutionContext("tenant", "execution", 1));
+
+        snapshot.run(() -> assertEquals(existing, PipelineRunContextHolder.get().orElseThrow()));
+
+        assertEquals(existing, PipelineRunContextHolder.get().orElseThrow());
+    }
+
+    @Test
+    void explicitEmptyRunContextClearsAndRestoresExistingContext() {
+        PipelineRunContext existing = mock(PipelineRunContext.class);
+        PipelineRunContextHolder.set(existing);
+        InvocationContextSnapshot snapshot = new InvocationContextSnapshot(
+            new PipelineContext("v1", "tenant", "default"),
+            new AwaitExecutionContext("tenant", "execution", 1),
+            java.util.Optional.empty());
+
+        snapshot.run(() -> assertTrue(PipelineRunContextHolder.get().isEmpty()));
+
+        assertEquals(existing, PipelineRunContextHolder.get().orElseThrow());
     }
 }

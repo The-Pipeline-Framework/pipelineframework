@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2026 Mariano Barcia
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.pipelineframework.processor.composition;
 
 import java.util.List;
@@ -187,11 +203,18 @@ class PipelineDefinitionLinkerTest {
             PipelineDefinitionStep.pipeline("route", "OrderRequest", "FinalizedOrder", childReference));
 
         ResolvedPipelineDefinitionGraph graph = linker(Map.of(childReference, child)).link(root);
+        PipelineDefinition linkedChild = graph.definitions().get(childReference);
+        CompiledPipelineLocation reserve = location(root.reference(), "route", childReference, "reserve");
+        CompiledPipelineLocation provision = location(root.reference(), "route", childReference, "provision");
+        CompiledPipelineLocation finalize = location(root.reference(), "route", childReference, "finalize");
 
         assertEquals(CardinalitySemantics.ONE_TO_ONE, graph.rootCardinality());
-        assertEquals(List.of("PhysicalOrder"), child.steps().get(1).acceptedContractIds());
-        assertEquals(List.of("DigitalOrder"), child.steps().get(2).acceptedContractIds());
-        assertTrue(child.steps().get(3).terminal());
+        assertEquals(List.of("PhysicalOrder"), linkedChild.steps().get(1).acceptedContractIds());
+        assertEquals(List.of("DigitalOrder"), linkedChild.steps().get(2).acceptedContractIds());
+        assertTrue(linkedChild.steps().get(3).terminal());
+        assertEquals(provision, graph.continuationAfter(reserve).orElseThrow());
+        assertEquals(finalize, graph.continuationAfter(provision).orElseThrow());
+        assertTrue(graph.continuationAfter(finalize).isEmpty());
     }
 
     @Test
@@ -215,6 +238,29 @@ class PipelineDefinitionLinkerTest {
         assertEquals(
             "Resolved definition reference does not match requested reference: requested",
             failure.getMessage());
+    }
+
+    @Test
+    void rejectsDuplicateContinuationLocations() {
+        PipelineDefinition root = definition(
+            new PipelineReference("root"),
+            "Input",
+            "Output",
+            PipelineDefinitionStep.direct("step", "Input", "Output", CardinalitySemantics.ONE_TO_ONE));
+        CompiledPipelineLocation current = location(root.reference(), "step");
+
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> new ResolvedPipelineDefinitionGraph(
+                root,
+                Map.of(root.reference(), root),
+                CardinalitySemantics.ONE_TO_ONE,
+                List.of(),
+                List.of(
+                    new PipelineContinuationRoute(current, java.util.Optional.empty()),
+                    new PipelineContinuationRoute(current, java.util.Optional.of(current)))));
+
+        assertEquals("Duplicate continuation route for compiled location: root:step", failure.getMessage());
     }
 
     private static PipelineDefinitionLinker linker(Map<PipelineReference, PipelineDefinition> definitions) {

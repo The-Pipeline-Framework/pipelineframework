@@ -52,6 +52,30 @@ class PipelineCompositionResolverTest {
         assertThrows(IllegalArgumentException.class, () -> resolver.advance(invalid));
     }
 
+    @Test
+    void rejectsCyclicCompositionDescriptors() {
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionDescriptor("outer", List.of(
+                definition("outer", List.of(invocation(0, "again", "outer")),
+                    continuation("again", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")))));
+
+        assertEquals("composition definitions must not contain cycles: outer", failure.getMessage());
+    }
+
+    @Test
+    void rejectsDefinitionsUnreachableFromTheRoot() {
+        IllegalArgumentException failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionDescriptor("outer", List.of(
+                definition("outer", List.of(direct(0, "done")),
+                    continuation("done", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")),
+                definition("unused", List.of(direct(0, "unused-step")),
+                    continuation("unused-step", PipelineCompositionContinuationKind.RETURN, "")))));
+
+        assertEquals("composition definition is unreachable from root: unused", failure.getMessage());
+    }
+
     private static PipelineStaticLocation next(PipelineCompositionResolver.ResolvedContinuation continuation) {
         return assertInstanceOf(PipelineCompositionResolver.ResolvedContinuation.Next.class, continuation).location();
     }

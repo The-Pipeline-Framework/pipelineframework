@@ -43,6 +43,8 @@ import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -95,22 +97,31 @@ class PipelineRunnerObjectPublishTest {
         lenient().when(parallelismPolicyResolver.resolveMaxConcurrency(any())).thenReturn(1);
         lenient().when(cacheSupportFactory.buildCacheReadSupport()).thenReturn(null);
         lenient().when(telemetry.startRun(any(), anyInt(), any(), anyInt()))
-            .thenReturn(null);
+            .thenReturn(PipelineRunTelemetry.nonOwningContext());
         lenient().when(telemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(telemetry.instrumentRunCompletion(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-        lenient().when(telemetry.instrumentItemConsumed(any(), any(), any(Multi.class)))
+        lenient().when(telemetry.instrumentItemConsumed(any(), any(Object.class), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Multi.class)))
+        lenient().when(telemetry.instrumentItemConsumed(any(), any(Object.class), any(Uni.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Uni.class)))
+        lenient().when(telemetry.instrumentItemProduced(any(), any(Object.class), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentStepUni(any(), any(), any(), anyBoolean(), any()))
+        lenient().when(telemetry.instrumentItemProduced(any(), any(Object.class), any(Uni.class)))
+            .thenAnswer(invocation -> invocation.getArgument(2));
+        lenient().when(telemetry.instrumentStepUni(any(), any(), any(Object.class), anyBoolean(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(telemetry.instrumentStepUni(any(), any(), any(Object.class), anyBoolean()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(telemetry.instrumentStepMulti(any(), any(), any(Object.class), anyBoolean(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(telemetry.instrumentStepMulti(any(), any(), any(Object.class), anyBoolean()))
             .thenAnswer(invocation -> invocation.getArgument(1));
     }
 
     @AfterEach
     void clearAwaitContext() {
         AwaitExecutionContextHolder.clear();
+        PipelineRunContextHolder.clear();
     }
 
     @Test

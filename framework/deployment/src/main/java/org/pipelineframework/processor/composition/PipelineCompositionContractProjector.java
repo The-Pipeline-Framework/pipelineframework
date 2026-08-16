@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -153,11 +154,7 @@ public final class PipelineCompositionContractProjector {
     private static String sha256(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(digest.length * 2);
-            for (byte valueByte : digest) {
-                result.append(String.format("%02x", valueByte));
-            }
-            return result.toString();
+            return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 must be available", exception);
         }

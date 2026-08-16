@@ -19,6 +19,7 @@ package org.pipelineframework;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -44,6 +45,7 @@ import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 import org.pipelineframework.telemetry.PipelineTracingSupport;
 
@@ -137,7 +139,13 @@ public class PipelineRunner implements AutoCloseable {
         List<Object> steps,
         int startStepIndex,
         int stopBeforeStepIndex) {
-        return runFromStepUntilWithContext(input, steps, startStepIndex, stopBeforeStepIndex, true);
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            startStepIndex,
+            stopBeforeStepIndex,
+            true,
+            Optional.empty());
     }
 
     /**
@@ -154,7 +162,22 @@ public class PipelineRunner implements AutoCloseable {
      */
     public ExecutionResult runNestedWithContext(Object input, List<Object> steps) {
         Objects.requireNonNull(steps, "Steps list must not be null");
-        return runFromStepUntilWithContext(input, steps, 0, steps.size(), false);
+        return runFromStepUntilWithContext(input, steps, 0, steps.size(), false, Optional.empty());
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        PipelineRunContext owningRunContext
+    ) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            0,
+            steps.size(),
+            false,
+            Optional.of(Objects.requireNonNull(owningRunContext, "owningRunContext must not be null")));
     }
 
     private ExecutionResult runFromStepUntilWithContext(
@@ -162,7 +185,8 @@ public class PipelineRunner implements AutoCloseable {
         List<Object> steps,
         int startStepIndex,
         int stopBeforeStepIndex,
-        boolean rootInvocation) {
+        boolean rootInvocation,
+        Optional<PipelineRunContext> owningRunContext) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -182,17 +206,22 @@ public class PipelineRunner implements AutoCloseable {
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
         PipelineRunContext telemetryContext = rootInvocation
             ? runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency)
-            : PipelineRunTelemetry.nonOwningContext();
+            : owningRunContext.orElseGet(PipelineRunTelemetry::nonOwningContext);
         Object instrumentedInput = rootInvocation ? runTelemetry.instrumentInput(input, telemetryContext) : input;
-        PipelineStepTelemetry executionStepTelemetry = rootInvocation
+        PipelineStepTelemetry executionStepTelemetry = rootInvocation || owningRunContext.isPresent()
             ? PipelineStepTelemetry.of(stepTelemetry, telemetryContext)
             : PipelineStepTelemetry.disabled();
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
         AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
-        Object current = runnerCore.runSync(
+        Object contextualInput = stepExecutor.contextualizeInput(
             instrumentedInput,
+            contextSnapshot,
+            awaitContext,
+            telemetryContext);
+        Object current = PipelineRunContextHolder.call(telemetryContext, () -> runnerCore.runSync(
+            contextualInput,
             orderedSteps,
             startStepIndex,
             stopBeforeStepIndex,
@@ -230,7 +259,7 @@ public class PipelineRunner implements AutoCloseable {
                     contextSnapshot,
                     awaitContextSnapshot);
             },
-            index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index));
+            index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index)));
 
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
         Object terminal = current;

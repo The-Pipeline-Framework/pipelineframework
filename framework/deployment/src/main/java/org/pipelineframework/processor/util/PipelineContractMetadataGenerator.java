@@ -77,9 +77,9 @@ public class PipelineContractMetadataGenerator {
         String pipelineId = resolvePipelineId(ctx);
         Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
         Map<String, Object> canonicalTypes = canonicalTypes(ctx);
-        PipelineCompositionDescriptor composition = ctx.getResolvedPipelineDefinitionGraph() == null
-            ? PipelineCompositionDescriptor.empty()
-            : new PipelineCompositionContractProjector().project(ctx.getResolvedPipelineDefinitionGraph());
+        PipelineCompositionDescriptor composition = ctx.getResolvedPipelineDefinitionGraph()
+            .map(graph -> new PipelineCompositionContractProjector().project(graph))
+            .orElseGet(PipelineCompositionDescriptor::empty);
         int schemaVersion = composition.present() ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);

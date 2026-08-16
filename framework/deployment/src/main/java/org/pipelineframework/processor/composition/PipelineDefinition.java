@@ -44,8 +44,7 @@ public record PipelineDefinition(
             throw new IllegalArgumentException("Pipeline definition must contain at least one step");
         }
         Set<String> localStepIds = new HashSet<>();
-        for (int index = 0; index < steps.size(); index++) {
-            PipelineDefinitionStep step = Objects.requireNonNull(steps.get(index), "steps must not contain null");
+        for (PipelineDefinitionStep step : steps) {
             if (!localStepIds.add(step.localStepId())) {
                 throw new IllegalArgumentException("Duplicate definition-local step id: " + step.localStepId());
             }

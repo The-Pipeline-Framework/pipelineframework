@@ -16,8 +16,12 @@
 
 package org.pipelineframework.orchestrator.composition;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Release-pinned compiler projection of a resolved pipeline composition graph. */
 public record PipelineCompositionDescriptor(String rootDefinitionId, List<PipelineCompositionDefinition> definitions) {
@@ -39,10 +43,11 @@ public record PipelineCompositionDescriptor(String rootDefinitionId, List<Pipeli
         if (distinct != definitions.size()) {
             throw new IllegalArgumentException("composition definitions must have unique definition ids");
         }
+        Map<String, PipelineCompositionDefinition> definitionsById = new HashMap<>();
+        definitions.forEach(definition -> definitionsById.put(definition.definitionId(), definition));
         for (PipelineCompositionDefinition definition : definitions) {
             for (PipelineCompositionNode node : definition.nodes()) {
-                if (node.invocation() && definitions.stream().noneMatch(
-                    target -> target.definitionId().equals(node.targetDefinitionId()))) {
+                if (node.invocation() && !definitionsById.containsKey(node.targetDefinitionId())) {
                     throw new IllegalArgumentException("composition invocation references an unknown definition: "
                         + node.targetDefinitionId());
                 }
@@ -51,6 +56,19 @@ public record PipelineCompositionDescriptor(String rootDefinitionId, List<Pipeli
             if (definition.definitionId().equals(rootDefinitionId)
                 != (terminal.kind() == PipelineCompositionContinuationKind.ROOT_TERMINAL)) {
                 throw new IllegalArgumentException("only the root definition may have ROOT_TERMINAL continuation");
+            }
+        }
+        if (!definitions.isEmpty()) {
+            Set<String> reached = new HashSet<>();
+            visit(rootDefinitionId, definitionsById, reached, new HashSet<>());
+            if (reached.size() != definitions.size()) {
+                String unreachable = definitions.stream()
+                    .map(PipelineCompositionDefinition::definitionId)
+                    .filter(definitionId -> !reached.contains(definitionId))
+                    .findFirst()
+                    .orElseThrow();
+                throw new IllegalArgumentException(
+                    "composition definition is unreachable from root: " + unreachable);
             }
         }
     }
@@ -67,5 +85,26 @@ public record PipelineCompositionDescriptor(String rootDefinitionId, List<Pipeli
         Objects.requireNonNull(definitionId, "definitionId must not be null");
         return definitions.stream().filter(value -> value.definitionId().equals(definitionId)).findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Unknown composition definition: " + definitionId));
+    }
+
+    private static void visit(
+        String definitionId,
+        Map<String, PipelineCompositionDefinition> definitionsById,
+        Set<String> reached,
+        Set<String> visiting
+    ) {
+        if (reached.contains(definitionId)) {
+            return;
+        }
+        if (!visiting.add(definitionId)) {
+            throw new IllegalArgumentException("composition definitions must not contain cycles: " + definitionId);
+        }
+        PipelineCompositionDefinition definition = definitionsById.get(definitionId);
+        definition.nodes().stream()
+            .filter(PipelineCompositionNode::invocation)
+            .map(PipelineCompositionNode::targetDefinitionId)
+            .forEach(target -> visit(target, definitionsById, reached, visiting));
+        visiting.remove(definitionId);
+        reached.add(definitionId);
     }
 }

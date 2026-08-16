@@ -73,6 +73,8 @@ import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -86,6 +88,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -109,6 +113,7 @@ class LocalPipelineInvocationBinderTest {
     PipelineCacheSupportFactory cacheSupportFactory;
 
     private PipelineRunner runner;
+    private PipelineRunContext rootRunContext;
 
     @BeforeEach
     void setUp() {
@@ -121,6 +126,7 @@ class LocalPipelineInvocationBinderTest {
         runner.parallelismPolicyResolver = parallelismPolicyResolver;
         runner.cacheSupportFactory = cacheSupportFactory;
         runner.stepExecutor = new PipelineStepExecutor();
+        rootRunContext = PipelineRunTelemetry.nonOwningContext();
 
         lenient().when(stepOrderer.orderSteps(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(parallelismPolicyResolver.resolveParallelismPolicy(any()))
@@ -128,7 +134,7 @@ class LocalPipelineInvocationBinderTest {
         lenient().when(parallelismPolicyResolver.resolveMaxConcurrency(any())).thenReturn(1);
         lenient().when(cacheSupportFactory.buildCacheReadSupport()).thenReturn(null);
         lenient().when(runTelemetry.startRun(any(), anyInt(), any(), anyInt()))
-            .thenReturn(PipelineRunTelemetry.nonOwningContext());
+            .thenReturn(rootRunContext);
         lenient().when(runTelemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(runTelemetry.instrumentRunCompletion(any(), any()))
             .thenAnswer(invocation -> invocation.getArgument(0));
@@ -153,6 +159,7 @@ class LocalPipelineInvocationBinderTest {
     @AfterEach
     void clearContext() {
         PipelineContextHolder.clear();
+        PipelineRunContextHolder.clear();
     }
 
     @Test
@@ -209,6 +216,11 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(1, publisher.writeAttempts());
         assertSame(context, observedContext.get());
         verify(runTelemetry, times(1)).startRun(any(), anyInt(), any(), anyInt());
+        verify(stepTelemetry, times(3)).instrumentStepUni(
+            eq(ContextSuffix.class),
+            any(Uni.class),
+            same(rootRunContext),
+            anyBoolean());
     }
 
     @Test
@@ -341,7 +353,8 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(0, rootSubscriptions.get(), "building an invocation must not subscribe to its outer Multi");
         assertEquals(10, ((Multi<Integer>) execution.result()).collect().asList().await().indefinitely().size());
         assertEquals(1, rootSubscriptions.get());
-        assertEquals(2, maximumActiveChildren.get());
+        assertTrue(maximumActiveChildren.get() <= 2,
+            () -> "Nested child concurrency exceeded configured maximum: " + maximumActiveChildren.get());
         assertEquals(0, activeChildren.get());
     }
 

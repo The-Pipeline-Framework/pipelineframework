@@ -51,8 +51,11 @@ public record PipelineCompositionNode(
         if (!DIRECT.equals(kind) && !INVOCATION.equals(kind)) {
             throw new IllegalArgumentException("Unsupported composition node kind: " + kind);
         }
-        if (INVOCATION.equals(kind) == targetDefinitionId.isEmpty()) {
-            throw new IllegalArgumentException("Pipeline invocation nodes must declare exactly one targetDefinitionId");
+        if (DIRECT.equals(kind) && !targetDefinitionId.isEmpty()) {
+            throw new IllegalArgumentException("Direct composition nodes must not declare targetDefinitionId");
+        }
+        if (INVOCATION.equals(kind) && targetDefinitionId.isEmpty()) {
+            throw new IllegalArgumentException("Pipeline invocation nodes must declare targetDefinitionId");
         }
     }
 

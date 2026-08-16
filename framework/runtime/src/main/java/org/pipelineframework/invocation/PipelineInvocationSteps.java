@@ -26,6 +26,7 @@ import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 
 /**
  * Adapts a statically linked child definition to the existing TPF step interfaces.
@@ -163,7 +164,9 @@ public final class PipelineInvocationSteps {
     }
 
     private static Object nestedResult(PipelineRunner runner, List<Object> linkedChildSteps, Object input) {
-        PipelineRunner.ExecutionResult execution = runner.runNestedWithContext(input, linkedChildSteps);
+        PipelineRunner.ExecutionResult execution = PipelineRunContextHolder.get()
+            .map(context -> runner.runNestedWithContext(input, linkedChildSteps, context))
+            .orElseGet(() -> runner.runNestedWithContext(input, linkedChildSteps));
         if (execution.terminalOutputPublished()) {
             throw new IllegalStateException("Nested pipeline invocation must not own terminal publication");
         }

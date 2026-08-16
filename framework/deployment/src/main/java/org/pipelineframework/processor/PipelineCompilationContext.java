@@ -3,6 +3,7 @@ package org.pipelineframework.processor;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -58,6 +59,7 @@ public class PipelineCompilationContext {
     @Setter
     private PipelineBranchingPlan branchingPlan;
     @Setter
+    @Getter(AccessLevel.NONE)
     private ResolvedPipelineDefinitionGraph resolvedPipelineDefinitionGraph;
     @Setter
     private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
@@ -93,6 +95,10 @@ public class PipelineCompilationContext {
     private PlatformMode platformMode;
 
     private DescriptorProtos.FileDescriptorSet descriptorSet;
+
+    public Optional<ResolvedPipelineDefinitionGraph> getResolvedPipelineDefinitionGraph() {
+        return Optional.ofNullable(resolvedPipelineDefinitionGraph);
+    }
     
     /**
      * Create a compilation context initialized for the given annotation processing round.

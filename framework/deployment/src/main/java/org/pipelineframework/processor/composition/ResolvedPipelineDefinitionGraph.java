@@ -16,12 +16,14 @@
 
 package org.pipelineframework.processor.composition;
 
+import java.util.AbstractList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.RandomAccess;
 import org.pipelineframework.config.CardinalitySemantics;
 
 /**
@@ -49,16 +51,47 @@ public record ResolvedPipelineDefinitionGraph(
         invocationBindings = List.copyOf(Objects.requireNonNull(
             invocationBindings,
             "invocationBindings must not be null"));
-        continuationRoutes = List.copyOf(Objects.requireNonNull(
+        continuationRoutes = new ContinuationRouteIndex(Objects.requireNonNull(
             continuationRoutes,
             "continuationRoutes must not be null"));
     }
 
     public Optional<CompiledPipelineLocation> continuationAfter(CompiledPipelineLocation location) {
         Objects.requireNonNull(location, "location must not be null");
-        return continuationRoutes.stream()
-            .filter(route -> route.current().equals(location))
-            .findFirst()
-            .flatMap(PipelineContinuationRoute::next);
+        return ((ContinuationRouteIndex) continuationRoutes).continuationAfter(location);
+    }
+
+    private static final class ContinuationRouteIndex extends AbstractList<PipelineContinuationRoute>
+        implements RandomAccess {
+
+        private final List<PipelineContinuationRoute> routes;
+        private final Map<CompiledPipelineLocation, PipelineContinuationRoute> routesByCurrent;
+
+        private ContinuationRouteIndex(List<PipelineContinuationRoute> routes) {
+            this.routes = List.copyOf(routes);
+            Map<CompiledPipelineLocation, PipelineContinuationRoute> indexed = new LinkedHashMap<>();
+            for (PipelineContinuationRoute route : this.routes) {
+                PipelineContinuationRoute duplicate = indexed.putIfAbsent(route.current(), route);
+                if (duplicate != null) {
+                    throw new IllegalArgumentException(
+                        "Duplicate continuation route for compiled location: " + route.current().display());
+                }
+            }
+            this.routesByCurrent = Collections.unmodifiableMap(indexed);
+        }
+
+        private Optional<CompiledPipelineLocation> continuationAfter(CompiledPipelineLocation location) {
+            return Optional.ofNullable(routesByCurrent.get(location)).flatMap(PipelineContinuationRoute::next);
+        }
+
+        @Override
+        public PipelineContinuationRoute get(int index) {
+            return routes.get(index);
+        }
+
+        @Override
+        public int size() {
+            return routes.size();
+        }
     }
 }

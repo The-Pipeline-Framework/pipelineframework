@@ -29,9 +29,6 @@ public record CompiledPipelineLocation(
 
     public CompiledPipelineLocation {
         invocationPath = List.copyOf(Objects.requireNonNull(invocationPath, "invocationPath must not be null"));
-        for (DefinitionLocalLocation invocation : invocationPath) {
-            Objects.requireNonNull(invocation, "invocationPath must not contain null");
-        }
         definitionLocalLocation = Objects.requireNonNull(
             definitionLocalLocation,
             "definitionLocalLocation must not be null");

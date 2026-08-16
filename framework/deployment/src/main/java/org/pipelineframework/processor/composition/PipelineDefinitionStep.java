@@ -17,8 +17,8 @@
 package org.pipelineframework.processor.composition;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.List;
+import java.util.Optional;
 import org.pipelineframework.config.CardinalitySemantics;
 
 /**
@@ -44,7 +44,9 @@ public record PipelineDefinitionStep(
         outputContractId = requireNonBlank(outputContractId, "outputContractId");
         directCardinality = Objects.requireNonNull(directCardinality, "directCardinality must not be null");
         pipelineReference = Objects.requireNonNull(pipelineReference, "pipelineReference must not be null");
-        acceptedContractIds = acceptedContractIds == null ? List.of() : acceptedContractIds.stream()
+        acceptedContractIds = Objects.requireNonNull(
+            acceptedContractIds,
+            "acceptedContractIds must not be null").stream()
             .map(value -> requireNonBlank(value, "acceptedContractIds entry"))
             .distinct()
             .toList();
@@ -60,12 +62,7 @@ public record PipelineDefinitionStep(
         String outputContractId,
         CardinalitySemantics cardinality
     ) {
-        return new PipelineDefinitionStep(
-            localStepId,
-            inputContractId,
-            outputContractId,
-            Optional.of(Objects.requireNonNull(cardinality, "cardinality must not be null")),
-            Optional.empty(), List.of(), false);
+        return direct(localStepId, inputContractId, outputContractId, cardinality, List.of(), false);
     }
 
     public static PipelineDefinitionStep pipeline(
@@ -74,12 +71,7 @@ public record PipelineDefinitionStep(
         String outputContractId,
         PipelineReference pipelineReference
     ) {
-        return new PipelineDefinitionStep(
-            localStepId,
-            inputContractId,
-            outputContractId,
-            Optional.empty(),
-            Optional.of(Objects.requireNonNull(pipelineReference, "pipelineReference must not be null")), List.of(), false);
+        return pipeline(localStepId, inputContractId, outputContractId, pipelineReference, List.of(), false);
     }
 
     public static PipelineDefinitionStep pipeline(

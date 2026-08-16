@@ -35,6 +35,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -142,12 +143,12 @@ class PipelineContractMetadataGeneratorTest {
         PipelineReference outer = new PipelineReference("outer");
         PipelineReference inner = new PipelineReference("inner");
         PipelineDefinition innerDefinition = new PipelineDefinition(inner, "Value", "Value", List.of(
-            PipelineDefinitionStep.direct("x", "Value", "Value", org.pipelineframework.config.CardinalitySemantics.ONE_TO_ONE),
-            PipelineDefinitionStep.direct("y", "Value", "Value", org.pipelineframework.config.CardinalitySemantics.ONE_TO_ONE)));
+            PipelineDefinitionStep.direct("x", "Value", "Value", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("y", "Value", "Value", CardinalitySemantics.ONE_TO_ONE)));
         PipelineDefinition outerDefinition = new PipelineDefinition(outer, "Value", "Value", List.of(
-            PipelineDefinitionStep.direct("a", "Value", "Value", org.pipelineframework.config.CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("a", "Value", "Value", CardinalitySemantics.ONE_TO_ONE),
             PipelineDefinitionStep.pipeline("call-inner", "Value", "Value", inner),
-            PipelineDefinitionStep.direct("c", "Value", "Value", org.pipelineframework.config.CardinalitySemantics.ONE_TO_ONE)));
+            PipelineDefinitionStep.direct("c", "Value", "Value", CardinalitySemantics.ONE_TO_ONE)));
         ctx.setResolvedPipelineDefinitionGraph(new PipelineDefinitionLinker(
             reference -> java.util.Optional.ofNullable(Map.of(inner, innerDefinition).get(reference))).link(outerDefinition));
         ctx.setStepModels(List.of(step("ProcessCompositionService", "Value", "Value",

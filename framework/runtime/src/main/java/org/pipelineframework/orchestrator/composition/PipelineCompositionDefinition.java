@@ -44,6 +44,9 @@ public record PipelineCompositionDefinition(
             throw new IllegalArgumentException("definition nodes and continuations must have the same size");
         }
         Set<String> nodeIds = new HashSet<>();
+        Set<String> allNodeIds = nodes.stream()
+            .map(PipelineCompositionNode::nodeId)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
         for (int index = 0; index < nodes.size(); index++) {
             PipelineCompositionNode node = Objects.requireNonNull(nodes.get(index), "nodes must not contain null");
             if (node.index() != index || !nodeIds.add(node.nodeId())) {
@@ -55,7 +58,7 @@ public record PipelineCompositionDefinition(
                 throw new IllegalArgumentException("continuation must match its definition node");
             }
             if (continuation.kind() == PipelineCompositionContinuationKind.NEXT_LOCAL
-                && !nodeIdsFor(nodes).contains(continuation.nextNodeId())) {
+                && !allNodeIds.contains(continuation.nextNodeId())) {
                 throw new IllegalArgumentException("continuation nextNodeId is not a definition node");
             }
             if (index + 1 < nodes.size()) {
@@ -77,10 +80,6 @@ public record PipelineCompositionDefinition(
     public PipelineCompositionContinuation continuation(String nodeId) {
         return continuations.stream().filter(value -> value.nodeId().equals(nodeId)).findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Unknown continuation " + definitionId + ":" + nodeId));
-    }
-
-    private static Set<String> nodeIdsFor(List<PipelineCompositionNode> nodes) {
-        return nodes.stream().map(PipelineCompositionNode::nodeId).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private static String required(String value, String field) {
