@@ -416,7 +416,7 @@ public class PipelineYamlConfigLoader {
     }
 
     private record NativeCommandYaml(
-        String binding,
+        Optional<String> binding,
         String provider,
         int providerVersion,
         String operation,
@@ -430,7 +430,7 @@ public class PipelineYamlConfigLoader {
             int operationVersion,
             Map<String, Object> policy
         ) {
-            this("", provider, providerVersion, operation, operationVersion, policy);
+            this(Optional.empty(), provider, providerVersion, operation, operationVersion, policy);
         }
 
         private static NativeCommandYaml bound(
@@ -438,7 +438,7 @@ public class PipelineYamlConfigLoader {
             PipelineYamlOperationSelection selection
         ) {
             return new NativeCommandYaml(
-                binding.name(),
+                Optional.of(binding.name()),
                 binding.provider(),
                 binding.version(),
                 selection.operation(),
@@ -447,7 +447,8 @@ public class PipelineYamlConfigLoader {
         }
 
         private String commandName() {
-            return "native:" + provider + "/" + operation;
+            return binding.map(name -> "native-binding:" + name + "/" + operation)
+                .orElseGet(() -> "native:" + provider + "/" + operation);
         }
 
         private Map<String, Object> embed(Map<String, Object> config) {
@@ -457,9 +458,7 @@ public class PipelineYamlConfigLoader {
             embedded.put("__tpf_native_operation", operation);
             embedded.put("__tpf_native_operation_version", operationVersion);
             embedded.put("__tpf_native_policy", policy);
-            if (!binding.isBlank()) {
-                embedded.put("__tpf_native_binding", binding);
-            }
+            binding.ifPresent(name -> embedded.put("__tpf_native_binding", name));
             return Map.copyOf(embedded);
         }
     }
@@ -474,7 +473,10 @@ public class PipelineYamlConfigLoader {
         }
         Map<String, PipelineYamlConnectorBinding> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : values.entrySet()) {
-            String name = entry.getKey() == null ? "" : entry.getKey().toString();
+            String name = entry.getKey() == null ? "" : entry.getKey().toString().trim();
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("connector binding name must not be blank");
+            }
             if (!(entry.getValue() instanceof Map<?, ?> binding)) {
                 throw new IllegalArgumentException("connector binding '" + name + "' must be defined as a map");
             }

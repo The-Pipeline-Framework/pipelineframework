@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +101,7 @@ public final class ConnectorBindingMetadataGenerator {
         result.put("schemaId", snapshot.schemaId());
         result.put("schemaVersion", snapshot.schemaVersion());
         result.put("digest", snapshot.digest());
-        return Map.copyOf(result);
+        return Collections.unmodifiableMap(result);
     }
 
     private static OperationReference operationReference(

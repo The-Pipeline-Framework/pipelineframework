@@ -67,10 +67,14 @@ connection and secret references.
 
 ## Required Runtime Pieces
 
+For operation-first native provider commands, implement `CommandOperation<I, C, O>` as described in
+[Writing Command Connectors](/develop/extension/command-connectors). The older
+`CommandConnector<I, O>` entry below applies only to the retained legacy command path.
+
 | Piece | Purpose |
 | --- | --- |
 | `CommandIdGenerator<I>` | Builds the deterministic command id from the input. |
-| `CommandConnector<I, O>` | Calls the external system and returns the command output. |
+| `CommandConnector<I, O>` | Legacy compatibility adapter that calls the external system. |
 | `CommandEffectStore` | Records pending, dispatching, success, retryable failure, and DLQ state. |
 
 The generated command step calls these pieces. Application code does not call the effect store directly.

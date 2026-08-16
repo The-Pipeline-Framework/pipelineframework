@@ -326,9 +326,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineContractMetadataGenerator contractMetadataGenerator =
                 new PipelineContractMetadataGenerator(ctx.getProcessingEnv());
             contractMetadataGenerator.writePipelineContract(ctx);
-            ConnectorBindingMetadataGenerator connectorBindingMetadataGenerator =
-                new ConnectorBindingMetadataGenerator(ctx.getProcessingEnv());
-            connectorBindingMetadataGenerator.writeMetadata(ctx);
+            if (ctx.getProcessingEnv() != null) {
+                ConnectorBindingMetadataGenerator connectorBindingMetadataGenerator =
+                    new ConnectorBindingMetadataGenerator(ctx.getProcessingEnv());
+                connectorBindingMetadataGenerator.writeMetadata(ctx);
+            }
             if (ctx.isOrchestratorGenerated()) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());

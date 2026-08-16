@@ -168,25 +168,29 @@ public final class ConnectorRegistry {
         return operation;
     }
 
-    public synchronized CompletionStage<Void> start(ConnectorRuntimeContext context) {
+    public CompletionStage<Void> start(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return failed("connector registry cannot start after stop has begun");
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector registry cannot start after stop has begun");
+            }
+            state = LifecycleState.RUNNING;
         }
-        state = LifecycleState.RUNNING;
         CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
         for (ConnectorProvider<?> provider : providerOrder) {
             sequence = sequence.thenCompose(ignored -> activate(provider.id(), context));
         }
-        lifecycle = sequence;
-        return lifecycle;
+        synchronized (this) {
+            lifecycle = sequence;
+        }
+        return sequence;
     }
 
     /**
      * Lazily activates one discovered provider for deprecated provider-first live execution.
      * Discovery alone never makes the provider a lifecycle or resource owner.
      */
-    public synchronized CompletionStage<Void> activate(
+    public CompletionStage<Void> activate(
         ConnectorProviderId providerId,
         ConnectorRuntimeContext context
     ) {
@@ -194,13 +198,34 @@ public final class ConnectorRegistry {
         Objects.requireNonNull(providerId, "connector provider ID must not be null");
         ConnectorProvider<?> provider = providers.get(providerId);
         if (provider == null) {
-            throw new IllegalStateException("no connector provider registered for ID: " + providerId.value());
+            return failed("no connector provider registered for ID: " + providerId.value());
         }
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return failed("connector registry cannot activate a provider after stop has begun");
+        CompletableFuture<Void> activation;
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector registry cannot activate a provider after stop has begun");
+            }
+            state = LifecycleState.RUNNING;
+            CompletionStage<Void> existing = activations.get(providerId);
+            if (existing != null) {
+                return existing;
+            }
+            activation = new CompletableFuture<>();
+            activations.put(providerId, activation);
         }
-        state = LifecycleState.RUNNING;
-        return activations.computeIfAbsent(providerId, ignored -> startProvider(provider, context));
+        startProvider(provider, context).whenComplete((ignored, failure) -> {
+            if (failure == null) {
+                activation.complete(null);
+            } else {
+                synchronized (this) {
+                    if (state == LifecycleState.RUNNING) {
+                        activations.remove(providerId, activation);
+                    }
+                }
+                activation.completeExceptionally(failure);
+            }
+        });
+        return activation;
     }
 
     public synchronized CompletionStage<Void> stop(ConnectorRuntimeContext context) {

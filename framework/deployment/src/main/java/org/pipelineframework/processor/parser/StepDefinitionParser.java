@@ -642,7 +642,7 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            Map<String, Object> commandConfig = parseCommandConfig(stepData, name);
+            Map<String, Object> commandConfig = parseStepConfig(stepData, name, "command");
             if (commandConfig == null) {
                 throw new StepSkippedException();
             }
@@ -760,14 +760,15 @@ public class StepDefinitionParser {
                 throw new StepSkippedException();
             }
             if (operationFirst) {
-                Map<String, Object> operationConfig = parseCommandConfig(stepData, name);
+                Map<String, Object> operationConfig = parseStepConfig(stepData, name, "query");
                 if (operationConfig == null
                     || !validateNativeQueryBinding(name, operation, using, stepData, operationConfig, connectorBindings)) {
                     throw new StepSkippedException();
                 }
-                queryId = "native-binding:" + using + "/" + operation;
+                String bindingName = ConnectorBindingName.of(using).value();
+                queryId = "native-binding:" + bindingName + "/" + operation;
                 Map<String, Object> embedded = embedNativeQuerySelection(
-                    connectorBindings.get(using), operation, operationVersion(stepData), operationConfig);
+                    connectorBindings.get(bindingName), operation, operationVersion(stepData), operationConfig);
                 return new StepDefinition(
                     name,
                     StepKind.QUERY,
@@ -964,7 +965,7 @@ public class StepDefinitionParser {
                 "command step '" + stepName + "' operation " + operation);
             catalog.validateCommandPolicy(identity, binding.providerVersion(), policy);
             return Optional.of(new NativeCommandSelection(
-                binding.name(), binding.provider(), binding.providerVersion(), operation, operationVersion, policyMap));
+                Optional.of(binding.name()), binding.provider(), binding.providerVersion(), operation, operationVersion, policyMap));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
@@ -1055,8 +1056,14 @@ public class StepDefinitionParser {
 
     private static Map<String, Object> stringKeyedMap(Map<?, ?> raw) {
         Map<String, Object> result = new LinkedHashMap<>();
-        raw.forEach((key, value) -> result.put(String.valueOf(key), value));
-        return Map.copyOf(result);
+        raw.forEach((key, value) -> {
+            String name = String.valueOf(key);
+            if (value == null) {
+                throw new IllegalArgumentException("configuration field '" + name + "' must not be null");
+            }
+            result.put(name, value);
+        });
+        return java.util.Collections.unmodifiableMap(result);
     }
 
     @SuppressWarnings("unchecked")
@@ -1071,7 +1078,8 @@ public class StepDefinitionParser {
             ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
                 ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion);
             providerManifestCatalog().validateCommandPolicy(identity, providerVersion, policy);
-            return Optional.of(new NativeCommandSelection("", provider, providerVersion, operation, operationVersion, policyMap));
+            return Optional.of(new NativeCommandSelection(
+                Optional.empty(), provider, providerVersion, operation, operationVersion, policyMap));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid native command connector: " + failure.getMessage();
             LOG.warn(message);
@@ -1184,15 +1192,20 @@ public class StepDefinitionParser {
     }
 
     private record NativeCommandSelection(
-        String binding,
+        Optional<String> binding,
         String provider,
         int providerVersion,
         String operation,
         int operationVersion,
         Map<String, Object> policy
     ) {
+        private NativeCommandSelection {
+            binding = Objects.requireNonNull(binding, "connector binding selection must not be null");
+        }
+
         private String commandName() {
-            return "native:" + provider + "/" + operation;
+            return binding.map(name -> "native-binding:" + name + "/" + operation)
+                .orElseGet(() -> "native:" + provider + "/" + operation);
         }
 
         private Map<String, Object> embed(Map<String, Object> configuration) {
@@ -1202,9 +1215,7 @@ public class StepDefinitionParser {
             embedded.put("__tpf_native_operation", operation);
             embedded.put("__tpf_native_operation_version", operationVersion);
             embedded.put("__tpf_native_policy", policy);
-            if (!binding.isBlank()) {
-                embedded.put("__tpf_native_binding", binding);
-            }
+            binding.ifPresent(name -> embedded.put("__tpf_native_binding", name));
             return Map.copyOf(embedded);
         }
     }
@@ -1419,13 +1430,17 @@ public class StepDefinitionParser {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> parseCommandConfig(Map<String, Object> stepData, String stepName) {
+    private Map<String, Object> parseStepConfig(
+        Map<String, Object> stepData,
+        String stepName,
+        String stepKind
+    ) {
         Object configObj = stepData.get("config");
         if (configObj == null) {
             return Map.of();
         }
         if (!(configObj instanceof Map<?, ?> configMap)) {
-            String message = "Skipping step '" + stepName + "': command config must be a map";
+            String message = "Skipping step '" + stepName + "': " + stepKind + " config must be a map";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;

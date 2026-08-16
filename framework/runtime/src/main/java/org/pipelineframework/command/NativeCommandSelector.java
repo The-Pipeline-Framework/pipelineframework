@@ -7,7 +7,8 @@ import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 
 /**
- * Runtime selection for one native command operation.
+ * Runtime selection for one native command operation. The binding is present for operation/using
+ * selections and intentionally absent for deprecated provider-first selection.
  */
 public record NativeCommandSelector(
     Optional<ConnectorBindingName> binding,
@@ -33,6 +34,8 @@ public record NativeCommandSelector(
     }
 
     public String commandName() {
-        return "native:" + operationIdentity.providerId().value() + "/" + operationIdentity.operationId();
+        return binding.map(name -> "native-binding:" + name.value() + "/" + operationIdentity.operationId())
+            .orElseGet(() -> "native:" + operationIdentity.providerId().value() + "/"
+                + operationIdentity.operationId());
     }
 }

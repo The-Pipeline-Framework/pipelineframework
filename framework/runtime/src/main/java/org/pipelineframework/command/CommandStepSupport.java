@@ -539,12 +539,7 @@ public class CommandStepSupport {
     }
 
     private CommandOperation<?, ?, ?> requireBoundCommandOperation(NativeCommandSelector selector) {
-        ConnectorBindingRegistry registry = fixedConnectorBindingRegistry != null
-            ? fixedConnectorBindingRegistry
-            : connectorBindingRegistry;
-        if (registry == null) {
-            throw new IllegalStateException("connector binding registry is not available for command execution");
-        }
+        ConnectorBindingRegistry registry = requireBindingRegistry();
         org.pipelineframework.connector.ConnectorBindingName binding = selector.binding().orElseThrow();
         org.pipelineframework.connector.ConnectorProvider<?> provider = registry.requireProvider(binding);
         if (!provider.id().equals(selector.operationIdentity().providerId())
@@ -565,36 +560,40 @@ public class CommandStepSupport {
         if (selector.binding().isEmpty()) {
             return Uni.createFrom().voidItem();
         }
-        ConnectorRuntimeContext context = fixedConnectorRuntimeContext != null
-            ? fixedConnectorRuntimeContext
-            : connectorRuntimeContext;
-        if (context == null) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("connector runtime context is not available for command execution"));
+        try {
+            return Uni.createFrom().completionStage(requireBindingRegistry().activate(
+                selector.binding().orElseThrow(), requireConnectorRuntimeContext()));
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
         }
-        ConnectorBindingRegistry registry = fixedConnectorBindingRegistry != null
-            ? fixedConnectorBindingRegistry
-            : connectorBindingRegistry;
-        if (registry == null) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("connector binding registry is not available for command execution"));
-        }
-        return Uni.createFrom().completionStage(registry.activate(selector.binding().orElseThrow(), context));
     }
 
     private Uni<Void> activateProviderFirst(NativeCommandSelector selector) {
         if (selector.binding().isPresent()) {
             return Uni.createFrom().voidItem();
         }
+        return Uni.createFrom().completionStage(
+            requireRegistry().activate(selector.operationIdentity().providerId(), requireConnectorRuntimeContext()));
+    }
+
+    private ConnectorBindingRegistry requireBindingRegistry() {
+        ConnectorBindingRegistry registry = fixedConnectorBindingRegistry != null
+            ? fixedConnectorBindingRegistry
+            : connectorBindingRegistry;
+        if (registry == null) {
+            throw new IllegalStateException("connector binding registry is not available for command execution");
+        }
+        return registry;
+    }
+
+    private ConnectorRuntimeContext requireConnectorRuntimeContext() {
         ConnectorRuntimeContext context = fixedConnectorRuntimeContext != null
             ? fixedConnectorRuntimeContext
             : connectorRuntimeContext;
         if (context == null) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("connector runtime context is not available for command execution"));
+            throw new IllegalStateException("connector runtime context is not available for command execution");
         }
-        return Uni.createFrom().completionStage(
-            requireRegistry().activate(selector.operationIdentity().providerId(), context));
+        return context;
     }
 
     private static ConnectorExecutionContext connectorExecutionContext(CommandRequest<?> request) {

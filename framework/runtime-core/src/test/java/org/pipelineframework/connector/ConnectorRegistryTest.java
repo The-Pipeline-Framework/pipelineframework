@@ -52,6 +52,47 @@ class ConnectorRegistryTest {
         assertTrue(incompatible.getMessage().contains("exact-major compatibility"));
         assertThrows(IllegalArgumentException.class, () -> ConnectorProviderId.of("Invalid.Provider"));
         assertThrows(IllegalArgumentException.class, () -> ConnectorOperationKind.of("not-namespaced"));
+
+    }
+
+    @Test
+    void activationFailuresStayReactiveAndMayBeRetried() {
+        ConnectorRegistry empty = new ConnectorRegistry(List.of());
+        CompletionStage<Void> missing = empty.activate(
+            ConnectorProviderId.of("missing.provider"), ConnectorRuntimeContext.empty());
+        assertThrows(RuntimeException.class, () -> missing.toCompletableFuture().join());
+
+        AtomicInteger attempts = new AtomicInteger();
+        ConnectorProvider<Void> provider = new ConnectorProvider<>() {
+            @Override
+            public ConnectorProviderId id() {
+                return ConnectorProviderId.of("retry.provider");
+            }
+
+            @Override
+            public ConnectorProviderVersion version() {
+                return new ConnectorProviderVersion(1, 0);
+            }
+
+            @Override
+            public Collection<? extends ConnectorOperation> operations() {
+                return List.of();
+            }
+
+            @Override
+            public CompletionStage<Void> start(ConnectorRuntimeContext context) {
+                return attempts.incrementAndGet() == 1
+                    ? CompletableFuture.failedFuture(new IllegalStateException("temporary"))
+                    : ConnectorCompletionStages.completed();
+            }
+        };
+        ConnectorRegistry registry = new ConnectorRegistry(List.of(provider));
+
+        assertThrows(RuntimeException.class, () -> registry.activate(
+            provider.id(), ConnectorRuntimeContext.empty()).toCompletableFuture().join());
+        registry.activate(provider.id(), ConnectorRuntimeContext.empty()).toCompletableFuture().join();
+
+        assertEquals(2, attempts.get());
     }
 
     @Test

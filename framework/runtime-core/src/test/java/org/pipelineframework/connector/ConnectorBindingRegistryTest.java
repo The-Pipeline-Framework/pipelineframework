@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -84,6 +87,52 @@ class ConnectorBindingRegistryTest {
         Throwable failure = activation.getCause();
 
         assertTrue(failure.getMessage().contains("public no-argument constructor"), failure.getMessage());
+    }
+
+    @Test
+    void releasesBindingOwnedProviderExactlyOnceWhenActivationFails() {
+        AtomicInteger releases = new AtomicInteger();
+        ConnectorProviderInstanceFactory factory = ignored -> ConnectorProviderLease.of(
+            new FailingSharedProvider(), releases::incrementAndGet);
+        ConnectorBindingRegistry registry = ConnectorBindingRegistry.fromProviders(
+            List.of(definition("failing", "acme.shared", "one")),
+            List.of(new SharedProvider()),
+            factory);
+
+        assertThrows(RuntimeException.class, () -> registry.activate(
+            ConnectorBindingName.of("failing"), ConnectorRuntimeContext.empty()).toCompletableFuture().join());
+
+        assertEquals(1, releases.get());
+    }
+
+    @Test
+    void providerCreationDoesNotHoldTheRegistryMonitorDuringShutdown() throws Exception {
+        CountDownLatch creating = new CountDownLatch(1);
+        CountDownLatch releaseCreation = new CountDownLatch(1);
+        ConnectorProviderInstanceFactory factory = ignored -> {
+            creating.countDown();
+            try {
+                if (!releaseCreation.await(2, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("provider creation was not released");
+                }
+            } catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("provider creation interrupted", failure);
+            }
+            return ConnectorProviderLease.of(new SharedProvider());
+        };
+        ConnectorBindingRegistry registry = ConnectorBindingRegistry.fromProviders(
+            List.of(definition("blocking", "acme.shared", "one")), List.of(new SharedProvider()), factory);
+
+        CompletableFuture<CompletionStage<Void>> activation = CompletableFuture.supplyAsync(() ->
+            registry.activate(ConnectorBindingName.of("blocking"), ConnectorRuntimeContext.empty()));
+        assertTrue(creating.await(2, TimeUnit.SECONDS));
+        CompletionStage<Void> stopped = CompletableFuture.supplyAsync(() ->
+            registry.stop(ConnectorRuntimeContext.empty())).get(2, TimeUnit.SECONDS);
+        releaseCreation.countDown();
+
+        activation.join().toCompletableFuture().join();
+        stopped.toCompletableFuture().join();
     }
 
     @Test
@@ -197,6 +246,18 @@ class ConnectorBindingRegistryTest {
         @Override
         public ConnectorProviderId id() {
             return ConnectorProviderId.of("acme.shared");
+        }
+    }
+
+    private static final class FailingSharedProvider extends TestProvider {
+        @Override
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("acme.shared");
+        }
+
+        @Override
+        public CompletionStage<Void> start(ConnectorRuntimeContext context, ProviderConfig configuration) {
+            return CompletableFuture.failedFuture(new IllegalStateException("start failed"));
         }
     }
 

@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -34,14 +35,15 @@ final class InjectedConnectorProvider implements ConnectorProvider<InjectedConne
     private static final Map<String, Integer> BINDING_INSTANCES = new ConcurrentHashMap<>();
     private static final Map<Integer, AtomicInteger> STARTS = new ConcurrentHashMap<>();
     private static final Map<Integer, AtomicInteger> STOPS = new ConcurrentHashMap<>();
-    private static final CompletableFuture<Void> RACING_START = new CompletableFuture<>();
+    private static final AtomicReference<CompletableFuture<Void>> RACING_START =
+        new AtomicReference<>(new CompletableFuture<>());
 
     private final int instanceId = INSTANCE_SEQUENCE.incrementAndGet();
 
     @Inject
     InjectedConnectorDependency dependency;
 
-    private BindingConfig bindingConfig;
+    private volatile BindingConfig bindingConfig;
 
     @Override
     public ConnectorProviderId id() {
@@ -75,10 +77,11 @@ final class InjectedConnectorProvider implements ConnectorProvider<InjectedConne
             return CompletableFuture.failedFuture(new IllegalStateException("CDI dependency was not injected"));
         }
         bindingConfig = configuration;
+        CONFIGURATION_BINDINGS.computeIfAbsent(configuration.name(), ignored -> new AtomicInteger()).incrementAndGet();
         BINDING_INSTANCES.put(configuration.name(), instanceId);
         STARTS.computeIfAbsent(instanceId, ignored -> new AtomicInteger()).incrementAndGet();
         return "racing".equals(configuration.name())
-            ? RACING_START
+            ? RACING_START.get()
             : CompletableFuture.completedFuture(null);
     }
 
@@ -116,13 +119,19 @@ final class InjectedConnectorProvider implements ConnectorProvider<InjectedConne
     }
 
     static void releaseRacingStart() {
-        RACING_START.complete(null);
+        RACING_START.get().complete(null);
+    }
+
+    static void resetObservations() {
+        UNCONFIGURED_STARTS.set(0);
+        CONFIGURATION_BINDINGS.clear();
+        BINDING_INSTANCES.clear();
+        STARTS.clear();
+        STOPS.clear();
+        RACING_START.set(new CompletableFuture<>());
     }
 
     record BindingConfig(String name) {
-        BindingConfig {
-            CONFIGURATION_BINDINGS.computeIfAbsent(name, ignored -> new AtomicInteger()).incrementAndGet();
-        }
     }
 
     record OperationConfig(String suffix) {

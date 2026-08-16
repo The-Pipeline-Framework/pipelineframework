@@ -1,6 +1,7 @@
 package org.pipelineframework.connector;
 
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /** Typed semantic result of a unary Query operation. */
 public sealed interface QueryOutcome<O>
@@ -45,10 +46,18 @@ public sealed interface QueryOutcome<O>
     }
 
     private static String outcomeCode(String value) {
-        if (value == null || !value.matches("[a-z][a-z0-9-]{0,127}")) {
+        if (value == null || !QueryOutcomeCode.PATTERN.matcher(value).matches()) {
             throw new IllegalArgumentException(
-                "query outcome code must be lowercase letters, digits, or hyphens: " + value);
+                "query outcome code must start with a lowercase letter, contain only lowercase letters, digits, "
+                    + "or hyphens, and be at most 128 characters: " + value);
         }
         return value;
+    }
+}
+
+final class QueryOutcomeCode {
+    static final Pattern PATTERN = Pattern.compile("[a-z][a-z0-9-]{0,127}");
+
+    private QueryOutcomeCode() {
     }
 }

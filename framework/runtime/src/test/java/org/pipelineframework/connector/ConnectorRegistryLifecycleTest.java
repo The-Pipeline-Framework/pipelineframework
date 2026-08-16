@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +46,27 @@ class ConnectorRegistryLifecycleTest {
         assertEquals("lookup", bindings.requireOperation(
             ConnectorBindingName.of("shared"), "lookup", ConnectorOperationKind.QUERY, 1).id());
         assertEquals(1, TestProvider.starts.get());
+    }
+
+    @Test
+    void shutdownStartsEachLayerOnlyAfterThePreviousLayerSettles() {
+        List<String> events = new ArrayList<>();
+        CompletableFuture<String> bindingsStopped = new CompletableFuture<>();
+
+        CompletionStage<Void> stopped = ConnectorRegistryLifecycle.stopAll(List.of(
+            () -> {
+                events.add("bindings");
+                return bindingsStopped.thenAccept(ignored -> { });
+            },
+            () -> {
+                events.add("catalog");
+                return ConnectorCompletionStages.completed();
+            }));
+
+        assertEquals(List.of("bindings"), events);
+        bindingsStopped.complete("stopped");
+        stopped.toCompletableFuture().join();
+        assertEquals(List.of("bindings", "catalog"), events);
     }
 
     public static final class TestProvider implements ConnectorProvider<Void> {

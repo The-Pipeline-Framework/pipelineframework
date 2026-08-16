@@ -13,6 +13,30 @@ import org.junit.jupiter.api.Test;
 class PipelineYamlConfigLoaderTest {
 
     @Test
+    void trimsConnectorBindingKeysAndRejectsBlankOnes() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              " work ":
+                provider: acme.work
+                version: 1
+            steps: []
+            """));
+
+        assertTrue(config.connectors().containsKey("work"));
+        IllegalArgumentException blank = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                connectors:
+                  "":
+                    provider: acme.work
+                    version: 1
+                steps: []
+                """)));
+        assertTrue(blank.getMessage().contains("must not be blank"), blank.getMessage());
+    }
+
+    @Test
     void loadsNativeCommandSelectorIntoTheRuntimeDescriptorConfiguration() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"
@@ -496,6 +520,7 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("acme.work", binding.provider());
         assertEquals("work-session", binding.config().get("connection"));
         PipelineYamlStep command = config.steps().get(0);
+        assertEquals("native-binding:work/invoice.send", command.command());
         assertEquals("work", command.operationSelection().orElseThrow().using());
         assertEquals("invoice.send", command.operationSelection().orElseThrow().operation());
         assertEquals("work", command.commandConfig().get("__tpf_native_binding"));

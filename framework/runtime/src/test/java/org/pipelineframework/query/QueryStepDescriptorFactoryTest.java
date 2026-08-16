@@ -1,6 +1,8 @@
 package org.pipelineframework.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,6 +95,36 @@ class QueryStepDescriptorFactoryTest {
             assertEquals("search", descriptor.nativeSelector().orElseThrow().binding().value());
             assertEquals("document.find", descriptor.nativeSelector().orElseThrow().operationIdentity().operationId());
             assertEquals("orders", descriptor.config().get("index"));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
+    void nativeQueryDescriptorRejectsAnUnknownBinding() throws Exception {
+        Path explicit = tempDir.resolve("unknown-native-query.yaml");
+        Files.writeString(explicit, """
+            basePackage: org.example
+            connectors:
+              search:
+                provider: acme.search
+                version: 1
+            steps:
+              - name: Find Document
+                kind: query
+                operation: document.find
+                using: missing
+                input: org.example.DocumentQuery
+                output: org.example.Document
+            """);
+        System.setProperty("pipeline.config", explicit.toString());
+
+        QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+        try {
+            RuntimeException failure = assertThrows(RuntimeException.class, () -> factory.descriptor(
+                "ProcessFindDocumentService", "org.example.DocumentQuery", "org.example.Document")
+                .await().atMost(Duration.ofSeconds(2)));
+            assertTrue(failure.getMessage().contains("unknown connector binding 'missing'"), failure.getMessage());
         } finally {
             factory.shutdown();
         }

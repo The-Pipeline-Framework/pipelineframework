@@ -43,6 +43,7 @@ public final class GenerateConnectorProviderArtifactsMojo extends AbstractMojo {
         try (URLClassLoader loader = classLoader()) {
             List<ConnectorProvider<?>> providers = providers(classes, loader);
             if (providers.isEmpty()) {
+                deleteGeneratedArtifacts(classes);
                 getLog().debug("No ConnectorProvider implementations found in " + classes);
                 return;
             }
@@ -51,6 +52,12 @@ public final class GenerateConnectorProviderArtifactsMojo extends AbstractMojo {
         } catch (IOException | ReflectiveOperationException exception) {
             throw new MojoExecutionException("Unable to generate connector provider artifacts", exception);
         }
+    }
+
+    static void deleteGeneratedArtifacts(Path classes) throws IOException {
+        Files.deleteIfExists(classes.resolve(ConnectorProviderArtifacts.SERVICE_PATH));
+        Files.deleteIfExists(classes.resolve(
+            org.pipelineframework.connector.ConnectorProviderManifestLoader.RESOURCE_PATH));
     }
 
     private URLClassLoader classLoader() throws IOException {

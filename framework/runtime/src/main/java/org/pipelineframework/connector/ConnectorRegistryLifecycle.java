@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
@@ -54,9 +55,9 @@ public class ConnectorRegistryLifecycle {
 
     void onStop(@Observes ShutdownEvent event) {
         if (registry != null) {
-            stopAll(
-                bindingRegistry.orElse(ConnectorBindingRegistry.empty()).stop(runtimeContext),
-                registry.stop(runtimeContext))
+            stopAll(List.of(
+                () -> bindingRegistry.orElse(ConnectorBindingRegistry.empty()).stop(runtimeContext),
+                () -> registry.stop(runtimeContext)))
                 .toCompletableFuture()
                 .join();
         }
@@ -115,11 +116,11 @@ public class ConnectorRegistryLifecycle {
             instanceFactory);
     }
 
-    private static CompletionStage<Void> stopAll(CompletionStage<Void>... stages) {
+    static CompletionStage<Void> stopAll(List<Supplier<CompletionStage<Void>>> stops) {
         AtomicReference<Throwable> firstFailure = new AtomicReference<>();
         CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
-        for (CompletionStage<Void> stage : stages) {
-            sequence = sequence.thenCompose(ignored -> stage.handle((stopped, failure) -> {
+        for (Supplier<CompletionStage<Void>> stop : stops) {
+            sequence = sequence.thenCompose(ignored -> stop.get().handle((stopped, failure) -> {
                 if (failure != null) {
                     firstFailure.compareAndSet(null, failure);
                 }

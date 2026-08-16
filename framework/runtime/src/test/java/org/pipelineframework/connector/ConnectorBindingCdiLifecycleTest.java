@@ -15,11 +15,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import jakarta.inject.Inject;
+import jakarta.enterprise.inject.Instance;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.command.CommandDescriptor;
@@ -37,78 +39,88 @@ class ConnectorBindingCdiLifecycleTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
     @Inject
-    ConnectorRegistry connectorRegistry;
-
-    @Inject
-    ConnectorBindingRegistry bindingRegistry;
-
-    @Inject
     ConnectorRuntimeContext runtimeContext;
 
     @Inject
-    InMemoryCommandEffectStore effectStore;
+    Instance<ConnectorProvider<?>> providerInstances;
+
+    @Inject
+    QuarkusConnectorProviderInstanceFactory providerInstanceFactory;
+
+    @BeforeEach
+    void resetProviderObservations() {
+        InjectedConnectorProvider.resetObservations();
+    }
 
     @Test
-    void ownsInjectedProvidersPerBindingAndKeepsReplayAndShutdownLazy() {
-        assertEquals(3, bindingRegistry.providers().size());
-        assertTrue(bindingRegistry.providerInstances().isEmpty());
+    void startupAndReplayDoNotActivateConfiguredProviders() {
+        Fixture fixture = fixture("cdi-first");
+        assertTrue(fixture.bindings().providerInstances().isEmpty());
         assertEquals(0, InjectedConnectorProvider.unconfiguredStarts());
         assertEquals(0, InjectedConnectorProvider.configurationBindings("first"));
-
-        CommandStepSupport commands = new CommandStepSupport(
-            connectorRegistry,
-            bindingRegistry,
-            List.of(effectStore),
-            queueAsyncConfig());
-
         CommandDescriptor firstOperation = descriptor("cdi-first", "inspect.first");
         AwaitExecutionContext execution = new AwaitExecutionContext("connector-tenant", "connector-execution", 0);
         String replayId = "connector-replay-only";
         CommandRequest<String> replayRequest = new CommandRequest<>(
             firstOperation, replayId, "ignored", execution, firstOperation.config());
-        effectStore.createPending(replayRequest, System.currentTimeMillis()).await().atMost(TIMEOUT);
-        effectStore.markSucceeded(
+        fixture.store().createPending(replayRequest, System.currentTimeMillis()).await().atMost(TIMEOUT);
+        fixture.store().markSucceeded(
             execution.tenantId(), replayId, "recorded", System.currentTimeMillis()).await().atMost(TIMEOUT);
 
         AwaitExecutionContextHolder.set(execution);
         try {
-            String replayed = commands.<String, String>execute(
+            String replayed = fixture.commands().<String, String>execute(
                 firstOperation, (descriptor, input) -> replayId, "ignored").await().atMost(TIMEOUT);
             assertEquals("recorded", replayed);
         } finally {
             AwaitExecutionContextHolder.clear();
         }
-        assertTrue(bindingRegistry.providerInstances().isEmpty());
+        assertTrue(fixture.bindings().providerInstances().isEmpty());
         assertEquals(0, InjectedConnectorProvider.configurationBindings("first"));
+        fixture.bindings().stop(runtimeContext).toCompletableFuture().join();
+    }
+
+    @Test
+    void bindingsOwnDistinctInjectedInstancesWhileOperationsShareTheirBinding() {
+        Fixture fixture = fixture("cdi-first", "cdi-second");
+        AwaitExecutionContext execution = new AwaitExecutionContext("connector-tenant", "connector-execution", 0);
 
         InjectedConnectorProvider.InvocationResult first = invoke(
-            commands, execution, "cdi-first", "inspect.first", "live-first", "one");
+            fixture.commands(), execution, "cdi-first", "inspect.first", "live-first", "one");
         assertEquals("injected", first.injection());
         assertEquals("first", first.binding());
-        assertEquals(1, bindingRegistry.providerInstances().size());
+        assertEquals(1, fixture.bindings().providerInstances().size());
         assertEquals(1, InjectedConnectorProvider.configurationBindings("first"));
         assertEquals(1, InjectedConnectorProvider.starts(first.providerInstance()));
 
         InjectedConnectorProvider.InvocationResult shared = invoke(
-            commands, execution, "cdi-first", "inspect.second", "live-shared", "two");
+            fixture.commands(), execution, "cdi-first", "inspect.second", "live-shared", "two");
         assertEquals(first.providerInstance(), shared.providerInstance());
         assertEquals(1, InjectedConnectorProvider.configurationBindings("first"));
         assertEquals(1, InjectedConnectorProvider.starts(first.providerInstance()));
 
         InjectedConnectorProvider.InvocationResult second = invoke(
-            commands, execution, "cdi-second", "inspect.first", "live-second", "three");
+            fixture.commands(), execution, "cdi-second", "inspect.first", "live-second", "three");
         assertNotEquals(first.providerInstance(), second.providerInstance());
-        assertEquals(2, bindingRegistry.providerInstances().size());
+        assertEquals(2, fixture.bindings().providerInstances().size());
         assertEquals(1, InjectedConnectorProvider.configurationBindings("second"));
         assertEquals(1, InjectedConnectorProvider.starts(second.providerInstance()));
         assertEquals(0, InjectedConnectorProvider.unconfiguredStarts());
+        fixture.bindings().stop(runtimeContext).toCompletableFuture().join();
+        assertEquals(1, InjectedConnectorProvider.stops(first.providerInstance()));
+        assertEquals(1, InjectedConnectorProvider.stops(second.providerInstance()));
+    }
 
-        CompletionStage<Void> racing = bindingRegistry.activate(
+    @Test
+    void shutdownWinsTheActivationRaceAndRemainsIdempotent() {
+        Fixture fixture = fixture("cdi-racing");
+
+        CompletionStage<Void> racing = fixture.bindings().activate(
             ConnectorBindingName.of("cdi-racing"), runtimeContext);
-        CompletionStage<Void> stopped = bindingRegistry.stop(runtimeContext);
+        CompletionStage<Void> stopped = fixture.bindings().stop(runtimeContext);
         assertFalse(stopped.toCompletableFuture().isDone());
-        RuntimeException rejected = assertThrows(RuntimeException.class, () -> bindingRegistry.activate(
-            ConnectorBindingName.of("cdi-first"), runtimeContext).toCompletableFuture().join());
+        RuntimeException rejected = assertThrows(RuntimeException.class, () -> fixture.bindings().activate(
+            ConnectorBindingName.of("cdi-racing"), runtimeContext).toCompletableFuture().join());
         assertTrue(rejected.getCause().getMessage().contains("shutdown has begun"), rejected.getMessage());
 
         InjectedConnectorProvider.releaseRacingStart();
@@ -117,14 +129,36 @@ class ConnectorBindingCdiLifecycleTest {
         int racingInstance = InjectedConnectorProvider.instanceFor("racing");
         assertEquals(1, InjectedConnectorProvider.configurationBindings("racing"));
         assertEquals(1, InjectedConnectorProvider.starts(racingInstance));
-        assertEquals(1, InjectedConnectorProvider.stops(first.providerInstance()));
-        assertEquals(1, InjectedConnectorProvider.stops(second.providerInstance()));
         assertEquals(1, InjectedConnectorProvider.stops(racingInstance));
-        assertSame(stopped, bindingRegistry.stop(runtimeContext));
-        assertEquals(1, InjectedConnectorProvider.stops(first.providerInstance()));
-        assertEquals(1, InjectedConnectorProvider.stops(second.providerInstance()));
+        assertSame(stopped, fixture.bindings().stop(runtimeContext));
         assertEquals(1, InjectedConnectorProvider.stops(racingInstance));
         assertEquals(0, InjectedConnectorProvider.unconfiguredStarts());
+    }
+
+    private Fixture fixture(String... names) {
+        List<ConnectorProvider<?>> providers = providerInstances.stream()
+            .filter(provider -> ConnectorProviderId.of("test.cdi").equals(provider.id()))
+            .toList();
+        List<ConnectorBindingDefinition> definitions = java.util.Arrays.stream(names)
+            .map(name -> new ConnectorBindingDefinition(
+                ConnectorBindingName.of(name),
+                ConnectorProviderId.of("test.cdi"),
+                1,
+                new ConnectorConfigurationDocument(Map.of("name", name.substring("cdi-".length())))))
+            .toList();
+        ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
+            definitions, providers, providerInstanceFactory);
+        InMemoryCommandEffectStore store = new InMemoryCommandEffectStore();
+        CommandStepSupport commands = new CommandStepSupport(
+            new ConnectorRegistry(providers), bindings, List.of(store), queueAsyncConfig());
+        return new Fixture(bindings, store, commands);
+    }
+
+    private record Fixture(
+        ConnectorBindingRegistry bindings,
+        InMemoryCommandEffectStore store,
+        CommandStepSupport commands
+    ) {
     }
 
     private static InjectedConnectorProvider.InvocationResult invoke(

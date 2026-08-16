@@ -68,6 +68,18 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("awaitTemplateStep"));
         assertTrue(definitions.has("materialization"));
         assertTrue(definitions.has("materializationAspect"));
+        assertTrue(definitions.has("commandPolicy"));
+        assertTrue(definitions.has("providerFirstCommandSelector"));
+        assertTrue(definitions.has("connectorBinding"));
+        assertTrue(definitions.has("pipelineConnectorBindings"));
+        assertTrue(definitions.getAsJsonObject("providerFirstCommandSelector").has("description"));
+        String bindingNamePattern = definitions.getAsJsonObject("pipelineConnectorBindings")
+            .getAsJsonObject("propertyNames").get("pattern").getAsString();
+        assertEquals(bindingNamePattern, definitions.getAsJsonObject("commandTemplateStep")
+            .getAsJsonObject("properties").getAsJsonObject("using").get("pattern").getAsString());
+        assertEquals(bindingNamePattern, definitions.getAsJsonObject("queryTemplateStep")
+            .getAsJsonObject("properties").getAsJsonObject("using").get("pattern").getAsString());
+        assertContains(definitions.getAsJsonObject("queryTemplateStep").getAsJsonArray("required"), "cardinality");
 
         JsonObject properties = schema.getAsJsonObject("properties");
         assertTrue(properties.has("types"));

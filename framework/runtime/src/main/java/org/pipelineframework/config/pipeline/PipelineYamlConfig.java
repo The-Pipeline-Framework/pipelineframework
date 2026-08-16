@@ -73,6 +73,14 @@ public record PipelineYamlConfig(
         validateMap(queries, "queries");
         validateMap(publish, "publish");
         validateMap(connectors, "connectors");
+        if (connectors != null) {
+            connectors.forEach((name, binding) -> {
+                if (!name.equals(binding.name())) {
+                    throw new IllegalArgumentException(
+                        "connector map key '" + name + "' must match binding name '" + binding.name() + "'");
+                }
+            });
+        }
         sources = sources == null ? Map.of() : Map.copyOf(sources);
         queries = queries == null ? Map.of() : Map.copyOf(queries);
         publish = publish == null ? Map.of() : Map.copyOf(publish);

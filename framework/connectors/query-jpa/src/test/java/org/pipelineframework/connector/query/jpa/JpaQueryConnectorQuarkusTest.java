@@ -56,7 +56,11 @@ class JpaQueryConnectorQuarkusTest {
                 .chain(() -> session.persist(new CustomerRiskEntity("customer-native", "HIGH", 93)))));
 
         QueryOperation<Object, QueryRequest<?>, Object> operation =
-            (QueryOperation<Object, QueryRequest<?>, Object>) connector.operations().iterator().next();
+            (QueryOperation<Object, QueryRequest<?>, Object>) connector.operations().stream()
+                .filter(QueryOperation.class::isInstance)
+                .filter(candidate -> "find.one".equals(candidate.id()))
+                .findFirst()
+                .orElseThrow();
         QueryRequest<?> configuration = new QueryRequest<>(descriptor(), new CustomerRiskLookup("ignored"));
         asserter.assertThat(
             () -> Uni.createFrom().completionStage(operation.query(new QueryInvocation<>(

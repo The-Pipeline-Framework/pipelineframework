@@ -1,6 +1,5 @@
 package org.pipelineframework.connector;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Objects;
@@ -54,7 +53,7 @@ public final class ConnectorConfigurationValidator {
             case STRING, CONNECTION_REF, SECRET_REF -> value instanceof String;
             case BOOLEAN -> value instanceof Boolean;
             case INTEGER -> value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long;
-            case DECIMAL -> value instanceof Number || value instanceof BigDecimal;
+            case DECIMAL -> value instanceof Number;
             case ENUM -> value instanceof String string && field.enumValues().contains(string);
             case DURATION -> validDuration(value);
         };
@@ -68,8 +67,8 @@ public final class ConnectorConfigurationValidator {
             return false;
         }
         try {
-            Duration.parse(text);
-            return true;
+            Duration parsed = Duration.parse(text);
+            return parsed != null;
         } catch (RuntimeException ignored) {
             return false;
         }

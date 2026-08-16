@@ -1878,6 +1878,7 @@ public final class PipelineTemplateSchemaExporter {
     "providerFirstCommandSelector": {
       "type": "object",
       "deprecated": true,
+      "description": "Deprecated provider-first selector; use operation and using with a named connector binding.",
       "properties": {
         "provider": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$" },
         "providerVersion": { "type": "integer", "minimum": 1 },
@@ -2299,7 +2300,8 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "required": [
         "name",
-        "kind"
+        "kind",
+        "cardinality"
       ]
     },
     "v3RecordField": {

@@ -108,58 +108,103 @@ public final class ConnectorBindingRegistry {
     /**
      * Activates every binding. Runtime hosts normally prefer {@link #activate} for lazy ownership.
      */
-    public synchronized CompletionStage<Void> start(ConnectorRuntimeContext context) {
+    public CompletionStage<Void> start(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return failed("connector binding registry cannot start after shutdown has begun");
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector binding registry cannot start after shutdown has begun");
+            }
+            state = LifecycleState.RUNNING;
         }
-        state = LifecycleState.RUNNING;
         CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
         for (BindingSlot binding : bindingOrder) {
             sequence = sequence.thenCompose(ignored -> activate(binding.name(), context));
         }
-        lifecycle = sequence;
-        return lifecycle;
+        synchronized (this) {
+            lifecycle = sequence;
+        }
+        return sequence;
     }
 
-    public synchronized CompletionStage<Void> stop(ConnectorRuntimeContext context) {
+    public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return lifecycle;
+        List<CompletionStage<Binding>> pending;
+        CompletableFuture<Void> stopped = new CompletableFuture<>();
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return lifecycle;
+            }
+            state = LifecycleState.STOPPING;
+            pending = List.copyOf(activations.values());
+            lifecycle = stopped;
         }
-        state = LifecycleState.STOPPING;
         CompletionStage<Void> settled = ConnectorCompletionStages.completed();
-        for (CompletionStage<Binding> activation : List.copyOf(activations.values())) {
+        for (CompletionStage<Binding> activation : pending) {
             settled = settled.thenCompose(ignored -> activation.handle(
                 (activated, failure) -> ConnectorCompletionStages.completed()).thenCompose(stage -> stage));
         }
-        lifecycle = settled
+        settled
             .thenCompose(ignored -> stopStarted(context))
-            .whenComplete((ignored, failure) -> markStopped());
-        return lifecycle;
+            .whenComplete((ignored, failure) -> {
+                markStopped();
+                if (failure == null) {
+                    stopped.complete(null);
+                } else {
+                    stopped.completeExceptionally(failure);
+                }
+            });
+        return stopped;
     }
 
     /**
      * Creates and starts one configured binding on first live use. Concurrent callers share the
      * same activation stage.
      */
-    public synchronized CompletionStage<Void> activate(
+    public CompletionStage<Void> activate(
         ConnectorBindingName name,
         ConnectorRuntimeContext context
     ) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return failed("connector binding registry cannot activate after shutdown has begun");
-        }
         final BindingSlot slot;
-        try {
-            slot = requireSlot(name);
-        } catch (RuntimeException failure) {
-            return CompletableFuture.failedFuture(failure);
+        final CompletableFuture<Binding> activation;
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector binding registry cannot activate after shutdown has begun");
+            }
+            try {
+                slot = requireSlot(name);
+            } catch (RuntimeException failure) {
+                return CompletableFuture.failedFuture(failure);
+            }
+            state = LifecycleState.RUNNING;
+            CompletionStage<Binding> existing = activations.get(slot);
+            if (existing != null) {
+                return existing.thenApply(ignored -> null);
+            }
+            activation = new CompletableFuture<>();
+            activations.put(slot, activation);
         }
-        state = LifecycleState.RUNNING;
-        return activations.computeIfAbsent(slot, ignored -> createAndStart(slot, context))
-            .thenApply(ignored -> null);
+        createAndStart(slot, context).whenComplete((binding, failure) ->
+            completeActivation(slot, activation, binding, failure));
+        return activation.thenApply(ignored -> null);
+    }
+
+    private void completeActivation(
+        BindingSlot slot,
+        CompletableFuture<Binding> activation,
+        Binding binding,
+        Throwable failure
+    ) {
+        if (failure == null) {
+            activation.complete(binding);
+            return;
+        }
+        synchronized (this) {
+            if (state == LifecycleState.RUNNING) {
+                activations.remove(slot, activation);
+            }
+        }
+        activation.completeExceptionally(failure);
     }
 
     public Map<ConnectorBindingName, ConnectorProviderDescriptor> providers() {

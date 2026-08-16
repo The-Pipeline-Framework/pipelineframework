@@ -15,3 +15,5 @@ connectors:
     version: 1
     config:
       name: racing
+
+steps: []

@@ -66,6 +66,19 @@ class NativeCommandOutcomeTest {
         List.of(store),
         queueAsyncConfig());
 
+    @Test
+    void bindingQualifiedCommandNamesSeparateSharedProviderOperations() {
+        ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of("acme.search"), "write.document", ConnectorOperationKind.COMMAND, 1);
+        NativeCommandSelector first = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("first")), identity, 1, CommandPolicy.none());
+        NativeCommandSelector second = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("second")), identity, 1, CommandPolicy.none());
+
+        assertEquals("native-binding:first/write.document", first.commandName());
+        assertEquals("native-binding:second/write.document", second.commandName());
+    }
+
     @AfterEach
     void clearContext() {
         AwaitExecutionContextHolder.clear();
@@ -144,6 +157,34 @@ class NativeCommandOutcomeTest {
         assertEquals(1, boundProvider.starts);
         assertEquals(1, boundProvider.operation.invocations);
         assertEquals(0, prototype.starts);
+    }
+
+    @Test
+    void rejectsBindingWhoseRuntimeProviderDoesNotMatchTheSelector() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
+            List.of(new ConnectorBindingDefinition(
+                ConnectorBindingName.of("work"),
+                ConnectorProviderId.of("acme.search"),
+                1,
+                ConnectorConfigurationDocument.empty())),
+            List.of(new NativeProvider()));
+        CommandStepSupport boundSupport = new CommandStepSupport(
+            new ConnectorRegistry(List.of()), bindings, List.of(store), queueAsyncConfig());
+        NativeCommandSelector mismatched = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("work")),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("other.search"), "write.document", ConnectorOperationKind.COMMAND, 1),
+            1,
+            CommandPolicy.none());
+        CommandDescriptor descriptor = CommandDescriptor.nativeCommand(
+            "MismatchedBindingService", mismatched, String.class.getName(), String.class.getName(), "test",
+            CommandDuplicatePolicy.RETURN_RECORDED, Map.of("target", "orders"));
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> boundSupport.<String, String>execute(
+            descriptor, (ignored, input) -> "mismatched-binding", "input").await().atMost(Duration.ofSeconds(5)));
+
+        assertTrue(failure.getMessage().contains("command descriptor requires other.search v1"), failure.getMessage());
     }
 
     @Test

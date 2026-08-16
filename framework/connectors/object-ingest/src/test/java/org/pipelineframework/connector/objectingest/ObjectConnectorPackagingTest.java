@@ -9,6 +9,7 @@ import org.pipelineframework.connector.ObjectTargetOperation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 class ObjectConnectorPackagingTest {
     @Test
@@ -25,10 +26,12 @@ class ObjectConnectorPackagingTest {
         String operationId
     ) {
         assertEquals(providerId, provider.id().value());
+        assertEquals(2, provider.operations().size());
         assertEquals(Set.of(operationId), provider.operations().stream().map(ConnectorOperation::id).collect(Collectors.toSet()));
-        assertInstanceOf(ObjectSourceOperation.class, provider.operations().stream()
+        ConnectorOperation source = assertInstanceOf(ObjectSourceOperation.class, provider.operations().stream()
             .filter(ObjectSourceOperation.class::isInstance).findFirst().orElseThrow());
-        assertInstanceOf(ObjectTargetOperation.class, provider.operations().stream()
+        ConnectorOperation target = assertInstanceOf(ObjectTargetOperation.class, provider.operations().stream()
             .filter(ObjectTargetOperation.class::isInstance).findFirst().orElseThrow());
+        assertNotSame(source, target);
     }
 }

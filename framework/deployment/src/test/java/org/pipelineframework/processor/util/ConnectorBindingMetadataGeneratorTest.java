@@ -13,6 +13,7 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.List;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -89,6 +90,9 @@ class ConnectorBindingMetadataGeneratorTest {
         assertEquals("work", binding.get("name").getAsString());
         assertEquals("acme.work", binding.get("provider").getAsString());
         assertEquals("acme.work.provider", binding.getAsJsonObject("configuration").get("schemaId").getAsString());
+        assertEquals(
+            List.of("schemaId", "schemaVersion", "digest"),
+            binding.getAsJsonObject("configuration").keySet().stream().toList());
         assertEquals("invoice.send", binding.getAsJsonArray("operations").get(0).getAsJsonObject()
             .get("operation").getAsString());
         assertFalse(json.contains("work-connection"), json);
