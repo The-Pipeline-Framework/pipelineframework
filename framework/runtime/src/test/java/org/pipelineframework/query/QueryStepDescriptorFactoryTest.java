@@ -62,6 +62,42 @@ class QueryStepDescriptorFactoryTest {
         }
     }
 
+    @Test
+    void nativeQueryDescriptorRefersToTheNamedBindingWithoutProviderConstruction() throws Exception {
+        Path explicit = tempDir.resolve("native-query.yaml");
+        Files.writeString(explicit, """
+            basePackage: org.example
+            connectors:
+              search:
+                provider: acme.search
+                version: 1
+            steps:
+              - name: Find Document
+                kind: query
+                operation: document.find
+                using: search
+                config:
+                  index: orders
+                input: org.example.DocumentQuery
+                output: org.example.Document
+            """);
+        System.setProperty("pipeline.config", explicit.toString());
+
+        QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+        try {
+            QueryStepDescriptor descriptor = factory.descriptor(
+                "ProcessFindDocumentService",
+                "org.example.DocumentQuery",
+                "org.example.Document").await().atMost(Duration.ofSeconds(2));
+
+            assertEquals("search", descriptor.nativeSelector().orElseThrow().binding().value());
+            assertEquals("document.find", descriptor.nativeSelector().orElseThrow().operationIdentity().operationId());
+            assertEquals("orders", descriptor.config().get("index"));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
     private static Path relativeToWorkingDirectory(Path path) {
         return Path.of("").toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize());
     }

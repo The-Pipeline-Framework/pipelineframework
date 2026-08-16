@@ -33,7 +33,49 @@ Keep both classes typed. Do not implement command connectors as `CommandConnecto
 
 Native connector providers use the host-neutral `CommandOperation<I, C, O>` SPI. They return a
 JDK `CompletionStage<CommandOutcome<O>>`; Mutiny, CDI, and Quarkus types do not appear in that
-public provider contract. Select one from YAML instead of `command`, never alongside it:
+public provider contract. Authors implement provider identity/version, an operation catalog, typed
+configuration records when needed, and the family-specific operation method. Lifecycle methods are
+optional no-ops. Do not construct provider/operation descriptors or write provider factories.
+Configure a provider instance once under top-level `connectors`, then select an operation from a
+Command step with `operation` and `using`:
+
+```yaml
+connectors:
+  search:
+    provider: acme.search
+    version: 1
+    config:
+      connection: search-primary
+
+steps:
+  - name: Write document
+    kind: command
+    operation: write.document
+    operationVersion: 1
+    using: search
+    commandIdGenerator: com.example.DocumentCommandIdGenerator
+    config:
+      index: orders
+    policy:
+      requireIdempotency: true
+      requireReconciliation: true
+      requiredExecutionPosture: AUTOMATED
+      requiredExecutionStyle: PROVIDER_MANAGED
+      requiredConcurrencyScope: PROVIDER_MANAGED
+      minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+```
+
+`connectors.search.config` is provider-lifetime configuration. The step's `config` is operation
+configuration; the pipeline item remains the dynamic invocation input. Every step using `search`
+shares that named binding, while different bindings receive distinct provider instances. Bindings
+activate on first live use, so replay of an already recorded outcome does not start the provider.
+
+`using` is a pipeline-local binding name, not a provider ID. `ConnectionRef` and `SecretRef` values
+remain logical deployment-owned references and are resolved only at provider start or operation
+invocation, never while parsing or compiling. `operationVersion` defaults to `1` when omitted.
+
+The deprecated provider-first form remains readable during migration and is not silently
+reinterpreted. Select it instead of `command`, never alongside it:
 
 ```yaml
 connector:
@@ -50,10 +92,29 @@ connector:
     minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
-Provider metadata in `META-INF/pipeline/connector-providers.json` is validated during compilation;
-the provider is not constructed for that check. The operation configuration remains the step's
-`config` map, but TPF binds it to the provider's declared immutable configuration record before
+Prefer named bindings for new pipelines. Operation IDs remain provider-scoped; selecting
+`write.document` through `search` does not make it a provider-independent operation contract.
+
+TPF packaging derives provider metadata and direct service registration from the executable provider.
+The resulting `META-INF/pipeline/connector-providers.json` is validated during consumer compilation;
+the provider is not constructed by that consumer-side check. TPF binds provider and operation
+configuration independently to their declared immutable configuration records before
 an effect is created or the operation is invoked.
+
+Bind the packaging goal to the provider artifact's canonical lifecycle; it scans the artifact's public,
+concrete `ConnectorProvider` implementations after compilation. Provider constructors must therefore be
+public and side-effect free; acquire connections and other resources during `start`.
+
+```xml
+<plugin>
+  <groupId>org.pipelineframework</groupId>
+  <artifactId>connector-maven-plugin</artifactId>
+  <version>${pipeline-framework.version}</version>
+  <executions>
+    <execution><goals><goal>generate-provider-artifacts</goal></goals></execution>
+  </executions>
+</plugin>
+```
 
 `CommandOutcome` distinguishes success, retryable failure, terminal failure, ambiguous submission,
 and user action required. Only declared safe correlation or reconciliation references, outcome

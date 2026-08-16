@@ -62,6 +62,12 @@ steps:
 
 `version` participates in captured query identity. Bump it when the read meaning changes, such as a predicate or projection change that should not reuse earlier captured facts.
 
+This first-party captured JPA form remains supported. Provider-backed Query operations use the
+same operation-first selection shape as native Commands: a top-level named `connectors` binding,
+then `operation` plus `using` on the step. The binding owns provider configuration and lifecycle;
+the step owns operation configuration. Provider-backed Query execution is enabled by the native
+Query runtime, while this JPA connector continues to use its existing top-level `queries` definition.
+
 ## Java records
 
 Use small input and output records that make the read boundary obvious:

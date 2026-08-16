@@ -11,16 +11,17 @@ public interface QueryOperation<I, C, O> extends ConnectorOperation {
         return Optional.empty();
     }
 
-    CompletionStage<QueryOutcome<O>> query(QueryInvocation<I, C> invocation);
+    CompletionStage<QueryOutcome<O>> query(QueryInvocation<I, C, O> invocation);
 
     default CompletionStage<QueryOutcome<O>> query(
         I input,
         ConnectorConfigurationDocument configuration,
+        Class<O> outputType,
         ConnectorExecutionContext executionContext
     ) {
         ConnectorConfigSchema<C> schema = configurationSchema().orElseThrow(() -> new ConnectorConfigurationException(
-            "query operation " + descriptor().id() + " does not declare a configuration schema"));
-        C boundConfiguration = ConnectorConfigurationBinder.bind(schema, configuration, "query operation " + descriptor().id());
-        return query(new QueryInvocation<>(input, boundConfiguration, executionContext));
+            "query operation " + id() + " does not declare a configuration schema"));
+        C boundConfiguration = ConnectorConfigurationBinder.bind(schema, configuration, "query operation " + id());
+        return query(new QueryInvocation<>(input, boundConfiguration, outputType, executionContext));
     }
 }

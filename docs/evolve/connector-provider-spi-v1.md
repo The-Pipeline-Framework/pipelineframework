@@ -30,9 +30,8 @@ Conceptually:
 ConnectorProvider<PC>
     ├── CommandOperation<I,OC,O>
     ├── QueryOperation<I,OC,O>
-    ├── AgentOperation            // reserved metadata seam only in v1
-    ├── ObjectSource capability   // existing specialised streaming semantics
-    └── ObjectTarget capability   // existing specialised streaming semantics
+    ├── ObjectSourceOperation     // specialised list/read semantics
+    └── ObjectTargetOperation     // specialised write-session semantics
 ```
 
 ### ConnectorProvider
@@ -45,11 +44,13 @@ Provider lifecycle uses a provider-lifetime `ConnectorRuntimeContext` and JDK as
 
 ### ConnectorOperation
 
-`ConnectorOperation` is an open metadata/catalog contract. It has stable operation identity and kind, but **no generic execution method**.
+`ConnectorOperation` exposes only stable operation identity and version. Its family is derived from
+the executable subinterface; authors do not repeat the family in a descriptor.
 
 Operation identity is pinned by provider ID, operation ID, operation kind and major operation version. Duplicate identities fail deterministically.
 
-Operation kinds are open/namespaced. V1 recognises Command and Query semantics and reserves Agent metadata. Object source/target remain specialised streaming contracts.
+V1 recognises Command, Query, Object Source and Object Target semantics. Agent remains deferred and
+has no public marker type until an executable contract is pinned.
 
 ## Reconciliation decision 1 — typed outcomes are part of the public operation contract
 
@@ -63,7 +64,7 @@ interface CommandOperation<I, C, O> extends ConnectorOperation {
 }
 
 interface QueryOperation<I, C, O> extends ConnectorOperation {
-    CompletionStage<QueryOutcome<O>> query(QueryInvocation<I, C> invocation);
+    CompletionStage<QueryOutcome<O>> query(QueryInvocation<I, C, O> invocation);
 }
 ```
 
@@ -157,9 +158,9 @@ Initial runtime support may be limited to `UNBOUNDED` and `PROVIDER_MANAGED`; po
 
 Capability vocabulary and currently supported runtime enforcement must remain explicitly distinct.
 
-## Reconciliation decision 6 — Agent remains a reserved seam only
+## Reconciliation decision 6 — Agent remains deferred
 
-M1 reserves Agent as a distinct operation kind without weakening Command or Query semantics.
+M1 reserves the architectural possibility of Agent without publishing an empty operation kind or marker interface.
 
 Agent may share provider mechanics:
 
@@ -169,7 +170,6 @@ Agent may share provider mechanics:
 - typed configuration;
 - connection/secret references;
 - runtime services;
-- descriptor metadata;
 - common provider test infrastructure.
 
 M1 does **not** define:
@@ -192,13 +192,26 @@ No generated Agent step or runtime execution path is added in M1/M2 unless a lat
 
 Provider IDs are stable lowercase dotted names. Exact-major compatibility is pinned; minor evolution is additive only.
 
-Plain-Java discovery supports explicit provider collections and a host-neutral discovery mechanism such as `ServiceLoader`/provider factories plus static connector artifact metadata.
+Plain-Java discovery supports explicit provider collections and direct `ServiceLoader<ConnectorProvider>` discovery.
+Provider construction is a host-internal concern, not an author contract. Plain Java uses the public
+no-argument packaging constructor; Quarkus creates non-contextual CDI instances through the discovered
+bean so injection, post-construction and destruction remain container-owned.
 
-Native provider artifacts publish `META-INF/pipeline/connector-providers.json` (exact schema to be implemented in #571). The compiler reads metadata without instantiating providers or resolving connections/secrets.
+Native provider packaging derives descriptors from executable provider instances and emits direct
+service registration plus `META-INF/pipeline/connector-providers.json`. The consuming compiler reads
+that metadata without instantiating providers or resolving connections/secrets.
 
 Quarkus/CDI integration is an adapter. The public SPI never calls `CDI.current()` and provider authors must not need Quarkus build-step knowledge.
 
-Lifecycle is deterministic: providers start once in stable identity order and stop in reverse order.
+Discovery instances are catalog inputs, not lifecycle/resource owners. Each configured binding lazily
+creates one binding-owned provider instance on first live use; operations using that binding share it,
+while separate bindings receive separate instances. Replay-only paths do not create or start providers.
+Shutdown rejects new activations, waits for in-flight activation, and stops every activated binding once
+in reverse binding order.
+
+Discovery still returns provider instances today because direct `ServiceLoader` and deprecated
+provider-first compatibility are instance-based. Removing these prototypes entirely in favor of generated
+metadata plus implementation classes is a follow-up; until then they remain strictly non-lifecycle catalog objects.
 
 ## Connector registry
 

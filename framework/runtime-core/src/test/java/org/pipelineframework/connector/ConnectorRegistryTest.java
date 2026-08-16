@@ -5,12 +5,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,24 +55,6 @@ class ConnectorRegistryTest {
     }
 
     @Test
-    void registersReservedAgentMetadataButRejectsItsExecutionPath() {
-        AgentOperation agent = new AgentOperation() {
-            @Override
-            public ConnectorOperationDescriptor descriptor() {
-                return new ConnectorOperationDescriptor("review", ConnectorOperationKind.AGENT, 1);
-            }
-        };
-        ConnectorRegistry registry = new ConnectorRegistry(List.of(provider("agent.provider", new ArrayList<>(), agent)));
-        ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
-            ConnectorProviderId.of("agent.provider"), "review", ConnectorOperationKind.AGENT, 1);
-
-        assertInstanceOf(AgentOperation.class, registry.requireOperation(identity));
-        UnsupportedOperationException exception = assertThrows(
-            UnsupportedOperationException.class, () -> registry.requireExecutionOperation(identity, AgentOperation.class));
-        assertTrue(exception.getMessage().contains("metadata only"));
-    }
-
-    @Test
     void reservesTheTpfNamespaceUnlessAnExplicitFrameworkAllowlistAdmitsTheProvider() {
         ConnectorProvider<Void> frameworkProvider = provider(
             "tpf.legacy.command", new ArrayList<>(), operation("legacy.command", ConnectorOperationKind.COMMAND));
@@ -99,21 +79,21 @@ class ConnectorRegistryTest {
     }
 
     @Test
-    void continuesStoppingAfterFailureAndRetriesOnlyProvidersThatDidNotStop() {
+    void continuesStoppingAfterFailureAndKeepsShutdownIdempotent() {
         List<String> lifecycle = new ArrayList<>();
-        AtomicBoolean failZuluStop = new AtomicBoolean(true);
         ConnectorRegistry registry = new ConnectorRegistry(List.of(
             providerWithStop("alpha.provider", lifecycle, () -> ConnectorCompletionStages.completed()),
-            providerWithStop("zulu.provider", lifecycle, () -> failZuluStop.getAndSet(false)
-                ? CompletableFuture.failedFuture(new IllegalStateException("zulu unavailable"))
-                : ConnectorCompletionStages.completed())));
+            providerWithStop("zulu.provider", lifecycle,
+                () -> CompletableFuture.failedFuture(new IllegalStateException("zulu unavailable")))));
 
         registry.start(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
-        assertThrows(RuntimeException.class, () -> registry.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join());
+        CompletionStage<Void> stopped = registry.stop(ConnectorRuntimeContext.empty());
+        assertThrows(RuntimeException.class, () -> stopped.toCompletableFuture().join());
         assertEquals(List.of("start:alpha.provider", "start:zulu.provider", "stop:zulu.provider", "stop:alpha.provider"), lifecycle);
 
-        registry.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
-        assertEquals(List.of("start:alpha.provider", "start:zulu.provider", "stop:zulu.provider", "stop:alpha.provider", "stop:zulu.provider"), lifecycle);
+        assertEquals(stopped, registry.stop(ConnectorRuntimeContext.empty()));
+        assertThrows(RuntimeException.class, () -> stopped.toCompletableFuture().join());
+        assertEquals(List.of("start:alpha.provider", "start:zulu.provider", "stop:zulu.provider", "stop:alpha.provider"), lifecycle);
     }
 
     @Test
@@ -123,8 +103,13 @@ class ConnectorRegistryTest {
         AtomicInteger stopInvocations = new AtomicInteger();
         ConnectorRegistry registry = new ConnectorRegistry(List.of(new ConnectorProvider<Void>() {
             @Override
-            public ConnectorProviderDescriptor descriptor() {
-                return new ConnectorProviderDescriptor(ConnectorProviderId.of("gated.provider"), new ConnectorProviderVersion(1, 0));
+            public ConnectorProviderId id() {
+                return ConnectorProviderId.of("gated.provider");
+            }
+
+            @Override
+            public ConnectorProviderVersion version() {
+                return new ConnectorProviderVersion(1, 0);
             }
 
             @Override
@@ -173,8 +158,13 @@ class ConnectorRegistryTest {
     ) {
         return new ConnectorProvider<>() {
             @Override
-            public ConnectorProviderDescriptor descriptor() {
-                return new ConnectorProviderDescriptor(ConnectorProviderId.of(id), new ConnectorProviderVersion(1, 0));
+            public ConnectorProviderId id() {
+                return ConnectorProviderId.of(id);
+            }
+
+            @Override
+            public ConnectorProviderVersion version() {
+                return new ConnectorProviderVersion(1, 0);
             }
 
             @Override
@@ -195,7 +185,30 @@ class ConnectorRegistryTest {
     }
 
     private static ConnectorOperation operation(String id, ConnectorOperationKind kind) {
-        return () -> new ConnectorOperationDescriptor(id, kind, 1);
+        if (ConnectorOperationKind.COMMAND.equals(kind)) {
+            return new CommandOperation<Object, Object, Object>() {
+                @Override
+                public String id() {
+                    return id;
+                }
+
+                @Override
+                public CompletionStage<CommandOutcome<Object>> dispatch(CommandInvocation<Object, Object> invocation) {
+                    return CompletableFuture.failedFuture(new UnsupportedOperationException("metadata-only test operation"));
+                }
+            };
+        }
+        return new QueryOperation<Object, Object, Object>() {
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public CompletionStage<QueryOutcome<Object>> query(QueryInvocation<Object, Object, Object> invocation) {
+                return CompletableFuture.failedFuture(new UnsupportedOperationException("metadata-only test operation"));
+            }
+        };
     }
 
     private static ConnectorProvider<Void> providerWithStop(
@@ -205,8 +218,13 @@ class ConnectorRegistryTest {
     ) {
         return new ConnectorProvider<>() {
             @Override
-            public ConnectorProviderDescriptor descriptor() {
-                return new ConnectorProviderDescriptor(ConnectorProviderId.of(id), new ConnectorProviderVersion(1, 0));
+            public ConnectorProviderId id() {
+                return ConnectorProviderId.of(id);
+            }
+
+            @Override
+            public ConnectorProviderVersion version() {
+                return new ConnectorProviderVersion(1, 0);
             }
 
             @Override

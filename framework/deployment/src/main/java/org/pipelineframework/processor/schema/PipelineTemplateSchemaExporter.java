@@ -1384,6 +1384,7 @@ public final class PipelineTemplateSchemaExporter {
       },
       "additionalProperties": false
     },
+""".concat("""
     "legacyTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -1860,6 +1861,48 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "additionalProperties": true
     },
+    "commandPolicy": {
+      "type": "object",
+      "properties": {
+        "requireRetryRedrive": { "type": "boolean" },
+        "requireIdempotency": { "type": "boolean" },
+        "requireReconciliation": { "type": "boolean" },
+        "requiredExecutionPosture": { "type": "string", "enum": ["UNSPECIFIED", "AUTOMATED", "ATTENDED"] },
+        "requiredExecutionStyle": { "type": "string", "enum": ["UNSPECIFIED", "NON_BLOCKING", "BLOCKING", "PROVIDER_MANAGED"] },
+        "requiredConcurrencyScope": { "type": "string", "enum": ["UNSPECIFIED", "UNBOUNDED", "PROVIDER_SCOPED", "CONNECTION_SCOPED", "OPERATION_SCOPED", "PROVIDER_MANAGED"] },
+        "minimumMachineConfirmation": { "type": "string", "enum": ["NONE", "SUBMITTED", "PROVIDER_ACKNOWLEDGED", "READ_AFTER_WRITE_VERIFIED"] },
+        "requireUserConfirmation": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "providerFirstCommandSelector": {
+      "type": "object",
+      "deprecated": true,
+      "properties": {
+        "provider": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$" },
+        "providerVersion": { "type": "integer", "minimum": 1 },
+        "operation": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$" },
+        "operationVersion": { "type": "integer", "minimum": 1 },
+        "policy": { "$ref": "#/$defs/commandPolicy" }
+      },
+      "required": ["provider", "providerVersion", "operation", "operationVersion"],
+      "additionalProperties": false
+    },
+    "connectorBinding": {
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "config": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["provider", "version"],
+      "additionalProperties": false
+    },
+    "pipelineConnectorBindings": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$" },
+      "additionalProperties": { "$ref": "#/$defs/connectorBinding" }
+    },
     "commandTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -1877,6 +1920,25 @@ public final class PipelineTemplateSchemaExporter {
         "command": {
           "type": "string",
           "minLength": 1
+        },
+        "connector": {
+          "$ref": "#/$defs/providerFirstCommandSelector"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$"
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "policy": {
+          "$ref": "#/$defs/commandPolicy"
         },
         "cardinality": {
           "const": "ONE_TO_ONE"
@@ -1961,13 +2023,18 @@ public final class PipelineTemplateSchemaExporter {
               ]
             }
           ]
+        },
+        {
+          "oneOf": [
+            { "required": ["command"] },
+            { "required": ["connector"] },
+            { "required": ["operation", "using"] }
+          ]
         }
       ],
       "required": [
         "name",
         "kind",
-        "command",
-        "cardinality",
         "commandIdGenerator"
       ]
     },
@@ -2143,6 +2210,23 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "minLength": 1
         },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$"
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "cardinality": {
           "type": "string",
           "enum": [
@@ -2205,13 +2289,17 @@ public final class PipelineTemplateSchemaExporter {
               ]
             }
           ]
+        },
+        {
+          "oneOf": [
+            { "required": ["query"] },
+            { "required": ["operation", "using"] }
+          ]
         }
       ],
       "required": [
         "name",
-        "kind",
-        "query",
-        "cardinality"
+        "kind"
       ]
     },
     "v3RecordField": {
@@ -2586,6 +2674,9 @@ public final class PipelineTemplateSchemaExporter {
         "$ref": "#/$defs/queryDefinition"
       }
     },
+    "connectors": {
+      "$ref": "#/$defs/pipelineConnectorBindings"
+    },
     "aspects": {
       "type": "object",
       "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps. Aspect names must be lower-kebab-case and typically match the plugin module base name (e.g., persistence -> persistence-svc). Cache invalidation aspects (cache-invalidate, cache-invalidate-all) are hosted in cache-invalidation-svc.",
@@ -2683,7 +2774,7 @@ public final class PipelineTemplateSchemaExporter {
     "steps"
   ]
 }
-""";
+""");
 
     private PipelineTemplateSchemaExporter() {
     }

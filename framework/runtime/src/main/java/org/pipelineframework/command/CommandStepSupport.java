@@ -21,12 +21,14 @@ import org.pipelineframework.connector.CommandOperation;
 import org.pipelineframework.connector.CommandOutcome;
 import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandReference;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorConfigurationSnapshot;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorRegistry;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
@@ -43,10 +45,18 @@ public class CommandStepSupport {
     ConnectorRegistry connectorRegistry;
 
     @Inject
+    ConnectorBindingRegistry connectorBindingRegistry;
+
+    @Inject
+    ConnectorRuntimeContext connectorRuntimeContext;
+
+    @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
     private Collection<CommandEffectStore> fixedStores;
     private ConnectorRegistry fixedConnectorRegistry;
+    private ConnectorBindingRegistry fixedConnectorBindingRegistry;
+    private ConnectorRuntimeContext fixedConnectorRuntimeContext;
 
     public CommandStepSupport() {
     }
@@ -58,6 +68,8 @@ public class CommandStepSupport {
     ) {
         this.fixedConnectorRegistry = LegacyCommandConnectorProvider.createRegistry(
             List.of(), connectors == null ? List.of() : connectors);
+        this.fixedConnectorBindingRegistry = ConnectorBindingRegistry.empty();
+        this.fixedConnectorRuntimeContext = ConnectorRuntimeContext.empty();
         this.fixedStores = stores == null ? List.of() : stores;
         this.orchestratorConfig = orchestratorConfig;
     }
@@ -68,6 +80,22 @@ public class CommandStepSupport {
         PipelineOrchestratorConfig orchestratorConfig
     ) {
         this.fixedConnectorRegistry = java.util.Objects.requireNonNull(registry, "connector registry must not be null");
+        this.fixedConnectorBindingRegistry = ConnectorBindingRegistry.empty();
+        this.fixedConnectorRuntimeContext = ConnectorRuntimeContext.empty();
+        this.fixedStores = stores == null ? List.of() : stores;
+        this.orchestratorConfig = orchestratorConfig;
+    }
+
+    public CommandStepSupport(
+        ConnectorRegistry registry,
+        ConnectorBindingRegistry bindingRegistry,
+        Collection<CommandEffectStore> stores,
+        PipelineOrchestratorConfig orchestratorConfig
+    ) {
+        this.fixedConnectorRegistry = java.util.Objects.requireNonNull(registry, "connector registry must not be null");
+        this.fixedConnectorBindingRegistry = java.util.Objects.requireNonNull(
+            bindingRegistry, "connector binding registry must not be null");
+        this.fixedConnectorRuntimeContext = ConnectorRuntimeContext.empty();
         this.fixedStores = stores == null ? List.of() : stores;
         this.orchestratorConfig = orchestratorConfig;
     }
@@ -215,17 +243,31 @@ public class CommandStepSupport {
         CommandRequest<I> request,
         NativeCommandSelector selector
     ) {
-        CommandOperation<?, ?, ?> operation;
-        try {
-            operation = requireRegistry().requireCommandOperation(
-                selector.operationIdentity(), selector.providerMajorVersion(), selector.policy());
-        } catch (IllegalStateException | IllegalArgumentException failure) {
-            return Uni.createFrom().failure(failure);
-        }
         if (!store.supportsNativeOutcomeSnapshots()) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "native command operation " + selector.operationIdentity()
                     + " requires a CommandEffectStore that persists outcome snapshots"));
+        }
+        long effectStartNanos = CommandEffectMetrics.startNanos();
+        return activateBinding(selector)
+            .onItem().transformToUni(ignored -> executeActivatedNative(
+                store, request, selector, effectStartNanos));
+    }
+
+    private <I, O> Uni<O> executeActivatedNative(
+        CommandEffectStore store,
+        CommandRequest<I> request,
+        NativeCommandSelector selector,
+        long effectStartNanos
+    ) {
+        CommandOperation<?, ?, ?> operation;
+        try {
+            operation = selector.binding().isPresent()
+                ? requireBoundCommandOperation(selector)
+                : requireRegistry().requireCommandOperation(
+                    selector.operationIdentity(), selector.providerMajorVersion(), selector.policy());
+        } catch (IllegalStateException | IllegalArgumentException failure) {
+            return Uni.createFrom().failure(failure);
         }
         ConnectorConfigurationDocument configuration = new ConnectorConfigurationDocument(request.config());
         Object boundConfiguration;
@@ -239,16 +281,16 @@ public class CommandStepSupport {
         } catch (RuntimeException failure) {
             return Uni.createFrom().failure(failure);
         }
-        long effectStartNanos = CommandEffectMetrics.startNanos();
-        return beginDispatch(store, request)
-            .onItem().transformToUni(ignored -> dispatchNative(operation, request, selector, boundConfiguration)
-                .onFailure(CommandStepSupport::isCancellation)
-                .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of())))
-            .onItem().transformToUni(outcome -> applyNativeOutcome(
-                store, request, selector, snapshot, operation.capabilities(), selector.policy(), outcome, effectStartNanos))
-            .onFailure().call(failure -> isTypedOutcomeFailure(failure)
-                ? Uni.createFrom().voidItem()
-                : recordFailure(store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid())
+        return activateProviderFirst(selector)
+            .onItem().transformToUni(ignored -> beginDispatch(store, request)
+                .onItem().transformToUni(dispatched -> dispatchNative(operation, request, selector, boundConfiguration)
+                    .onFailure(CommandStepSupport::isCancellation)
+                    .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of())))
+                .onItem().transformToUni(outcome -> applyNativeOutcome(
+                    store, request, selector, snapshot, operation.capabilities(), selector.policy(), outcome, effectStartNanos))
+                .onFailure().call(failure -> isTypedOutcomeFailure(failure)
+                    ? Uni.createFrom().voidItem()
+                    : recordFailure(store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid()))
             .map(value -> (O) value);
     }
 
@@ -494,6 +536,65 @@ public class CommandStepSupport {
             throw new IllegalStateException("connector registry is not available for command execution");
         }
         return registry;
+    }
+
+    private CommandOperation<?, ?, ?> requireBoundCommandOperation(NativeCommandSelector selector) {
+        ConnectorBindingRegistry registry = fixedConnectorBindingRegistry != null
+            ? fixedConnectorBindingRegistry
+            : connectorBindingRegistry;
+        if (registry == null) {
+            throw new IllegalStateException("connector binding registry is not available for command execution");
+        }
+        org.pipelineframework.connector.ConnectorBindingName binding = selector.binding().orElseThrow();
+        org.pipelineframework.connector.ConnectorProvider<?> provider = registry.requireProvider(binding);
+        if (!provider.id().equals(selector.operationIdentity().providerId())
+            || provider.version().major() != selector.providerMajorVersion()) {
+            throw new IllegalStateException(
+                "connector binding '" + binding.value() + "' resolves provider " + provider.id().value()
+                    + " v" + provider.version().major() + " but command descriptor requires "
+                    + selector.operationIdentity().providerId().value() + " v" + selector.providerMajorVersion());
+        }
+        return registry.requireCommandOperation(
+            binding,
+            selector.operationIdentity().operationId(),
+            selector.operationIdentity().majorVersion(),
+            selector.policy());
+    }
+
+    private Uni<Void> activateBinding(NativeCommandSelector selector) {
+        if (selector.binding().isEmpty()) {
+            return Uni.createFrom().voidItem();
+        }
+        ConnectorRuntimeContext context = fixedConnectorRuntimeContext != null
+            ? fixedConnectorRuntimeContext
+            : connectorRuntimeContext;
+        if (context == null) {
+            return Uni.createFrom().failure(
+                new IllegalStateException("connector runtime context is not available for command execution"));
+        }
+        ConnectorBindingRegistry registry = fixedConnectorBindingRegistry != null
+            ? fixedConnectorBindingRegistry
+            : connectorBindingRegistry;
+        if (registry == null) {
+            return Uni.createFrom().failure(
+                new IllegalStateException("connector binding registry is not available for command execution"));
+        }
+        return Uni.createFrom().completionStage(registry.activate(selector.binding().orElseThrow(), context));
+    }
+
+    private Uni<Void> activateProviderFirst(NativeCommandSelector selector) {
+        if (selector.binding().isPresent()) {
+            return Uni.createFrom().voidItem();
+        }
+        ConnectorRuntimeContext context = fixedConnectorRuntimeContext != null
+            ? fixedConnectorRuntimeContext
+            : connectorRuntimeContext;
+        if (context == null) {
+            return Uni.createFrom().failure(
+                new IllegalStateException("connector runtime context is not available for command execution"));
+        }
+        return Uni.createFrom().completionStage(
+            requireRegistry().activate(selector.operationIdentity().providerId(), context));
     }
 
     private static ConnectorExecutionContext connectorExecutionContext(CommandRequest<?> request) {

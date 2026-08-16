@@ -44,6 +44,7 @@ class ConnectorConfigurationBindingTest {
         provider.operation.query(
             "input",
             new ConnectorConfigurationDocument(Map.of("index", "orders", "limit", 20, "mode", "FAST")),
+            String.class,
             ConnectorExecutionContext.empty()).toCompletableFuture().join();
 
         assertEquals(new OperationConfig("orders", 20, Mode.FAST), provider.operation.invokedWith);
@@ -58,6 +59,7 @@ class ConnectorConfigurationBindingTest {
         ConnectorConfigurationException failure = assertThrows(ConnectorConfigurationException.class, () -> provider.operation.query(
             "input",
             new ConnectorConfigurationDocument(Map.of("index", "orders", "limit", "not-an-integer", "mode", "FAST")),
+            String.class,
             ConnectorExecutionContext.empty()));
 
         assertTrue(failure.getMessage().contains("fake.config.query"));
@@ -133,11 +135,13 @@ class ConnectorConfigurationBindingTest {
         private ProviderConfig startedWith;
 
         @Override
-        public ConnectorProviderDescriptor descriptor() {
-            return new ConnectorProviderDescriptor(
-                ConnectorProviderId.of("fake.config"),
-                new ConnectorProviderVersion(1, 0),
-                Optional.of(providerSchema().descriptor()));
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("fake.config");
+        }
+
+        @Override
+        public ConnectorProviderVersion version() {
+            return new ConnectorProviderVersion(1, 0);
         }
 
         @Override
@@ -175,12 +179,8 @@ class ConnectorConfigurationBindingTest {
         private OperationConfig invokedWith;
 
         @Override
-        public ConnectorOperationDescriptor descriptor() {
-            return new ConnectorOperationDescriptor(
-                "query",
-                ConnectorOperationKind.QUERY,
-                1,
-                Optional.of(operationSchema().descriptor()));
+        public String id() {
+            return "query";
         }
 
         @Override
@@ -189,12 +189,11 @@ class ConnectorConfigurationBindingTest {
         }
 
         @Override
-        public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, OperationConfig> invocation) {
+        public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, OperationConfig, String> invocation) {
             invocations.incrementAndGet();
             invokedWith = invocation.configuration();
             return runtimeContext.secretResolver().orElseThrow().resolve(new SecretRef("query-token"))
-                .thenApply(ignored -> new QueryOutcome<>() {
-                });
+                .thenApply(ignored -> new QueryOutcome.Found<>("found"));
         }
     }
 }

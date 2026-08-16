@@ -182,8 +182,9 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
-    void queryStepSchemaRequiresQueryReferenceAndCaptureFields() {
-        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+    void queryStepSchemaSupportsCapturedQueryOrNamedConnectorOperation() {
+        JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
+        JsonObject definitions = schema.getAsJsonObject("$defs");
         JsonObject queryDefinition = definitions.getAsJsonObject("queryDefinition");
         JsonObject queryProperties = queryDefinition.getAsJsonObject("properties");
         assertEquals("jpa", queryProperties.getAsJsonObject("connector").get("const").getAsString());
@@ -217,7 +218,14 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject properties = queryStep.getAsJsonObject("properties");
         assertTrue(properties.has("query"));
         assertTrue(properties.has("capture"));
-        assertContains(queryStep.getAsJsonArray("required"), "query");
+        assertTrue(properties.has("operation"));
+        assertTrue(properties.has("using"));
+        JsonArray selections = queryStep.getAsJsonArray("allOf").get(1).getAsJsonObject().getAsJsonArray("oneOf");
+        assertContains(selections.get(0).getAsJsonObject().getAsJsonArray("required"), "query");
+        assertContains(selections.get(1).getAsJsonObject().getAsJsonArray("required"), "operation");
+        assertContains(selections.get(1).getAsJsonObject().getAsJsonArray("required"), "using");
+        assertEquals("#/$defs/pipelineConnectorBindings",
+            schema.getAsJsonObject("properties").getAsJsonObject("connectors").get("$ref").getAsString());
     }
 
     @Test

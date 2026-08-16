@@ -8,7 +8,9 @@ import java.util.concurrent.CompletionStage;
  * Reusable provider packaging and lifecycle unit. Its configuration type is provider-owned.
  */
 public interface ConnectorProvider<PC> {
-    ConnectorProviderDescriptor descriptor();
+    ConnectorProviderId id();
+
+    ConnectorProviderVersion version();
 
     Collection<? extends ConnectorOperation> operations();
 
@@ -20,11 +22,15 @@ public interface ConnectorProvider<PC> {
         return Optional.empty();
     }
 
-    CompletionStage<Void> start(ConnectorRuntimeContext context);
+    default CompletionStage<Void> start(ConnectorRuntimeContext context) {
+        return ConnectorCompletionStages.completed();
+    }
 
     default CompletionStage<Void> start(ConnectorRuntimeContext context, PC configuration) {
         return start(context);
     }
 
-    CompletionStage<Void> stop(ConnectorRuntimeContext context);
+    default CompletionStage<Void> stop(ConnectorRuntimeContext context) {
+        return ConnectorCompletionStages.completed();
+    }
 }

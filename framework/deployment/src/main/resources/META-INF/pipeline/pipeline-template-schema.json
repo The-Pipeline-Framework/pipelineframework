@@ -1826,6 +1826,48 @@
       ],
       "additionalProperties": true
     },
+    "commandPolicy": {
+      "type": "object",
+      "properties": {
+        "requireRetryRedrive": { "type": "boolean" },
+        "requireIdempotency": { "type": "boolean" },
+        "requireReconciliation": { "type": "boolean" },
+        "requiredExecutionPosture": { "type": "string", "enum": ["UNSPECIFIED", "AUTOMATED", "ATTENDED"] },
+        "requiredExecutionStyle": { "type": "string", "enum": ["UNSPECIFIED", "NON_BLOCKING", "BLOCKING", "PROVIDER_MANAGED"] },
+        "requiredConcurrencyScope": { "type": "string", "enum": ["UNSPECIFIED", "UNBOUNDED", "PROVIDER_SCOPED", "CONNECTION_SCOPED", "OPERATION_SCOPED", "PROVIDER_MANAGED"] },
+        "minimumMachineConfirmation": { "type": "string", "enum": ["NONE", "SUBMITTED", "PROVIDER_ACKNOWLEDGED", "READ_AFTER_WRITE_VERIFIED"] },
+        "requireUserConfirmation": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "providerFirstCommandSelector": {
+      "type": "object",
+      "deprecated": true,
+      "properties": {
+        "provider": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$" },
+        "providerVersion": { "type": "integer", "minimum": 1 },
+        "operation": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$" },
+        "operationVersion": { "type": "integer", "minimum": 1 },
+        "policy": { "$ref": "#/$defs/commandPolicy" }
+      },
+      "required": ["provider", "providerVersion", "operation", "operationVersion"],
+      "additionalProperties": false
+    },
+    "connectorBinding": {
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "config": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["provider", "version"],
+      "additionalProperties": false
+    },
+    "pipelineConnectorBindings": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$" },
+      "additionalProperties": { "$ref": "#/$defs/connectorBinding" }
+    },
     "commandTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -1843,6 +1885,25 @@
         "command": {
           "type": "string",
           "minLength": 1
+        },
+        "connector": {
+          "$ref": "#/$defs/providerFirstCommandSelector"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "policy": {
+          "$ref": "#/$defs/commandPolicy"
         },
         "cardinality": {
           "const": "ONE_TO_ONE"
@@ -1927,13 +1988,18 @@
               ]
             }
           ]
+        },
+        {
+          "oneOf": [
+            { "required": ["command"] },
+            { "required": ["connector"] },
+            { "required": ["operation", "using"] }
+          ]
         }
       ],
       "required": [
         "name",
         "kind",
-        "command",
-        "cardinality",
         "commandIdGenerator"
       ]
     },
@@ -2109,6 +2175,23 @@
           "type": "string",
           "minLength": 1
         },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "cardinality": {
           "type": "string",
           "enum": [
@@ -2171,13 +2254,17 @@
               ]
             }
           ]
+        },
+        {
+          "oneOf": [
+            { "required": ["query"] },
+            { "required": ["operation", "using"] }
+          ]
         }
       ],
       "required": [
         "name",
-        "kind",
-        "query",
-        "cardinality"
+        "kind"
       ]
     },
     "v3RecordField": {
@@ -2551,6 +2638,9 @@
       "additionalProperties": {
         "$ref": "#/$defs/queryDefinition"
       }
+    },
+    "connectors": {
+      "$ref": "#/$defs/pipelineConnectorBindings"
     },
     "aspects": {
       "type": "object",

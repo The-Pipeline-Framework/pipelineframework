@@ -49,6 +49,12 @@ public class QueryStepSupport {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
+        if (descriptor.nativeSelector().isPresent()) {
+            NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
+            return Uni.createFrom().failure(new UnsupportedOperationException(
+                "provider-backed Query execution is not available in this runtime: binding '"
+                    + selector.binding().value() + "', operation " + selector.operationIdentity().operationId()));
+        }
         FrameworkQueryConnector connector;
         try {
             connector = resolveConnector(descriptor.connector());

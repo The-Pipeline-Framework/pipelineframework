@@ -513,6 +513,126 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void validatesOperationFirstCommandAndQueryAgainstOneNamedBinding() throws IOException {
+        Path metadataRoot = tempDir.resolve("binding-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},
+            "operations":[
+            {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
+            "configurationSchema":{"id":"acme.work.send","version":1,"fields":[
+            {"name":"destination","type":"STRING","required":true}]},
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}},
+            {"id":"invoice.find","kind":"tpf:query","majorVersion":1,
+            "configurationSchema":{"id":"acme.work.find","version":1,"fields":[
+            {"name":"index","type":"STRING","required":true}]}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("binding-operations.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  connection: work-session
+            steps:
+              - name: Send invoice
+                kind: command
+                operation: invoice.send
+                using: work
+                policy:
+                  requireIdempotency: true
+                config:
+                  destination: billing
+                input: Invoice
+                output: SendResult
+                java:
+                  input: com.example.Invoice
+                  output: com.example.SendResult
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+              - name: Find invoice
+                kind: query
+                operation: invoice.find
+                using: work
+                config:
+                  index: invoices
+                input: FindInvoice
+                output: Invoice
+                java:
+                  input: com.example.FindInvoice
+                  output: com.example.Invoice
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(2, steps.size(), diagnostics.toString());
+            assertEquals("work", steps.get(0).commandConfig().get("__tpf_native_binding"));
+            assertEquals("native:acme.work/invoice.send", steps.get(0).command());
+            assertEquals("native-binding:work/invoice.find", steps.get(1).queryId());
+            assertEquals("work", steps.get(1).queryConfig().get("__tpf_native_binding"));
+            assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsInvalidBindingConfigBeforeOperationSelection() throws IOException {
+        Path metadataRoot = tempDir.resolve("invalid-binding-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},"operations":[]}]}
+            """);
+        Path pipeline = tempDir.resolve("invalid-binding.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  unexpected: value
+            steps:
+              - name: Send invoice
+                kind: command
+                operation: invoice.send
+                using: work
+                input: Invoice
+                output: SendResult
+                java:
+                  input: com.example.Invoice
+                  output: com.example.SendResult
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains("field 'connection': missing required value")),
+                diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unknown connector binding 'work'")),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
     void rejectsUnknownNativeCommandPolicyFields() throws IOException {
         assertNativeCommandPolicyRejected("unsupportedGuarantee: true", "unsupported field 'unsupportedGuarantee'");
     }

@@ -30,7 +30,7 @@ public final class BoundConnectorRegistry {
             started = true;
             CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
             for (ConnectorProvider<?> provider : registry.providerOrder()) {
-                sequence = sequence.thenCompose(ignored -> start(provider, providerConfigurations.get(provider.descriptor().id()), context)
+                sequence = sequence.thenCompose(ignored -> start(provider, providerConfigurations, context)
                     .thenRun(() -> startedProviders.add(provider)));
             }
             lifecycle = sequence;
@@ -56,11 +56,17 @@ public final class BoundConnectorRegistry {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private static CompletionStage<Void> start(ConnectorProvider provider, Object configuration, ConnectorRuntimeContext context) {
-        CompletionStage<Void> stage = provider.start(context, configuration);
+    private static CompletionStage<Void> start(
+        ConnectorProvider provider,
+        Map<ConnectorProviderId, Object> configurations,
+        ConnectorRuntimeContext context
+    ) {
+        CompletionStage<Void> stage = configurations.containsKey(provider.id())
+            ? provider.start(context, configurations.get(provider.id()))
+            : provider.start(context);
         if (stage == null) {
             return CompletableFuture.failedFuture(new IllegalStateException(
-                "connector provider " + provider.descriptor().id().value() + " returned null from start"));
+                "connector provider " + provider.id().value() + " returned null from start"));
         }
         return stage;
     }
