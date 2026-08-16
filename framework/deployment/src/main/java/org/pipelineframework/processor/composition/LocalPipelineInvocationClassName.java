@@ -9,6 +9,10 @@
  */
 package org.pipelineframework.processor.composition;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Objects;
 
 /** Deterministic generated class naming shared by invocation source and metadata renderers. */
@@ -17,11 +21,8 @@ public final class LocalPipelineInvocationClassName {
     }
 
     public static String simpleName(CompiledPipelineLocation location) {
-        String normalized = Objects.requireNonNull(location, "location must not be null").display()
-            .replaceAll("[^A-Za-z0-9_]", "_")
-            .replaceAll("_+", "_")
-            .replaceFirst("^_+", "");
-        return "PipelineInvocation_" + normalized;
+        String display = Objects.requireNonNull(location, "location must not be null").display();
+        return "PipelineInvocation_" + digest(display);
     }
 
     public static String canonicalName(String basePackage, CompiledPipelineLocation location) {
@@ -30,5 +31,14 @@ public final class LocalPipelineInvocationClassName {
             throw new IllegalArgumentException("basePackage must not be blank");
         }
         return normalizedPackage + ".pipeline." + simpleName(location);
+    }
+
+    private static String digest(String display) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(display.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is required by the Java platform", impossible);
+        }
     }
 }

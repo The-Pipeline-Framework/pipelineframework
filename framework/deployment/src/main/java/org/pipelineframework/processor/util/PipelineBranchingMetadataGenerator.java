@@ -156,12 +156,12 @@ public final class PipelineBranchingMetadataGenerator {
         String definitionId,
         String stepName
     ) {
-        if (ctx.getResolvedPipelineDefinitionGraph() == null
+        if (ctx.getResolvedPipelineDefinitionGraph().isEmpty()
             || !(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig template)) {
             return List.of();
         }
         PipelineReference owner = new PipelineReference(definitionId);
-        return ctx.getResolvedPipelineDefinitionGraph().invocationBindings().stream()
+        return ctx.getResolvedPipelineDefinitionGraph().orElseThrow().invocationBindings().stream()
             .filter(binding -> binding.invocationLocation().definitionLocalLocation().definition().equals(owner))
             .filter(binding -> binding.invocationLocation().definitionLocalLocation().localStepId().equals(stepName))
             .map(binding -> LocalPipelineInvocationClassName.canonicalName(

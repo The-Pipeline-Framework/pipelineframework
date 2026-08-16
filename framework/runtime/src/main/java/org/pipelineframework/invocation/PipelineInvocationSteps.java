@@ -176,23 +176,37 @@ public final class PipelineInvocationSteps {
         @SuppressWarnings("unchecked")
         public Uni<O> applyOneToOne(I input) {
             if (recursiveCall.isPresent()) {
-                return Uni.createFrom().deferred(() -> invokeOneToOne(input))
-                    .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                    .emitOn(Infrastructure.getDefaultExecutor());
+                return Uni.createFrom().deferred(() -> {
+                    PipelineInvocationContext active = activeParentContext(recursiveCall.orElseThrow());
+                    return Uni.createFrom().deferred(() -> invokeOneToOne(input, Optional.of(active)))
+                        .runSubscriptionOn(Infrastructure.getDefaultExecutor())
+                        .emitOn(Infrastructure.getDefaultExecutor());
+                });
             }
-            return invokeOneToOne(input);
+            return invokeOneToOne(input, Optional.empty());
         }
 
         @SuppressWarnings("unchecked")
-        private Uni<O> invokeOneToOne(I input) {
+        private Uni<O> invokeOneToOne(I input, Optional<PipelineInvocationContext> parentContext) {
             Optional<PipelineInvocationContext> childContext = recursiveCall.map(call ->
-                call.parentContext().enterRecursive(definitionId, call.callsiteId()));
+                parentContext.orElseThrow().enterRecursive(definitionId, call.callsiteId()));
             Object result = nestedResult(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps,
                 Uni.createFrom().item(input), childContext);
             if (result instanceof Uni<?> uni) {
                 return (Uni<O>) uni;
             }
             throw new IllegalStateException("Linked ONE_TO_ONE pipeline returned a streaming result");
+        }
+
+        private PipelineInvocationContext activeParentContext(RecursiveCall call) {
+            PipelineInvocationContext active = PipelineInvocationContextHolder.get()
+                .orElseThrow(() -> new IllegalStateException(
+                    "Recursive pipeline invocation subscribed without an invocation context"));
+            if (!active.equals(call.parentContext())) {
+                throw new IllegalStateException(
+                    "Recursive pipeline invocation adapter does not belong to the active parent invocation");
+            }
+            return active;
         }
     }
 

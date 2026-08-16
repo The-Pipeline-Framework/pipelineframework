@@ -197,7 +197,7 @@ public final class LocalPipelineInvocationRenderer {
         if (recursive) {
             return MethodSpec.methodBuilder("applyOneToOne").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output)).addParameter(input, "input")
-                .addStatement("return $T.<$T, $T>recursiveOneToOne(runner, $S, $S, $L, $L).applyOneToOne(input)",
+                .addStatement("return $T.<$T, $T>recursiveOneToOne(runner, $S, $S, $L, $L, effectiveConfig()).applyOneToOne(input)",
                     INVOCATION_STEPS, input, output, definitionId, callsiteId, definitionTerminalStepIndex, list).build();
         }
         return switch (cardinality) {

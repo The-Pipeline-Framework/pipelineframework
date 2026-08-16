@@ -27,6 +27,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.PipelineRunnerTestHarness;
+import org.pipelineframework.processor.composition.CompiledPipelineLocation;
+import org.pipelineframework.processor.composition.DefinitionLocalLocation;
+import org.pipelineframework.processor.composition.LocalPipelineInvocationClassName;
+import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.invocation.PipelineRecursionLimitExceededException;
@@ -45,6 +49,12 @@ import static org.mockito.Mockito.verify;
 @Isolated
 class PipelineRecursionProductizationTest {
 
+    private static final PipelineReference ROOT = new PipelineReference("$root");
+    private static final PipelineReference AGENT = new PipelineReference("agent");
+    private static final String ROOT_INVOCATION = invocationName(List.of(), ROOT, "Call agent");
+    private static final String RECURSIVE_INVOCATION = invocationName(
+        List.of(new DefinitionLocalLocation(ROOT, "Call agent")), AGENT, "Recur");
+
     @TempDir
     Path tempDir;
 
@@ -62,20 +72,21 @@ class PipelineRecursionProductizationTest {
         assertTrue(contract.length() < 30_000, "Recursive composition contract must remain finite");
         String branching = fixture.metadata("branching.json");
         assertTrue(branching.contains("\"runtimeStepClass\": "
-            + "\"com.example.recursion.pipeline.PipelineInvocation_root_Call_agent\",\n"
+            + "\"com.example.recursion.pipeline." + ROOT_INVOCATION + "\",\n"
             + "      \"inputRuntimeClass\": \"com.example.recursion.domain.State\""),
             "Invocation input metadata must use the generated method signature, not its first accepted variant");
 
         String recursiveSource = Files.readString(
-            fixture.generatedClass("PipelineInvocation_root_Call_agent_agent_Recur"));
-        assertTrue(recursiveSource.contains("Provider<PipelineInvocation_root_Call_agent_agent_Recur>"));
+            fixture.generatedClass(RECURSIVE_INVOCATION));
+        assertTrue(recursiveSource.contains("Provider<" + RECURSIVE_INVOCATION + ">"));
         assertTrue(recursiveSource.contains("recursiveOneToOne(runner, \"agent\", \"Recur\""));
+        assertTrue(recursiveSource.contains("effectiveConfig()).applyOneToOne(input)"));
         assertFalse(recursiveSource.contains("ExecutionRecord"));
         assertFalse(recursiveSource.contains("PipelineTelemetry.RunContext"));
 
         Path classes = compileGeneratedFixture(fixture, recursionSources(), List.of(
-            "PipelineInvocation_root_Call_agent",
-            "PipelineInvocation_root_Call_agent_agent_Recur",
+            ROOT_INVOCATION,
+            RECURSIVE_INVOCATION,
             "ProcessDecideLocalClientStep",
             "ProcessCompleteLocalClientStep",
             "ProcessUnwindLocalClientStep"));
@@ -199,7 +210,7 @@ class PipelineRecursionProductizationTest {
 
     private Object invocationGraph(ClassLoader loader, PipelineRunner runner) throws Exception {
         Object recursive = loader.loadClass(
-            "com.example.recursion.pipeline.PipelineInvocation_root_Call_agent_agent_Recur")
+            "com.example.recursion.pipeline." + RECURSIVE_INVOCATION)
             .getConstructor().newInstance();
         set(recursive, "runner", runner);
         set(recursive, "child0", client(loader, "ProcessDecideLocalClientStep", "DecideService"));
@@ -208,7 +219,7 @@ class PipelineRecursionProductizationTest {
         set(recursive, "child2", client(loader, "ProcessCompleteLocalClientStep", "CompleteService"));
         set(recursive, "child3", client(loader, "ProcessUnwindLocalClientStep", "UnwindService"));
 
-        Object root = loader.loadClass("com.example.recursion.pipeline.PipelineInvocation_root_Call_agent")
+        Object root = loader.loadClass("com.example.recursion.pipeline." + ROOT_INVOCATION)
             .getConstructor().newInstance();
         set(root, "runner", runner);
         set(root, "child0", client(loader, "ProcessDecideLocalClientStep", "DecideService"));
@@ -216,6 +227,16 @@ class PipelineRecursionProductizationTest {
         set(root, "child2", client(loader, "ProcessCompleteLocalClientStep", "CompleteService"));
         set(root, "child3", client(loader, "ProcessUnwindLocalClientStep", "UnwindService"));
         return root;
+    }
+
+    private static String invocationName(
+        List<DefinitionLocalLocation> path,
+        PipelineReference definition,
+        String stepId
+    ) {
+        return LocalPipelineInvocationClassName.simpleName(new CompiledPipelineLocation(
+            path,
+            new DefinitionLocalLocation(definition, stepId)));
     }
 
     private Object client(ClassLoader loader, String clientName, String serviceName) throws Exception {

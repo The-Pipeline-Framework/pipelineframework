@@ -53,12 +53,23 @@ class PipelineCompositionResolverTest {
     }
 
     @Test
-    void rejectsCyclicCompositionDescriptors() {
+    void acceptsFiniteDirectSelfRecursiveCompositionDescriptor() {
+        PipelineCompositionDescriptor descriptor = new PipelineCompositionDescriptor("outer", List.of(
+            definition("outer", List.of(invocation(0, "again", "outer")),
+                continuation("again", PipelineCompositionContinuationKind.ROOT_TERMINAL, ""))));
+
+        assertEquals("outer", descriptor.definition("outer").definitionId());
+    }
+
+    @Test
+    void rejectsMutuallyRecursiveCompositionDescriptors() {
         IllegalArgumentException failure = assertThrows(
             IllegalArgumentException.class,
             () -> new PipelineCompositionDescriptor("outer", List.of(
-                definition("outer", List.of(invocation(0, "again", "outer")),
-                    continuation("again", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")))));
+                definition("outer", List.of(invocation(0, "call-inner", "inner")),
+                    continuation("call-inner", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")),
+                definition("inner", List.of(invocation(0, "call-outer", "outer")),
+                    continuation("call-outer", PipelineCompositionContinuationKind.RETURN, "")))));
 
         assertEquals("composition definitions must not contain cycles: outer", failure.getMessage());
     }
