@@ -1435,17 +1435,41 @@ public class StepDefinitionParser {
         String stepName,
         String stepKind
     ) {
-        Object configObj = stepData.get("config");
-        if (configObj == null) {
+        if (!stepData.containsKey("config")) {
             return Map.of();
         }
+        Object configObj = stepData.get("config");
         if (!(configObj instanceof Map<?, ?> configMap)) {
             String message = "Skipping step '" + stepName + "': " + stepKind + " config must be a map";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (containsNullValue(configMap)) {
+            String message = "Skipping step '" + stepName + "': " + stepKind
+                + " config must not contain null values";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         return (Map<String, Object>) normalizeMap(configMap);
+    }
+
+    private boolean containsNullValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.values().stream().anyMatch(this::containsNullValue);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (containsNullValue(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String normalizeDuplicatePolicy(String duplicatePolicy) {

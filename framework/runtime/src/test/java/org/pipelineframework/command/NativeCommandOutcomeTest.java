@@ -134,11 +134,6 @@ class NativeCommandOutcomeTest {
                 ConnectorConfigurationDocument.empty())),
             List.of(prototype));
         assertTrue(bindings.providerInstances().isEmpty());
-        bindings.activate(ConnectorBindingName.of("work"), ConnectorRuntimeContext.empty())
-            .toCompletableFuture().join();
-        NativeProvider boundProvider = (NativeProvider) bindings.providerInstances().get(0);
-        boundProvider.operation.outcome = new CommandOutcome.Succeeded<>(
-            "bound-result", CommandConfirmation.none(), Set.of(), List.of());
         CommandStepSupport boundSupport = new CommandStepSupport(
             new ConnectorRegistry(List.of()), bindings, List.of(store), queueAsyncConfig());
         NativeCommandSelector selector = new NativeCommandSelector(
@@ -151,12 +146,14 @@ class NativeCommandOutcomeTest {
             "BoundNativeService", selector, String.class.getName(), String.class.getName(), "test",
             CommandDuplicatePolicy.RETURN_RECORDED, Map.of("target", "orders"));
 
-        assertEquals(1, boundProvider.starts);
         assertEquals("bound-result", boundSupport.<String, String>execute(
             descriptor, (ignored, input) -> "bound-command", "input").await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, bindings.providerInstances().size());
+        NativeProvider boundProvider = (NativeProvider) bindings.providerInstances().getFirst();
         assertEquals(1, boundProvider.starts);
         assertEquals(1, boundProvider.operation.invocations);
         assertEquals(0, prototype.starts);
+        assertEquals(0, prototype.operation.invocations);
     }
 
     @Test
@@ -484,6 +481,8 @@ class NativeCommandOutcomeTest {
 
         public NativeProvider() {
             this(new NativeOperation());
+            operation.outcome = new CommandOutcome.Succeeded<>(
+                "bound-result", CommandConfirmation.none(), Set.of(), List.of());
         }
 
         private NativeProvider(NativeOperation operation) {

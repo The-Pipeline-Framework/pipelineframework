@@ -589,6 +589,67 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsNullCommandAndQueryOperationConfigurationValues() throws IOException {
+        Path metadataRoot = tempDir.resolve("null-operation-config-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "operations":[
+            {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}},
+            {"id":"invoice.find","kind":"tpf:query","majorVersion":1}]}]}
+            """);
+        Path pipeline = tempDir.resolve("null-operation-config.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Send invoice
+                kind: command
+                cardinality: ONE_TO_ONE
+                operation: invoice.send
+                using: work
+                config:
+                  destination:
+                input: Invoice
+                output: SendResult
+                java: { input: com.example.Invoice, output: com.example.SendResult }
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+              - name: Find invoice
+                kind: query
+                cardinality: ONE_TO_ONE
+                operation: invoice.find
+                using: work
+                config:
+                input: FindInvoice
+                output: Invoice
+                java: { input: com.example.FindInvoice, output: com.example.Invoice }
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty(), diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.equals(
+                "ERROR:Skipping step 'Send invoice': command config must not contain null values")),
+                diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.equals(
+                "ERROR:Skipping step 'Find invoice': query config must be a map")),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
     void rejectsInvalidBindingConfigBeforeOperationSelection() throws IOException {
         Path metadataRoot = tempDir.resolve("invalid-binding-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
