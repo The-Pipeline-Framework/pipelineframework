@@ -37,6 +37,7 @@ import org.pipelineframework.cache.CachePolicyEnforcer;
 import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.cache.QueryNotFoundCacheEntry;
 import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.connector.QueryCacheability;
@@ -207,6 +208,27 @@ class PipelineStepExecutor {
             null,
             null,
             null);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            null,
+            null,
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot);
     }
 
     @SuppressWarnings({"unchecked"})
@@ -437,18 +459,18 @@ class PipelineStepExecutor {
                         + "a live external effect while retaining an older pipeline replay output; use "
                         + "PREFER_CACHE, REQUIRE_CACHE, CACHE_ONLY, or BYPASS_CACHE")));
         }
+        if (cacheReadSupport == null) {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                return step.apply(Uni.createFrom().item(item));
+            });
+        }
         if (step instanceof ProviderQueryStep queryStep) {
             try {
                 validateQueryCachePolicy(queryStep.queryCacheRequirements(), policy, cacheReadSupport);
             } catch (CachePolicyViolation failure) {
                 return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(failure));
             }
-        }
-        if (cacheReadSupport == null) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
-                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
-                return step.apply(Uni.createFrom().item(item));
-            });
         }
         if (step instanceof CacheReadBypass) {
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
@@ -467,9 +489,11 @@ class PipelineStepExecutor {
                             "negative caching requires a cache key for Query operation "
                                 + queryStep.queryCacheRequirements().operationIdentity())));
                 }
-                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
-                return executeOneToOne(
-                    step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, key);
+                return withPipelineContext(contextSnapshot, () -> {
+                    PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                    return executeOneToOne(
+                        step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, key);
+                });
             }
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
@@ -571,7 +595,10 @@ class PipelineStepExecutor {
         QueryCacheRequirements requirements = queryStep.queryCacheRequirements();
         return execution.onFailure(QueryNotFoundException.class).call(failure -> {
             QueryNotFoundException notFound = (QueryNotFoundException) failure;
-            return cacheReadSupport.writer().orElseThrow().put(
+            PipelineCacheWriter writer = cacheReadSupport.writer().orElseThrow(() -> new CachePolicyViolation(
+                "negative caching for Query operation " + requirements.operationIdentity()
+                    + " requires a cache subsystem that supports bounded writes"));
+            return writer.put(
                 cacheKey.orElseThrow(),
                 new QueryNotFoundCacheEntry(notFound.outcomeCode()),
                 requirements.negativeCacheTtl().orElseThrow());

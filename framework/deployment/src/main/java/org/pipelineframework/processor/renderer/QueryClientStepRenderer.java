@@ -30,6 +30,7 @@ import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -209,19 +210,8 @@ public class QueryClientStepRenderer {
         if (stepName == null || stepName.isBlank()) {
             return "ProcessStepService";
         }
-        String stripped = stepName.startsWith("Process ") ? stepName.substring("Process ".length()) : stepName;
-        StringBuilder formatted = new StringBuilder();
-        for (String part : stripped.split(" ")) {
-            if (part.isBlank()) {
-                continue;
-            }
-            String lower = part.toLowerCase(java.util.Locale.ROOT);
-            formatted.append(Character.toUpperCase(lower.charAt(0)));
-            if (lower.length() > 1) {
-                formatted.append(lower.substring(1));
-            }
-        }
-        return formatted.isEmpty() ? "ProcessStepService" : "Process" + formatted + "Service";
+        String formatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
+        return formatted.isBlank() ? "ProcessStepService" : "Process" + formatted + "Service";
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {

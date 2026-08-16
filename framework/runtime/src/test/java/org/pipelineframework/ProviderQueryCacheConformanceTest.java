@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CacheKeyTarget;
 import org.pipelineframework.cache.CachePolicyViolation;
+import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.cache.PipelineCacheReader;
 import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.cache.QueryNotFoundCacheEntry;
@@ -36,6 +37,7 @@ import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.query.InMemoryQueryCaptureStore;
@@ -128,6 +130,48 @@ class ProviderQueryCacheConformanceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void absentCacheSubsystemBypassesPositiveMaximumAgeValidation() {
+        QueryCapabilities boundedCapabilities = new QueryCapabilities(
+            QueryCacheability.CACHEABLE, Optional.of(Duration.ofMinutes(5)), Optional.empty());
+        GeneratedLikeQueryStep bounded = step(boundedCapabilities, Optional.empty(), false);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            bounded, Uni.createFrom().item(new QueryInput("input")));
+
+        assertEquals(new QueryOutput("live-input"), ((Uni<QueryOutput>) result).await().indefinitely());
+        assertEquals(1, bounded.calls.get());
+    }
+
+    @Test
+    void negativeCacheFailureReportsMissingWriterAsPolicyViolation() {
+        QueryCapabilities capabilities = new QueryCapabilities(
+            QueryCacheability.CACHEABLE, Optional.empty(), Optional.of(Duration.ofSeconds(30)));
+        GeneratedLikeQueryStep step = step(capabilities, Optional.of(Duration.ofSeconds(20)), true);
+        RecordingCache reader = new RecordingCache(Map.of());
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            reader,
+            Optional.empty(),
+            List.of(new QueryCacheKeyStrategy()),
+            "cache-only",
+            Optional.empty());
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new QueryInput("input")),
+            false,
+            1,
+            support,
+            PipelineContext.fromHeaders("v1", "", "cache-only"),
+            new AwaitExecutionContext("tenant", "execution", 1));
+        CachePolicyViolation failure = assertThrows(CachePolicyViolation.class,
+            () -> ((Uni<?>) result).await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("acme.lookup"));
+        assertTrue(failure.getMessage().contains("bounded writes"));
+    }
+
+    @Test
     void boundedNegativeMarkerReplaysAndIsWrittenOnlyForOptedInLiveMisses() {
         Duration negativeTtl = Duration.ofSeconds(20);
         QueryCapabilities capabilities = new QueryCapabilities(
@@ -162,6 +206,7 @@ class ProviderQueryCacheConformanceTest {
         assertEquals(0, cacheOnlyCache.getCalls.get());
         assertEquals(1, cacheOnlyCache.putCalls.get());
         assertEquals(new QueryNotFoundCacheEntry("missing"), cacheOnlyCache.values.get("v1:key"));
+        assertEquals(CacheStatus.BYPASS, cacheOnly.observedCacheStatus);
 
         RecordingCache bypassCache = new RecordingCache(Map.of());
         GeneratedLikeQueryStep bypass = step(capabilities, Optional.of(negativeTtl), true);
@@ -308,10 +353,8 @@ class ProviderQueryCacheConformanceTest {
             Uni.createFrom().item(new QueryInput("input")),
             false,
             1,
-            null,
-            null,
             support,
-            new PipelineContext("v1", null, policy),
+            PipelineContext.fromHeaders("v1", "", policy),
             executionContext);
         return ((Uni<QueryOutput>) result).await().indefinitely();
     }
@@ -343,6 +386,7 @@ class ProviderQueryCacheConformanceTest {
         private final QueryCacheRequirements requirements;
         private final boolean notFound;
         private final AtomicInteger calls = new AtomicInteger();
+        private CacheStatus observedCacheStatus;
 
         GeneratedLikeQueryStep(QueryCacheRequirements requirements, boolean notFound) {
             this.requirements = requirements;
@@ -352,6 +396,7 @@ class ProviderQueryCacheConformanceTest {
         @Override
         public Uni<QueryOutput> applyOneToOne(QueryInput input) {
             calls.incrementAndGet();
+            observedCacheStatus = PipelineCacheStatusHolder.get();
             return notFound
                 ? Uni.createFrom().failure(new QueryNotFoundException("missing"))
                 : Uni.createFrom().item(new QueryOutput("live-" + input.id()));

@@ -623,10 +623,16 @@ public class StepDefinitionParser {
             String operation = getStringValue(stepData, "operation");
             String using = getStringValue(stepData, "using");
             boolean operationFirst = !isBlank(operation) || !isBlank(using);
-            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy")
-                || stepData.containsKey("negativeCacheTtl"))) {
+            if (stepData.containsKey("negativeCacheTtl")) {
                 String message = "Skipping step '" + name
-                    + "': operationVersion/policy/negativeCacheTtl requires operation and using";
+                    + "': negativeCacheTtl is supported only for provider-backed query selections";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
+            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy"))) {
+                String message = "Skipping step '" + name
+                    + "': operationVersion/policy requires operation and using";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 throw new StepSkippedException();
@@ -752,8 +758,13 @@ public class StepDefinitionParser {
             String operation = getStringValue(stepData, "operation");
             String using = getStringValue(stepData, "using");
             boolean operationFirst = !isBlank(operation) || !isBlank(using);
-            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy"))) {
-                String message = "Skipping step '" + name + "': operationVersion/policy requires operation and using";
+            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy")
+                || stepData.containsKey("negativeCacheTtl"))) {
+                String unsupportedFields = stepData.containsKey("negativeCacheTtl")
+                    ? "operationVersion/policy/negativeCacheTtl"
+                    : "operationVersion/policy";
+                String message = "Skipping step '" + name
+                    + "': " + unsupportedFields + " requires operation and using";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 throw new StepSkippedException();

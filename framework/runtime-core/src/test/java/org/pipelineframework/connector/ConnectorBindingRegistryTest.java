@@ -141,6 +141,7 @@ class ConnectorBindingRegistryTest {
             List.of(definition("offline", "acme.missing", "one")),
             List.of());
 
+        assertEquals(List.of(ConnectorBindingName.of("offline")), registry.unavailableBindingNames());
         registry.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
         IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
             registry.requireProvider(ConnectorBindingName.of("offline")));

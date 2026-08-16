@@ -6,12 +6,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
-
 /** Bindable operation configuration for the {@code jpa.query/find.one} Query operation. */
 public record JpaFindOneConfiguration(
     String entity,
-    Map<String, PipelineYamlJpaPredicate> where,
+    Map<String, JpaPredicate> where,
     Optional<Map<String, String>> projection,
     Optional<Map<String, String>> orderBy,
     Optional<Integer> limit,

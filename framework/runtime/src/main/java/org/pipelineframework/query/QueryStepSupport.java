@@ -38,7 +38,7 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
 public class QueryStepSupport {
     private final List<FrameworkQueryConnector> connectors;
     private final List<QueryCaptureStore> stores;
-    private final ConnectorBindingRegistry bindingRegistry;
+    private final Optional<ConnectorBindingRegistry> bindingRegistry;
     private final ConnectorRuntimeContext runtimeContext;
     private final ObjectMapper json = PipelineJson.mapper();
 
@@ -49,11 +49,11 @@ public class QueryStepSupport {
         ConnectorBindingRegistry bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
-        this(toList(connectors), toStores(stores), bindingRegistry, runtimeContext);
+        this(toList(connectors), toStores(stores), Optional.of(bindingRegistry), runtimeContext);
     }
 
     public QueryStepSupport(Collection<FrameworkQueryConnector> connectors, Collection<QueryCaptureStore> stores) {
-        this(connectors, stores, null, ConnectorRuntimeContext.empty());
+        this(connectors, stores, Optional.empty(), ConnectorRuntimeContext.empty());
     }
 
     public QueryStepSupport(
@@ -61,7 +61,7 @@ public class QueryStepSupport {
         Collection<QueryCaptureStore> stores,
         ConnectorBindingRegistry bindingRegistry
     ) {
-        this(connectors, stores, bindingRegistry, ConnectorRuntimeContext.empty());
+        this(connectors, stores, Optional.ofNullable(bindingRegistry), ConnectorRuntimeContext.empty());
     }
 
     public QueryStepSupport(
@@ -70,11 +70,21 @@ public class QueryStepSupport {
         ConnectorBindingRegistry bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
+        this(connectors, stores, Optional.ofNullable(bindingRegistry), runtimeContext);
+    }
+
+    private QueryStepSupport(
+        Collection<FrameworkQueryConnector> connectors,
+        Collection<QueryCaptureStore> stores,
+        Optional<ConnectorBindingRegistry> bindingRegistry,
+        ConnectorRuntimeContext runtimeContext
+    ) {
         this.connectors = connectors == null ? List.of() : List.copyOf(connectors);
         this.stores = stores == null || stores.isEmpty()
             ? List.of(new InMemoryQueryCaptureStore())
             : List.copyOf(stores);
-        this.bindingRegistry = bindingRegistry;
+        this.bindingRegistry = java.util.Objects.requireNonNull(
+            bindingRegistry, "connector binding registry selection must not be null");
         this.runtimeContext = java.util.Objects.requireNonNull(runtimeContext, "connector runtime context must not be null");
     }
 
@@ -157,11 +167,13 @@ public class QueryStepSupport {
         Class<O> outputType
     ) {
         NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
-        if (bindingRegistry == null) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("connector binding registry is not available for Query execution"));
+        ConnectorBindingRegistry bindings;
+        try {
+            bindings = requireBindingRegistry(selector);
+        } catch (IllegalStateException failure) {
+            return Uni.createFrom().failure(failure);
         }
-        return Uni.createFrom().completionStage(bindingRegistry.activate(selector.binding(), runtimeContext))
+        return Uni.createFrom().completionStage(bindings.activate(selector.binding(), runtimeContext))
             .onItem().transformToUni(ignored -> {
                 try {
                     QueryOperation<?, ?, ?> operation = requireBoundQueryOperation(descriptor, selector);
@@ -219,10 +231,8 @@ public class QueryStepSupport {
         QueryStepDescriptor descriptor,
         NativeQuerySelector selector
     ) {
-        if (bindingRegistry == null) {
-            throw new IllegalStateException("connector binding registry is not available for Query execution");
-        }
-        var provider = bindingRegistry.requireProvider(selector.binding());
+        ConnectorBindingRegistry bindings = requireBindingRegistry(selector);
+        var provider = bindings.requireProvider(selector.binding());
         if (!provider.id().equals(selector.operationIdentity().providerId())
             || provider.version().major() != selector.providerMajorVersion()) {
             throw new IllegalStateException(
@@ -230,7 +240,7 @@ public class QueryStepSupport {
                     + provider.id().value() + " v" + provider.version().major() + " but Query descriptor requires "
                     + selector.operationIdentity().providerId().value() + " v" + selector.providerMajorVersion());
         }
-        QueryOperation<?, ?, ?> operation = bindingRegistry.requireQueryOperation(
+        QueryOperation<?, ?, ?> operation = bindings.requireQueryOperation(
             selector.binding(),
             selector.operationIdentity().operationId(),
             selector.operationIdentity().majorVersion());
@@ -289,6 +299,11 @@ public class QueryStepSupport {
         }
         return Uni.createFrom().failure(new IllegalStateException(
             "unsupported query outcome from " + selector.operationIdentity() + ": " + outcome.getClass().getName()));
+    }
+
+    private ConnectorBindingRegistry requireBindingRegistry(NativeQuerySelector selector) {
+        return bindingRegistry.orElseThrow(() -> new IllegalStateException(
+            "connector binding registry is not available for Query operation " + selector.operationIdentity()));
     }
 
     private <O> Uni<O> executeConnector(

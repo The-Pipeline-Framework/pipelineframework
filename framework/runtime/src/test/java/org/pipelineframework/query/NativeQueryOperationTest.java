@@ -29,6 +29,7 @@ import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.TestConnectorBindingRegistries;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 
@@ -160,6 +161,7 @@ class NativeQueryOperationTest {
             descriptor(Map.of("index", "customers")), new Lookup("customer-2"), Snapshot.class)
             .await().atMost(Duration.ofSeconds(2)));
         org.junit.jupiter.api.Assertions.assertTrue(nullOutcome.getMessage().contains("null outcome"));
+
     }
 
     @Test
@@ -226,14 +228,14 @@ class NativeQueryOperationTest {
     }
 
     private static ConnectorBindingRegistry bindings(FakeQueryOperation operation) {
-        FakeProvider.operation = operation;
-        return ConnectorBindingRegistry.fromProviders(
+        return TestConnectorBindingRegistries.fromProviderSupplier(
             List.of(new ConnectorBindingDefinition(
                 ConnectorBindingName.of("lookup"),
                 ConnectorProviderId.of("acme.lookup"),
                 1,
                 ConnectorConfigurationDocument.empty())),
-            List.of(new FakeProvider()));
+            new FakeProvider(operation),
+            () -> new FakeProvider(operation));
     }
 
     private static ConnectorBindingRegistry unavailableBindings() {
@@ -247,14 +249,14 @@ class NativeQueryOperationTest {
     }
 
     private static ConnectorBindingRegistry zeroConfigBindings(ZeroConfigQueryOperation operation) {
-        ZeroConfigProvider.operation = operation;
-        return ConnectorBindingRegistry.fromProviders(
+        return TestConnectorBindingRegistries.fromProviderSupplier(
             List.of(new ConnectorBindingDefinition(
                 ConnectorBindingName.of("zero"),
                 ConnectorProviderId.of("acme.zero"),
                 1,
                 ConnectorConfigurationDocument.empty())),
-            List.of(new ZeroConfigProvider()));
+            new ZeroConfigProvider(operation),
+            () -> new ZeroConfigProvider(operation));
     }
 
     public record Lookup(String customerId) {
@@ -267,9 +269,10 @@ class NativeQueryOperationTest {
     }
 
     public static final class FakeProvider implements ConnectorProvider<Void> {
-        private static FakeQueryOperation operation;
+        private final FakeQueryOperation operation;
 
-        public FakeProvider() {
+        FakeProvider(FakeQueryOperation operation) {
+            this.operation = operation;
         }
 
         @Override
@@ -300,9 +303,10 @@ class NativeQueryOperationTest {
     }
 
     public static final class ZeroConfigProvider implements ConnectorProvider<Void> {
-        private static ZeroConfigQueryOperation operation;
+        private final ZeroConfigQueryOperation operation;
 
-        public ZeroConfigProvider() {
+        ZeroConfigProvider(ZeroConfigQueryOperation operation) {
+            this.operation = operation;
         }
 
         @Override

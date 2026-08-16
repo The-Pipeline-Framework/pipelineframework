@@ -67,7 +67,11 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
     @Override
     public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
         try {
-            return queryOne(JpaQueryPlan.from(request.descriptor()), request.input(), outputType);
+            return queryOne(
+                JpaQueryPlan.from(request.descriptor().queryId(),
+                    JpaPipelineQueryAdapter.configuration(request.descriptor().jpa())),
+                request.input(),
+                outputType);
         } catch (RuntimeException ex) {
             return CompletableFuture.failedStage(ex);
         }

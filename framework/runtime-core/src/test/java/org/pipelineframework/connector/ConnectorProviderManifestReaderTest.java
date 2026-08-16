@@ -159,6 +159,22 @@ class ConnectorProviderManifestReaderTest {
             new ConnectorProviderManifestCatalog(List.of(undeclared)).requireQueryCapabilities(identity, 1));
     }
 
+    @Test
+    void rejectsCommandIdentityWhenQueryCapabilitiesAreRequested() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1}]}]}
+            """));
+        ConnectorOperationIdentity commandIdentity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of("metadata.provider"), "find", ConnectorOperationKind.COMMAND, 1);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> new ConnectorProviderManifestCatalog(List.of(manifest))
+                .requireQueryCapabilities(commandIdentity, 1));
+
+        assertTrue(failure.getMessage().contains("require a Query operation identity"));
+    }
+
     private static ByteArrayInputStream input(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }

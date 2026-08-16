@@ -3,7 +3,10 @@ package org.pipelineframework.processor.phase;
 /**
  * Handles naming policies and transformations for various identifiers.
  */
-class NamingPolicy {
+public final class NamingPolicy {
+
+    private NamingPolicy() {
+    }
 
     /**
      * Converts input to PascalCase.
@@ -35,7 +38,7 @@ class NamingPolicy {
      * @param name the name to strip
      * @return the name without the prefix
      */
-    static String stripProcessPrefix(String name) {
+    public static String stripProcessPrefix(String name) {
         if (name == null) {
             return "";
         }
@@ -51,7 +54,7 @@ class NamingPolicy {
      * @param input the input string
      * @return the formatted class name
      */
-    static String formatForClassName(String input) {
+    public static String formatForClassName(String input) {
         if (input == null || input.isBlank()) {
             return "";
         }

@@ -47,7 +47,7 @@ For provider-backed Query steps, use this matrix:
 | --- | --- |
 | PREFER_CACHE | A hit replays the cached pipeline output. A miss enters Query capture/live-observation semantics and writes a successful output. |
 | REQUIRE_CACHE | A hit replays the cached pipeline output. A miss fails before Query capture lookup or provider invocation. |
-| CACHE_ONLY | No pre-read. Execute Query capture/live-observation semantics and write the observed output. |
+| CACHE_ONLY | No pre-read. Execute Query capture/live-observation semantics and always write a found output. A `NotFound` result writes an internal not-found marker only when negative caching is explicitly enabled and supported. |
 | BYPASS_CACHE | No generic cache I/O. Execute Query capture/live-observation semantics. |
 | SKIP_IF_PRESENT | Rejected: its existence-only behavior neither replays the previous observation nor records a new one. |
 

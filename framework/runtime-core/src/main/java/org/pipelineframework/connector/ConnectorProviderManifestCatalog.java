@@ -126,6 +126,9 @@ public final class ConnectorProviderManifestCatalog {
         int expectedProviderMajorVersion
     ) {
         Objects.requireNonNull(identity, "query operation identity must not be null");
+        if (identity.kind() != ConnectorOperationKind.QUERY) {
+            throw new IllegalArgumentException("query capabilities require a Query operation identity: " + identity);
+        }
         ConnectorOperationDescriptor operation = requireOperation(
             identity.providerId(),
             expectedProviderMajorVersion,

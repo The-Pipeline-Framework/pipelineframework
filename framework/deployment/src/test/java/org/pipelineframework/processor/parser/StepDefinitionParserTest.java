@@ -836,6 +836,24 @@ class StepDefinitionParserTest {
                 input: Lookup
                 output: Invoice
                 java: { input: com.example.Lookup, output: com.example.Invoice }
+              - name: Command with negative cache
+                kind: command
+                cardinality: ONE_TO_ONE
+                operation: invoice.send
+                using: work
+                negativeCacheTtl: PT30S
+                input: Invoice
+                output: Result
+                java: { input: com.example.Invoice, output: com.example.Result }
+                commandIdGenerator: com.example.IdGenerator
+              - name: Legacy query with negative cache
+                kind: query
+                cardinality: ONE_TO_ONE
+                query: legacy-query
+                negativeCacheTtl: PT30S
+                input: Lookup
+                output: Invoice
+                java: { input: com.example.Lookup, output: com.example.Invoice }
             """, diagnostics);
 
         assertTrue(steps.isEmpty(), diagnostics.toString());
@@ -847,6 +865,10 @@ class StepDefinitionParserTest {
             "query and operation/using are mutually exclusive")), diagnostics.toString());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
             "operationVersion/policy requires operation and using")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "negativeCacheTtl is supported only for provider-backed query selections")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "operationVersion/policy/negativeCacheTtl requires operation and using")), diagnostics.toString());
     }
 
     @Test

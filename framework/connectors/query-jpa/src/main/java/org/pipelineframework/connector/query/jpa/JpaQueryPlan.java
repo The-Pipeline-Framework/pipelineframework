@@ -12,9 +12,6 @@ import java.util.Set;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
-import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
-import org.pipelineframework.query.QueryStepDescriptor;
 
 final class JpaQueryPlan {
     private static final Pattern JAVA_IDENTIFIER = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*");
@@ -23,7 +20,7 @@ final class JpaQueryPlan {
 
     private final String queryId;
     private final Class<?> entityType;
-    private final Map<String, PipelineYamlJpaPredicate> where;
+    private final Map<String, JpaPredicate> where;
     private final Map<String, String> projection;
     private final Map<String, String> orderBy;
     private final Optional<Integer> limit;
@@ -31,7 +28,7 @@ final class JpaQueryPlan {
     private JpaQueryPlan(
         String queryId,
         Class<?> entityType,
-        Map<String, PipelineYamlJpaPredicate> where,
+        Map<String, JpaPredicate> where,
         Map<String, String> projection,
         Map<String, String> orderBy,
         Optional<Integer> limit
@@ -42,18 +39,6 @@ final class JpaQueryPlan {
         this.projection = Collections.unmodifiableMap(new LinkedHashMap<>(projection));
         this.orderBy = Collections.unmodifiableMap(new LinkedHashMap<>(orderBy));
         this.limit = limit;
-    }
-
-    static JpaQueryPlan from(QueryStepDescriptor descriptor) {
-        PipelineYamlJpaQuery jpa = descriptor.jpa();
-        return from(
-            descriptor.queryId(),
-            jpa.entity(),
-            jpa.where(),
-            jpa.projection(),
-            jpa.orderBy(),
-            Optional.ofNullable(jpa.limit()),
-            jpa.result());
     }
 
     static JpaQueryPlan from(String queryId, JpaFindOneConfiguration configuration) {
@@ -70,7 +55,7 @@ final class JpaQueryPlan {
     private static JpaQueryPlan from(
         String queryId,
         String entity,
-        Map<String, PipelineYamlJpaPredicate> where,
+        Map<String, JpaPredicate> where,
         Map<String, String> projection,
         Map<String, String> orderBy,
         Optional<Integer> limit,
@@ -112,7 +97,7 @@ final class JpaQueryPlan {
             .append(" e where ");
         int index = 0;
         ParameterCounter parameters = new ParameterCounter();
-        for (Map.Entry<String, PipelineYamlJpaPredicate> entry : where.entrySet()) {
+        for (Map.Entry<String, JpaPredicate> entry : where.entrySet()) {
             if (index > 0) {
                 hql.append(" and ");
             }
@@ -136,7 +121,7 @@ final class JpaQueryPlan {
     Map<String, Object> bindings(Object input) {
         Map<String, Object> bindings = new LinkedHashMap<>();
         ParameterCounter parameters = new ParameterCounter();
-        for (PipelineYamlJpaPredicate predicate : where.values()) {
+        for (JpaPredicate predicate : where.values()) {
             bindPredicate(bindings, predicate, input, parameters);
         }
         return Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
@@ -150,7 +135,7 @@ final class JpaQueryPlan {
         return limit.filter(value -> value == 1).isPresent();
     }
 
-    private void appendPredicate(StringBuilder hql, String entityPath, PipelineYamlJpaPredicate predicate, ParameterCounter parameters) {
+    private void appendPredicate(StringBuilder hql, String entityPath, JpaPredicate predicate, ParameterCounter parameters) {
         String path = "e." + entityPath;
         switch (predicate.operator()) {
             case "eq" -> hql.append(path).append(" = :").append(parameters.next());
@@ -174,7 +159,7 @@ final class JpaQueryPlan {
 
     private void bindPredicate(
         Map<String, Object> bindings,
-        PipelineYamlJpaPredicate predicate,
+        JpaPredicate predicate,
         Object input,
         ParameterCounter parameters
     ) {
@@ -256,7 +241,7 @@ final class JpaQueryPlan {
         }
     }
 
-    private static void validatePathMap(Map<String, PipelineYamlJpaPredicate> values, String field) {
+    private static void validatePathMap(Map<String, JpaPredicate> values, String field) {
         if (values == null || values.isEmpty()) {
             throw new IllegalArgumentException("jpa." + field + " must not be empty");
         }

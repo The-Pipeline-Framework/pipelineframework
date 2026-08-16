@@ -222,6 +222,11 @@ public final class ConnectorBindingRegistry {
         return Collections.unmodifiableMap(result);
     }
 
+    /** Configured binding names whose provider implementation is unavailable on this host. */
+    public List<ConnectorBindingName> unavailableBindingNames() {
+        return unavailableBindings.keySet().stream().sorted().toList();
+    }
+
     /**
      * Successfully activated provider instances, in deterministic binding order.
      */

@@ -77,7 +77,7 @@ class JpaQueryConnectorQuarkusTest {
     private static JpaFindOneConfiguration nativeConfiguration() {
         return new JpaFindOneConfiguration(
             CustomerRiskEntity.class.getName(),
-            Map.of("customerId", PipelineYamlJpaPredicate.equalTo("input.customerId")),
+            Map.of("customerId", new JpaPredicate("eq", List.of("input.customerId"))),
             Optional.of(Map.of("customerId", "customerId", "riskBand", "riskBand", "score", "score")),
             Optional.empty(),
             Optional.empty(),

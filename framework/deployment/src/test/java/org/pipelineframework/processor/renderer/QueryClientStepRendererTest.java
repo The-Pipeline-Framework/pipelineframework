@@ -117,8 +117,9 @@ class QueryClientStepRendererTest {
         assertTrue(exception.getMessage().contains("does not match .common.domain, .common.dto, or .service"));
     }
 
-    @Test
-    void generatedLocalNativeQueryCarriesStaticCacheRequirements() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"Load Customer Risk", "Load-Customer_Risk", "Load\\tCustomer Risk"})
+    void generatedLocalNativeQueryCarriesStaticCacheRequirementsAcrossNameSeparators(String stepName) throws Exception {
         Path metadataRoot = tempDir.resolve("connector-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
@@ -137,12 +138,12 @@ class QueryClientStepRendererTest {
                 provider: acme.lookup
                 version: 1
             steps:
-              - name: Load Customer Risk
+              - name: "%s"
                 kind: query
                 operation: customer.find
                 using: lookup
                 negativeCacheTtl: PT20S
-            """);
+            """.formatted(stepName));
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
             Thread.currentThread().setContextClassLoader(loader);
