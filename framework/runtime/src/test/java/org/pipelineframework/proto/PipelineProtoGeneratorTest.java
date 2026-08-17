@@ -159,6 +159,28 @@ class PipelineProtoGeneratorTest {
         assertTrue(types.contains("OrderId order_id = 2;"));
         assertTrue(types.contains("optional string payment_id = 3;"));
         assertTrue(types.contains("PayloadReference reference = 4;"));
+        assertTrue(types.contains("message ConnectorPayloadOrigin {"));
+        assertTrue(types.contains("string binding_name = 1;"));
+        assertTrue(types.contains("string provider_id = 2;"));
+        assertTrue(types.contains("string operation_id = 3;"));
+        assertTrue(types.contains("string operation_kind = 4;"));
+        assertTrue(types.contains("int32 operation_major_version = 5;"));
+        assertTrue(types.contains("int32 provider_major_version = 6;"));
+        assertTrue(types.contains("bool has_configuration = 7;"));
+        assertTrue(types.contains("string configuration_schema_id = 8;"));
+        assertTrue(types.contains("int32 configuration_schema_version = 9;"));
+        assertTrue(types.contains("string configuration_digest = 10;"));
+        assertTrue(types.contains("repeated string connection_references = 11;"));
+        assertTrue(types.contains("string provider = 1;"));
+        assertTrue(types.contains("string container = 2;"));
+        assertTrue(types.contains("string key = 3;"));
+        assertTrue(types.contains("string content_type = 4;"));
+        assertTrue(types.contains("string codec = 5;"));
+        assertTrue(types.contains("string checksum = 6;"));
+        assertTrue(types.contains("int64 size_bytes = 7;"));
+        assertTrue(types.contains("string version = 8;"));
+        assertTrue(types.contains("map<string, string> metadata = 9;"));
+        assertTrue(types.contains("ConnectorPayloadOrigin connector_origin = 10;"));
         assertTrue(types.contains("oneof value {"));
         assertTrue(types.contains("PaymentRecord approved = 1;"));
         assertTrue(types.contains("PaymentRecord requires_review = 2;"));
@@ -223,6 +245,8 @@ class PipelineProtoGeneratorTest {
         assertFalse(Files.exists(domain.resolve("DisplayName.java")));
         assertTrue(adapters.contains("public static com.example.payments.grpc.PipelineTypes.PaymentRecord toProto"));
         assertTrue(adapters.contains("toProtoPayloadReference"));
+        assertTrue(adapters.contains("value.hasConnectorOrigin()"));
+        assertTrue(adapters.contains("value.getMetadataMap(), origin"));
         assertTrue(adapters.contains("This surface is intentionally provisional"));
     }
 
@@ -2243,6 +2267,8 @@ class PipelineProtoGeneratorTest {
         assertTrue(typesContent.contains("message PayloadReference {"));
         assertTrue(typesContent.contains("string provider = 1;"));
         assertTrue(typesContent.contains("map<string, string> metadata = 9;"));
+        assertTrue(typesContent.contains("message ConnectorPayloadOrigin {"));
+        assertTrue(typesContent.contains("ConnectorPayloadOrigin connector_origin = 10;"));
         assertTrue(typesContent.contains("PayloadReference textRef = 3;"));
         assertFalse(typesContent.contains("optional PayloadReference textRef = 3;"));
     }

@@ -3,7 +3,6 @@ package org.pipelineframework.connector.objectingest;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,10 +11,17 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Stream;
 
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
+import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.objectingest.ObjectSourceItem;
 import org.pipelineframework.objectingest.ObjectSourceProvider;
 import org.pipelineframework.repository.PayloadReference;
@@ -24,6 +30,15 @@ import org.pipelineframework.repository.PayloadReference;
  * Filesystem object source provider for local ingest and deterministic tests.
  */
 public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
+    private final Executor executor;
+
+    public FilesystemObjectSourceProvider() {
+        this(ForkJoinPool.commonPool());
+    }
+
+    FilesystemObjectSourceProvider(Executor executor) {
+        this.executor = Objects.requireNonNull(executor, "filesystem source executor must not be null");
+    }
 
     @Override
     public String providerName() {
@@ -69,6 +84,41 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    @Override
+    public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
+        return CompletableFuture.supplyAsync(() -> materializeBlocking(reference, maxBytes), executor);
+    }
+
+    private MaterializedPayload materializeBlocking(PayloadReference reference, long maxBytes) {
+        try {
+            if (reference == null) {
+                throw new IllegalArgumentException("payload reference must not be null");
+            }
+            if (maxBytes < 1) {
+                throw new IllegalArgumentException("maxBytes must be positive");
+            }
+            if (!providerName().equalsIgnoreCase(reference.provider())) {
+                throw new IllegalArgumentException("filesystem operation cannot materialize provider=" + reference.provider());
+            }
+            if (reference.container() == null || reference.container().isBlank()) {
+                throw new IllegalArgumentException("filesystem payload reference container must not be blank");
+            }
+            if (reference.sizeBytes() > maxBytes) {
+                throw new IllegalStateException("Object exceeds configured maxBytes: " + reference.key());
+            }
+            Path root = Path.of(reference.container()).toAbsolutePath().normalize();
+            Path path = requireUnderRoot(root, root.resolve(reference.key()).normalize());
+            byte[] bytes = readBounded(path, maxBytes, reference.key());
+            String checksum = sha256(bytes);
+            if (reference.checksum() != null && !reference.checksum().equalsIgnoreCase(checksum)) {
+                throw new IllegalStateException("Filesystem payload checksum mismatch: " + reference.key());
+            }
+            return new MaterializedPayload(reference, bytes, reference.contentType(), reference.codec(), checksum);
+        } catch (IOException failure) {
+            throw new CompletionException(failure);
+        }
+    }
+
     private byte[] readBounded(Path path, long maxBytes, String key) throws IOException {
         try (InputStream input = Files.newInputStream(path); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
@@ -99,7 +149,8 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
                 etag,
                 size,
                 null,
-                Map.of("source", source.name()));
+                Map.of("source", source.name()),
+                Optional.empty());
             return new ObjectSourceItem(
                 providerName(),
                 root.toString(),
@@ -184,6 +235,14 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
                 }
             }
             return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest is not available", e);
+        }
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 digest is not available", e);
         }

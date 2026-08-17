@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -98,7 +99,8 @@ public final class StdioObjectTargetProvider implements ObjectTargetProvider {
                     metadata.putAll(closeRequest.metadata());
                     metadata.put("endpoint", ENDPOINT);
                     PayloadReference reference = new PayloadReference(
-                        "stdio", ENDPOINT, request.objectKey(), request.contentType(), "raw", closeRequest.checksum(), closeRequest.bytes(), null, metadata);
+                        "stdio", ENDPOINT, request.objectKey(), request.contentType(), "raw", closeRequest.checksum(), closeRequest.bytes(), null,
+                        metadata, Optional.empty());
                     return CompletableFuture.completedFuture(new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now()));
                 } catch (IOException | RuntimeException e) {
                     return CompletableFuture.failedFuture(e);

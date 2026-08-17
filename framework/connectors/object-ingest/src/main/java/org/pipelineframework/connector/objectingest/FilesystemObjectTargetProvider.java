@@ -12,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -145,7 +146,8 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
                             closeRequest.checksum(),
                             closeRequest.bytes(),
                             null,
-                            metadata);
+                            metadata,
+                            Optional.empty());
                         return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
                     } catch (IOException | IllegalStateException e) {
                         cleanupTemporaryFile(e);
