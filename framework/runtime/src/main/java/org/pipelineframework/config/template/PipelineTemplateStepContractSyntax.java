@@ -124,8 +124,14 @@ public final class PipelineTemplateStepContractSyntax {
         if (isLogicalName(value)) {
             return true;
         }
-        return value != null && value.startsWith("<") && value.endsWith(">") && value.length() > 2
-            && value.indexOf('<', 1) < 0 && value.indexOf('>') == value.length() - 1;
+        if (value == null) {
+            return false;
+        }
+        try {
+            return ProtocolTypeReferences.parseContributed(value).isPresent();
+        } catch (IllegalArgumentException failure) {
+            return false;
+        }
     }
 
     public record StepContracts(

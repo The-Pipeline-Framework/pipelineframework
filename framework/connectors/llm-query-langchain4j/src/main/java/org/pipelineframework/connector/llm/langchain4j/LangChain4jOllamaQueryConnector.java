@@ -1,6 +1,8 @@
 package org.pipelineframework.connector.llm.langchain4j;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -26,8 +28,19 @@ import org.pipelineframework.connector.llm.LlmTurnRequest;
 @ApplicationScoped
 public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProvider {
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
+    static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private final OllamaModelFactory modelFactory;
 
     public LangChain4jOllamaQueryConnector() {
+        this((baseUrl, modelName, timeout) -> OllamaChatModel.builder()
+            .baseUrl(baseUrl)
+            .modelName(modelName)
+            .timeout(timeout)
+            .build());
+    }
+
+    LangChain4jOllamaQueryConnector(OllamaModelFactory modelFactory) {
+        this.modelFactory = Objects.requireNonNull(modelFactory, "Ollama model factory must not be null");
     }
 
     @Override
@@ -35,11 +48,14 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         LlmProviderConfiguration configuration,
         ConnectorRuntimeContext context
     ) {
-        ChatModel model = OllamaChatModel.builder()
-            .baseUrl(configuration.baseUrl().orElse(DEFAULT_BASE_URL))
-            .modelName(configuration.model())
-            .build();
+        ChatModel model = modelFactory.create(
+            configuration.baseUrl().orElse(DEFAULT_BASE_URL), configuration.model(), REQUEST_TIMEOUT);
         return new LangChain4jDecisionClient(model, context.executor());
+    }
+
+    @FunctionalInterface
+    interface OllamaModelFactory {
+        ChatModel create(String baseUrl, String modelName, Duration timeout);
     }
 
     static final class LangChain4jDecisionClient implements LlmDecisionClient {
@@ -66,11 +82,14 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
                 .toolSpecifications(tools)
                 .build();
             List<ToolExecutionRequest> proposals = model.chat(chat).aiMessage().toolExecutionRequests();
+            proposals = proposals == null ? List.of() : proposals;
             if (proposals.size() != 1) {
                 return new LlmToolProposal("", "{}");
             }
             ToolExecutionRequest proposal = proposals.getFirst();
-            return new LlmToolProposal(proposal.name(), proposal.arguments());
+            String name = proposal.name() == null ? "" : proposal.name();
+            String arguments = proposal.arguments() == null ? "{}" : proposal.arguments();
+            return new LlmToolProposal(name, arguments);
         }
 
         private ToolSpecification tool(LlmToolDefinition definition) {

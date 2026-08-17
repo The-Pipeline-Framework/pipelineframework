@@ -1902,6 +1902,23 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException pattern = assertThrows(IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(unboundedPattern));
         assertTrue(pattern.getMessage().contains("pattern requires maxLength"));
+
+        Path unsafePattern = tempDir.resolve("v3-unsafe-wrapper-pattern.yaml");
+        Files.writeString(unsafePattern, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              AccountCode:
+                wraps: string
+                pattern: "(a+)+"
+                maxLength: 128
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: AccountCode, output: AccountCode }]
+            """);
+        IllegalStateException unsafe = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(unsafePattern));
+        assertTrue(unsafe.getMessage().contains("unsafe for runtime model validation"));
     }
 
     @Test

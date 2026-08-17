@@ -80,6 +80,24 @@ class LlmQueryOperationTest {
         assertEquals("command", bound.callables().get("charge").kind());
     }
 
+    @Test
+    void buildsTheDecisionContractOncePerOutputAndConfigurationBinding() {
+        AtomicInteger loads = new AtomicInteger();
+        CanonicalTypeCatalogue catalogue = CanonicalTypeCatalogue.load(Decision.class.getClassLoader());
+        LlmQueryOperation operation = new LlmQueryOperation(
+            () -> Optional.of(request -> CompletableFuture.completedFuture(
+                new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}"))),
+            ignored -> {
+                loads.incrementAndGet();
+                return catalogue;
+            });
+
+        operation.query(invocation()).toCompletableFuture().join();
+        operation.query(invocation()).toCompletableFuture().join();
+
+        assertEquals(1, loads.get());
+    }
+
     private static QueryOutcome<Object> query(LlmDecisionClient client) {
         return operation(client).query(invocation()).toCompletableFuture().join();
     }

@@ -186,9 +186,10 @@ M1 does **not** define:
 - durable agent audit model;
 - whether agents orchestrate/query/command other connector operations.
 
-A later LLM Query connector may contribute a portable `AgentCall` data type for application-authored
-decision unions. That proposal payload is not an `AgentOperation`, does not execute anything, and does
-not change this SPI's decision to keep Agent execution semantics out of the universal provider mechanics.
+The current LLM Query connector contributes the portable, inert `AgentCall` data type for
+application-authored decision unions. That proposal payload is not an `AgentOperation`, does not execute
+anything, and does not change this SPI's decision to keep Agent execution semantics out of the universal
+provider mechanics.
 
 No generated Agent step or runtime execution path is added in M1/M2 unless a later pinned design explicitly introduces one.
 

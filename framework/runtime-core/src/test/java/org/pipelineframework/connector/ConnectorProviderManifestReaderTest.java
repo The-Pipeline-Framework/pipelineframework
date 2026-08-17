@@ -69,6 +69,95 @@ class ConnectorProviderManifestReaderTest {
     }
 
     @Test
+    void requiresProtocolUnionVariantsToReferenceContributedTypes() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[],"protocolTypes":[
+            {"name":"Success","fields":[{"name":"value","type":"string"}]},
+            {"name":"Decision","variants":{"success":"<metadata.provider.Success>"}}]}]}
+            """));
+        assertInstanceOf(PipelineTemplateTypeDefinition.UnionType.class,
+            manifest.providers().getFirst().protocolTypes().get(1).definition());
+
+        IllegalArgumentException scalar = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[{"name":"Decision","variants":{"success":"string"}}]}]}
+                """)));
+        assertTrue(scalar.getMessage().contains("must reference a contributed protocol type"));
+    }
+
+    @Test
+    void validatesProtocolWrapperConstraintsWithTheCanonicalScalarRules() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[],"protocolTypes":[
+            {"name":"Email","wraps":"string","pattern":"[^@]+@[^@]+","maxLength":128,"format":"email"},
+            {"name":"Count","wraps":"int32","minimum":0,"maximum":10}]}]}
+            """));
+        PipelineTemplateTypeDefinition.WrapperType email = assertInstanceOf(
+            PipelineTemplateTypeDefinition.WrapperType.class,
+            manifest.providers().getFirst().protocolTypes().getFirst().definition());
+        assertEquals(128, email.constraints().maxLength().orElseThrow());
+        assertEquals("[^@]+@[^@]+", email.constraints().pattern().orElseThrow());
+
+        IllegalArgumentException wrongScalar = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[{"name":"Flag","wraps":"bool","minimum":0}]}]}
+                """)));
+        assertTrue(wrongScalar.getMessage().contains("numeric constraints on non-numeric wrapper"));
+
+        IllegalArgumentException emptyInterval = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[
+                {"name":"Count","wraps":"int32","minimumExclusive":1,"maximum":1}]}]}
+                """)));
+        assertTrue(emptyInterval.getMessage().contains("empty numeric constraint interval"));
+
+        IllegalArgumentException unsafePattern = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[],"protocolTypes":[
+                {"name":"Unsafe","wraps":"string","pattern":"(a+)+","maxLength":128}]}]}
+                """)));
+        assertTrue(unsafePattern.getMessage().contains("unsafe for runtime model validation"));
+    }
+
+    @Test
+    void rejectsWrapperConstraintsOnEveryNonWrapperProtocolShape() {
+        for (String declaration : List.of(
+            "{\"name\":\"Value\",\"fields\":[],\"maxLength\":4}",
+            "{\"name\":\"Value\",\"alias\":\"string\",\"maxLength\":4}",
+            "{\"name\":\"Value\",\"variants\":{\"value\":\"<metadata.provider.Other>\"},\"maxLength\":4}")) {
+            IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+                () -> ConnectorProviderManifestReader.read(input("""
+                    {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                    "operations":[],"protocolTypes":[%s]}]}
+                    """.formatted(declaration))));
+            assertTrue(rejected.getMessage().contains("can declare 'maxLength' only beside wraps"));
+        }
+    }
+
+    @Test
+    void rejectsProgrammaticProtocolTypesOutsideTheProviderNamespace() {
+        ConnectorProviderArtifactDescriptor artifact = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[]}]}
+            """)).providers().getFirst();
+        ProtocolTypeDescriptor foreign = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("other.provider"), "Value"),
+            new PipelineTemplateTypeDefinition.WrapperType(
+                "Value", new PipelineTemplateTypeReference.Scalar("string"),
+                org.pipelineframework.config.template.PipelineTemplateWrapperConstraints.empty()));
+
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> new ConnectorProviderArtifactDescriptor(artifact.provider(), List.of(), List.of(foreign)));
+        assertTrue(rejected.getMessage().contains("must use provider namespace 'metadata.provider'"));
+    }
+
+    @Test
     void preservesV1CompatibilityAndRequiresV2ForProtocolTypes() {
         ConnectorProviderManifest v1 = ConnectorProviderManifestReader.read(input("""
             {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},"operations":[]}]}

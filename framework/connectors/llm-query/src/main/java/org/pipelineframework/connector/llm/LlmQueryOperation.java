@@ -10,6 +10,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,10 +26,21 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private static final ConnectorConfigSchema<LlmTurnConfiguration> CONFIGURATION_SCHEMA =
         ConnectorConfigSchema.record(LlmTurnConfiguration.class, "llm.query.turn", 1);
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final System.Logger LOG = System.getLogger(LlmQueryOperation.class.getName());
     private final Supplier<Optional<LlmDecisionClient>> client;
+    private final Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader;
+    private final Map<DecisionContractKey, DecisionContract> contracts = new ConcurrentHashMap<>();
 
     LlmQueryOperation(Supplier<Optional<LlmDecisionClient>> client) {
+        this(client, CanonicalTypeCatalogue::load);
+    }
+
+    LlmQueryOperation(
+        Supplier<Optional<LlmDecisionClient>> client,
+        Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader
+    ) {
         this.client = Objects.requireNonNull(client, "LLM decision client supplier must not be null");
+        this.catalogueLoader = Objects.requireNonNull(catalogueLoader, "canonical catalogue loader must not be null");
     }
 
     @Override
@@ -49,8 +62,12 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         final DecisionContract contract;
         final LlmTurnRequest request;
         try {
-            CanonicalTypeCatalogue catalogue = CanonicalTypeCatalogue.load(classLoader(invocation.outputType()));
-            contract = DecisionContract.from(invocation.outputType(), invocation.configuration(), catalogue);
+            DecisionContractKey key = new DecisionContractKey(invocation.outputType(), invocation.configuration());
+            contract = contracts.computeIfAbsent(key, binding -> {
+                ClassLoader loader = classLoader(binding.outputType());
+                return DecisionContract.from(
+                    binding.outputType(), binding.configuration(), catalogueLoader.apply(loader), loader);
+            });
             request = new LlmTurnRequest(
                 invocation.configuration().instructions(),
                 JSON.writeValueAsString(invocation.input()),
@@ -68,9 +85,18 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             try {
                 return new QueryOutcome.Found<>(contract.materialize(proposal));
             } catch (InvalidModelDecisionException failure) {
+                LOG.log(System.Logger.Level.WARNING,
+                    "LLM Query rejected an invalid model decision: " + failure.getMessage(), failure);
                 return new QueryOutcome.TerminalFailure<>("invalid-model-decision");
             }
         });
+    }
+
+    private record DecisionContractKey(Class<?> outputType, LlmTurnConfiguration configuration) {
+        private DecisionContractKey {
+            Objects.requireNonNull(outputType, "LLM output type must not be null");
+            Objects.requireNonNull(configuration, "LLM turn configuration must not be null");
+        }
     }
 
     private static ClassLoader classLoader(Class<?> outputType) {
@@ -84,6 +110,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
 
     private record DecisionContract(
         Class<?> outputType,
+        ClassLoader classLoader,
         CanonicalTypeCatalogue catalogue,
         Map<String, LlmCallableConfiguration> callables,
         Map<String, String> completionVariants,
@@ -99,7 +126,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         static DecisionContract from(
             Class<?> outputType,
             LlmTurnConfiguration configuration,
-            CanonicalTypeCatalogue catalogue
+            CanonicalTypeCatalogue catalogue,
+            ClassLoader classLoader
         ) {
             String outputName = outputType.getSimpleName();
             Map<String, String> variants = catalogue.unionVariants(outputName);
@@ -138,7 +166,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 tools.add(new LlmToolDefinition(
                     entry.getKey(), "Complete with " + entry.getValue(), catalogue.schema(entry.getValue()))));
             return new DecisionContract(
-                outputType, catalogue, configuration.callables(), completions, callDiscriminator, tools);
+                outputType, classLoader, catalogue, configuration.callables(), completions, callDiscriminator, tools);
         }
 
         Object materialize(LlmToolProposal proposal) {
@@ -158,7 +186,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             String arguments = catalogue.validateAndCanonicalize(completionType, proposal.argumentsJson());
             try {
                 Class<?> payloadType = Class.forName(outputType.getPackageName() + "." + completionType, true,
-                    outputType.getClassLoader());
+                    classLoader);
                 return instantiateVariant(proposal.alias(), JSON.readValue(arguments, payloadType));
             } catch (InvalidModelDecisionException failure) {
                 throw failure;
@@ -170,7 +198,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         private Object instantiateAgentCall(LlmCallableConfiguration callable, String arguments) {
             try {
                 Class<?> agentCall = Class.forName(outputType.getPackageName() + ".AgentCall", true,
-                    outputType.getClassLoader());
+                    classLoader);
                 Constructor<?> constructor = agentCall.getDeclaredConstructor(String.class, String.class, String.class);
                 return constructor.newInstance(callable.using(), callable.operation(), arguments);
             } catch (Exception failure) {
@@ -187,7 +215,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     "output union has no runtime variant for discriminator '" + discriminator + "'"));
             try {
                 Constructor<?> constructor = List.of(variant.getDeclaredConstructors()).stream()
-                    .filter(candidate -> candidate.getParameterCount() == 1)
+                    .filter(candidate -> candidate.getParameterCount() == 1
+                        && candidate.getParameterTypes()[0].isInstance(payload))
                     .findFirst()
                     .orElseThrow(() -> new InvalidModelDecisionException(
                         "output union variant '" + discriminator + "' has no unary constructor"));

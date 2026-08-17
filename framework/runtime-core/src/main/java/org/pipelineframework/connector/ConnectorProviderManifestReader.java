@@ -9,8 +9,10 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.pipelineframework.config.template.PipelineTemplateScalarTypes;
+import org.pipelineframework.config.template.ProtocolTypeReferences;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.config.template.PipelineTemplateWrapperConstraintValidator;
 import org.pipelineframework.config.template.PipelineTemplateWrapperConstraints;
 import org.pipelineframework.protocol.ProtocolTypeDescriptor;
 import org.pipelineframework.protocol.ProtocolTypeIdentity;
@@ -130,11 +132,15 @@ public final class ConnectorProviderManifestReader {
         if (PipelineTemplateScalarTypes.isScalar(token)) {
             return new PipelineTemplateTypeReference.Scalar(token);
         }
-        if (token.startsWith("<") && token.endsWith(">") && token.indexOf('<', 1) < 0
-            && token.indexOf('>') == token.length() - 1) {
-            String identity = token.substring(1, token.length() - 1);
-            ProtocolTypeIdentity.of(identity);
-            return new PipelineTemplateTypeReference.Contributed(identity);
+        try {
+            Optional<String> identity = ProtocolTypeReferences.parseContributed(token);
+            if (identity.isPresent()) {
+                ProtocolTypeIdentity.of(identity.orElseThrow());
+                return new PipelineTemplateTypeReference.Contributed(identity.orElseThrow());
+            }
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalArgumentException("protocol type '" + owner
+                + "' must reference a supported scalar or qualified contributed type, got '" + value + "'", failure);
         }
         throw new IllegalArgumentException("protocol type '" + owner
             + "' must reference a supported scalar or qualified contributed type, got '" + value + "'");
@@ -159,17 +165,6 @@ public final class ConnectorProviderManifestReader {
         Optional<BigDecimal> minimumExclusive = optionalDecimal(value, "minimumExclusive");
         Optional<BigDecimal> maximum = optionalDecimal(value, "maximum");
         Optional<BigDecimal> maximumExclusive = optionalDecimal(value, "maximumExclusive");
-        boolean hasString = minLength.isPresent() || maxLength.isPresent() || pattern.isPresent() || format.isPresent();
-        boolean hasNumber = minimum.isPresent() || minimumExclusive.isPresent() || maximum.isPresent() || maximumExclusive.isPresent();
-        if (hasString && !"string".equals(scalar)) {
-            throw new IllegalArgumentException("protocol type '" + name + "' uses string constraints on non-string wrapper");
-        }
-        if (hasNumber && !java.util.Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
-            throw new IllegalArgumentException("protocol type '" + name + "' uses numeric constraints on non-numeric wrapper");
-        }
-        if (pattern.isPresent() && maxLength.isEmpty()) {
-            throw new IllegalArgumentException("protocol type '" + name + "' pattern requires maxLength");
-        }
         pattern.ifPresent(expression -> {
             try {
                 Pattern.compile(expression);
@@ -178,22 +173,32 @@ public final class ConnectorProviderManifestReader {
                     + exception.getDescription());
             }
         });
-        if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
-            throw new IllegalArgumentException("protocol type '" + name + "' minLength must not exceed maxLength");
-        }
-        if (minimum.isPresent() && minimumExclusive.isPresent() || maximum.isPresent() && maximumExclusive.isPresent()) {
-            throw new IllegalArgumentException("protocol type '" + name + "' cannot declare inclusive and exclusive bounds together");
-        }
-        Optional<BigDecimal> lower = minimum.isPresent() ? minimum : minimumExclusive;
-        Optional<BigDecimal> upper = maximum.isPresent() ? maximum : maximumExclusive;
-        if (lower.isPresent() && upper.isPresent()) {
-            int comparison = lower.orElseThrow().compareTo(upper.orElseThrow());
-            if (comparison > 0 || comparison == 0 && (minimumExclusive.isPresent() || maximumExclusive.isPresent())) {
-                throw new IllegalArgumentException("protocol type '" + name + "' declares an empty numeric constraint interval");
-            }
-        }
-        return new PipelineTemplateWrapperConstraints(minLength, maxLength, pattern, format, minimum, minimumExclusive,
-            maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraints constraints = new PipelineTemplateWrapperConstraints(
+            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints)
+            .ifPresent(violation -> { throw protocolConstraintFailure(name, violation); });
+        return constraints;
+    }
+
+    private static IllegalArgumentException protocolConstraintFailure(
+        String name,
+        PipelineTemplateWrapperConstraintValidator.Violation violation
+    ) {
+        String message = switch (violation.kind()) {
+            case STRING_ON_NON_STRING -> "uses string constraints on non-string wrapper";
+            case NUMERIC_ON_NON_NUMERIC -> "uses numeric constraints on non-numeric wrapper";
+            case PATTERN_REQUIRES_MAX_LENGTH -> "pattern requires maxLength";
+            case PATTERN_TOO_LONG -> "pattern exceeds the supported maximum length of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_LENGTH;
+            case PATTERN_INPUT_TOO_LONG -> "pattern maxLength exceeds the runtime matching limit of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_INPUT_LENGTH;
+            case UNSAFE_PATTERN -> "pattern uses a regex feature that is unsafe for runtime model validation";
+            case MIN_LENGTH_EXCEEDS_MAX_LENGTH -> "minLength must not exceed maxLength";
+            case LOWER_BOUNDS_COMBINED, UPPER_BOUNDS_COMBINED ->
+                "cannot declare inclusive and exclusive bounds together";
+            case EMPTY_INTERVAL -> "declares an empty numeric constraint interval";
+        };
+        return new IllegalArgumentException("protocol type '" + name + "' " + message);
     }
 
     private static void rejectConstraints(Map<String, Object> value, String name) {

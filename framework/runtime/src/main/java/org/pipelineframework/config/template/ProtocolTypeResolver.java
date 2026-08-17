@@ -30,13 +30,13 @@ final class ProtocolTypeResolver {
         for (String name : authoredNames) {
             definitions.put(name, normalizeDefinition(definitions.get(name)));
         }
-        String resolvedInput = normalizeContract(inputContract);
-        String resolvedOutput = normalizeContract(outputContract);
+        String resolvedInput = normalizeNullableContract(inputContract);
+        String resolvedOutput = normalizeNullableContract(outputContract);
         List<PipelineTemplateStep> resolvedSteps = steps.stream().map(this::normalizeStep).toList();
         Map<String, PipelineTemplateDefinition> resolvedPipelines = new LinkedHashMap<>();
         pipelines.forEach((id, pipeline) -> resolvedPipelines.put(id, new PipelineTemplateDefinition(
-            normalizeContract(pipeline.inputContract()),
-            normalizeContract(pipeline.outputContract()),
+            normalizeNullableContract(pipeline.inputContract()),
+            normalizeNullableContract(pipeline.outputContract()),
             pipeline.steps().stream().map(this::normalizeStep).toList())));
         PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(
             definitions, representationMappings, representationProviderConfigurations, identities);
@@ -45,31 +45,38 @@ final class ProtocolTypeResolver {
 
     private PipelineTemplateStep normalizeStep(PipelineTemplateStep step) {
         return new PipelineTemplateStep(
-            step.name(), step.cardinality(), normalizeContract(step.inputTypeName()), step.inputFields(),
-            step.inboundMapper(), normalizeContract(step.outputTypeName()), step.outputFields(), step.outboundMapper(),
-            step.execution(), step.accepts().stream().map(this::normalizeContract).toList(), step.terminal(),
+            step.name(), step.cardinality(), normalizeNullableContract(step.inputTypeName()), step.inputFields(),
+            step.inboundMapper(), normalizeNullableContract(step.outputTypeName()), step.outputFields(), step.outboundMapper(),
+            step.execution(), step.accepts().stream().map(this::normalizeNullableContract).toList(), step.terminal(),
             step.pipelineReference(), step.callables().entrySet().stream().collect(java.util.stream.Collectors.toMap(
                 Map.Entry::getKey,
                 entry -> new org.pipelineframework.config.pipeline.PipelineYamlCallable(
                     entry.getValue().alias(), entry.getValue().using(), entry.getValue().operation(),
-                    entry.getValue().kind(), entry.getValue().operationVersion(), normalizeContract(entry.getValue().input())),
+                    entry.getValue().kind(), entry.getValue().operationVersion(),
+                    normalizeNullableContract(entry.getValue().input())),
                 (left, right) -> { throw new IllegalStateException("duplicate callable alias: " + left.alias()); },
                 LinkedHashMap::new)));
     }
 
-    private String normalizeContract(String contract) {
+    private String normalizeNullableContract(String contract) {
         if (contract == null) {
             return null;
         }
+        return normalizeContract(contract);
+    }
+
+    private String normalizeContract(String contract) {
         String token = contract.trim();
-        if (!token.startsWith("<") && !token.endsWith(">")) {
+        final Optional<String> contributed;
+        try {
+            contributed = ProtocolTypeReferences.parseContributed(token);
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalStateException("Unsupported contributed protocol type reference '" + contract + "'", failure);
+        }
+        if (contributed.isEmpty()) {
             return token;
         }
-        if (!token.startsWith("<") || !token.endsWith(">") || token.length() < 3
-            || token.indexOf('<', 1) >= 0 || token.indexOf('>') != token.length() - 1) {
-            throw new IllegalStateException("Unsupported contributed protocol type reference '" + contract + "'");
-        }
-        return importType(registry.resolve(token.substring(1, token.length() - 1))).identity().typeName();
+        return importType(registry.resolve(contributed.orElseThrow())).identity().typeName();
     }
 
     private PipelineTemplateTypeDefinition normalizeDefinition(PipelineTemplateTypeDefinition definition) {

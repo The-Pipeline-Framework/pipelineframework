@@ -31,6 +31,7 @@ import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
@@ -53,6 +54,7 @@ public class PipelineTemplateConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
     private static final String DEFAULT_TRANSPORT = "GRPC";
+    private static final String AGENT_CALL_PROTOCOL_TYPE = "tpf.llm.AgentCall";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
@@ -502,36 +504,33 @@ public class PipelineTemplateConfigLoader {
         Optional<BigDecimal> minimumExclusive = readV3DecimalConstraint(name, declaration, "minimumExclusive");
         Optional<BigDecimal> maximum = readV3DecimalConstraint(name, declaration, "maximum");
         Optional<BigDecimal> maximumExclusive = readV3DecimalConstraint(name, declaration, "maximumExclusive");
-        boolean stringConstraints = minLength.isPresent() || maxLength.isPresent() || pattern.isPresent() || format.isPresent();
-        boolean numericConstraints = minimum.isPresent() || minimumExclusive.isPresent() || maximum.isPresent() || maximumExclusive.isPresent();
-        if (stringConstraints && !"string".equals(scalar)) {
-            throw new IllegalStateException("Type '" + name + "' can use string constraints only when wraps: string.");
-        }
-        if (numericConstraints && !Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
-            throw new IllegalStateException("Type '" + name + "' can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.");
-        }
-        if (pattern.isPresent() && maxLength.isEmpty()) {
-            throw new IllegalStateException("Type '" + name + "' pattern requires maxLength to bound runtime matching.");
-        }
-        if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
-            throw new IllegalStateException("Type '" + name + "' minLength must not exceed maxLength.");
-        }
-        if (minimum.isPresent() && minimumExclusive.isPresent()) {
-            throw new IllegalStateException("Type '" + name + "' cannot declare both minimum and minimumExclusive.");
-        }
-        if (maximum.isPresent() && maximumExclusive.isPresent()) {
-            throw new IllegalStateException("Type '" + name + "' cannot declare both maximum and maximumExclusive.");
-        }
-        Optional<BigDecimal> lower = minimum.isPresent() ? minimum : minimumExclusive;
-        Optional<BigDecimal> upper = maximum.isPresent() ? maximum : maximumExclusive;
-        if (lower.isPresent() && upper.isPresent()) {
-            int interval = lower.get().compareTo(upper.get());
-            if (interval > 0 || interval == 0 && (minimumExclusive.isPresent() || maximumExclusive.isPresent())) {
-                throw new IllegalStateException("Type '" + name + "' declares an empty numeric constraint interval.");
-            }
-        }
-        return new PipelineTemplateWrapperConstraints(minLength, maxLength, pattern, format, minimum, minimumExclusive,
-            maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraints constraints = new PipelineTemplateWrapperConstraints(
+            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints)
+            .ifPresent(violation -> { throw wrapperConstraintFailure(name, violation); });
+        return constraints;
+    }
+
+    private IllegalStateException wrapperConstraintFailure(
+        String name,
+        PipelineTemplateWrapperConstraintValidator.Violation violation
+    ) {
+        String message = switch (violation.kind()) {
+            case STRING_ON_NON_STRING -> "can use string constraints only when wraps: string.";
+            case NUMERIC_ON_NON_NUMERIC ->
+                "can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.";
+            case PATTERN_REQUIRES_MAX_LENGTH -> "pattern requires maxLength to bound runtime matching.";
+            case PATTERN_TOO_LONG -> "pattern exceeds the supported maximum length of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_LENGTH + ".";
+            case PATTERN_INPUT_TOO_LONG -> "pattern maxLength exceeds the runtime matching limit of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_INPUT_LENGTH + ".";
+            case UNSAFE_PATTERN -> "pattern uses a regex feature that is unsafe for runtime model validation.";
+            case MIN_LENGTH_EXCEEDS_MAX_LENGTH -> "minLength must not exceed maxLength.";
+            case LOWER_BOUNDS_COMBINED -> "cannot declare both minimum and minimumExclusive.";
+            case UPPER_BOUNDS_COMBINED -> "cannot declare both maximum and maximumExclusive.";
+            case EMPTY_INTERVAL -> "declares an empty numeric constraint interval.";
+        };
+        return new IllegalStateException("Type '" + name + "' " + message);
     }
 
     private void rejectV3WrapperConstraints(String name, Map<?, ?> declaration) {
@@ -666,9 +665,14 @@ public class PipelineTemplateConfigLoader {
 
     private PipelineTemplateTypeReference readV3Reference(String value, String owner) {
         String token = value.trim();
-        if (token.startsWith("<") && token.endsWith(">") && token.length() > 2
-            && token.indexOf('<', 1) < 0 && token.indexOf('>') == token.length() - 1) {
-            return new PipelineTemplateTypeReference.Contributed(token.substring(1, token.length() - 1));
+        try {
+            Optional<String> contributed = ProtocolTypeReferences.parseContributed(token);
+            if (contributed.isPresent()) {
+                return new PipelineTemplateTypeReference.Contributed(contributed.orElseThrow());
+            }
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.",
+                failure);
         }
         if (token.contains("<") || token.contains(">") || token.contains("[") || token.contains("]")) {
             throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.");
@@ -779,26 +783,15 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Step '" + step.name()
                 + "' declares callables and must output an application-authored v3 decision union.");
         }
-        long agentCallVariants = union.variants().values().stream()
-            .map(PipelineTemplateTypeDefinition.Variant::payload)
-            .map(typeModel::resolveAliases)
-            .filter(PipelineTemplateTypeReference.Named.class::isInstance)
-            .map(PipelineTemplateTypeReference.Named.class::cast)
-            .map(PipelineTemplateTypeReference.Named::name)
-            .filter(name -> typeModel.contributedTypeIdentity(name)
-                .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isPresent())
-            .count();
-        if (agentCallVariants != 1) {
+        Map<Boolean, List<PipelineTemplateTypeDefinition.Variant>> variants = union.variants().values().stream()
+            .collect(Collectors.partitioningBy(variant -> isAgentCallVariant(typeModel, variant)));
+        List<PipelineTemplateTypeDefinition.Variant> agentCallVariants = variants.get(true);
+        List<PipelineTemplateTypeDefinition.Variant> completionVariants = variants.get(false);
+        if (agentCallVariants.size() != 1) {
             throw new IllegalStateException("Step '" + step.name()
                 + "' decision union must declare exactly one <tpf.llm.AgentCall> variant.");
         }
-        union.variants().values().stream()
-            .filter(variant -> {
-                PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
-                return !(resolved instanceof PipelineTemplateTypeReference.Named named)
-                    || typeModel.contributedTypeIdentity(named.name())
-                        .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isEmpty();
-            })
+        completionVariants.stream()
             .map(PipelineTemplateTypeDefinition.Variant::discriminator)
             .filter(step.callables()::containsKey)
             .findFirst()
@@ -806,20 +799,36 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Step '" + step.name() + "' callable alias '" + alias
                     + "' conflicts with a completion discriminator.");
             });
-        union.variants().values().stream()
-            .map(PipelineTemplateTypeDefinition.Variant::payload)
-            .map(typeModel::resolveAliases)
-            .filter(PipelineTemplateTypeReference.Named.class::isInstance)
-            .map(PipelineTemplateTypeReference.Named.class::cast)
-            .map(PipelineTemplateTypeReference.Named::name)
-            .filter(name -> typeModel.contributedTypeIdentity(name)
-                .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isEmpty())
+        completionVariants.stream()
+            .map(variant -> resolvedVariantName(typeModel, variant))
             .filter(name -> !isRecordContract(typeModel, name))
             .findFirst()
             .ifPresent(name -> {
                 throw new IllegalStateException("Step '" + step.name() + "' completion payload '" + name
                     + "' must resolve to a v3 record for model tool arguments.");
             });
+    }
+
+    private boolean isAgentCallVariant(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateTypeDefinition.Variant variant
+    ) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
+        return resolved instanceof PipelineTemplateTypeReference.Named named
+            && typeModel.contributedTypeIdentity(named.name())
+                .filter(identity -> AGENT_CALL_PROTOCOL_TYPE.equals(identity.qualifiedName())).isPresent();
+    }
+
+    private String resolvedVariantName(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateTypeDefinition.Variant variant
+    ) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
+        if (!(resolved instanceof PipelineTemplateTypeReference.Named named)) {
+            throw new IllegalStateException("Decision union variant '" + variant.discriminator()
+                + "' must resolve to a named v3 type.");
+        }
+        return named.name();
     }
 
     /**
@@ -1388,7 +1397,7 @@ public class PipelineTemplateConfigLoader {
                         authoredVersion == null ? 1 : authoredVersion,
                         readString(descriptor, "input"));
                 if (result.putIfAbsent(callable.alias(), callable) != null) {
-                    throw new IllegalStateException("duplicate callable alias '" + alias + "'");
+                    throw new IllegalArgumentException("duplicate callable alias '" + alias + "'");
                 }
             } catch (IllegalArgumentException failure) {
                 throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "': "

@@ -19,12 +19,14 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.config.template.PipelineTemplateWrapperConstraintValidator;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptorLoader;
 
@@ -36,6 +38,7 @@ import org.pipelineframework.orchestrator.release.PipelineContractDescriptorLoad
  */
 final class CanonicalTypeCatalogue {
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private final Map<String, TypeBinding> types;
 
     private CanonicalTypeCatalogue(Map<String, TypeBinding> types) {
@@ -63,7 +66,7 @@ final class CanonicalTypeCatalogue {
     }
 
     String schema(String typeName) {
-        ObjectNode root = schemaDefinition(requireType(typeName));
+        ObjectNode root = rootSchema(requireType(typeName), new ArrayList<>());
         if (!"object".equals(root.path("type").asText())) {
             throw new IllegalStateException("LLM tool argument contract must project as a JSON object: " + typeName);
         }
@@ -74,6 +77,23 @@ final class CanonicalTypeCatalogue {
         } catch (IOException failure) {
             throw new IllegalStateException("Failed to serialize canonical schema for '" + typeName + "'", failure);
         }
+    }
+
+    private ObjectNode rootSchema(TypeBinding binding, List<String> aliases) {
+        if (!"alias".equals(text(binding.definition(), "kind"))) {
+            return schemaDefinition(binding);
+        }
+        if (aliases.contains(binding.name())) {
+            throw new IllegalStateException("Recursive canonical alias is not supported: " + binding.name());
+        }
+        List<String> nested = new ArrayList<>(aliases);
+        nested.add(binding.name());
+        JsonNode target = binding.definition().path("target");
+        return switch (text(target, "kind")) {
+            case "named" -> rootSchema(requireType(text(target, "id")), nested);
+            case "scalar", "map" -> referenceSchema(target);
+            default -> throw new IllegalStateException("Unsupported canonical type expression: " + target);
+        };
     }
 
     String validateAndCanonicalize(String typeName, String payload) {
@@ -268,7 +288,8 @@ final class CanonicalTypeCatalogue {
     private void validateScalar(String scalar, JsonNode value, String path) {
         boolean valid = switch (scalar) {
             case "bool" -> value.isBoolean();
-            case "int32", "int64" -> value.isIntegralNumber();
+            case "int32" -> value.isIntegralNumber() && value.canConvertToInt();
+            case "int64" -> value.isIntegralNumber() && value.canConvertToLong();
             case "float32", "float64", "decimal" -> value.isNumber();
             case "payload_ref" -> value.isObject();
             default -> value.isTextual();
@@ -304,8 +325,26 @@ final class CanonicalTypeCatalogue {
             if (definition.has("maxLength") && text.length() > definition.path("maxLength").intValue()) {
                 throw invalid(path, "value is longer than maxLength");
             }
-            if (definition.has("pattern") && !Pattern.compile(definition.path("pattern").textValue()).matcher(text).matches()) {
-                throw invalid(path, "value does not match pattern");
+            if (definition.has("pattern")) {
+                if (text.length() > PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_INPUT_LENGTH) {
+                    throw invalid(path, "value exceeds the runtime pattern matching limit");
+                }
+                try {
+                    if (!Pattern.compile(definition.path("pattern").textValue()).matcher(text).matches()) {
+                        throw invalid(path, "value does not match pattern");
+                    }
+                } catch (PatternSyntaxException failure) {
+                    throw new IllegalStateException("Canonical pattern constraint is invalid", failure);
+                }
+            }
+            if (definition.has("format")) {
+                String format = text(definition, "format");
+                if (!"email".equals(format)) {
+                    throw new IllegalStateException("Unsupported canonical wrapper format '" + format + "'");
+                }
+                if (!EMAIL.matcher(text).matches()) {
+                    throw invalid(path, "invalid email value");
+                }
             }
         }
         if (value.isNumber()) {

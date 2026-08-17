@@ -5,7 +5,7 @@ import java.util.Set;
 
 /** Host-neutral scalar vocabulary shared by v3 type authors and compiler adapters. */
 public final class PipelineTemplateScalarTypes {
-    private static final Set<String> TYPES = Set.of(
+    static final Set<String> TYPES = Set.of(
         "string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid",
         "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref");
 

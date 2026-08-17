@@ -102,7 +102,7 @@ Add the LangChain4j adapter for Ollama:
 </dependency>
 ```
 
-The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop. Future Spring AI support implements the same portable connector contract; application types and YAML do not change.
+The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
 
 Operational model/provider failures remain exceptional Query failures. A syntactically or structurally invalid model decision is instead a typed terminal Query outcome. Query capture records the successful application decision, not prompts, credentials, SDK objects, or hidden reasoning.
 
