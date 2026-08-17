@@ -5,12 +5,12 @@ This scaffold walkthrough predates the current IA and connector/FCIS positioning
 :::
 
 ::: warning Legacy Reference
-This page still contains useful examples, but it predates the current docs IA and the stronger connector/FCIS positioning. Prefer [Pipeline Compilation](/develop/pipeline-compilation/), [Configuration](/develop/configuration/), [Object Ingest](/design/object-ingest), and [MCP and Template Generation](/develop/mcp-template-generation) for current user-facing guidance.
+This page still contains useful examples, but it predates the current docs IA and the stronger connector/FCIS positioning. Prefer [Pipeline Compilation](/develop/pipeline-compilation/), [Configuration](/develop/configuration/), and [Object Ingest](/design/object-ingest) for current user-facing guidance.
 :::
 
 ## Overview
 
-This document provides a comprehensive reference implementation of The Pipeline Framework, demonstrating how to create pipeline applications using both YAML configuration files and the visual Canvas tool.
+This document provides a comprehensive reference implementation of The Pipeline Framework, demonstrating how to create pipeline applications using YAML configuration files.
 
 ## Quick Start with YAML Configuration
 
@@ -168,29 +168,6 @@ public class LogSummaryStep implements ReactiveService<SummaryOutput, SummaryOut
 }
 ```
 
-## Quick Start with Visual Canvas
-
-### 1. Visit the Canvas Designer
-
-Go to https://app.pipelineframework.org to use the visual designer.
-
-### 2. Create Steps Visually
-
-- Drag and drop new steps onto the canvas
-- Select cardinality for each step
-- Define input/output types and fields
-- Connect steps to establish pipeline flow
-
-### 3. Download Configuration
-
-- Generate YAML configuration from the visual design
-- Download the configuration file
-- Use it with the template generator:
-
-```bash
-java -jar template-generator-1.0.0.jar -c downloaded-config.yaml -o ./my-pipeline-app
-```
-
 ## Generated Project Structure
 
 The template generator creates a complete Maven multi-module project:
@@ -230,7 +207,7 @@ my-pipeline-app/
 
 ### 1. Define Pipeline Configuration
 
-- Use YAML file or Canvas designer to define steps
+- Use YAML file to define steps
 - Specify cardinalities and data types
 - Define field mappings for each step
 
@@ -293,7 +270,6 @@ The framework automatically manages type dependencies between steps:
 ## Best Practices
 
 1. **Start Small**: Begin with simple 1-1 steps to understand the flow
-2. **Use Canvas**: For complex pipelines, use the visual designer first
-3. **Test Incrementally**: Implement and test each step separately
-4. **Monitor**: Use the integrated observability tools to monitor performance
-5. **Document**: Add documentation for complex business logic
+2. **Test Incrementally**: Implement and test each step separately
+3. **Monitor**: Use the integrated observability tools to monitor performance
+4. **Document**: Add documentation for complex business logic

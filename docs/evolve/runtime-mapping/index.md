@@ -40,11 +40,11 @@ Maven topology defines physical artifacts.
 - Replacing existing build or runtime config formats.
 - Enforcing a single architecture style.
 
-## Relationship to Canvas and Maven
+## Relationship to Scaffold Generation and Maven
 
 Typical flow:
 
-1. Design application in Web UI Canvas Designer and download scaffold.
+1. Generate the application scaffold from your pipeline model.
 2. Add or refine `pipeline.runtime.yaml`.
 3. Align Maven topology to target runtime shape (`modular`, `pipeline-runtime`, `monolith`).
 
