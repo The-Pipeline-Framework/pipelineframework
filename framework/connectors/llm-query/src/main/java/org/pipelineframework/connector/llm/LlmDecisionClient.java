@@ -4,5 +4,10 @@ import java.util.concurrent.CompletionStage;
 
 /** Low-level adapter seam: one request produces one model decision and never executes a tool. */
 public interface LlmDecisionClient {
+    /** Whether this adapter can enforce the supplied decision schemas natively. */
+    default boolean supportsNativeStructuredOutput() {
+        return false;
+    }
+
     CompletionStage<LlmToolProposal> decide(LlmTurnRequest request);
 }

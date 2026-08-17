@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -173,6 +174,7 @@ public class PipelineYamlConfigLoader {
             "platform");
         Map<String, PipelineYamlConnectorBinding> connectors = readConnectorBindings(rootMap);
         List<PipelineYamlStep> steps = readSteps(rootMap, connectors);
+        Map<String, List<PipelineYamlStep>> localPipelines = readLocalPipelines(rootMap, connectors);
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         Map<String, PipelineYamlQuery> queries = readQueries(rootMap);
         Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
@@ -183,7 +185,30 @@ public class PipelineYamlConfigLoader {
         validateObjectOutputTarget(output, publish);
 
         return new PipelineYamlConfig(
-            basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output, connectors);
+            basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output,
+            connectors, localPipelines);
+    }
+
+    private Map<String, List<PipelineYamlStep>> readLocalPipelines(
+        Map<?, ?> rootMap,
+        Map<String, PipelineYamlConnectorBinding> connectorBindings
+    ) {
+        Object raw = rootMap.get("pipelines");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (!(raw instanceof Map<?, ?> definitions)) {
+            throw new IllegalArgumentException("pipelines must be defined as a map");
+        }
+        Map<String, List<PipelineYamlStep>> result = new LinkedHashMap<>();
+        definitions.forEach((key, value) -> {
+            String name = String.valueOf(key).trim();
+            if (name.isEmpty() || !(value instanceof Map<?, ?> definition)) {
+                throw new IllegalArgumentException("local pipeline definitions must be named maps");
+            }
+            result.put(name, readSteps(definition, connectorBindings));
+        });
+        return Collections.unmodifiableMap(result);
     }
 
     /**
@@ -271,6 +296,7 @@ public class PipelineYamlConfigLoader {
             String duplicatePolicy = readString(stepMap, "duplicatePolicy");
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             Optional<NativeCommandYaml> nativeCommand = readNativeCommand(stepMap, name);
+            Optional<PipelineYamlDynamicOperation> dynamicOperation = readDynamicOperation(stepMap, name);
             Optional<PipelineYamlOperationSelection> operationSelection = readOperationSelection(stepMap, name);
             Map<String, PipelineYamlCallable> callables = readCallables(stepMap, name, connectorBindings);
             Optional<Duration> negativeCacheTtl = readPositiveDuration(stepMap, "negativeCacheTtl", name);
@@ -296,6 +322,10 @@ public class PipelineYamlConfigLoader {
                     throw new IllegalArgumentException(
                         "step '" + name + "' operation/using selection requires kind command or query");
                 }
+            }
+            if (dynamicOperation.isPresent() && kind != null && !kind.isBlank()) {
+                throw new IllegalArgumentException(
+                    "step '" + name + "' operation.mode dynamic must not declare kind");
             }
             if (negativeCacheTtl.isPresent()
                 && (!"query".equalsIgnoreCase(kind) || operationSelection.isEmpty())) {
@@ -348,10 +378,35 @@ public class PipelineYamlConfigLoader {
                     terminal,
                     operationSelection,
                     negativeCacheTtl,
-                    callables));
+                    callables,
+                    dynamicOperation));
             }
         }
+        validateDynamicOperationSources(stepInfos);
         return stepInfos;
+    }
+
+    private static void validateDynamicOperationSources(List<PipelineYamlStep> steps) {
+        Map<String, PipelineYamlStep> byName = new LinkedHashMap<>();
+        steps.forEach(step -> byName.put(step.name(), step));
+        for (PipelineYamlStep invocation : steps) {
+            if (invocation.dynamicOperation().isEmpty()) {
+                continue;
+            }
+            String sourceName = invocation.dynamicOperation().orElseThrow().from();
+            PipelineYamlStep source = byName.get(sourceName);
+            if (source == null || !"query".equalsIgnoreCase(source.kind()) || source.callables().isEmpty()) {
+                throw new IllegalArgumentException("dynamic operation step '" + invocation.name()
+                    + "' from must reference a Query step with an explicit callable catalogue: " + sourceName);
+            }
+            long unique = source.callables().values().stream()
+                .map(callable -> callable.using() + "\u0000" + callable.operation())
+                .distinct().count();
+            if (unique != source.callables().size()) {
+                throw new IllegalArgumentException("dynamic operation step '" + invocation.name()
+                    + "' callable source contains duplicate binding+operation targets");
+            }
+        }
     }
 
     private Map<String, PipelineYamlCallable> readCallables(
@@ -385,12 +440,28 @@ public class PipelineYamlConfigLoader {
                 descriptor.containsKey("operationVersion")
                     ? readPositiveInteger(descriptor, "operationVersion", "step '" + stepName + "' callable '" + alias + "'")
                     : 1,
-                readString(descriptor, "input"));
+                readString(descriptor, "input"),
+                Optional.ofNullable(trimToNull(readString(descriptor, "commandIdGenerator"))),
+                readString(descriptor, "duplicatePolicy"),
+                callableMap(descriptor.get("config"), stepName, alias, "config"),
+                callableMap(descriptor.get("policy"), stepName, alias, "policy"));
             if (result.putIfAbsent(callable.alias(), callable) != null) {
                 throw new IllegalArgumentException("step '" + stepName + "' declares duplicate callable alias '" + alias + "'");
             }
         });
         return Map.copyOf(result);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> callableMap(Object value, String stepName, String alias, String field) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("step '" + stepName + "' callable '" + alias + "' " + field
+                + " must be a map");
+        }
+        return (Map<String, Object>) normalizeConfigValue(values);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
@@ -432,6 +503,9 @@ public class PipelineYamlConfigLoader {
     }
 
     private Optional<PipelineYamlOperationSelection> readOperationSelection(Map<?, ?> stepMap, String stepName) {
+        if (stepMap.get("operation") instanceof Map<?, ?>) {
+            return Optional.empty();
+        }
         String operation = trimToNull(readString(stepMap, "operation"));
         String using = trimToNull(readString(stepMap, "using"));
         if (operation == null && using == null) {
@@ -457,6 +531,33 @@ public class PipelineYamlConfigLoader {
             ? Map.of()
             : (Map<String, Object>) normalizeConfigValue(policy);
         return Optional.of(new PipelineYamlOperationSelection(operation, operationVersion, using, normalizedPolicy));
+    }
+
+    private Optional<PipelineYamlDynamicOperation> readDynamicOperation(Map<?, ?> stepMap, String stepName) {
+        Object raw = stepMap.get("operation");
+        if (!(raw instanceof Map<?, ?> values)) {
+            return Optional.empty();
+        }
+        values.keySet().stream().map(String::valueOf)
+            .filter(key -> !Set.of("mode", "from").contains(key)).sorted().findFirst().ifPresent(key -> {
+                throw new IllegalArgumentException(
+                    "step '" + stepName + "' dynamic operation has unsupported field '" + key + "'");
+            });
+        String mode = trimToNull(readString(values, "mode"));
+        if (!"dynamic".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("step '" + stepName + "' operation map requires mode: dynamic");
+        }
+        String from = trimToNull(readString(values, "from"));
+        if (from == null) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' operation.mode dynamic requires a non-blank from step");
+        }
+        if (stepMap.containsKey("using") || stepMap.containsKey("operationVersion") || stepMap.containsKey("policy")
+            || stepMap.containsKey("config")) {
+            throw new IllegalArgumentException("step '" + stepName
+                + "' dynamic operation binding cannot declare using, operationVersion, policy, or config");
+        }
+        return Optional.of(new PipelineYamlDynamicOperation(from));
     }
 
     private int readPositiveInteger(Map<?, ?> values, String key, String context) {

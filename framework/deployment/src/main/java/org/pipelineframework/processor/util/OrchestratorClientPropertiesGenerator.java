@@ -119,7 +119,9 @@ public class OrchestratorClientPropertiesGenerator {
         return models.stream()
             .filter(model -> model.enabledTargets().contains(target)
                 || model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
-                || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP))
+                || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
+                || model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)
+                || model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP))
             .toList();
     }
 

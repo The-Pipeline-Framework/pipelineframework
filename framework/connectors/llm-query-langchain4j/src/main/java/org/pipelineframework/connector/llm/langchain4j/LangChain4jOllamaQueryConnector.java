@@ -68,6 +68,11 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         }
 
         @Override
+        public boolean supportsNativeStructuredOutput() {
+            return true;
+        }
+
+        @Override
         public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
             return CompletableFuture.supplyAsync(() -> decideBlocking(request), executor);
         }

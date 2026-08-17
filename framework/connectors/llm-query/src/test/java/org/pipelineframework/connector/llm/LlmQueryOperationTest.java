@@ -14,12 +14,14 @@ import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class LlmQueryOperationTest {
     private static final LlmTurnConfiguration CONFIGURATION = new LlmTurnConfiguration(
         "Choose one alternative.",
         Map.of("charge", new LlmCallableConfiguration(
-            "payments", "charge.create", "command", 1, "ToolArguments")));
+            "payments", "charge.create", "command", 1, "ToolArguments")),
+        StructuredOutputSchemaMode.OPTIONAL);
 
     @Test
     void performsOneInferenceAndConstructsTrustedBoundAgentCall() {
@@ -60,6 +62,23 @@ class LlmQueryOperationTest {
     }
 
     @Test
+    void requiredStructuredOutputFailsBeforeInferenceWhenAdapterCannotEnforceIt() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmTurnConfiguration required = new LlmTurnConfiguration(
+            CONFIGURATION.instructions(), CONFIGURATION.callables());
+        LlmDecisionClient unsupported = request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.completedFuture(new LlmToolProposal("complete", "{\"status\":\"ok\"}"));
+        };
+
+        QueryOutcome<?> outcome = operation(unsupported).query(invocation(required)).toCompletableFuture().join();
+
+        assertEquals("structured-output-unavailable",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(0, calls.get());
+    }
+
+    @Test
     void bindsTheCompiledYamlCatalogueIntoTypedOperationConfiguration() {
         LlmQueryOperation operation = operation(request -> CompletableFuture.completedFuture(
             new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}")));
@@ -78,6 +97,7 @@ class LlmQueryOperationTest {
 
         assertEquals("payments", bound.callables().get("charge").using());
         assertEquals("command", bound.callables().get("charge").kind());
+        assertEquals(StructuredOutputSchemaMode.REQUIRED, bound.structuredOutputMode());
     }
 
     @Test
@@ -107,8 +127,12 @@ class LlmQueryOperationTest {
     }
 
     private static QueryInvocation<Object, LlmTurnConfiguration, Object> invocation() {
+        return invocation(CONFIGURATION);
+    }
+
+    private static QueryInvocation<Object, LlmTurnConfiguration, Object> invocation(LlmTurnConfiguration configuration) {
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) Decision.class;
-        return new QueryInvocation<>(Map.of("invoiceId", "7"), CONFIGURATION, output, ConnectorExecutionContext.empty());
+        return new QueryInvocation<>(Map.of("invoiceId", "7"), configuration, output, ConnectorExecutionContext.empty());
     }
 }

@@ -26,6 +26,9 @@ public final class ClientStepClassNames {
         if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
             return "QueryClientStep";
         }
+        if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+            return "DynamicOperationClientStep";
+        }
         return defaultSuffix;
     }
 

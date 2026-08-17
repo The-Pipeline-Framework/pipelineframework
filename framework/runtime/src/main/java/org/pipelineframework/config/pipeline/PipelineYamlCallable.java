@@ -1,7 +1,9 @@
 package org.pipelineframework.config.pipeline;
 
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorOperationKind;
@@ -13,7 +15,11 @@ public record PipelineYamlCallable(
     String operation,
     ConnectorOperationKind kind,
     int operationVersion,
-    String input
+    String input,
+    Optional<String> commandIdGenerator,
+    String duplicatePolicy,
+    Map<String, Object> config,
+    Map<String, Object> policy
 ) {
     public PipelineYamlCallable {
         alias = requireToken(alias, "callable alias");
@@ -27,6 +33,29 @@ public record PipelineYamlCallable(
         if (input.isEmpty()) {
             throw new IllegalArgumentException("callable input contract must not be blank");
         }
+        commandIdGenerator = Objects.requireNonNull(
+            commandIdGenerator, "callable command ID generator must not be null").map(String::trim)
+            .filter(value -> !value.isEmpty());
+        duplicatePolicy = duplicatePolicy == null || duplicatePolicy.isBlank()
+            ? "RETURN_RECORDED"
+            : duplicatePolicy.trim();
+        config = Map.copyOf(Objects.requireNonNull(config, "callable operation config must not be null"));
+        policy = Map.copyOf(Objects.requireNonNull(policy, "callable command policy must not be null"));
+        if (ConnectorOperationKind.QUERY.equals(kind)
+            && (commandIdGenerator.isPresent() || !policy.isEmpty() || !"RETURN_RECORDED".equals(duplicatePolicy))) {
+            throw new IllegalArgumentException("Query callable cannot declare Command execution settings");
+        }
+    }
+
+    public PipelineYamlCallable(
+        String alias,
+        String using,
+        String operation,
+        ConnectorOperationKind kind,
+        int operationVersion,
+        String input
+    ) {
+        this(alias, using, operation, kind, operationVersion, input, Optional.empty(), "RETURN_RECORDED", Map.of(), Map.of());
     }
 
     public static ConnectorOperationKind parseKind(String value) {

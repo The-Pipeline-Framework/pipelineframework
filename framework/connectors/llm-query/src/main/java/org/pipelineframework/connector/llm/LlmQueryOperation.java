@@ -20,6 +20,7 @@ import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 /** Exactly-one-inference Query operation. Proposed calls remain inert typed data. */
 final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfiguration, Object> {
@@ -71,9 +72,14 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             request = new LlmTurnRequest(
                 invocation.configuration().instructions(),
                 JSON.writeValueAsString(invocation.input()),
-                contract.tools());
+                contract.tools(),
+                invocation.configuration().structuredOutputMode());
         } catch (Exception failure) {
             return CompletableFuture.failedStage(failure);
+        }
+        if (request.structuredOutputSchema() == StructuredOutputSchemaMode.REQUIRED
+            && !active.supportsNativeStructuredOutput()) {
+            return CompletableFuture.completedStage(new QueryOutcome.TerminalFailure<>("structured-output-unavailable"));
         }
         CompletionStage<LlmToolProposal> decision;
         try {
@@ -175,16 +181,22 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             }
             LlmCallableConfiguration callable = callables.get(proposal.alias());
             if (callable != null) {
-                String arguments = catalogue.validateAndCanonicalize(callable.input(), proposal.argumentsJson());
-                Object agentCall = instantiateAgentCall(callable, arguments);
-                return instantiateVariant(callDiscriminator, agentCall);
+                try {
+                    String arguments = catalogue.validateAndCanonicalize(callable.input(), proposal.argumentsJson());
+                    Object agentCall = instantiateAgentCall(callable, arguments);
+                    return instantiateVariant(callDiscriminator, agentCall);
+                } catch (InvalidModelDecisionException failure) {
+                    throw failure;
+                } catch (IllegalArgumentException failure) {
+                    throw new InvalidModelDecisionException(failure.getMessage(), failure);
+                }
             }
             String completionType = completionVariants.get(proposal.alias());
             if (completionType == null) {
                 throw new InvalidModelDecisionException("model selected unknown tool alias '" + proposal.alias() + "'");
             }
-            String arguments = catalogue.validateAndCanonicalize(completionType, proposal.argumentsJson());
             try {
+                String arguments = catalogue.validateAndCanonicalize(completionType, proposal.argumentsJson());
                 Class<?> payloadType = Class.forName(outputType.getPackageName() + "." + completionType, true,
                     classLoader);
                 return instantiateVariant(proposal.alias(), JSON.readValue(arguments, payloadType));
