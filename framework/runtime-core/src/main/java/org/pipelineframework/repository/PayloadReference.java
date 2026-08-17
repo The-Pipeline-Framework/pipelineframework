@@ -17,19 +17,16 @@
 package org.pipelineframework.repository;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import org.pipelineframework.connector.ConnectorPayloadOrigin;
 
 /**
- * Claim-check reference to a payload stored outside the in-flight pipeline message.
+ * Portable claim-check reference to payload bytes owned by a repository or connector binding.
  *
- * @param provider repository provider name, for example filesystem or s3
- * @param container provider-specific bucket/container/root identifier
- * @param key provider-specific object key
- * @param contentType stored payload content type
- * @param codec codec identifier used to encode the payload
- * @param checksum checksum value, typically sha-256 hex
- * @param sizeBytes encoded payload size in bytes
- * @param version version or replay tag associated with the payload
- * @param metadata provider/application metadata
+ * <p>An empty connector origin denotes repository ownership and {@code provider} selects the
+ * repository provider. A present connector origin delegates interpretation of provider-native
+ * location fields to that exact binding-owned object-source operation.</p>
  */
 public record PayloadReference(
     String provider,
@@ -40,7 +37,8 @@ public record PayloadReference(
     String checksum,
     long sizeBytes,
     String version,
-    Map<String, String> metadata
+    Map<String, String> metadata,
+    Optional<ConnectorPayloadOrigin> connectorOrigin
 ) {
     public PayloadReference {
         provider = normalize(provider);
@@ -51,12 +49,22 @@ public record PayloadReference(
         checksum = normalize(checksum);
         version = normalize(version);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        connectorOrigin = connectorOrigin == null ? Optional.empty() : connectorOrigin;
         if (key == null) {
             throw new IllegalArgumentException("payload reference key must not be blank");
         }
         if (sizeBytes < 0) {
             throw new IllegalArgumentException("payload reference sizeBytes must be >= 0");
         }
+        if (connectorOrigin.isEmpty() && provider == null) {
+            throw new IllegalArgumentException("repository-owned payload reference provider must not be blank");
+        }
+    }
+
+    public PayloadReference withConnectorOrigin(ConnectorPayloadOrigin origin) {
+        return new PayloadReference(
+            provider, container, key, contentType, codec, checksum, sizeBytes, version, metadata,
+            Optional.of(Objects.requireNonNull(origin, "connector payload origin must not be null")));
     }
 
     private static String normalize(String value) {

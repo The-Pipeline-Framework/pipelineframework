@@ -82,6 +82,20 @@ public final class CsvPaymentFileObjectMapper
 }
 ```
 
+The `localPath` projection above is retained for existing filesystem applications, but it is not a
+portable content contract. A neutral downstream connector consumes `snapshot.reference()` through
+`PayloadMaterializer`; only the binding-owned object-source operation interprets `container`,
+`key`, or other provider location metadata. The filesystem object source supports this bounded
+materialization path. S3 and standard input reject reference materialization; an unsupported source
+fails explicitly rather than
+leaking its location into application mapper code.
+
+Filesystem materialization reopens the referenced file, enforces `maxBytes` before and during the
+read, verifies its SHA-256 checksum, closes the input before completion, and returns immutable
+bytes. It is repeatable while the referenced file and binding provenance remain unchanged. Standard
+input remains single-consumption and cannot truthfully offer repeatable reference materialization
+without first transferring ownership to durable storage.
+
 ## Publish DSL
 
 Declare the target at top level, then bind terminal pipeline output to it.

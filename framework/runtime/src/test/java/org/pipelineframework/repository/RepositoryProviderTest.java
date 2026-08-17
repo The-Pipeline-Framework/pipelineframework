@@ -19,6 +19,7 @@ package org.pipelineframework.repository;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.Optional;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +46,7 @@ class RepositoryProviderTest {
     }
 
     private PayloadReference reference() {
-        return new PayloadReference("test", null, "key", "text/plain", "string", null, 0, null, null);
+        return new PayloadReference("test", null, "key", "text/plain", "string", null, 0, null, null, Optional.empty());
     }
 
     private static final class TestRepositoryProvider implements RepositoryProvider {
