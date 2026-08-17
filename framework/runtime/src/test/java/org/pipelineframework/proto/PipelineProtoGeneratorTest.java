@@ -31,7 +31,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junitpioneer.jupiter.ClearSystemProperty;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorPayloadOrigin;
+import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.repository.PayloadReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -248,6 +254,183 @@ class PipelineProtoGeneratorTest {
         assertTrue(adapters.contains("value.hasConnectorOrigin()"));
         assertTrue(adapters.contains("value.getMetadataMap(), origin"));
         assertTrue(adapters.contains("This surface is intentionally provisional"));
+    }
+
+    @Test
+    void generatedPayloadReferenceAdapterRoundTripsAbsentOptionalFieldsAndConnectorOrigin() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-payload-reference.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payload Reference"
+            basePackage: "com.example.payload"
+            transport: "GRPC"
+            types:
+              Document:
+                fields:
+                  - [reference, payload_ref]
+            steps:
+              - name: Process Document
+                cardinality: ONE_TO_ONE
+                input: Document
+                output: Document
+            """);
+        var config = new org.pipelineframework.config.template.PipelineTemplateConfigLoader().load(configPath);
+        var plan = new PipelineGenerationPlan(config.basePackage(), config.typeModel(),
+            org.pipelineframework.config.template.PipelineIdlSnapshot.from(config));
+        List<PipelineJavaDomainRenderer.RenderedSource> sources = new PipelineJavaDomainRenderer().render(plan);
+        Path sourceRoot = tempDir.resolve("payload-reference-sources");
+        for (PipelineJavaDomainRenderer.RenderedSource source : sources) {
+            Path target = sourceRoot.resolve(source.relativePath());
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, source.content());
+        }
+        Path protoStub = sourceRoot.resolve("com/example/payload/grpc/PipelineTypes.java");
+        Files.createDirectories(protoStub.getParent());
+        Files.writeString(protoStub, """
+            package com.example.payload.grpc;
+
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.Map;
+            import java.util.Objects;
+            import java.util.TreeMap;
+
+            public final class PipelineTypes {
+              public static final class ConnectorPayloadOrigin {
+                private final Builder value;
+                private ConnectorPayloadOrigin(Builder value) { this.value = value; }
+                public static Builder newBuilder() { return new Builder(); }
+                public String getBindingName() { return value.bindingName; }
+                public String getProviderId() { return value.providerId; }
+                public String getOperationId() { return value.operationId; }
+                public String getOperationKind() { return value.operationKind; }
+                public int getOperationMajorVersion() { return value.operationMajorVersion; }
+                public int getProviderMajorVersion() { return value.providerMajorVersion; }
+                public boolean getHasConfiguration() { return value.hasConfiguration; }
+                public String getConfigurationSchemaId() { return value.configurationSchemaId; }
+                public int getConfigurationSchemaVersion() { return value.configurationSchemaVersion; }
+                public String getConfigurationDigest() { return value.configurationDigest; }
+                public List<String> getConnectionReferencesList() { return List.copyOf(value.connectionReferences); }
+                public static final class Builder {
+                  private String bindingName = "";
+                  private String providerId = "";
+                  private String operationId = "";
+                  private String operationKind = "";
+                  private int operationMajorVersion;
+                  private int providerMajorVersion;
+                  private boolean hasConfiguration;
+                  private String configurationSchemaId = "";
+                  private int configurationSchemaVersion;
+                  private String configurationDigest = "";
+                  private final List<String> connectionReferences = new ArrayList<>();
+                  public Builder setBindingName(String value) { bindingName = Objects.requireNonNull(value); return this; }
+                  public Builder setProviderId(String value) { providerId = Objects.requireNonNull(value); return this; }
+                  public Builder setOperationId(String value) { operationId = Objects.requireNonNull(value); return this; }
+                  public Builder setOperationKind(String value) { operationKind = Objects.requireNonNull(value); return this; }
+                  public Builder setOperationMajorVersion(int value) { operationMajorVersion = value; return this; }
+                  public Builder setProviderMajorVersion(int value) { providerMajorVersion = value; return this; }
+                  public Builder setHasConfiguration(boolean value) { hasConfiguration = value; return this; }
+                  public Builder setConfigurationSchemaId(String value) { configurationSchemaId = Objects.requireNonNull(value); return this; }
+                  public Builder setConfigurationSchemaVersion(int value) { configurationSchemaVersion = value; return this; }
+                  public Builder setConfigurationDigest(String value) { configurationDigest = Objects.requireNonNull(value); return this; }
+                  public Builder addAllConnectionReferences(Iterable<String> values) {
+                    values.forEach(connectionReferences::add); return this;
+                  }
+                  public ConnectorPayloadOrigin build() { return new ConnectorPayloadOrigin(this); }
+                }
+              }
+
+              public static final class PayloadReference {
+                private final Builder value;
+                private PayloadReference(Builder value) { this.value = value; }
+                public static Builder newBuilder() { return new Builder(); }
+                public String getProvider() { return value.provider; }
+                public String getContainer() { return value.container; }
+                public String getKey() { return value.key; }
+                public String getContentType() { return value.contentType; }
+                public String getCodec() { return value.codec; }
+                public String getChecksum() { return value.checksum; }
+                public long getSizeBytes() { return value.sizeBytes; }
+                public String getVersion() { return value.version; }
+                public Map<String, String> getMetadataMap() { return Map.copyOf(value.metadata); }
+                public boolean hasConnectorOrigin() { return value.connectorOrigin != null; }
+                public ConnectorPayloadOrigin getConnectorOrigin() { return value.connectorOrigin; }
+                public static final class Builder {
+                  private String provider = "";
+                  private String container = "";
+                  private String key = "";
+                  private String contentType = "";
+                  private String codec = "";
+                  private String checksum = "";
+                  private long sizeBytes;
+                  private String version = "";
+                  private final Map<String, String> metadata = new TreeMap<>();
+                  private ConnectorPayloadOrigin connectorOrigin;
+                  public Builder setProvider(String value) { provider = Objects.requireNonNull(value); return this; }
+                  public Builder setContainer(String value) { container = Objects.requireNonNull(value); return this; }
+                  public Builder setKey(String value) { key = Objects.requireNonNull(value); return this; }
+                  public Builder setContentType(String value) { contentType = Objects.requireNonNull(value); return this; }
+                  public Builder setCodec(String value) { codec = Objects.requireNonNull(value); return this; }
+                  public Builder setChecksum(String value) { checksum = Objects.requireNonNull(value); return this; }
+                  public Builder setSizeBytes(long value) { sizeBytes = value; return this; }
+                  public Builder setVersion(String value) { version = Objects.requireNonNull(value); return this; }
+                  public Builder putAllMetadata(Map<String, String> value) { metadata.putAll(value); return this; }
+                  public Builder setConnectorOrigin(ConnectorPayloadOrigin.Builder value) {
+                    connectorOrigin = value.build(); return this;
+                  }
+                  public PayloadReference build() { return new PayloadReference(this); }
+                }
+              }
+
+              public static final class Document {
+                private final PayloadReference reference;
+                private Document(PayloadReference reference) { this.reference = reference; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasReference() { return reference != null; }
+                public PayloadReference getReference() { return reference; }
+                public static final class Builder {
+                  private PayloadReference reference;
+                  public Builder setReference(PayloadReference value) { reference = Objects.requireNonNull(value); return this; }
+                  public Document build() { return new Document(reference); }
+                }
+              }
+            }
+            """);
+        Path classes = Files.createDirectories(tempDir.resolve("payload-reference-classes"));
+        try (var files = Files.walk(sourceRoot)) {
+            List<String> generatedSources = files.filter(path -> path.toString().endsWith(".java"))
+                .map(Path::toString)
+                .toList();
+            List<String> compilerArguments = new ArrayList<>(List.of(
+                "-classpath", System.getProperty("java.class.path"), "-d", classes.toString()));
+            compilerArguments.addAll(generatedSources);
+            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(
+                null, null, null, compilerArguments.toArray(String[]::new)));
+        }
+
+        ConnectorPayloadOrigin origin = new ConnectorPayloadOrigin(
+            ConnectorBindingName.of("documents"),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("filesystem.objects"),
+                "filesystem",
+                ConnectorOperationKind.OBJECT_SOURCE,
+                1),
+            1,
+            Optional.empty());
+        PayloadReference reference = new PayloadReference(
+            null, null, "document.txt", null, null, null, 0, null, Map.of("source", "documents"),
+            Optional.of(origin));
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> documentClass = loader.loadClass("com.example.payload.domain.Document");
+            Class<?> adaptersClass = loader.loadClass("com.example.payload.domain.PipelineDomainProtoAdapters");
+            Class<?> documentProto = loader.loadClass("com.example.payload.grpc.PipelineTypes$Document");
+            Object document = documentClass.getConstructor(PayloadReference.class).newInstance(reference);
+
+            Object encoded = adaptersClass.getMethod("toProto", documentClass).invoke(null, document);
+            Object decoded = adaptersClass.getMethod("fromProto", documentProto).invoke(null, encoded);
+
+            assertEquals(document, decoded);
+        }
     }
 
     @Test

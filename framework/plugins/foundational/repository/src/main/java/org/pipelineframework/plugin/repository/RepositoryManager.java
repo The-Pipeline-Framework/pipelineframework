@@ -94,6 +94,9 @@ public class RepositoryManager implements PayloadMaterializer {
             return connectorBindings.materialize(reference, maxBytes);
         }
         return load(reference).map(result -> {
+            if (!reference.equals(result.reference())) {
+                throw new IllegalStateException("repository materialized a different payload reference");
+            }
             byte[] bytes = result.payload();
             if (bytes.length > maxBytes) {
                 throw new IllegalStateException(

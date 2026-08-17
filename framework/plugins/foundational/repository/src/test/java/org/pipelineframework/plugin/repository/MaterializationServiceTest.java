@@ -69,6 +69,31 @@ class MaterializationServiceTest {
     }
 
     @Test
+    void rejectsRepositoryResultForDifferentReference() {
+        TestRepositoryManager repositoryManager = new TestRepositoryManager();
+        byte[] expected = "expected".getBytes(StandardCharsets.UTF_8);
+        PayloadReference reference = repositoryManager.store(new RepositoryWriteRequest(
+            "payloads", "document", expected, "text/plain", "raw", RepositoryChecksums.sha256Hex(expected), null,
+            Map.of())).await().indefinitely();
+        repositoryManager.loadedReference = Optional.of(new PayloadReference(
+            reference.provider(),
+            reference.container(),
+            "different-document",
+            reference.contentType(),
+            reference.codec(),
+            reference.checksum(),
+            reference.sizeBytes(),
+            reference.version(),
+            reference.metadata(),
+            reference.connectorOrigin()));
+
+        CompletionException failure = assertThrows(CompletionException.class, () ->
+            repositoryManager.materialize(reference, 1024).toCompletableFuture().join());
+
+        assertEquals("repository materialized a different payload reference", failure.getCause().getMessage());
+    }
+
+    @Test
     void referencesAndDereferencesConfiguredFields() {
         TestRepositoryManager repositoryManager = new TestRepositoryManager();
         MaterializationService service = new MaterializationService();
@@ -160,6 +185,7 @@ class MaterializationServiceTest {
 
     private static final class TestRepositoryManager extends RepositoryManager {
         private final Map<PayloadReference, byte[]> payloads = new HashMap<>();
+        private Optional<PayloadReference> loadedReference = Optional.empty();
 
         @Override
         public Uni<PayloadReference> store(RepositoryWriteRequest request) {
@@ -180,12 +206,13 @@ class MaterializationServiceTest {
 
         @Override
         public Uni<RepositoryReadResult> load(PayloadReference reference) {
+            PayloadReference resultReference = loadedReference.orElse(reference);
             return Uni.createFrom().item(new RepositoryReadResult(
-                reference,
+                resultReference,
                 payloads.get(reference),
-                reference.contentType(),
-                reference.codec(),
-                reference.checksum()));
+                resultReference.contentType(),
+                resultReference.codec(),
+                resultReference.checksum()));
         }
     }
 }

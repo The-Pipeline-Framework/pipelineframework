@@ -89,9 +89,9 @@ prevent the locator from silently yielding different content. The current filesy
 this latter form because its root is source-operation input rather than connector-binding
 configuration.
 
-Release or execution identity alone does not provide this guarantee today: connector binding
-definitions are runtime configuration and there is no historical, release-pinned binding lookup.
-The provenance carried by the reference is consequently required until such a lookup exists.
+Connector-owned references must carry this provenance because release and execution identity do
+not pin connector binding definitions. Resolution must compare the captured provenance with the
+active binding and fail before provider access when they differ.
 
 The Java record gains a connector-origin component and is therefore a source/binary shape change.
 For JSON, old documents that omit `connectorOrigin` deserialize as repository-owned references;
