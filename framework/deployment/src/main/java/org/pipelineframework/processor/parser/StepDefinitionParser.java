@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
@@ -59,7 +59,7 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-        YAMLFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build());
+        new YAMLFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION));
     private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
     private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
         "eq",
@@ -192,7 +192,8 @@ public class StepDefinitionParser {
         Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
         Map<String, ParsedConnectorBinding> connectorBindings = parseConnectorBindings(templateData);
 
-        List<StepDefinition> rootSteps = parseStepList(templateData.get("steps"), basePackage, version, queryDefinitions);
+        List<StepDefinition> rootSteps = parseStepList(
+            templateData.get("steps"), basePackage, version, queryDefinitions, connectorBindings);
         if (rootSteps.isEmpty() && !(templateData.get("steps") instanceof List)) {
             LOG.debugf("No 'steps' array found in pipeline template");
         }
@@ -212,7 +213,8 @@ public class StepDefinitionParser {
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> definition = (Map<String, Object>) rawDefinition;
-                if (definitions.putIfAbsent(id, parseStepList(definition.get("steps"), basePackage, version, queryDefinitions)) != null) {
+                if (definitions.putIfAbsent(id, parseStepList(
+                        definition.get("steps"), basePackage, version, queryDefinitions, connectorBindings)) != null) {
                     throw new IOException("Duplicate pipeline definition ID '" + id + "'");
                 }
             }
@@ -221,7 +223,11 @@ public class StepDefinitionParser {
     }
 
     private List<StepDefinition> parseStepList(
-            Object stepsObj, String basePackage, int version, Map<String, QueryDefinition> queryDefinitions) {
+            Object stepsObj,
+            String basePackage,
+            int version,
+            Map<String, QueryDefinition> queryDefinitions,
+            Map<String, ParsedConnectorBinding> connectorBindings) {
         if (!(stepsObj instanceof List<?> stepsList)) {
             return List.of();
         }
