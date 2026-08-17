@@ -65,6 +65,15 @@ public interface PipelineStepConfig {
     Integer maxConcurrency();
 
     /**
+     * Maximum recursive pipeline invocation depth below a root invocation.
+     *
+     * @return deterministic recursive invocation depth bound
+     */
+    @WithName("max-recursive-depth")
+    @WithDefault("64")
+    Integer maxRecursiveDepth();
+
+    /**
      * Durable provider-facing admission settings for await interactions.
      *
      * @return await admission configuration

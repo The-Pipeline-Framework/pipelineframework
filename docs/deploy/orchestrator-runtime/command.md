@@ -35,12 +35,46 @@ steps:
 
 The authored step names the command and the typed input/output contract. Provider details such as endpoint, credentials, index name, timeout, and provider retry tuning belong in runtime configuration.
 
+For a native Connector Provider, declare a named configured instance separately from the operation:
+
+```yaml
+connectors:
+  search:
+    provider: acme.search
+    version: 1
+    config:
+      connection: search-primary
+
+steps:
+  - name: "Write Search Index Document"
+    kind: command
+    operation: write.document
+    using: search
+    input: SearchIndexDocument
+    output: SearchIndexWriteResult
+    java:
+      input: org.example.SearchIndexDocument
+      output: org.example.SearchIndexWriteResult
+    commandIdGenerator: org.example.SearchIndexDocumentCommandIdGenerator
+    config:
+      index: orders
+```
+
+The `search` binding starts once and may be reused by several Command operations. Its `config` is
+provider-level configuration. The step `config` is operation-level configuration. Static provider
+metadata validates both scopes during compilation without constructing the provider or resolving
+connection and secret references.
+
 ## Required Runtime Pieces
+
+For operation-first native provider commands, implement `CommandOperation<I, C, O>` as described in
+[Writing Command Connectors](/develop/extension/command-connectors). The older
+`CommandConnector<I, O>` entry below applies only to the retained legacy command path.
 
 | Piece | Purpose |
 | --- | --- |
 | `CommandIdGenerator<I>` | Builds the deterministic command id from the input. |
-| `CommandConnector<I, O>` | Calls the external system and returns the command output. |
+| `CommandConnector<I, O>` | Legacy compatibility adapter that calls the external system. |
 | `CommandEffectStore` | Records pending, dispatching, success, retryable failure, and DLQ state. |
 
 The generated command step calls these pieces. Application code does not call the effect store directly.

@@ -1,5 +1,9 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
+import {
+  awaitOutputCountFromDownstreamStart,
+  hasAwaitLifecycleCounterEvidence
+} from "./replay-counter-policy.js";
 
 const mount = document.getElementById("threeMount");
 const appShell = document.querySelector(".app-shell");
@@ -1537,7 +1541,7 @@ function clearElement(element) {
 function renderRunParameters(runParameters) {
   clearElement(runParametersContent);
   const sections = Array.isArray(runParameters?.sections)
-    ? runParameters.sections.filter((section) => section?.id !== "telemetry")
+    ? runParameters.sections
     : [];
 
   for (const section of sections) {
@@ -3189,6 +3193,7 @@ function stateForStep(stepName) {
       peakPressure: 0,
       peakInFlight: 0,
       peakCounterBacklog: 0,
+      awaitLifecycleCounterEvidence: false,
       activeInputKeys: new Set()
     });
   }
@@ -3464,10 +3469,16 @@ function recordReplayCounters(rawEvent) {
       recordReceived(state, inputCount);
     }
     releaseInFlight(state, inputKeys, inputCount);
-    if (!replayHasAwaitLifecycleEvents && stepHasRenderRole(event.from, "await")) {
+    if (stepHasRenderRole(event.from, "await")) {
       const awaitState = stateForStep(event.from);
-      recordSent(awaitState, inputCount);
-      releaseInFlight(awaitState, inputKeys, inputCount);
+      const derivedOutputCount = awaitOutputCountFromDownstreamStart(
+        awaitState.awaitLifecycleCounterEvidence,
+        inputCount
+      );
+      if (derivedOutputCount > 0) {
+        recordSent(awaitState, derivedOutputCount);
+        releaseInFlight(awaitState, inputKeys, derivedOutputCount);
+      }
     }
     return;
   }
@@ -3549,10 +3560,11 @@ function recordAwaitLifecycleCounters(rawEvent, event) {
   }
   const expected = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.expectedItemCount);
   const completed = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.completedItemCount);
-  if (expected == null && completed == null) {
+  if (!hasAwaitLifecycleCounterEvidence(expected, completed)) {
     return;
   }
   const state = stateForStep(awaitStepName);
+  state.awaitLifecycleCounterEvidence = true;
   state.known = true;
   state.receivedKnown = true;
   state.sentKnown = true;

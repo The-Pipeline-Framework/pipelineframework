@@ -12,6 +12,7 @@ import jakarta.enterprise.util.TypeLiteral;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.*;
+import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.step.ConfigurableStep;
@@ -96,8 +97,8 @@ class PipelineRunnerCacheReadTest {
     }
 
     @Test
-    void cacheOnlyReadsFromCache() {
-        CountingStep step = new CountingStep();
+    void cacheOnlyExecutesCommandWithoutReadingWarmEntry() {
+        CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
             new FixedReader(Map.of("v1:key", "cached-value")),
             List.of(new FixedKeyStrategy()),
@@ -116,8 +117,69 @@ class PipelineRunnerCacheReadTest {
             context);
 
         String value = ((Uni<String>) result).await().indefinitely();
-        assertEquals("cached-value", value);
+        assertEquals("computed-input", value);
+        assertEquals(1, step.calls.get());
+    }
+
+    @Test
+    void preferCacheHitIsPipelineReplayAndSkipsCommandRuntime() {
+        CountingCommandStep step = new CountingCommandStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-command-output")),
+            List.of(new FixedKeyStrategy()),
+            "prefer-cache");
+
+        String value = run(step, support, new PipelineContext("v1", null, "prefer-cache"));
+
+        assertEquals("cached-command-output", value);
         assertEquals(0, step.calls.get());
+    }
+
+    @Test
+    void preferCacheVersionChangeFallsThroughToCommandRuntime() {
+        CountingCommandStep step = new CountingCommandStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-command-output")),
+            List.of(new FixedKeyStrategy()),
+            "prefer-cache");
+
+        String value = run(step, support, new PipelineContext("v2", null, "prefer-cache"));
+
+        assertEquals("computed-input", value);
+        assertEquals(1, step.calls.get());
+    }
+
+    @Test
+    void skipIfPresentRejectsCommandBeforeCacheOrLiveExecution() {
+        CountingCommandStep step = new CountingCommandStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-command-output")),
+            List.of(new FixedKeyStrategy()),
+            "skip-if-present");
+
+        CachePolicyViolation failure = assertThrows(CachePolicyViolation.class,
+            () -> run(step, support, new PipelineContext("v1", null, "skip-if-present")));
+
+        assertTrue(failure.getMessage().contains("SKIP_IF_PRESENT is not supported for Command steps"));
+        assertTrue(failure.getMessage().contains("live external effect"));
+        assertEquals(0, step.calls.get());
+    }
+
+    private static String run(
+        StepOneToOne<String, String> step,
+        PipelineRunner.CacheReadSupport support,
+        PipelineContext context
+    ) {
+        Object result = PipelineRunner.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item("input"),
+            false,
+            128,
+            null,
+            null,
+            support,
+            context);
+        return ((Uni<String>) result).await().indefinitely();
     }
 
     @Test
@@ -382,6 +444,13 @@ class PipelineRunnerCacheReadTest {
     }
 
     static final class CountingBypassStep extends CountingStep implements CacheReadBypass {
+    }
+
+    static final class CountingCommandStep extends CountingStep implements CommandStep, CacheKeyTarget {
+        @Override
+        public Class<?> cacheKeyTargetType() {
+            return String.class;
+        }
     }
 
     static final class StatusCapturingStep extends CountingStep {

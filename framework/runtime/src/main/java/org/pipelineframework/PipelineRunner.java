@@ -17,8 +17,11 @@
 package org.pipelineframework;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -38,12 +41,15 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
+import org.pipelineframework.invocation.PipelineInvocationContext;
+import org.pipelineframework.invocation.PipelineInvocationContextHolder;
 import org.pipelineframework.runtime.core.PipelineRunnerCore;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 import org.pipelineframework.telemetry.PipelineTracingSupport;
 
@@ -137,6 +143,129 @@ public class PipelineRunner implements AutoCloseable {
         List<Object> steps,
         int startStepIndex,
         int stopBeforeStepIndex) {
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            startStepIndex,
+            stopBeforeStepIndex,
+            true,
+            Optional.empty(),
+            "$root",
+            -1,
+            rootInvocationContext());
+    }
+
+    /**
+     * Runs a statically linked child definition within the current root invocation.
+     *
+     * <p>The child uses the same step executor, configuration, and {@link PipelineContext} capture
+     * as a top-level range, but it neither starts another pipeline run nor owns terminal object
+     * publication. The caller receives the child reactive result to flatten through its ordinary
+     * step interface.
+     *
+     * @param input child input as a Uni or Multi
+     * @param steps statically linked child step instances
+     * @return child result without terminal publication ownership
+     */
+    public ExecutionResult runNestedWithContext(Object input, List<Object> steps) {
+        return runNestedWithContext(input, steps, "$root", -1);
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        String definitionId,
+        int definitionTerminalStepIndex
+    ) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        Objects.requireNonNull(definitionId, "definitionId must not be null");
+        PipelineInvocationContext invocationContext = PipelineInvocationContextHolder.get()
+            .orElseGet(this::rootInvocationContext);
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            0,
+            steps.size(),
+            false,
+            Optional.empty(),
+            definitionId,
+            definitionTerminalStepIndex,
+            invocationContext);
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        PipelineInvocationContext invocationContext
+    ) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        Objects.requireNonNull(definitionId, "definitionId must not be null");
+        Objects.requireNonNull(invocationContext, "invocationContext must not be null");
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            0,
+            steps.size(),
+            false,
+            Optional.empty(),
+            definitionId,
+            definitionTerminalStepIndex,
+            invocationContext);
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        PipelineRunContext owningRunContext
+    ) {
+        PipelineInvocationContext invocationContext = PipelineInvocationContextHolder.get()
+            .orElseGet(this::rootInvocationContext);
+        return runNestedWithContext(
+            input,
+            steps,
+            definitionId,
+            definitionTerminalStepIndex,
+            invocationContext,
+            owningRunContext);
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        PipelineInvocationContext invocationContext,
+        PipelineRunContext owningRunContext
+    ) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        Objects.requireNonNull(definitionId, "definitionId must not be null");
+        Objects.requireNonNull(invocationContext, "invocationContext must not be null");
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            0,
+            steps.size(),
+            false,
+            Optional.of(Objects.requireNonNull(owningRunContext, "owningRunContext must not be null")),
+            definitionId,
+            definitionTerminalStepIndex,
+            invocationContext);
+    }
+
+    private ExecutionResult runFromStepUntilWithContext(
+        Object input,
+        List<Object> steps,
+        int startStepIndex,
+        int stopBeforeStepIndex,
+        boolean rootInvocation,
+        Optional<PipelineRunContext> owningRunContext,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        PipelineInvocationContext invocationContext) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -144,7 +273,11 @@ public class PipelineRunner implements AutoCloseable {
                 input == null ? "null" : input.getClass().getName()));
         }
 
-        List<Object> orderedSteps = stepOrderer.orderSteps(steps);
+        // A nested definition is compiler-linked in its canonical authored order.  It deliberately
+        // does not consult the root order.json, which only describes root admission execution.
+        List<Object> orderedSteps = rootInvocation
+            ? stepOrderer.orderSteps(steps)
+            : Collections.unmodifiableList(new ArrayList<>(steps));
         if (startStepIndex < 0 || startStepIndex > orderedSteps.size()) {
             throw new IllegalArgumentException("startStepIndex is out of range: " + startStepIndex);
         }
@@ -154,15 +287,28 @@ public class PipelineRunner implements AutoCloseable {
 
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
-        PipelineRunContext telemetryContext =
-            runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency);
-        Object instrumentedInput = runTelemetry.instrumentInput(input, telemetryContext);
+        PipelineRunContext telemetryContext = rootInvocation
+            ? Objects.requireNonNull(
+                runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency),
+                "PipelineRunTelemetry.startRun must not return null")
+            : owningRunContext.orElseGet(PipelineRunTelemetry::nonOwningContext);
+        Object instrumentedInput = rootInvocation ? runTelemetry.instrumentInput(input, telemetryContext) : input;
+        PipelineStepTelemetry executionStepTelemetry = rootInvocation || owningRunContext.isPresent()
+            ? PipelineStepTelemetry.of(stepTelemetry, telemetryContext)
+            : PipelineStepTelemetry.disabled();
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
         AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
-        Object current = runnerCore.runSync(
-            instrumentedInput,
+        Object contextualInput = PipelineInvocationContextHolder.call(invocationContext, () ->
+            stepExecutor.contextualizeInput(
+                instrumentedInput,
+                contextSnapshot,
+                awaitContext,
+                telemetryContext));
+        Object current = PipelineInvocationContextHolder.call(invocationContext, () ->
+            PipelineRunContextHolder.call(telemetryContext, () -> runnerCore.runSync(
+            contextualInput,
             orderedSteps,
             startStepIndex,
             stopBeforeStepIndex,
@@ -176,7 +322,7 @@ public class PipelineRunner implements AutoCloseable {
                         awaitContext.continuationMode(),
                         awaitContext.terminalOutputOwnership(),
                         PipelineTracingSupport.capture(
-                            telemetryContext == null || telemetryContext.span() == null
+                            telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
                                 : telemetryContext.span().getSpanContext()));
 
@@ -195,18 +341,21 @@ public class PipelineRunner implements AutoCloseable {
                     value,
                     parallelismPolicy,
                     maxConcurrency,
-                    stepTelemetry,
-                    telemetryContext,
+                    executionStepTelemetry,
                     cacheReadSupport,
                     contextSnapshot,
-                    awaitContextSnapshot);
+                    awaitContextSnapshot,
+                    definitionId,
+                    definitionTerminalStepIndex,
+                    java.util.Optional.of(invocationContext));
             },
-            index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index));
+            index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index))));
 
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
         Object terminal = current;
         boolean terminalOutputPublished = false;
-        if (stopBeforeStepIndex == orderedSteps.size()
+        if (rootInvocation
+            && stopBeforeStepIndex == orderedSteps.size()
             && (awaitContext == null
                 || awaitContext.terminalOutputOwnership() == TerminalOutputOwnership.TRANSITION_WORKER)) {
             ObjectPublishRunner publishRunner = objectPublishRunner();
@@ -215,10 +364,16 @@ public class PipelineRunner implements AutoCloseable {
                 terminalOutputPublished = true;
             }
         }
+        Object completed = rootInvocation ? runTelemetry.instrumentRunCompletion(terminal, telemetryContext) : terminal;
         return new ExecutionResult(
-            runTelemetry.instrumentRunCompletion(terminal, telemetryContext),
+            completed,
             telemetryContext,
             terminalOutputPublished);
+    }
+
+    private PipelineInvocationContext rootInvocationContext() {
+        int maximumDepth = pipelineConfig == null ? 64 : pipelineConfig.maxRecursiveDepth();
+        return PipelineInvocationContext.root(maximumDepth);
     }
 
     public record ExecutionResult(
@@ -295,6 +450,16 @@ public class PipelineRunner implements AutoCloseable {
     static final class CacheReadSupport extends PipelineCacheReadSupport {
         CacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {
             super(reader, strategies, defaultPolicy);
+        }
+
+        CacheReadSupport(
+            PipelineCacheReader reader,
+            java.util.Optional<org.pipelineframework.cache.PipelineCacheWriter> writer,
+            List<CacheKeyStrategy> strategies,
+            String defaultPolicy,
+            java.util.Optional<java.time.Duration> configuredTtl
+        ) {
+            super(reader, writer, strategies, defaultPolicy, configuredTtl);
         }
     }
 

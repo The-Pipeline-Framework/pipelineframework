@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2023-2026 Mariano Barcia
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.pipelineframework.processor.composition;
+
+import java.util.Optional;
+
+/**
+ * Compiler-time source of pipeline definitions for static linking.
+ *
+ * <p>The initial implementation may resolve only local definitions. Future package import support
+ * can implement this seam without changing {@link PipelineReference} or runtime invocation.
+ */
+@FunctionalInterface
+public interface PipelineDefinitionResolver {
+
+    Optional<PipelineDefinition> resolve(PipelineReference reference);
+}

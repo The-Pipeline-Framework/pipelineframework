@@ -11,33 +11,56 @@ import io.quarkus.runtime.Startup;
 import org.pipelineframework.config.pipeline.PipelineBranchingResourceLoader;
 
 /**
- * Holds runtime branch-routing descriptors keyed by runtime step class.
+ * Holds runtime branch-routing descriptors keyed by compiled definition scope and runtime step class.
  */
 @Startup
 @ApplicationScoped
 @Unremovable
 public class PipelineBranchingRegistry {
 
-    private final Map<String, StepBranchingDescriptor> descriptorsByStepClass;
+    private final Map<DescriptorKey, StepBranchingDescriptor> descriptors;
 
     public PipelineBranchingRegistry() {
-        this(PipelineBranchingResourceLoader.load().orElse(null));
+        this(PipelineBranchingResourceLoader.load());
     }
 
     PipelineBranchingRegistry(PipelineBranchingResourceLoader.BranchingResource resource) {
-        this.descriptorsByStepClass = resource == null ? Map.of() : buildDescriptors(resource);
+        this(Optional.of(resource));
+    }
+
+    private PipelineBranchingRegistry(Optional<PipelineBranchingResourceLoader.BranchingResource> resource) {
+        this.descriptors = resource.map(this::buildDescriptors).orElseGet(Map::of);
     }
 
     public Optional<StepBranchingDescriptor> descriptorFor(Class<?> stepClass) {
-        if (stepClass == null || descriptorsByStepClass.isEmpty()) {
+        if (stepClass == null || descriptors.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(descriptorsByStepClass.get(normalizeStepClassName(stepClass)));
+        String runtimeClass = normalizeStepClassName(stepClass);
+        return descriptors.entrySet().stream()
+            .filter(entry -> "$root".equals(entry.getKey().definitionId())
+                && runtimeClass.equals(entry.getKey().runtimeStepClass()))
+            .map(Map.Entry::getValue)
+            .findFirst();
     }
 
-    private Map<String, StepBranchingDescriptor> buildDescriptors(PipelineBranchingResourceLoader.BranchingResource resource) {
+    public Optional<StepBranchingDescriptor> descriptorFor(
+        String definitionId,
+        int definitionTerminalStepIndex,
+        Class<?> stepClass
+    ) {
+        if (definitionId == null || definitionId.isBlank() || stepClass == null || descriptors.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(descriptors.get(new DescriptorKey(
+            definitionId.strip(),
+            definitionTerminalStepIndex,
+            normalizeStepClassName(stepClass))));
+    }
+
+    private Map<DescriptorKey, StepBranchingDescriptor> buildDescriptors(PipelineBranchingResourceLoader.BranchingResource resource) {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        Map<String, StepBranchingDescriptor> descriptors = new LinkedHashMap<>();
+        Map<DescriptorKey, StepBranchingDescriptor> descriptors = new LinkedHashMap<>();
         for (PipelineBranchingResourceLoader.BranchingStep step : resource.steps()) {
             String runtimeStepClass = step.runtimeStepClass();
             if (runtimeStepClass == null || runtimeStepClass.isBlank()) {
@@ -70,10 +93,12 @@ public class PipelineBranchingRegistry {
                 step.acceptedVariants(),
                 step.producedVariants(),
                 step.terminal());
-            StepBranchingDescriptor existing = descriptors.put(runtimeStepClass, descriptor);
+            DescriptorKey key = new DescriptorKey(
+                step.definitionId(), step.definitionTerminalStepIndex(), runtimeStepClass);
+            StepBranchingDescriptor existing = descriptors.put(key, descriptor);
             if (existing != null) {
                 throw new IllegalStateException(
-                    "Duplicate runtimeStepClass '" + runtimeStepClass
+                    "Duplicate branching descriptor '" + key
                     + "' detected: step '" + step.step() + "' at index " + step.index()
                     + " conflicts with existing step '" + existing.stepName() + "' at index " + existing.index());
             }
@@ -121,5 +146,8 @@ public class PipelineBranchingRegistry {
             return stepClass.getSuperclass().getName();
         }
         return name;
+    }
+
+    private record DescriptorKey(String definitionId, int definitionTerminalStepIndex, String runtimeStepClass) {
     }
 }

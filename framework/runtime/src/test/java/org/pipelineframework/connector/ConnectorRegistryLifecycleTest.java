@@ -2,12 +2,22 @@ package org.pipelineframework.connector;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConnectorRegistryLifecycleTest {
+
+    @BeforeEach
+    void resetStarts() {
+        TestProvider.starts.set(0);
+    }
 
     @Test
     void cdiAdapterBuildsTheSameHostNeutralRegistryFromAnExplicitProviderCollection() {
@@ -16,24 +26,83 @@ class ConnectorRegistryLifecycleTest {
         assertEquals("cdi.adapter", registry.providers().keySet().iterator().next().value());
     }
 
-    private static final class TestProvider implements ConnectorProvider<Void> {
+    @Test
+    void cdiAdapterCreatesALazyNamedBindingAndActivatesItOnce() {
+        ConnectorBindingRegistry bindings = ConnectorRegistryLifecycle.createBindingRegistry(
+            List.of(new ConnectorBindingDefinition(
+                ConnectorBindingName.of("shared"),
+                ConnectorProviderId.of("cdi.adapter"),
+                1,
+                new ConnectorConfigurationDocument(Map.of()))),
+            List.of(new TestProvider()));
+
+        assertEquals(0, TestProvider.starts.get());
+
+        bindings.activate(ConnectorBindingName.of("shared"), ConnectorRuntimeContext.empty())
+            .toCompletableFuture().join();
+        bindings.activate(ConnectorBindingName.of("shared"), ConnectorRuntimeContext.empty())
+            .toCompletableFuture().join();
+
+        assertEquals("lookup", bindings.requireOperation(
+            ConnectorBindingName.of("shared"), "lookup", ConnectorOperationKind.QUERY, 1).id());
+        assertEquals(1, TestProvider.starts.get());
+    }
+
+    @Test
+    void shutdownStartsEachLayerOnlyAfterThePreviousLayerSettles() {
+        List<String> events = new ArrayList<>();
+        CompletableFuture<String> bindingsStopped = new CompletableFuture<>();
+
+        CompletionStage<Void> stopped = ConnectorRegistryLifecycle.stopAll(List.of(
+            () -> {
+                events.add("bindings");
+                return bindingsStopped.thenAccept(ignored -> { });
+            },
+            () -> {
+                events.add("catalog");
+                return ConnectorCompletionStages.completed();
+            }));
+
+        assertEquals(List.of("bindings"), events);
+        bindingsStopped.complete("stopped");
+        stopped.toCompletableFuture().join();
+        assertEquals(List.of("bindings", "catalog"), events);
+    }
+
+    public static final class TestProvider implements ConnectorProvider<Void> {
+        private static final AtomicInteger starts = new AtomicInteger();
+
+        public TestProvider() {
+        }
+
         @Override
-        public ConnectorProviderDescriptor descriptor() {
-            return new ConnectorProviderDescriptor(ConnectorProviderId.of("cdi.adapter"), new ConnectorProviderVersion(1, 0));
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("cdi.adapter");
+        }
+
+        @Override
+        public ConnectorProviderVersion version() {
+            return new ConnectorProviderVersion(1, 0);
         }
 
         @Override
         public Collection<? extends ConnectorOperation> operations() {
-            return List.of(() -> new ConnectorOperationDescriptor("lookup", ConnectorOperationKind.QUERY, 1));
+            return List.of(new QueryOperation<Object, Object, Object>() {
+                @Override
+                public String id() {
+                    return "lookup";
+                }
+
+                @Override
+                public CompletionStage<QueryOutcome<Object>> query(QueryInvocation<Object, Object, Object> invocation) {
+                    return CompletableFuture.failedFuture(new UnsupportedOperationException("not invoked"));
+                }
+            });
         }
 
         @Override
         public CompletionStage<Void> start(ConnectorRuntimeContext context) {
-            return ConnectorCompletionStages.completed();
-        }
-
-        @Override
-        public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
+            starts.incrementAndGet();
             return ConnectorCompletionStages.completed();
         }
     }

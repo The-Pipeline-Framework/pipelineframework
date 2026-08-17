@@ -20,6 +20,23 @@ TPF caching has two distinct phases:
 
 This separation is intentional: pre-read protects expensive steps; side-effects persist outputs.
 
+## Command outputs and two replay authorities
+
+Command outputs may participate in the same versioned step-result cache as other unary outputs. This does not
+replace Command effect semantics. The two stores answer different questions:
+
+- The step-result cache answers “what did this step produce for this pipeline replay identity?”
+- `CommandEffectStore` answers “what happened to this logical external effect identified by `CommandId`?”
+
+For a warm `PREFER_CACHE` or `REQUIRE_CACHE` hit, TPF takes the pipeline-replay path: it returns the cached
+Command output without invoking the Command runtime, consulting `CommandEffectStore`, or dispatching a provider.
+The cache hit is replay intent under the selected policy; it is not proof that the external effect currently
+exists. A miss that permits execution enters the live Command path, where `CommandEffectStore` remains
+authoritative.
+
+Command cache keys remain ordinary versioned `CacheKeyStrategy` identities. They are not implicitly `CommandId`.
+Choose keys that include the business meaning and operation-relevant revisions of the replayed output.
+
 ## Key resolution and target types
 
 Cache keys are resolved via `CacheKeyStrategy` beans. When pre-reading, the runner attempts to disambiguate

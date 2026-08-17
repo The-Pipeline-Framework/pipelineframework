@@ -58,6 +58,16 @@
                 <groupId>io.smallrye</groupId>
                 <artifactId>jandex-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>connector-maven-plugin</artifactId>
+                <version>${project.version}</version>
+                <executions>
+                    <execution>
+                        <goals><goal>generate-provider-artifacts</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

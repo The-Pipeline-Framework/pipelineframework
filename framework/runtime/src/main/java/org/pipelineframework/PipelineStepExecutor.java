@@ -37,12 +37,19 @@ import org.pipelineframework.cache.CachePolicyEnforcer;
 import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.cache.PipelineCacheWriter;
+import org.pipelineframework.cache.QueryNotFoundCacheEntry;
+import org.pipelineframework.command.CommandStep;
+import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.query.ProviderQueryStep;
+import org.pipelineframework.query.QueryCacheRequirements;
+import org.pipelineframework.query.QueryNotFoundException;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.service.ReactiveStreamingService;
@@ -53,8 +60,10 @@ import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
+import org.pipelineframework.invocation.PipelineInvocationContext;
 
 @ApplicationScoped
 class PipelineStepExecutor {
@@ -76,11 +85,68 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
-        PipelineStepTelemetry stepTelemetry = PipelineStepTelemetry.of(telemetry, telemetryContext);
+        return applyStep(
+            step,
+            current,
+            parallelismPolicy,
+            maxConcurrency,
+            PipelineStepTelemetry.of(telemetry, telemetryContext),
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot);
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
+            contextSnapshot, awaitContextSnapshot, "$root", -1, java.util.Optional.empty());
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        String definitionId,
+        int definitionTerminalStepIndex) {
+        return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
+            contextSnapshot, awaitContextSnapshot, definitionId, definitionTerminalStepIndex,
+            java.util.Optional.empty());
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
-            : branchingRegistry.descriptorFor(resolvedStep.getClass()).orElse(null);
+            : ("$root".equals(definitionId)
+                ? branchingRegistry.descriptorFor(resolvedStep.getClass())
+                : branchingRegistry.descriptorFor(
+                    definitionId, definitionTerminalStepIndex, resolvedStep.getClass())).orElse(null);
         if (resolvedStep instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
             return applyAwaitStreamOneToOneUnchecked(
                 awaitStep,
@@ -96,7 +162,7 @@ class PipelineStepExecutor {
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOne(stepOneToOne, current, parallel, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
@@ -119,7 +185,7 @@ class PipelineStepExecutor {
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
             var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOne(adapter, current, false, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
             var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
             return applyOneToMany(adapter, current, false, maxConcurrency, stepTelemetry,
@@ -209,6 +275,27 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            null,
+            null,
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
         PipelineStepTelemetry.Seam telemetry,
         PipelineRunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
@@ -261,6 +348,33 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         StepBranchingDescriptor branchingDescriptor) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot,
+            branchingDescriptor,
+            java.util.Optional.empty());
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        StepBranchingDescriptor branchingDescriptor,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         return applyOneToOne(
             step,
             current,
@@ -270,7 +384,8 @@ class PipelineStepExecutor {
             cacheReadSupport,
             contextSnapshot,
             awaitContextSnapshot,
-            branchingDescriptor);
+            branchingDescriptor,
+            invocationContext);
     }
 
     @SuppressWarnings({"unchecked"})
@@ -283,7 +398,8 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
-        StepBranchingDescriptor branchingDescriptor) {
+        StepBranchingDescriptor branchingDescriptor,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
         if (current instanceof Uni<?>) {
             Uni<I> input = telemetry.consume(step.getClass(), (Uni<I>) current);
             Uni<O> result = input
@@ -301,7 +417,8 @@ class PipelineStepExecutor {
                         contextSnapshot,
                         awaitContextSnapshot,
                         telemetry,
-                        replayScope)
+                        replayScope,
+                        invocationContext)
                         .onItem().transformToUni(enforced -> applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
                     return telemetry.instrument(step.getClass(), scoped, false, replayScope);
@@ -327,7 +444,8 @@ class PipelineStepExecutor {
                             contextSnapshot,
                             awaitContextSnapshot,
                             telemetry,
-                            replayScope)
+                            replayScope,
+                            invocationContext)
                             .onItem().transformToUni(enforced ->
                                 applyCachePolicy(step, enforced, contextSnapshot))
                             .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
@@ -352,7 +470,8 @@ class PipelineStepExecutor {
                         contextSnapshot,
                         awaitContextSnapshot,
                         telemetry,
-                        replayScope)
+                        replayScope,
+                        invocationContext)
                         .onItem().transformToUni(enforced ->
                             applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
@@ -420,51 +539,92 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         PipelineStepTelemetry telemetry,
-        PipelineStepTelemetry.ReplayScope replayScope) {
+        PipelineStepTelemetry.ReplayScope replayScope,
+        java.util.Optional<PipelineInvocationContext> invocationContext) {
+        CachePolicy policy = cacheReadSupport == null
+            ? contextCachePolicy(contextSnapshot)
+            : cacheReadSupport.resolvePolicy(contextSnapshot);
+        if (step instanceof CommandStep && policy == CachePolicy.SKIP_IF_PRESENT) {
+            return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
+                new CachePolicyViolation(
+                    "Cache policy SKIP_IF_PRESENT is not supported for Command steps because it can execute "
+                        + "a live external effect while retaining an older pipeline replay output; use "
+                        + "PREFER_CACHE, REQUIRE_CACHE, CACHE_ONLY, or BYPASS_CACHE")));
+        }
         if (cacheReadSupport == null) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
+        }
+        if (step instanceof ProviderQueryStep queryStep) {
+            try {
+                validateQueryCachePolicy(queryStep.queryCacheRequirements(), policy, cacheReadSupport);
+            } catch (CachePolicyViolation failure) {
+                return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(failure));
+            }
         }
         if (step instanceof CacheReadBypass) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
         }
-        CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
         if (!cacheReadSupport.shouldRead(policy)) {
-            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+            if (step instanceof ProviderQueryStep queryStep
+                && policy == CachePolicy.CACHE_ONLY
+                && queryStep.queryCacheRequirements().negativeCacheTtl().isPresent()) {
+                Optional<String> key = resolveCacheKey(step, item, cacheReadSupport, contextSnapshot);
+                if (key.isEmpty()) {
+                    return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
+                        new CachePolicyViolation(
+                            "negative caching requires a cache key for Query operation "
+                                + queryStep.queryCacheRequirements().operationIdentity())));
+                }
+                return withPipelineContext(contextSnapshot, () -> {
+                    PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                    return executeOneToOne(
+                        step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, key,
+                        invocationContext);
+                });
+            }
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
         }
-        Class<?> targetType = null;
-        if (step instanceof CacheKeyTarget cacheKeyTarget) {
-            targetType = cacheKeyTarget.cacheKeyTargetType();
-        }
-        java.util.Optional<String> resolvedKey = cacheReadSupport.resolveKey(item, contextSnapshot, targetType);
+        java.util.Optional<String> resolvedKey = resolveCacheKey(step, item, cacheReadSupport, contextSnapshot);
         if (resolvedKey.isEmpty()) {
             if (policy == CachePolicy.REQUIRE_CACHE) {
                 return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
                     new IllegalStateException("Cache key required but could not be resolved")));
             }
+            if (step instanceof ProviderQueryStep queryStep
+                && queryStep.queryCacheRequirements().negativeCacheTtl().isPresent()) {
+                return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
+                    new CachePolicyViolation(
+                        "negative caching requires a cache key for Query operation "
+                            + queryStep.queryCacheRequirements().operationIdentity())));
+            }
             return withPipelineContext(contextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.MISS);
-                return step.apply(Uni.createFrom().item(item));
+                return executeOneToOne(
+                    step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy, Optional.empty(),
+                    invocationContext);
             });
         }
-        String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);
+        String key = resolvedKey.orElseThrow();
         return cacheReadSupport.reader().get(key)
             .onItemOrFailure().transformToUni((cached, failure) -> {
                 if (failure != null) {
                     if (policy == CachePolicy.REQUIRE_CACHE) {
                         return Uni.createFrom().failure(failure);
                     }
-                    return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+                    return withPipelineContext(contextSnapshot, () -> {
                         PipelineCacheStatusHolder.set(CacheStatus.MISS);
-                        return step.apply(Uni.createFrom().item(item));
+                        return executeOneToOne(
+                            step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy,
+                            Optional.of(key), invocationContext);
                     });
                 }
                 if (cached.isPresent()) {
@@ -472,8 +632,19 @@ class PipelineStepExecutor {
                         PipelineCacheStatusHolder.set(CacheStatus.HIT);
                         telemetry.recordCacheHit(replayScope);
                         try {
+                            Object cachedValue = cached.orElseThrow();
+                            if (cachedValue instanceof QueryNotFoundCacheEntry notFound) {
+                                if (step instanceof ProviderQueryStep) {
+                                    return Uni.createFrom().<O>failure(
+                                        new QueryNotFoundException(notFound.outcomeCode()));
+                                }
+                                return Uni.createFrom().failure(new IllegalStateException(
+                                    "Cached Query NotFound marker for key '" + key
+                                        + "' cannot be returned as ordinary pipeline output for step "
+                                        + step.getClass().getName()));
+                            }
                             @SuppressWarnings("unchecked")
-                            O value = (O) cached.get();
+                            O value = (O) cachedValue;
                             return Uni.createFrom().item(value);
                         } catch (ClassCastException ex) {
                             return Uni.createFrom().failure(new IllegalStateException(
@@ -486,11 +657,112 @@ class PipelineStepExecutor {
                     return Uni.createFrom().failure(new CachePolicyViolation(
                         "Cache policy REQUIRE_CACHE failed for key: " + key));
                 }
-                return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
+                return withPipelineContext(contextSnapshot, () -> {
                     PipelineCacheStatusHolder.set(CacheStatus.MISS);
-                    return step.apply(Uni.createFrom().item(item));
+                    return executeOneToOne(
+                        step, item, contextSnapshot, awaitContextSnapshot, cacheReadSupport, policy,
+                        Optional.of(key), invocationContext);
                 });
             });
+    }
+
+    private static <I, O> Uni<O> executeOneToOne(
+        StepOneToOne<I, O> step,
+        I item,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        PipelineCacheReadSupport cacheReadSupport,
+        CachePolicy policy,
+        Optional<String> cacheKey,
+        java.util.Optional<PipelineInvocationContext> invocationContext
+    ) {
+        Uni<O> execution = withStepExecutionUni(
+            contextSnapshot, awaitContextSnapshot, invocationContext,
+            () -> step.apply(Uni.createFrom().item(item)));
+        if (!(step instanceof ProviderQueryStep queryStep)
+            || policy == CachePolicy.BYPASS_CACHE
+            || policy == CachePolicy.REQUIRE_CACHE
+            || queryStep.queryCacheRequirements().negativeCacheTtl().isEmpty()) {
+            return execution;
+        }
+        if (cacheKey.isEmpty()) {
+            return execution;
+        }
+        QueryCacheRequirements requirements = queryStep.queryCacheRequirements();
+        return execution.onFailure(QueryNotFoundException.class).call(failure -> {
+            QueryNotFoundException notFound = (QueryNotFoundException) failure;
+            PipelineCacheWriter writer = cacheReadSupport.writer().orElseThrow(() -> new CachePolicyViolation(
+                "negative caching for Query operation " + requirements.operationIdentity()
+                    + " requires a cache subsystem that supports bounded writes"));
+            return writer.put(
+                cacheKey.orElseThrow(),
+                new QueryNotFoundCacheEntry(notFound.outcomeCode()),
+                requirements.negativeCacheTtl().orElseThrow());
+        });
+    }
+
+    private static Optional<String> resolveCacheKey(
+        StepOneToOne<?, ?> step,
+        Object item,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot
+    ) {
+        Class<?> targetType = step instanceof CacheKeyTarget cacheKeyTarget
+            ? cacheKeyTarget.cacheKeyTargetType()
+            : null;
+        return cacheReadSupport.resolveKey(item, contextSnapshot, targetType)
+            .map(key -> cacheReadSupport.withVersionPrefix(key, contextSnapshot));
+    }
+
+    private static void validateQueryCachePolicy(
+        QueryCacheRequirements requirements,
+        CachePolicy policy,
+        PipelineCacheReadSupport cacheReadSupport
+    ) {
+        if (policy == CachePolicy.SKIP_IF_PRESENT) {
+            throw new CachePolicyViolation(
+                "Cache policy SKIP_IF_PRESENT is not supported for provider-backed Query steps because it performs "
+                    + "a live observation but neither replays the existing value nor records a miss; use "
+                    + "PREFER_CACHE, REQUIRE_CACHE, CACHE_ONLY, or BYPASS_CACHE for operation "
+                    + requirements.operationIdentity());
+        }
+        if (requirements.capabilities().cacheability() == QueryCacheability.LIVE_ONLY
+            && policy != CachePolicy.BYPASS_CACHE) {
+            throw new CachePolicyViolation(
+                "Query operation " + requirements.operationIdentity() + " is LIVE_ONLY and requires BYPASS_CACHE, not "
+                    + policy);
+        }
+        if (policy == CachePolicy.BYPASS_CACHE) {
+            return;
+        }
+        requirements.capabilities().maximumCacheAge().ifPresent(maximum -> {
+            Optional<Duration> configured = cacheReadSupport == null
+                ? Optional.empty()
+                : cacheReadSupport.configuredTtl();
+            if (configured.isEmpty()) {
+                throw new CachePolicyViolation(
+                    "Query operation " + requirements.operationIdentity() + " limits positive cache age to "
+                        + maximum + " but pipeline.cache.ttl is not configured");
+            }
+            if (configured.orElseThrow().compareTo(maximum) > 0) {
+                throw new CachePolicyViolation(
+                    "pipeline.cache.ttl " + configured.orElseThrow() + " exceeds Query operation "
+                        + requirements.operationIdentity() + " maximum cache age " + maximum);
+            }
+        });
+        if (requirements.negativeCacheTtl().isPresent()
+            && (policy == CachePolicy.RETURN_CACHED || policy == CachePolicy.CACHE_ONLY)
+            && (cacheReadSupport == null || cacheReadSupport.writer().isEmpty())) {
+            throw new CachePolicyViolation(
+                "negative caching for Query operation " + requirements.operationIdentity()
+                    + " requires a cache subsystem that supports bounded writes");
+        }
+    }
+
+    private static CachePolicy contextCachePolicy(PipelineContext context) {
+        return context == null || context.cachePolicy() == null
+            ? CachePolicy.RETURN_CACHED
+            : CachePolicy.fromConfig(context.cachePolicy());
     }
 
     static <T> T withPipelineContext(PipelineContext context, Supplier<T> supplier) {
@@ -518,12 +790,40 @@ class PipelineStepExecutor {
         return DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier);
     }
 
+    static <T> Uni<T> withStepExecutionUni(
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        java.util.Optional<PipelineInvocationContext> invocationContext,
+        Supplier<Uni<T>> supplier
+    ) {
+        return invocationContext
+            .map(value -> DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, value, supplier))
+            .orElseGet(() -> DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier));
+    }
+
     static <T> Multi<T> withStepExecutionMulti(
         PipelineContext context,
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
     ) {
         return DEFAULT_INVOCATION_RUNTIME.invokeStepMulti(context, awaitContext, supplier);
+    }
+
+    static Object contextualizeInput(
+        Object input,
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        PipelineRunContext runContext
+    ) {
+        return PipelineRunContextHolder.call(runContext, () -> {
+            if (input instanceof Uni<?> uni) {
+                return withStepExecutionUni(context, awaitContext, () -> uni);
+            }
+            if (input instanceof Multi<?> multi) {
+                return withStepExecutionMulti(context, awaitContext, () -> multi);
+            }
+            throw new IllegalArgumentException("Pipeline input must be a Uni or Multi");
+        });
     }
 
     @SuppressWarnings("unchecked")

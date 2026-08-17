@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PipelineConfigTest {
 
@@ -63,5 +64,14 @@ class PipelineConfigTest {
 
         // Then
         assertEquals(7, stepConfig.retryLimit());
+    }
+
+    @Test
+    void recursiveDepthIsBoundedByDefaultAndRejectsNegativeConfiguration() {
+        PipelineConfig pipelineConfig = new PipelineConfig();
+
+        assertEquals(64, pipelineConfig.maxRecursiveDepth());
+        assertEquals(12, pipelineConfig.maxRecursiveDepth(12).maxRecursiveDepth());
+        assertThrows(IllegalArgumentException.class, () -> pipelineConfig.maxRecursiveDepth(-1));
     }
 }

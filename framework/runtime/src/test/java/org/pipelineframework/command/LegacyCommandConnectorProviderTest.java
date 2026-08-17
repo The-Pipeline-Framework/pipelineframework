@@ -40,7 +40,7 @@ class LegacyCommandConnectorProviderTest {
         assertEquals("done", output);
         assertSame(request, connector.request.get());
         ConnectorOperation operation = registry.operations().values().iterator().next();
-        assertEquals("legacy.observed.operation", operation.descriptor().id());
+        assertEquals("legacy.observed.operation", operation.id());
         ConnectorOperationIdentity identity = registry.operations().keySet().iterator().next();
         assertInstanceOf(CommandOperation.class, registry.requireExecutionOperation(identity, CommandOperation.class));
     }
@@ -117,7 +117,7 @@ class LegacyCommandConnectorProviderTest {
     }
 
     private static List<String> operationIds(LegacyCommandConnectorProvider provider) {
-        return provider.operations().stream().map(operation -> operation.descriptor().id()).sorted().toList();
+        return provider.operations().stream().map(ConnectorOperation::id).sorted().toList();
     }
 
     private static CommandRequest<String> request(String command, Map<String, Object> config) {
@@ -175,9 +175,13 @@ class LegacyCommandConnectorProviderTest {
 
     private static final class ReservedProvider implements ConnectorProvider<Void> {
         @Override
-        public ConnectorProviderDescriptor descriptor() {
-            return new ConnectorProviderDescriptor(
-                ConnectorProviderId.of("tpf.legacy.command"), new ConnectorProviderVersion(1, 0));
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("tpf.legacy.command");
+        }
+
+        @Override
+        public ConnectorProviderVersion version() {
+            return new ConnectorProviderVersion(1, 0);
         }
 
         @Override
@@ -185,14 +189,5 @@ class LegacyCommandConnectorProviderTest {
             return List.of();
         }
 
-        @Override
-        public CompletionStage<Void> start(ConnectorRuntimeContext context) {
-            return java.util.concurrent.CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-            return java.util.concurrent.CompletableFuture.completedFuture(null);
-        }
     }
 }

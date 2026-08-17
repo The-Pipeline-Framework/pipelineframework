@@ -87,6 +87,7 @@ public class CommandClientStepRenderer {
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
             .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
+            .addSuperinterface(ClassName.get("org.pipelineframework.command", "CommandStep"))
             .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
             .addField(support)
             .addField(descriptorFactory)

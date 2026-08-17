@@ -76,6 +76,8 @@ public final class PipelineBranchingResourceLoader {
                 "Branch-aware step '" + step + "' is missing required field 'runtimeStepClass' in branching.json. Entry: " + raw);
         }
         return new BranchingStep(
+            stringValue(raw.get("definitionId")),
+            intValue(raw.get("definitionTerminalStepIndex"), -1),
             intValue(raw.get("index"), -1),
             step,
             runtimeStepClass,
@@ -238,6 +240,8 @@ public final class PipelineBranchingResourceLoader {
     }
 
     public record BranchingStep(
+        String definitionId,
+        int definitionTerminalStepIndex,
         int index,
         String step,
         String runtimeStepClass,
@@ -249,6 +253,26 @@ public final class PipelineBranchingResourceLoader {
         List<BranchVariantIdentity> producedVariants,
         boolean terminal
     ) {
+        public BranchingStep {
+            definitionId = definitionId == null || definitionId.isBlank() ? "$root" : definitionId.strip();
+        }
+
+        public BranchingStep(
+            int index,
+            String step,
+            String runtimeStepClass,
+            String inputRuntimeClass,
+            List<String> acceptedContracts,
+            List<String> acceptedRuntimeClasses,
+            List<BranchVariantIdentity> inputVariants,
+            List<BranchVariantIdentity> acceptedVariants,
+            List<BranchVariantIdentity> producedVariants,
+            boolean terminal
+        ) {
+            this("$root", -1, index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts,
+                acceptedRuntimeClasses, inputVariants, acceptedVariants, producedVariants, terminal);
+        }
+
         public BranchingStep(
             int index,
             String step,
@@ -258,7 +282,7 @@ public final class PipelineBranchingResourceLoader {
             List<String> acceptedRuntimeClasses,
             boolean terminal
         ) {
-            this(index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts, acceptedRuntimeClasses,
+            this("$root", -1, index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts, acceptedRuntimeClasses,
                 List.of(), List.of(), List.of(), terminal);
         }
     }

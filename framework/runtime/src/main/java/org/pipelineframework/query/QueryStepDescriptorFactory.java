@@ -19,6 +19,13 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
+import org.pipelineframework.connector.QueryCapabilities;
 
 /**
  * Builds query descriptors from runtime pipeline YAML.
@@ -76,6 +83,38 @@ public class QueryStepDescriptorFactory {
             .orElseThrow(() -> new IllegalStateException("No query YAML step found for generated service " + serviceName));
         if (!"query".equalsIgnoreCase(step.kind())) {
             throw new IllegalStateException("Generated query service " + serviceName + " maps to non-query YAML step");
+        }
+        if (step.operationSelection().isPresent()) {
+            org.pipelineframework.config.pipeline.PipelineYamlOperationSelection selectedOperation =
+                step.operationSelection().orElseThrow();
+            org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding binding =
+                config.connectors().get(selectedOperation.using());
+            if (binding == null) {
+                throw new IllegalStateException("Query step " + serviceName + " references unknown connector binding '"
+                    + selectedOperation.using() + "'");
+            }
+            ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+                ConnectorProviderId.of(binding.provider()),
+                selectedOperation.operation(),
+                ConnectorOperationKind.QUERY,
+                selectedOperation.operationVersion());
+            QueryCapabilities capabilities = providerManifestCatalog().requireQueryCapabilities(
+                identity, binding.version());
+            return QueryStepDescriptor.nativeQuery(
+                serviceName,
+                inputType,
+                outputType,
+                step.cardinality(),
+                new NativeQuerySelector(
+                    ConnectorBindingName.of(binding.name()),
+                    identity,
+                    binding.version()),
+                step.operationConfig(),
+                step.queryCapture() == null || step.queryCapture().keyFields() == null
+                    ? java.util.List.of()
+                    : step.queryCapture().keyFields(),
+                capabilities,
+                step.negativeCacheTtl());
         }
         if (step.queryId() == null || step.queryId().isBlank()) {
             throw new IllegalStateException("Query step " + serviceName + " is missing query");
@@ -154,6 +193,12 @@ public class QueryStepDescriptorFactory {
             }
         }
         return Optional.empty();
+    }
+
+    private static ConnectorProviderManifestCatalog providerManifestCatalog() {
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        return ConnectorProviderManifestLoader.load(
+            context == null ? QueryStepDescriptorFactory.class.getClassLoader() : context);
     }
 
     private static String toServiceName(String stepName) {

@@ -7,10 +7,35 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringReader;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class PipelineYamlConfigLoaderTest {
+
+    @Test
+    void trimsConnectorBindingKeysAndRejectsBlankOnes() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              " work ":
+                provider: acme.work
+                version: 1
+            steps: []
+            """));
+
+        assertTrue(config.connectors().containsKey("work"));
+        IllegalArgumentException blank = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                connectors:
+                  "":
+                    provider: acme.work
+                    version: 1
+                steps: []
+                """)));
+        assertTrue(blank.getMessage().contains("must not be blank"), blank.getMessage());
+    }
 
     @Test
     void loadsNativeCommandSelectorIntoTheRuntimeDescriptorConfiguration() {
@@ -465,19 +490,92 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
-    void rejectsLegacyConnectorSection() {
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
-            new PipelineYamlConfigLoader().load(new StringReader("""
-                basePackage: "com.example"
-                transport: "GRPC"
-                platform: "COMPUTE"
-                steps: []
-                connectors: []
-                """)));
+    void loadsNamedConnectorBindingsAndOperationFirstCommandAndQuerySelections() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  connection: work-session
+            steps:
+              - name: "Send invoice"
+                kind: command
+                operation: invoice.send
+                using: work
+                policy:
+                  requireIdempotency: true
+                config:
+                  destination: billing
+              - name: "Find invoice"
+                kind: query
+                operation: invoice.find
+                operationVersion: 2
+                using: work
+                config:
+                  index: invoices
+            """));
 
-        assertEquals(
-            "Top-level connectors are no longer supported; use input.subscription and output.checkpoint",
-            exception.getMessage());
+        PipelineYamlConnectorBinding binding = config.connectors().get("work");
+        assertEquals("acme.work", binding.provider());
+        assertEquals("work-session", binding.config().get("connection"));
+        PipelineYamlStep command = config.steps().get(0);
+        assertEquals("native-binding:work/invoice.send", command.command());
+        assertEquals("work", command.operationSelection().orElseThrow().using());
+        assertEquals("invoice.send", command.operationSelection().orElseThrow().operation());
+        assertEquals("work", command.commandConfig().get("__tpf_native_binding"));
+        assertEquals("billing", command.commandConfig().get("destination"));
+        PipelineYamlStep query = config.steps().get(1);
+        assertEquals("native-binding:work/invoice.find", query.queryId());
+        assertEquals(2, query.operationSelection().orElseThrow().operationVersion());
+        assertEquals("invoices", query.commandConfig().get("index"));
+    }
+
+    @Test
+    void loadsBoundedNegativeCachingOnlyForProviderBackedQueries() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Find invoice
+                kind: query
+                operation: invoice.find
+                using: work
+                negativeCacheTtl: PT20S
+            """));
+
+        assertEquals(Duration.ofSeconds(20), config.steps().getFirst().negativeCacheTtl().orElseThrow());
+
+        IllegalArgumentException legacy = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                steps:
+                  - name: Find invoice
+                    kind: query
+                    query: invoice-by-id
+                    negativeCacheTtl: PT20S
+                """)));
+        assertTrue(legacy.getMessage().contains("only for provider-backed Query steps"));
+
+        IllegalArgumentException invalid = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                connectors:
+                  work:
+                    provider: acme.work
+                    version: 1
+                steps:
+                  - name: Find invoice
+                    kind: query
+                    operation: invoice.find
+                    using: work
+                    negativeCacheTtl: PT0S
+                """)));
+        assertTrue(invalid.getMessage().contains("must be a positive ISO-8601 duration"));
     }
 
     @Test
