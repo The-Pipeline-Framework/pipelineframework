@@ -77,6 +77,11 @@ public final class ConnectorProviderArtifacts {
             .append(commandCapabilities(capabilities)));
         operation.queryCapabilities().ifPresent(capabilities -> json.append(",\"queryCapabilities\":")
             .append(queryCapabilities(capabilities)));
+        operation.typeContract().ifPresent(contract -> {
+            json.append(",\"typeContract\":{\"input\":").append(quote(contract.inputType()));
+            contract.outputType().ifPresent(output -> json.append(",\"output\":").append(quote(output)));
+            json.append('}');
+        });
         return json.append('}').toString();
     }
 

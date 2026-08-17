@@ -12,7 +12,8 @@ public record ConnectorOperationDescriptor(
     int majorVersion,
     Optional<ConnectorConfigSchemaDescriptor> configurationSchema,
     Optional<CommandCapabilities> commandCapabilities,
-    Optional<QueryCapabilities> queryCapabilities
+    Optional<QueryCapabilities> queryCapabilities,
+    Optional<ConnectorOperationTypeContract> typeContract
 ) {
     public ConnectorOperationDescriptor {
         id = ConnectorProviderId.require(id, "operation ID");
@@ -23,6 +24,7 @@ public record ConnectorOperationDescriptor(
         configurationSchema = Objects.requireNonNull(configurationSchema, "configuration schema must not be null");
         commandCapabilities = Objects.requireNonNull(commandCapabilities, "command capabilities must not be null");
         queryCapabilities = Objects.requireNonNull(queryCapabilities, "query capabilities must not be null");
+        typeContract = Objects.requireNonNull(typeContract, "operation type contract must not be null");
         if (commandCapabilities.isPresent() && !ConnectorOperationKind.COMMAND.equals(kind)) {
             throw new IllegalArgumentException("command capabilities require command operation kind");
         }
@@ -32,7 +34,7 @@ public record ConnectorOperationDescriptor(
     }
 
     public ConnectorOperationDescriptor(String id, ConnectorOperationKind kind, int majorVersion) {
-        this(id, kind, majorVersion, Optional.empty(), Optional.empty(), Optional.empty());
+        this(id, kind, majorVersion, Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public ConnectorOperationDescriptor(
@@ -41,7 +43,7 @@ public record ConnectorOperationDescriptor(
         int majorVersion,
         Optional<ConnectorConfigSchemaDescriptor> configurationSchema
     ) {
-        this(id, kind, majorVersion, configurationSchema, Optional.empty(), Optional.empty());
+        this(id, kind, majorVersion, configurationSchema, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public ConnectorOperationDescriptor(
@@ -51,6 +53,6 @@ public record ConnectorOperationDescriptor(
         Optional<ConnectorConfigSchemaDescriptor> configurationSchema,
         Optional<CommandCapabilities> commandCapabilities
     ) {
-        this(id, kind, majorVersion, configurationSchema, commandCapabilities, Optional.empty());
+        this(id, kind, majorVersion, configurationSchema, commandCapabilities, Optional.empty(), Optional.empty());
     }
 }
