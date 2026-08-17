@@ -31,14 +31,18 @@ import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.pipeline.PipelineResources;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
+import org.pipelineframework.protocol.ProtocolTypeRegistry;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -50,10 +54,12 @@ public class PipelineTemplateConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
     private static final String DEFAULT_TRANSPORT = "GRPC";
+    private static final String AGENT_CALL_PROTOCOL_TYPE = "tpf.llm.AgentCall";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
+    private final ProtocolTypeRegistry protocolTypeRegistry;
     private boolean warnedAuthoredFieldNumber;
     private boolean warnedOptional;
     private boolean warnedAuthoredUnionNumber;
@@ -85,9 +91,26 @@ public class PipelineTemplateConfigLoader {
         Function<String, String> envLookup,
         Consumer<String> warningReporter
     ) {
+        this(propertyLookup, envLookup, warningReporter, discoveredProtocolTypes());
+    }
+
+    private static ProtocolTypeRegistry discoveredProtocolTypes() {
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        return new ProtocolTypeRegistry(
+            ProtocolTypeRegistry.discoverContributions(classLoader), ConnectorProviderManifestLoader.load(classLoader));
+    }
+
+    /** Creates a loader with explicit contributed protocol vocabulary for plain-Java tooling and tests. */
+    public PipelineTemplateConfigLoader(
+        Function<String, String> propertyLookup,
+        Function<String, String> envLookup,
+        Consumer<String> warningReporter,
+        ProtocolTypeRegistry protocolTypeRegistry
+    ) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
         this.warningReporter = warningReporter == null ? LOG::warning : warningReporter;
+        this.protocolTypeRegistry = Objects.requireNonNull(protocolTypeRegistry, "protocol type registry must not be null");
     }
 
     /**
@@ -227,11 +250,11 @@ public class PipelineTemplateConfigLoader {
         if (rootMap.containsKey("unions")) {
             throw new IllegalStateException("Top-level 'unions' is not supported in version: 3; declare variants under 'types'.");
         }
-        PipelineTemplateTypeModel typeModel = readV3Types(rootMap);
+        V3TypeDeclarations typeDeclarations = readV3Types(rootMap);
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
-        Map<String, PipelineTemplateDefinition> pipelines = readV3PipelineDefinitions(rootMap, version, typeModel);
+        Map<String, PipelineTemplateDefinition> pipelines = readV3PipelineDefinitions(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         if (!materialization.aspects().isEmpty()) {
@@ -244,13 +267,23 @@ public class PipelineTemplateConfigLoader {
         validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
         validateObjectOutputTarget(output, publish);
+        ProtocolTypeResolver.Resolved resolved = new ProtocolTypeResolver(
+            protocolTypeRegistry, typeDeclarations.definitions()).resolve(
+                typeDeclarations.representationMappings(), typeDeclarations.providerConfigurations(),
+                inputContract, outputContract, steps, pipelines);
+        PipelineTemplateTypeModel typeModel = resolved.typeModel();
+        inputContract = resolved.inputContract();
+        outputContract = resolved.outputContract();
+        steps = resolved.steps();
+        pipelines = resolved.pipelines();
         validateV3Contracts(typeModel, inputContract, outputContract, steps);
+        pipelines.forEach((id, definition) ->
+            validateV3Contracts(typeModel, definition.inputContract(), definition.outputContract(), definition.steps()));
         return new PipelineTemplateConfig(version, appName, basePackage, transport, platform, Map.of(), Map.of(), sources,
             publish, steps, aspects, input, output, materialization, inputContract, outputContract, typeModel, pipelines);
     }
 
-    private Map<String, PipelineTemplateDefinition> readV3PipelineDefinitions(
-            Map<?, ?> rootMap, int version, PipelineTemplateTypeModel typeModel) {
+    private Map<String, PipelineTemplateDefinition> readV3PipelineDefinitions(Map<?, ?> rootMap, int version) {
         Object rawDefinitions = rootMap.get("pipelines");
         if (rawDefinitions == null) {
             return Map.of();
@@ -274,7 +307,6 @@ public class PipelineTemplateConfigLoader {
             if (steps.isEmpty()) {
                 throw new IllegalStateException("Pipeline definition '" + id + "' requires at least one step.");
             }
-            validateV3Contracts(typeModel, input, output, steps);
             if (containsAwait(definition.get("steps"))) {
                 throw new IllegalStateException("Pipeline definition '" + id
                     + "' contains kind: await; nested Await is not supported in this slice.");
@@ -316,7 +348,7 @@ public class PipelineTemplateConfigLoader {
         return false;
     }
 
-    private PipelineTemplateTypeModel readV3Types(Map<?, ?> rootMap) {
+    private V3TypeDeclarations readV3Types(Map<?, ?> rootMap) {
         Object typesObj = rootMap.get("types");
         if (!(typesObj instanceof Map<?, ?> typesMap) || typesMap.isEmpty()) {
             throw new IllegalStateException("Version: 3 requires a non-empty top-level 'types' map.");
@@ -341,7 +373,10 @@ public class PipelineTemplateConfigLoader {
                 representationMappings.put(name, mappings);
             }
         }
-        return new PipelineTemplateTypeModel(definitions, representationMappings, providerConfigurations);
+        return new V3TypeDeclarations(
+            Collections.unmodifiableMap(new LinkedHashMap<>(definitions)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(representationMappings)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(providerConfigurations)));
     }
 
     private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
@@ -469,36 +504,33 @@ public class PipelineTemplateConfigLoader {
         Optional<BigDecimal> minimumExclusive = readV3DecimalConstraint(name, declaration, "minimumExclusive");
         Optional<BigDecimal> maximum = readV3DecimalConstraint(name, declaration, "maximum");
         Optional<BigDecimal> maximumExclusive = readV3DecimalConstraint(name, declaration, "maximumExclusive");
-        boolean stringConstraints = minLength.isPresent() || maxLength.isPresent() || pattern.isPresent() || format.isPresent();
-        boolean numericConstraints = minimum.isPresent() || minimumExclusive.isPresent() || maximum.isPresent() || maximumExclusive.isPresent();
-        if (stringConstraints && !"string".equals(scalar)) {
-            throw new IllegalStateException("Type '" + name + "' can use string constraints only when wraps: string.");
-        }
-        if (numericConstraints && !Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
-            throw new IllegalStateException("Type '" + name + "' can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.");
-        }
-        if (pattern.isPresent() && maxLength.isEmpty()) {
-            throw new IllegalStateException("Type '" + name + "' pattern requires maxLength to bound runtime matching.");
-        }
-        if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
-            throw new IllegalStateException("Type '" + name + "' minLength must not exceed maxLength.");
-        }
-        if (minimum.isPresent() && minimumExclusive.isPresent()) {
-            throw new IllegalStateException("Type '" + name + "' cannot declare both minimum and minimumExclusive.");
-        }
-        if (maximum.isPresent() && maximumExclusive.isPresent()) {
-            throw new IllegalStateException("Type '" + name + "' cannot declare both maximum and maximumExclusive.");
-        }
-        Optional<BigDecimal> lower = minimum.isPresent() ? minimum : minimumExclusive;
-        Optional<BigDecimal> upper = maximum.isPresent() ? maximum : maximumExclusive;
-        if (lower.isPresent() && upper.isPresent()) {
-            int interval = lower.get().compareTo(upper.get());
-            if (interval > 0 || interval == 0 && (minimumExclusive.isPresent() || maximumExclusive.isPresent())) {
-                throw new IllegalStateException("Type '" + name + "' declares an empty numeric constraint interval.");
-            }
-        }
-        return new PipelineTemplateWrapperConstraints(minLength, maxLength, pattern, format, minimum, minimumExclusive,
-            maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraints constraints = new PipelineTemplateWrapperConstraints(
+            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive);
+        PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints)
+            .ifPresent(violation -> { throw wrapperConstraintFailure(name, violation); });
+        return constraints;
+    }
+
+    private IllegalStateException wrapperConstraintFailure(
+        String name,
+        PipelineTemplateWrapperConstraintValidator.Violation violation
+    ) {
+        String message = switch (violation.kind()) {
+            case STRING_ON_NON_STRING -> "can use string constraints only when wraps: string.";
+            case NUMERIC_ON_NON_NUMERIC ->
+                "can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.";
+            case PATTERN_REQUIRES_MAX_LENGTH -> "pattern requires maxLength to bound runtime matching.";
+            case PATTERN_TOO_LONG -> "pattern exceeds the supported maximum length of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_LENGTH + ".";
+            case PATTERN_INPUT_TOO_LONG -> "pattern maxLength exceeds the runtime matching limit of "
+                + PipelineTemplateWrapperConstraintValidator.MAX_PATTERN_INPUT_LENGTH + ".";
+            case UNSAFE_PATTERN -> "pattern uses a regex feature that is unsafe for runtime model validation.";
+            case MIN_LENGTH_EXCEEDS_MAX_LENGTH -> "minLength must not exceed maxLength.";
+            case LOWER_BOUNDS_COMBINED -> "cannot declare both minimum and minimumExclusive.";
+            case UPPER_BOUNDS_COMBINED -> "cannot declare both maximum and maximumExclusive.";
+            case EMPTY_INTERVAL -> "declares an empty numeric constraint interval.";
+        };
+        return new IllegalStateException("Type '" + name + "' " + message);
     }
 
     private void rejectV3WrapperConstraints(String name, Map<?, ?> declaration) {
@@ -621,26 +653,44 @@ public class PipelineTemplateConfigLoader {
             if (PipelineTemplateTypeMappings.isV3ScalarType(payload)) {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
             }
-            if (payload.contains("<") || payload.contains(".")) {
+            PipelineTemplateTypeReference reference = readV3Reference(payload, unionName + "." + discriminator);
+            if (reference instanceof PipelineTemplateTypeReference.Scalar) {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
             }
             result.put(discriminator, new PipelineTemplateTypeDefinition.Variant(discriminator,
-                new PipelineTemplateTypeReference.Named(payload)));
+                reference));
         }
         return result;
     }
 
     private PipelineTemplateTypeReference readV3Reference(String value, String owner) {
-        if (value.contains("<") || value.contains(">") || value.contains("[") || value.contains("]")) {
+        String token = value.trim();
+        try {
+            Optional<String> contributed = ProtocolTypeReferences.parseContributed(token);
+            if (contributed.isPresent()) {
+                return new PipelineTemplateTypeReference.Contributed(contributed.orElseThrow());
+            }
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.",
+                failure);
+        }
+        if (token.contains("<") || token.contains(">") || token.contains("[") || token.contains("]")) {
             throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.");
         }
-        if (PipelineTemplateTypeMappings.isV3ScalarType(value)) {
-            return new PipelineTemplateTypeReference.Scalar(value);
+        if (PipelineTemplateTypeMappings.isV3ScalarType(token)) {
+            return new PipelineTemplateTypeReference.Scalar(token);
         }
-        if (!PipelineTemplateTypeMappings.isMessageReferenceToken(value)) {
+        if (!PipelineTemplateTypeMappings.isMessageReferenceToken(token)) {
             throw new IllegalStateException("Type '" + owner + "' must reference a supported scalar or named type, got '" + value + "'.");
         }
-        return new PipelineTemplateTypeReference.Named(value);
+        return new PipelineTemplateTypeReference.Named(token);
+    }
+
+    private record V3TypeDeclarations(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings,
+        Map<String, Map<String, Object>> providerConfigurations
+    ) {
     }
 
     private String requiredV3String(Map<?, ?> values, String key, String owner) {
@@ -682,6 +732,19 @@ public class PipelineTemplateConfigLoader {
             if (!typeModel.contains(step.outputTypeName())) {
                 throw new IllegalStateException("Step '" + step.name() + "' references unknown output type '" + step.outputTypeName() + "'.");
             }
+            for (org.pipelineframework.config.pipeline.PipelineYamlCallable callable : step.callables().values()) {
+                if (!typeModel.contains(callable.input())) {
+                    throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                        + "' references unknown input type '" + callable.input() + "'.");
+                }
+                if (!isRecordContract(typeModel, callable.input())) {
+                    throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                        + "' input '" + callable.input() + "' must resolve to a v3 record for model tool arguments.");
+                }
+            }
+            if (!step.callables().isEmpty()) {
+                validateLlmDecisionContract(typeModel, step);
+            }
         }
         if (steps.isEmpty()) {
             return;
@@ -706,6 +769,66 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Final step '" + last.name() + "' output '" + last.outputTypeName()
                 + "' is not assignable to pipeline output contract '" + outputContract + "'.");
         }
+    }
+
+    private boolean isRecordContract(PipelineTemplateTypeModel typeModel, String contract) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(contract));
+        return resolved instanceof PipelineTemplateTypeReference.Named named
+            && typeModel.definition(named.name()).orElseThrow() instanceof PipelineTemplateTypeDefinition.RecordType;
+    }
+
+    private void validateLlmDecisionContract(PipelineTemplateTypeModel typeModel, PipelineTemplateStep step) {
+        PipelineTemplateTypeDefinition definition = typeModel.definition(step.outputTypeName()).orElseThrow();
+        if (!(definition instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+            throw new IllegalStateException("Step '" + step.name()
+                + "' declares callables and must output an application-authored v3 decision union.");
+        }
+        Map<Boolean, List<PipelineTemplateTypeDefinition.Variant>> variants = union.variants().values().stream()
+            .collect(Collectors.partitioningBy(variant -> isAgentCallVariant(typeModel, variant)));
+        List<PipelineTemplateTypeDefinition.Variant> agentCallVariants = variants.get(true);
+        List<PipelineTemplateTypeDefinition.Variant> completionVariants = variants.get(false);
+        if (agentCallVariants.size() != 1) {
+            throw new IllegalStateException("Step '" + step.name()
+                + "' decision union must declare exactly one <tpf.llm.AgentCall> variant.");
+        }
+        completionVariants.stream()
+            .map(PipelineTemplateTypeDefinition.Variant::discriminator)
+            .filter(step.callables()::containsKey)
+            .findFirst()
+            .ifPresent(alias -> {
+                throw new IllegalStateException("Step '" + step.name() + "' callable alias '" + alias
+                    + "' conflicts with a completion discriminator.");
+            });
+        completionVariants.stream()
+            .map(variant -> resolvedVariantName(typeModel, variant))
+            .filter(name -> !isRecordContract(typeModel, name))
+            .findFirst()
+            .ifPresent(name -> {
+                throw new IllegalStateException("Step '" + step.name() + "' completion payload '" + name
+                    + "' must resolve to a v3 record for model tool arguments.");
+            });
+    }
+
+    private boolean isAgentCallVariant(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateTypeDefinition.Variant variant
+    ) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
+        return resolved instanceof PipelineTemplateTypeReference.Named named
+            && typeModel.contributedTypeIdentity(named.name())
+                .filter(identity -> AGENT_CALL_PROTOCOL_TYPE.equals(identity.qualifiedName())).isPresent();
+    }
+
+    private String resolvedVariantName(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateTypeDefinition.Variant variant
+    ) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
+        if (!(resolved instanceof PipelineTemplateTypeReference.Named named)) {
+            throw new IllegalStateException("Decision union variant '" + variant.discriminator()
+                + "' must resolve to a named v3 type.");
+        }
+        return named.name();
     }
 
     /**
@@ -1218,6 +1341,8 @@ public class PipelineTemplateConfigLoader {
             Optional<String> pipelineReference = Optional.ofNullable(readString(stepMap, "pipeline"))
                 .map(String::trim)
                 .filter(reference -> !reference.isEmpty());
+            Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> callables =
+                readTemplateCallables(stepMap, name, version);
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
@@ -1234,9 +1359,52 @@ public class PipelineTemplateConfigLoader {
                 execution,
                 accepts,
                 terminal,
-                pipelineReference));
+                pipelineReference,
+                callables));
         }
         return stepInfos;
+    }
+
+    private Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> readTemplateCallables(
+        Map<?, ?> stepMap,
+        String stepName,
+        int version
+    ) {
+        Object raw = stepMap.get("callables");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (version != 3) {
+            throw new IllegalStateException("Step '" + stepName + "' callables require version: 3");
+        }
+        if (!(raw instanceof Map<?, ?> values) || values.isEmpty()) {
+            throw new IllegalStateException("Step '" + stepName + "' callables must be a non-empty map");
+        }
+        Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> result = new LinkedHashMap<>();
+        values.forEach((aliasValue, descriptorValue) -> {
+            String alias = aliasValue == null ? "" : aliasValue.toString().trim();
+            if (!(descriptorValue instanceof Map<?, ?> descriptor)) {
+                throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "' must be a map");
+            }
+            Integer authoredVersion = readIntegerObject(descriptor, "operationVersion");
+            try {
+                org.pipelineframework.config.pipeline.PipelineYamlCallable callable =
+                    new org.pipelineframework.config.pipeline.PipelineYamlCallable(
+                        alias,
+                        readString(descriptor, "using"),
+                        readString(descriptor, "operation"),
+                        org.pipelineframework.config.pipeline.PipelineYamlCallable.parseKind(readString(descriptor, "kind")),
+                        authoredVersion == null ? 1 : authoredVersion,
+                        readString(descriptor, "input"));
+                if (result.putIfAbsent(callable.alias(), callable) != null) {
+                    throw new IllegalArgumentException("duplicate callable alias '" + alias + "'");
+                }
+            } catch (IllegalArgumentException failure) {
+                throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "': "
+                    + failure.getMessage(), failure);
+            }
+        });
+        return Map.copyOf(result);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

@@ -1,0 +1,114 @@
+package org.pipelineframework.connector.llm.langchain4j;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import org.pipelineframework.connector.llm.LlmToolDefinition;
+import org.pipelineframework.connector.llm.LlmProviderConfiguration;
+import org.pipelineframework.connector.llm.LlmTurnRequest;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
+
+class LangChain4jOllamaQueryConnectorTest {
+    @Test
+    void configuresTheOllamaModelWithAnExplicitBoundedTimeout() {
+        AtomicReference<String> baseUrl = new AtomicReference<>();
+        AtomicReference<String> modelName = new AtomicReference<>();
+        AtomicReference<Duration> timeout = new AtomicReference<>();
+        ChatModel model = model(AiMessage.from("unused"));
+        var connector = new LangChain4jOllamaQueryConnector((configuredBaseUrl, configuredModel, configuredTimeout) -> {
+            baseUrl.set(configuredBaseUrl);
+            modelName.set(configuredModel);
+            timeout.set(configuredTimeout);
+            return model;
+        });
+
+        assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class,
+            connector.createClient(
+                new LlmProviderConfiguration("qwen3", Optional.of("http://ollama.internal:11434")),
+                ConnectorRuntimeContext.empty()));
+        assertEquals("http://ollama.internal:11434", baseUrl.get());
+        assertEquals("qwen3", modelName.get());
+        assertEquals(Duration.ofSeconds(30), timeout.get());
+    }
+
+    @Test
+    void performsOneLowLevelChatCallAndReturnsTheProposalWithoutExecutingIt() {
+        AtomicInteger calls = new AtomicInteger();
+        ChatModel model = new ChatModel() {
+            @Override
+            public ChatResponse doChat(ChatRequest request) {
+                calls.incrementAndGet();
+                assertEquals(List.of("charge"),
+                    request.toolSpecifications().stream().map(specification -> specification.name()).toList());
+                return ChatResponse.builder()
+                    .aiMessage(AiMessage.from(ToolExecutionRequest.builder()
+                        .name("charge")
+                        .arguments("{\"amount\":42}")
+                        .build()))
+                    .build();
+            }
+        };
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+
+        var proposal = client.decide(new LlmTurnRequest(
+            "Decide once.",
+            "{\"invoiceId\":\"7\"}",
+            List.of(new LlmToolDefinition(
+                "charge", "Propose a charge", """
+                    {"type":"object","properties":{"amount":{"type":"integer"}},
+                     "required":["amount"],"additionalProperties":false,
+                     "$defs":{"Arguments":{"type":"object","properties":{"amount":{"type":"integer"}},
+                     "required":["amount"],"additionalProperties":false}}}
+                    """))))
+            .toCompletableFuture().join();
+
+        assertEquals("charge", proposal.alias());
+        assertEquals("{\"amount\":42}", proposal.argumentsJson());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void normalizesMissingToolRequestsToAnEmptyProposal() {
+        var proposal = decide(AiMessage.builder().toolExecutionRequests(null).build());
+
+        assertEquals("", proposal.alias());
+        assertEquals("{}", proposal.argumentsJson());
+    }
+
+    @Test
+    void normalizesNullToolNameAndArgumentsToAnEmptyProposal() {
+        var proposal = decide(AiMessage.from(ToolExecutionRequest.builder().build()));
+
+        assertEquals("", proposal.alias());
+        assertEquals("{}", proposal.argumentsJson());
+    }
+
+    private static org.pipelineframework.connector.llm.LlmToolProposal decide(AiMessage message) {
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model(message), Runnable::run);
+        return client.decide(new LlmTurnRequest("Decide once.", "{}", List.of(
+            new LlmToolDefinition("complete", "Complete", """
+                {"type":"object","properties":{},"required":[],"additionalProperties":false}
+                """))))
+            .toCompletableFuture().join();
+    }
+
+    private static ChatModel model(AiMessage message) {
+        return new ChatModel() {
+            @Override
+            public ChatResponse doChat(ChatRequest request) {
+                return ChatResponse.builder().aiMessage(message).build();
+            }
+        };
+    }
+}
