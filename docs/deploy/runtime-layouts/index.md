@@ -1,7 +1,7 @@
 # Runtime Layouts and Build Topologies
 
 This section is the application developer guide for shaping deployments after scaffold generation.
-In the standard flow, you design in the Web UI Canvas Designer, download the scaffold,
+In the standard flow, you generate the scaffold from your pipeline model,
 then choose how many deployables you actually want to run.
 
 ## Three terms you must separate
@@ -52,9 +52,8 @@ In durable self-host HA, `orchestrator-svc` is a module/artifact name, not alway
 
 Application developers using the normal onboarding path:
 
-1. Design in Canvas.
-2. Download scaffold.
-3. Adjust runtime layout and build topology for your target environment.
+1. Generate the scaffold from your pipeline model.
+2. Adjust runtime layout and build topology for your target environment.
 
 ## Why people get confused
 

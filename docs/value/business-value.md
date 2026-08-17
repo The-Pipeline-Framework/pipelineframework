@@ -55,8 +55,8 @@ Together they give TPF a practical state-and-replay story: keep the durable reco
 
 <div class="value-links">
 
-- [Quick Start](/design/pipeline-studio/)
-- [Canvas Guide](/design/pipeline-studio/canvas-guide)
+- [Pipeline Compilation](/develop/pipeline-compilation/)
+- [Code a Step](/develop/code-a-step)
 - [Runtime Layouts](/deploy/runtime-layouts/)
 - [Operators](/design/operators)
 - [Operator Reuse Strategy](/design/operator-reuse-strategy)

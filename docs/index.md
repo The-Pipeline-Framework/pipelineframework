@@ -11,10 +11,10 @@ hero:
   actions:
     - theme: alt
       text: Quick Start
-      link: /design/pipeline-studio/
+      link: /develop/pipeline-compilation/
     - theme: brand
-      text: Design with Canvas
-      link: https://app.pipelineframework.org
+      text: Code a Step
+      link: /develop/code-a-step
 ---
 
 <figure class="home-cinematic-spotlight">
@@ -35,8 +35,8 @@ hero:
   <figcaption>Async application flow: an await step hands work through Kafka to an external provider, then resumes from captured state with deterministic lineage.</figcaption>
 </figure>
 
-<Callout type="tip" title="Fastest path: design with Canvas">
-Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to model a typed application flow visually and download a runnable baseline. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, connectors, and runtime configuration.
+<Callout type="tip" title="YAML is the canonical design path">
+Define the typed application flow in pipeline YAML, then let the framework validate and generate the adapters, transports, and runtime wiring. The same model can then be refined through Java functions, existing-method operators, type mappers, connectors, and runtime configuration.
 </Callout>
 
 <Callout type="info" title="TPF understands contracts, not just order">
@@ -173,8 +173,8 @@ If you already have proven Java libraries or remote endpoints, operators let you
 
 ## Start Here
 
-- [Quick Start](/design/pipeline-studio/) for the fastest path to a runnable scaffold.
-- [Pipeline Compilation](/develop/pipeline-compilation/) for YAML-first generation and build-time validation.
+- [Pipeline Compilation](/develop/pipeline-compilation/) for the YAML-first generation path and build-time validation.
+- [Code a Step](/develop/code-a-step) to implement the business function itself.
 - [Operators](/develop/operators) for reusing existing Java methods or remote endpoints.
 - [Runtime Layouts](/deploy/runtime-layouts/) for logical placement versus Maven/container build topology.
 - [AWS Lambda Platform](/deploy/aws-lambda) for the canonical `FUNCTION` platform guide.

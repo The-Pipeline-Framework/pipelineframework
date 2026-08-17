@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/design/pipeline-studio/
+      content: 0;url=/develop/pipeline-compilation/
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/design/pipeline-studio/'))
+    window.location.replace(withBase('/develop/pipeline-compilation/'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/design/pipeline-studio/](/design/pipeline-studio/).
+This page moved to [/develop/pipeline-compilation/](/develop/pipeline-compilation/).

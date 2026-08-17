@@ -17,10 +17,8 @@ TPF reference material now lives in concrete examples and focused guides rather 
 | --- | --- |
 | Design the application flow | [Functional Core, Imperative Shell](/design/fcis) |
 | Understand state surfaces | [State Model](/design/state-model) |
-| Use visual baseline modeling | [Pipeline Studio](/design/pipeline-studio/) |
 | Understand generated artifacts | [Pipeline Compilation](/develop/pipeline-compilation/) |
 | Configure a generated app | [Configuration](/develop/configuration/) |
-| Work with MCP/template generation | [MCP and Template Generation](/develop/mcp-template-generation) |
 
 ## Archived Scaffold Walkthrough
 

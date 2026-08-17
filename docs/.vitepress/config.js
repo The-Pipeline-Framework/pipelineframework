@@ -42,15 +42,6 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/design/'},
-            {
-                text: 'Pipeline Studio',
-                link: '/design/pipeline-studio/',
-                collapsed: true,
-                items: [
-                    {text: 'Quick Start', link: '/design/pipeline-studio/'},
-                    {text: 'Canvas Guide', link: '/design/pipeline-studio/canvas-guide'}
-                ]
-            },
             {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
             {text: 'State Model', link: '/design/state-model'},
             {text: 'Application Structure', link: '/design/application-structure'},
@@ -98,7 +89,6 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/develop/'},
             {text: 'Spring Support Status', link: '/develop/spring-support'},
-            {text: 'MCP and Template Generation', link: '/develop/mcp-template-generation'},
             {
                 text: 'Pipeline Compilation',
                 link: '/develop/pipeline-compilation/',
@@ -386,7 +376,6 @@ const mainSidebar = [
                     {text: 'Overview', link: '/evolve/publishing'},
                     {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
                     {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
-                    {text: 'Bridge Release Coordination', link: '/evolve/bridge-release-coordination'},
                     {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
                 ]
             },
@@ -663,7 +652,10 @@ export default withMermaid(
           // Exclude redirect stubs from route migrations; keep their canonical targets.
           return !pathname.startsWith('/guide/')
             && !pathname.startsWith('/design/runtime-layouts')
+            && !pathname.startsWith('/design/pipeline-studio')
             && pathname !== '/design/await'
+            && pathname !== '/develop/mcp-template-generation'
+            && pathname !== '/evolve/bridge-release-coordination'
         })
       }
     },

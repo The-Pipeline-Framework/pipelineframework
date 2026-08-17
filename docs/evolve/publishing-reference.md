@@ -9,11 +9,7 @@ packaging-aware: public `pom` artifacts require their POM and signature, while
 public `jar` artifacts also require main, sources, Javadoc, and signature files.
 
 ::: tip Reference Appendix
-This is the long-form Maven Central and release reference. Start with [Publishing](/evolve/publishing), [Framework Release Process](/evolve/framework-release-process), [Docs Snapshot Process](/evolve/docs-snapshot-process), or [Bridge Release Coordination](/evolve/bridge-release-coordination) for the canonical path.
-:::
-
-::: tip Release Boundary
-This repository publishes the Java framework artifacts. The MCP bridge and Node template generator are coordinated but released from [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge); see the coordinated bridge section before cutting releases that depend on schema changes.
+This is the long-form Maven Central and release reference. Start with [Publishing](/evolve/publishing), [Framework Release Process](/evolve/framework-release-process), or [Docs Snapshot Process](/evolve/docs-snapshot-process) for the canonical path.
 :::
 
 This document explains how to publish immutable The Pipeline Framework releases to Maven Central, refresh the current development snapshot, and manage the project's versioning and release process properly.
@@ -37,7 +33,6 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
 3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
-6. **Publish the bridge separately when needed**: `tpf-mcp-bridge` uses npm semver and tag format `tpf-mcp-bridge-vX.Y.Z`; it is coordinated with TPF releases but not version-number synchronized.
 
 The GitHub Actions workflow automatically:
 - Runs the workflows selected by the pushed paths on `main`
@@ -59,7 +54,6 @@ the deployment, verify Maven Central metadata and create the skipped GitHub rele
 - [GitHub Actions Workflow](#github-actions-workflow)
 - [Nightly Snapshot Publishing](#nightly-snapshot-publishing)
 - [Safe Release Process](#safe-release-process)
-- [Coordinated tpf-mcp-bridge Release](#coordinated-tpf-mcp-bridge-release)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
@@ -331,60 +325,6 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
-
-### Coordinated tpf-mcp-bridge release
-
-The [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) repository is released independently from the Maven framework artifacts. It contains the MCP bridge and the vendored template generator snapshot, so it should be published after a framework release when schema or generator-facing behavior changes.
-
-Do not reuse the Maven framework version for this package. Keep normal npm semver in `package.json` and publish with the bridge tag format:
-
-```bash
-git tag tpf-mcp-bridge-vX.Y.Z
-git push origin tpf-mcp-bridge-vX.Y.Z
-```
-
-Pushing that tag triggers the bridge repository's `.github/workflows/publish.yml`
-workflow. The workflow verifies that the tag name matches the root npm
-`package.json` version, runs the bridge and vendored generator tests, runs
-`npm pack --dry-run`, then publishes `@pipelineframework/tpf-mcp-bridge` to npm.
-
-The bridge publish workflow uses npm trusted publishing rather than a long-lived
-`NPM_TOKEN`. The npm package must have a trusted publisher configured for:
-
-- package: `@pipelineframework/tpf-mcp-bridge`
-- repository: `The-Pipeline-Framework/tpf-mcp-bridge`
-- workflow file: `.github/workflows/publish.yml`
-
-The workflow must retain `permissions: id-token: write` and use an npm version
-that supports trusted publishing. The current bridge workflow uses Node 24 with
-`actions/setup-node@v6` and checks for npm `>= 11.5.1`, matching npm's trusted
-publishing requirements. If `npm publish` fails with a misleading `404 Not Found`
-for an existing package, treat that as an npm authentication/trusted-publisher
-configuration problem before assuming the package is missing.
-
-Before tagging the bridge:
-
-1. Sync `template-generator-node/src/pipeline-template-schema.json` from the matching released framework deployment artifact.
-2. Update generator templates that embed framework parent or dependency versions so generated projects target the released TPF version.
-3. Bump the root npm package version and keep `package-lock.json` aligned.
-4. Run `npm test`, `npm --prefix template-generator-node test`, and `npm pack --dry-run`.
-5. For generator changes that affect generated Java, generated POMs, runtime layout, REST await outputs, mapper contracts, or framework version alignment, run the generated-scaffold compile smoke against the matching framework tag. Generate inside a framework tag worktree under `examples/<smoke-name>` so the scaffold root POM's `<relativePath>../../pom.xml</relativePath>` resolves to `pipeline-framework-root`; then run:
-
-   ```bash
-   ./mvnw -f examples/<smoke-name>/pom.xml -DskipTests compile
-   ```
-
-6. Note the compatible TPF release in the bridge release notes, for example `compatible with TPF v26.5.2`.
-
-After the workflow completes:
-
-```bash
-npm view @pipelineframework/tpf-mcp-bridge version --registry=https://registry.npmjs.org
-```
-
-Confirm the returned version matches the bridge package version. If a publish
-fails after the tag exists, keep the tag immutable in normal release practice:
-fix the workflow or package metadata, then publish a new patch version and tag.
 
 ## Important Publishing Details (Central Validation)
 

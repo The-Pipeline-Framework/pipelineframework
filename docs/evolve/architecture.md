@@ -17,7 +17,6 @@ Use public Design/Develop/Deploy docs for application usage. Use this page when 
 | Checkpoint handoff | [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) |
 | Brokered runtime boundaries | [Brokered Runtime Boundaries](/evolve/brokered-boundaries/) |
 | Runtime portability and Spring status | [Runtime Core Decoupling](/evolve/runtime-core-decoupling) and [Spring Support Status](/develop/spring-support) |
-| MCP/template generation boundary | [MCP and Template Generation](/develop/mcp-template-generation) |
 
 ## Current Control-Plane Shape
 

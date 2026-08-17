@@ -23,7 +23,7 @@ The pipeline YAML controls global settings used by the annotation processor.
 | `transport` | enum | `GRPC`  | Global transport for generated adapters (`GRPC`, `REST`, or `LOCAL`). |
 | `platform`  | enum | `COMPUTE` | Target deployment platform (`COMPUTE` or `FUNCTION`; legacy aliases: `STANDARD`, `LAMBDA`). |
 
-If `pipeline-config.yaml` (the template configuration produced by Canvas or the template generator) is present,
+If `pipeline-config.yaml` (the template configuration produced by the template generator) is present,
 the build can also use it to generate protobuf definitions and orchestrator endpoints at compile time.
 
 ### Orchestrator CLI (Annotation)
