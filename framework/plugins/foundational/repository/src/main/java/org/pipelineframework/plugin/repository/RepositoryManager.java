@@ -71,11 +71,24 @@ public class RepositoryManager implements PayloadMaterializer {
         return provider.store(request);
     }
 
+    /**
+     * Loads a payload from the repository associated with the reference.
+     *
+     * @param reference the payload reference identifying the repository and payload
+     * @return the repository read result
+     */
     public Uni<RepositoryReadResult> load(PayloadReference reference) {
         RepositoryProvider provider = resolveProvider(reference);
         return provider.load(reference);
     }
 
+    /**
+     * Materializes a payload reference while enforcing the specified maximum size and checksum.
+     *
+     * @param reference the payload reference to materialize
+     * @param maxBytes the maximum permitted materialized payload size in bytes
+     * @return the materialized payload
+     */
     @Override
     public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
         Objects.requireNonNull(reference, "payload reference must not be null");
@@ -110,6 +123,12 @@ public class RepositoryManager implements PayloadMaterializer {
         }).subscribeAsCompletionStage();
     }
 
+    /**
+     * Deletes the payload identified by the reference.
+     *
+     * @param reference the reference to the payload to delete
+     * @return {@code true} if the payload was deleted, {@code false} otherwise
+     */
     public Uni<Boolean> delete(PayloadReference reference) {
         RepositoryProvider provider = resolveProvider(reference);
         return provider.delete(reference);

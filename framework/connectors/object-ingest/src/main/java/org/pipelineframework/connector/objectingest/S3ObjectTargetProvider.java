@@ -221,6 +221,12 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
             }, executor);
         }
 
+        /**
+         * Finalizes the S3 object upload and creates its payload reference.
+         *
+         * @param closeRequest metadata, checksum, and byte count for the completed object
+         * @return the completed object write result
+         */
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {

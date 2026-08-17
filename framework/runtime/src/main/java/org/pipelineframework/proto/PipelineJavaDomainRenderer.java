@@ -394,6 +394,12 @@ final class PipelineJavaDomainRenderer {
             .append("        }\n    }\n\n");
     }
 
+    /**
+     * Generates protobuf conversion adapters for payload references, including optional connector-origin metadata and configuration snapshots.
+     *
+     * @param builder    the source builder to which the adapter methods are appended
+     * @param protoTypes the generated protobuf types used by the adapters
+     */
     private void renderPayloadReferenceAdapters(StringBuilder builder, String protoTypes) {
         builder.append("    private static ").append(protoTypes).append(".PayloadReference toProtoPayloadReference(")
             .append(PAYLOAD_REFERENCE).append(" value) {\n")

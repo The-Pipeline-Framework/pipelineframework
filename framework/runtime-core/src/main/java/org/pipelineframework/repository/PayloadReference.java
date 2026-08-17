@@ -61,12 +61,24 @@ public record PayloadReference(
         }
     }
 
+    /**
+     * Associates this payload reference with a connector payload origin.
+     *
+     * @param origin the connector origin associated with the payload
+     * @return a new payload reference containing the specified connector origin
+     */
     public PayloadReference withConnectorOrigin(ConnectorPayloadOrigin origin) {
         return new PayloadReference(
             provider, container, key, contentType, codec, checksum, sizeBytes, version, metadata,
             Optional.of(Objects.requireNonNull(origin, "connector payload origin must not be null")));
     }
 
+    /**
+     * Normalizes an optional string value by trimming it and converting blank values to {@code null}.
+     *
+     * @param value the string value to normalize
+     * @return the trimmed value, or {@code null} if the input is absent or blank
+     */
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }

@@ -27,12 +27,22 @@ public final class FilesystemObjectConnector implements ConnectorProvider<Void> 
         return new ConnectorProviderVersion(1, 0);
     }
 
+    /**
+     * Declares that the connector provider manages execution style and concurrency.
+     *
+     * @return the connector's execution capabilities
+     */
     @Override
     public ConnectorExecutionCapabilities executionCapabilities() {
         return new ConnectorExecutionCapabilities(
             ConnectorExecutionStyle.PROVIDER_MANAGED, ConnectorConcurrencyScope.PROVIDER_MANAGED);
     }
 
+    /**
+     * Provides the filesystem object source and target operations.
+     *
+     * @return the connector's supported operations
+     */
     @Override
     public Collection<? extends ConnectorOperation> operations() {
         return List.of(source, target);

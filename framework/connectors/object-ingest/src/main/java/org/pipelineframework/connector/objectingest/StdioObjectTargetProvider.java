@@ -87,6 +87,12 @@ public final class StdioObjectTargetProvider implements ObjectTargetProvider {
             }
         }
 
+        /**
+         * Completes the write session and creates a reference for the emitted output.
+         *
+         * @param closeRequest the final byte count, checksum, and metadata for the output
+         * @return the completed object write result
+         */
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             synchronized (streams) {

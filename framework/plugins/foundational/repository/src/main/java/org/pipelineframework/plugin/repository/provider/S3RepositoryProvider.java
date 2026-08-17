@@ -97,6 +97,11 @@ public class S3RepositoryProvider implements RepositoryProvider {
         return "s3";
     }
 
+    /**
+     * Stores a payload in Amazon S3 and creates a reference to the stored object.
+     *
+     * @return a reference containing the object's storage location and payload metadata
+     */
     @Override
     public Uni<PayloadReference> store(RepositoryWriteRequest request) {
         return Uni.createFrom().item(() -> {

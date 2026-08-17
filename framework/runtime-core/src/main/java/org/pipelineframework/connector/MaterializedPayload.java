@@ -16,6 +16,11 @@ public record MaterializedPayload(
         bytes = Objects.requireNonNull(bytes, "materialized payload bytes must not be null").clone();
     }
 
+    /**
+     * Returns a defensive copy of the materialized payload bytes.
+     *
+     * @return a copy of the payload bytes
+     */
     @Override
     public byte[] bytes() {
         return bytes.clone();

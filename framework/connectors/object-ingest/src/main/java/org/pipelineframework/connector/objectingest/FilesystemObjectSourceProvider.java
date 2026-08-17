@@ -32,10 +32,19 @@ import org.pipelineframework.repository.PayloadReference;
 public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
     private final Executor executor;
 
+    /**
+     * Creates a filesystem object source provider using the common pool executor.
+     */
     public FilesystemObjectSourceProvider() {
         this(ForkJoinPool.commonPool());
     }
 
+    /**
+     * Creates a filesystem object source provider using the specified executor.
+     *
+     * @param executor executor used for asynchronous filesystem operations
+     * @throws NullPointerException if {@code executor} is {@code null}
+     */
     FilesystemObjectSourceProvider(Executor executor) {
         this.executor = Objects.requireNonNull(executor, "filesystem source executor must not be null");
     }
@@ -72,6 +81,14 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    /**
+     * Reads a filesystem object as text using the configured payload charset.
+     *
+     * @param source  the source configuration
+     * @param item    the object to read
+     * @param maxBytes the maximum number of bytes to read
+     * @return the object's decoded text
+     */
     @Override
     public Optional<String> readText(PipelineObjectSourceConfig source, ObjectSourceItem item, long maxBytes) {
         Path root = root(source);
@@ -84,11 +101,28 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    /**
+     * Materializes a referenced payload subject to the specified size limit.
+     *
+     * @param reference the payload reference to materialize
+     * @param maxBytes the maximum number of bytes to read
+     * @return the materialized payload
+     */
     @Override
     public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
         return CompletableFuture.supplyAsync(() -> materializeBlocking(reference, maxBytes), executor);
     }
 
+    /**
+     * Materializes a filesystem payload and verifies its content checksum when provided.
+     *
+     * @param reference the payload reference identifying the filesystem object
+     * @param maxBytes the maximum number of bytes to read
+     * @return the materialized payload with its computed checksum
+     * @throws IllegalArgumentException if the reference, size limit, provider, or container is invalid
+     * @throws IllegalStateException if the object exceeds the size limit or its checksum does not match
+     * @throws CompletionException if reading the object fails
+     */
     private MaterializedPayload materializeBlocking(PayloadReference reference, long maxBytes) {
         try {
             if (reference == null) {
@@ -119,6 +153,16 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    /**
+     * Reads a file into memory while enforcing an optional maximum byte limit.
+     *
+     * @param path     the file to read
+     * @param maxBytes the maximum allowed content size, when positive
+     * @param key      the object key used in the size-limit error message
+     * @return the file contents
+     * @throws IOException if the file cannot be read
+     * @throws IllegalStateException if the content exceeds {@code maxBytes}
+     */
     private byte[] readBounded(Path path, long maxBytes, String key) throws IOException {
         try (InputStream input = Files.newInputStream(path); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
@@ -133,6 +177,14 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    /**
+     * Builds an object source item containing filesystem metadata and a payload reference for the specified key.
+     *
+     * @param source the configured object source
+     * @param root   the filesystem root containing the object
+     * @param key    the object's path key relative to the root
+     * @return the object source item for the specified key
+     */
     private ObjectSourceItem item(PipelineObjectSourceConfig source, Path root, String key) {
         Path path = requireUnderRoot(root, root.resolve(key).normalize());
         try {
@@ -224,6 +276,13 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         return path;
     }
 
+    /**
+     * Computes the SHA-256 checksum of a file.
+     *
+     * @param path the file whose checksum is computed
+     * @return the checksum as a lowercase hexadecimal string
+     * @throws IOException if the file cannot be read
+     */
     private String sha256(Path path) throws IOException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -240,6 +299,12 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         }
     }
 
+    /**
+     * Computes the SHA-256 digest of the supplied bytes as a hexadecimal string.
+     *
+     * @param bytes the bytes to digest
+     * @return the hexadecimal SHA-256 digest
+     */
     private String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));

@@ -63,6 +63,13 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
         return "filesystem";
     }
 
+    /**
+     * Stores a repository payload and returns its reference.
+     *
+     * @param request the payload and metadata to store
+     * @return a reference to the stored payload
+     * @throws IllegalStateException if the payload cannot be written or atomic replacement is unsupported
+     */
     @Override
     public Uni<PayloadReference> store(RepositoryWriteRequest request) {
         return Uni.createFrom().item(() -> {

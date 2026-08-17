@@ -123,6 +123,14 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
         }
     }
 
+    /**
+     * Creates an object source item and payload reference from an S3 object.
+     *
+     * @param source the source configuration associated with the object
+     * @param bucket the S3 bucket containing the object
+     * @param item the S3 object to convert
+     * @return the corresponding object source item
+     */
     private ObjectSourceItem item(PipelineObjectSourceConfig source, String bucket, S3Object item) {
         String etag = normalizeEtag(item.eTag());
         long size = item.size() == null ? 0L : item.size();

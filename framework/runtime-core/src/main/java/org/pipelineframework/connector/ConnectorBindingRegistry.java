@@ -273,6 +273,14 @@ public final class ConnectorBindingRegistry {
             identity, provider.version().major(), policy);
     }
 
+    /**
+     * Resolves a query operation from an activated connector binding.
+     *
+     * @param name the connector binding name
+     * @param operationId the query operation identifier
+     * @param operationMajorVersion the required operation major version
+     * @return the activated query operation
+     */
     public synchronized QueryOperation<?, ?, ?> requireQueryOperation(
         ConnectorBindingName name,
         String operationId,
@@ -285,7 +293,14 @@ public final class ConnectorBindingRegistry {
             QueryOperation.class);
     }
 
-    /** Returns the durable identity of one configured object-source operation. */
+    /**
+     * Captures the durable identity and configuration snapshot of a configured object-source operation.
+     *
+     * @param name the configured binding name
+     * @param operationId the object-source operation identifier
+     * @param operationMajorVersion the operation's major version
+     * @return the operation's durable payload origin
+     */
     public ConnectorPayloadOrigin objectSourceOrigin(
         ConnectorBindingName name,
         String operationId,
@@ -302,7 +317,13 @@ public final class ConnectorBindingRegistry {
             name, operation, slot.definition().providerMajorVersion(), configuration);
     }
 
-    /** Resolves only when the current binding has the exact origin captured in the reference. */
+    /**
+     * Resolves the object-source operation captured by a payload origin.
+     *
+     * @param origin the captured payload origin to validate
+     * @return the active object-source operation matching the origin
+     * @throws IllegalStateException if the binding provenance, provider version, or active binding does not match
+     */
     public synchronized ObjectSourceOperation requireObjectSourceOperation(ConnectorPayloadOrigin origin) {
         Objects.requireNonNull(origin, "connector payload origin must not be null");
         ConnectorPayloadOrigin current = objectSourceOrigin(
@@ -319,7 +340,13 @@ public final class ConnectorBindingRegistry {
         return binding.registry().requireExecutionOperation(origin.operation(), ObjectSourceOperation.class);
     }
 
-    /** Materializes a connector-owned reference without exposing provider-native location semantics. */
+    /**
+     * Materializes a connector-owned payload reference while enforcing its origin and size limits.
+     *
+     * @param reference the connector-owned payload reference to materialize
+     * @param maxBytes the maximum permitted payload size in bytes
+     * @return the materialized payload
+     */
     public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
         Objects.requireNonNull(reference, "payload reference must not be null");
         if (maxBytes < 1) {
@@ -349,6 +376,14 @@ public final class ConnectorBindingRegistry {
         });
     }
 
+    /**
+     * Resolves a configured connector binding by name.
+     *
+     * @param name the connector binding name
+     * @return the configured binding slot
+     * @throws NullPointerException if {@code name} is {@code null}
+     * @throws IllegalStateException if the binding is unavailable or not configured
+     */
     private BindingSlot requireSlot(ConnectorBindingName name) {
         Objects.requireNonNull(name, "connector binding name must not be null");
         BindingSlot binding = bindings.get(name);

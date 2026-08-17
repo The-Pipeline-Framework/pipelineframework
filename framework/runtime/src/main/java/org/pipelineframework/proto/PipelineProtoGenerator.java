@@ -633,6 +633,12 @@ public class PipelineProtoGenerator {
         return delimiter + text + delimiter;
     }
 
+    /**
+     * Determines whether any message contains a field with the {@code payload_ref} canonical type.
+     *
+     * @param messages message definitions to inspect
+     * @return {@code true} if a payload-reference field is present, {@code false} otherwise
+     */
     private boolean usesPayloadReference(Map<String, PipelineTemplateMessage> messages) {
         for (PipelineTemplateMessage message : messages.values()) {
             if (message == null || message.fields() == null) {
@@ -647,6 +653,11 @@ public class PipelineProtoGenerator {
         return false;
     }
 
+    /**
+     * Appends protobuf message definitions for payload references and their connector origin metadata.
+     *
+     * @param builder the buffer receiving the generated protobuf definitions
+     */
     private void renderPayloadReferenceMessage(StringBuilder builder) {
         builder.append("message ConnectorPayloadOrigin {\n");
         builder.append("  string binding_name = 1;\n");

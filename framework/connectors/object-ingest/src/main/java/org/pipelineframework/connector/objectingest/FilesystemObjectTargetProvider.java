@@ -123,6 +123,13 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
             }, executor);
         }
 
+        /**
+         * Finalizes the filesystem publication and creates the corresponding write result.
+         *
+         * @param closeRequest publication metadata, checksum, and byte count
+         * @return the completed object write result
+         * @throws CompletionException if closing or atomically replacing the temporary file fails
+         */
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {

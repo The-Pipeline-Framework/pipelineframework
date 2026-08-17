@@ -256,12 +256,23 @@ final class PipelineTypesProtoRenderer {
         builder.append(";\n");
     }
 
+    /**
+     * Determines whether any message field uses the {@code payload_ref} type.
+     *
+     * @param messages the pipeline messages to inspect
+     * @return {@code true} if a message contains a {@code payload_ref} field, {@code false} otherwise
+     */
     private boolean usesPayloadReference(Map<String, PipelineTemplateMessage> messages) {
         return messages.values().stream().filter(message -> message != null && message.fields() != null)
             .flatMap(message -> message.fields().stream())
             .anyMatch(field -> field != null && "payload_ref".equals(field.canonicalType()));
     }
 
+    /**
+     * Appends proto3 message definitions for connector payload origins and payload references.
+     *
+     * @param builder the builder to which the message definitions are appended
+     */
     private void renderPayloadReferenceMessage(StringBuilder builder) {
         builder.append("message ConnectorPayloadOrigin {\n");
         builder.append("  string binding_name = 1;\n");
@@ -283,6 +294,12 @@ final class PipelineTypesProtoRenderer {
         builder.append("  ConnectorPayloadOrigin connector_origin = 10;\n}\n");
     }
 
+    /**
+     * Converts a field name to lowercase snake_case notation.
+     *
+     * @param input the field name to convert
+     * @return the converted field name, or an empty string for null or blank input
+     */
     private String toProtoFieldName(String input) {
         if (input == null || input.isBlank()) { return ""; }
         StringBuilder builder = new StringBuilder();
