@@ -123,6 +123,12 @@ public class PipelineTemplateConfigLoader {
         if (dialect != PipelineTemplateDialect.V3 && rootMap.containsKey("representations")) {
             throw new IllegalStateException("Top-level representations require version: 3");
         }
+        if (dialect != PipelineTemplateDialect.V3 && rootMap.containsKey("pipelines")) {
+            throw new IllegalStateException("Top-level 'pipelines' requires version: 3");
+        }
+        if (dialect != PipelineTemplateDialect.V3 && containsPipelineReference(rootMap.get("steps"))) {
+            throw new IllegalStateException("Step property 'pipeline' requires version: 3");
+        }
 
         if (dialect == PipelineTemplateDialect.V3) {
             return loadV3(rootMap, version, appName, basePackage, transport, resolvedPlatform);
@@ -197,6 +203,16 @@ public class PipelineTemplateConfigLoader {
             null);
     }
 
+    private boolean containsPipelineReference(Object rawSteps) {
+        if (!(rawSteps instanceof List<?> steps)) {
+            return false;
+        }
+        return steps.stream()
+            .filter(Map.class::isInstance)
+            .map(Map.class::cast)
+            .anyMatch(step -> step.containsKey("pipeline"));
+    }
+
     private PipelineTemplateConfig loadV3(
         Map<?, ?> rootMap,
         int version,
@@ -215,6 +231,7 @@ public class PipelineTemplateConfigLoader {
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
+        Map<String, PipelineTemplateDefinition> pipelines = readV3PipelineDefinitions(rootMap, version, typeModel);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         if (!materialization.aspects().isEmpty()) {
@@ -229,7 +246,74 @@ public class PipelineTemplateConfigLoader {
         validateObjectOutputTarget(output, publish);
         validateV3Contracts(typeModel, inputContract, outputContract, steps);
         return new PipelineTemplateConfig(version, appName, basePackage, transport, platform, Map.of(), Map.of(), sources,
-            publish, steps, aspects, input, output, materialization, inputContract, outputContract, typeModel);
+            publish, steps, aspects, input, output, materialization, inputContract, outputContract, typeModel, pipelines);
+    }
+
+    private Map<String, PipelineTemplateDefinition> readV3PipelineDefinitions(
+            Map<?, ?> rootMap, int version, PipelineTemplateTypeModel typeModel) {
+        Object rawDefinitions = rootMap.get("pipelines");
+        if (rawDefinitions == null) {
+            return Map.of();
+        }
+        if (!(rawDefinitions instanceof Map<?, ?> definitions)) {
+            throw new IllegalStateException("Version: 3 top-level 'pipelines' must be a map.");
+        }
+        Map<String, PipelineTemplateDefinition> parsed = new LinkedHashMap<>();
+        for (var entry : definitions.entrySet()) {
+            String id = stringify(entry.getKey());
+            if (id == null || id.isBlank()) {
+                throw new IllegalStateException("Pipeline definition IDs must not be blank.");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> definition)) {
+                throw new IllegalStateException("Pipeline definition '" + id + "' must be a YAML map.");
+            }
+            rejectUnexpectedDefinitionKeys(id, definition);
+            String input = readDefinitionContract(definition, "input", id);
+            String output = readDefinitionContract(definition, "output", id);
+            List<PipelineTemplateStep> steps = readSteps(definition, version);
+            if (steps.isEmpty()) {
+                throw new IllegalStateException("Pipeline definition '" + id + "' requires at least one step.");
+            }
+            validateV3Contracts(typeModel, input, output, steps);
+            if (containsAwait(definition.get("steps"))) {
+                throw new IllegalStateException("Pipeline definition '" + id
+                    + "' contains kind: await; nested Await is not supported in this slice.");
+            }
+            if (parsed.putIfAbsent(id.trim(), new PipelineTemplateDefinition(input, output, steps)) != null) {
+                throw new IllegalStateException("Duplicate pipeline definition ID '" + id + "'.");
+            }
+        }
+        return java.util.Collections.unmodifiableMap(parsed);
+    }
+
+    private void rejectUnexpectedDefinitionKeys(String id, Map<?, ?> definition) {
+        for (Object rawKey : definition.keySet()) {
+            String key = stringify(rawKey);
+            if (!"input".equals(key) && !"output".equals(key) && !"steps".equals(key)) {
+                throw new IllegalStateException("Pipeline definition '" + id
+                    + "' contains unsupported version: 3 property '" + key + "'.");
+            }
+        }
+    }
+
+    private String readDefinitionContract(Map<?, ?> definition, String key, String id) {
+        Object value = definition.get(key);
+        if (!(value instanceof String contract) || contract.isBlank()) {
+            throw new IllegalStateException("Pipeline definition '" + id + "' requires a non-blank " + key + " contract.");
+        }
+        return contract.trim();
+    }
+
+    private boolean containsAwait(Object rawSteps) {
+        if (!(rawSteps instanceof Iterable<?> steps)) {
+            return false;
+        }
+        for (Object rawStep : steps) {
+            if (rawStep instanceof Map<?, ?> step && "await".equalsIgnoreCase(readString(step, "kind"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private PipelineTemplateTypeModel readV3Types(Map<?, ?> rootMap) {
@@ -1131,6 +1215,9 @@ public class PipelineTemplateConfigLoader {
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
             List<String> accepts = readStringList(stepMap, "accepts");
             boolean terminal = readBoolean(stepMap, "terminal", false);
+            Optional<String> pipelineReference = Optional.ofNullable(readString(stepMap, "pipeline"))
+                .map(String::trim)
+                .filter(reference -> !reference.isEmpty());
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
@@ -1146,7 +1233,8 @@ public class PipelineTemplateConfigLoader {
                 outboundMapper,
                 execution,
                 accepts,
-                terminal));
+                terminal,
+                pipelineReference));
         }
         return stepInfos;
     }

@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.tools.Diagnostic;
 
@@ -41,6 +42,141 @@ class StepDefinitionParserTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void parsesLocalDefinitionsAndPipelineInvocationWithTheSameStepGrammar() throws Exception {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            types:
+              Value:
+                fields: [[id, string]]
+            pipelines:
+              inner:
+                input: Value
+                output: Value
+                steps:
+                  - name: X
+                    service: com.example.XService
+                    cardinality: ONE_TO_ONE
+                    input: Value
+                    output: Value
+            steps:
+              - name: Call inner
+                pipeline: inner
+                cardinality: ONE_TO_ONE
+                input: Value
+                output: Value
+                java:
+                  input: com.example.Value
+                  output: com.example.Value
+            """);
+
+        ParsedPipelineDefinitionCatalog catalog = new StepDefinitionParser().parseDefinitionCatalog(file);
+
+        assertEquals(StepKind.PIPELINE, catalog.rootSteps().getFirst().kind());
+        assertEquals(Optional.of("inner"), catalog.rootSteps().getFirst().pipelineReference());
+        assertEquals(List.of("inner"), catalog.localDefinitions().keySet().stream().toList());
+        assertEquals("X", catalog.localDefinitions().get("inner").getFirst().name());
+    }
+
+    @Test
+    void rejectsDuplicateLocalPipelineKeysBeforeCatalogMaterialization() throws IOException {
+        Path file = tempDir.resolve("duplicate-pipelines.yaml");
+        Files.writeString(file, """
+            version: 3
+            basePackage: com.example
+            pipelines:
+              inner: { steps: [] }
+              inner: { steps: [] }
+            steps: []
+            """);
+
+        IOException failure = assertThrows(
+            IOException.class,
+            () -> new StepDefinitionParser().parseDefinitionCatalog(file));
+        assertTrue(failure.getMessage().toLowerCase(java.util.Locale.ROOT).contains("duplicate"), failure::getMessage);
+        assertTrue(failure.getMessage().contains("inner"), failure::getMessage);
+    }
+
+    @Test
+    void parsesLocalCatalogWhenRootStepsKeyIsAbsent() throws IOException {
+        Path file = tempDir.resolve("catalog-without-root.yaml");
+        Files.writeString(file, """
+            version: 3
+            basePackage: com.example
+            pipelines:
+              inner:
+                steps:
+                  - { name: X, service: com.example.XService, input: Value, output: Value }
+            """);
+
+        ParsedPipelineDefinitionCatalog catalog = new StepDefinitionParser().parseDefinitionCatalog(file);
+
+        assertTrue(catalog.rootSteps().isEmpty());
+        assertEquals(List.of("inner"), catalog.localDefinitions().keySet().stream().toList());
+        assertEquals("X", catalog.localDefinitions().get("inner").getFirst().name());
+    }
+
+    @Test
+    void preservesAuthoredLocalDefinitionOrder() throws IOException {
+        Path file = tempDir.resolve("ordered-catalog.yaml");
+        Files.writeString(file, """
+            version: 3
+            basePackage: com.example
+            pipelines:
+              zeta:
+                steps: [{ name: Z, service: com.example.ZService, input: Value, output: Value }]
+              alpha:
+                steps: [{ name: A, service: com.example.AService, input: Value, output: Value }]
+            steps: []
+            """);
+
+        ParsedPipelineDefinitionCatalog catalog = new StepDefinitionParser().parseDefinitionCatalog(file);
+
+        assertEquals(List.of("zeta", "alpha"), catalog.localDefinitions().keySet().stream().toList());
+    }
+
+    @Test
+    void rejectsInvalidPipelineCardinalityInsteadOfDefaultingToOneToOne() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+
+        List<StepDefinition> steps = parse("""
+            version: 3
+            basePackage: com.example
+            steps:
+              - name: Invalid invocation
+                pipeline: inner
+                cardinality: SOMETIMES_MANY
+                input: Value
+                output: Value
+                java: { input: com.example.Value, output: com.example.Value }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "invalid pipeline cardinality 'SOMETIMES_MANY'")));
+    }
+
+    @Test
+    void rejectsPresentButBlankPipelineReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            basePackage: com.example
+            steps:
+              - name: Blank invocation
+                pipeline: "  "
+                input: Value
+                output: Value
+                java: { input: com.example.Value, output: com.example.Value }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("pipeline reference must not be blank")));
+    }
 
     @Test
     void rejectsStepWhenServiceAndOperatorAreBothProvided() throws IOException {

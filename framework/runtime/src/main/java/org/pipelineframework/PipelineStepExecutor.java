@@ -105,10 +105,29 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
+        return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
+            contextSnapshot, awaitContextSnapshot, "$root", -1);
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        String definitionId,
+        int definitionTerminalStepIndex) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
-            : branchingRegistry.descriptorFor(resolvedStep.getClass()).orElse(null);
+            : ("$root".equals(definitionId)
+                ? branchingRegistry.descriptorFor(resolvedStep.getClass())
+                : branchingRegistry.descriptorFor(
+                    definitionId, definitionTerminalStepIndex, resolvedStep.getClass())).orElse(null);
         if (resolvedStep instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
             return applyAwaitStreamOneToOneUnchecked(
                 awaitStep,

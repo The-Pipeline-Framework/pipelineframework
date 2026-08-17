@@ -16,7 +16,6 @@
 
 package org.pipelineframework;
 
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -422,6 +421,9 @@ class LocalPipelineInvocationBinderTest {
     @Test
     void nestedFailuresAndCancellationUseTheOuterReactiveSubscription() throws Exception {
         setObjectPublishRunner(ObjectPublishRunner.disabled());
+        // This proof covers propagation, not retry policy. Disable the default exponential retries
+        // so a deliberate failure is observed immediately rather than after the full backoff window.
+        runner.pipelineConfig.defaults().retryLimit(0);
         PipelineReference innerReference = new PipelineReference("reactive-inner");
         PipelineDefinition inner = definition(
             innerReference,
@@ -527,9 +529,7 @@ class LocalPipelineInvocationBinderTest {
     }
 
     private void setObjectPublishRunner(ObjectPublishRunner publishRunner) throws Exception {
-        Field field = PipelineRunner.class.getDeclaredField("objectPublishRunner");
-        field.setAccessible(true);
-        field.set(runner, publishRunner);
+        PipelineRunnerTestHarness.setObjectPublishRunner(runner, publishRunner);
     }
 
     record TerminalValue(String value) {

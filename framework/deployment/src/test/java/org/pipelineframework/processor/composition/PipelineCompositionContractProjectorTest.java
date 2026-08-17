@@ -119,6 +119,37 @@ class PipelineCompositionContractProjectorTest {
             first.definition("child").continuation("finish").kind());
     }
 
+    @Test
+    void canonicalizesDefinitionOrderIndependentlyOfResolverMapIteration() {
+        PipelineReference root = new PipelineReference("root");
+        PipelineReference alpha = new PipelineReference("alpha");
+        PipelineReference zeta = new PipelineReference("zeta");
+        PipelineDefinition rootDefinition = definition(root, "Value", "Value",
+            PipelineDefinitionStep.pipeline("call-zeta", "Value", "Value", zeta),
+            PipelineDefinitionStep.pipeline("call-alpha", "Value", "Value", alpha));
+        PipelineDefinition alphaDefinition = definition(alpha, "Value", "Value",
+            PipelineDefinitionStep.direct("alpha-step", "Value", "Value", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition zetaDefinition = definition(zeta, "Value", "Value",
+            PipelineDefinitionStep.direct("zeta-step", "Value", "Value", CardinalitySemantics.ONE_TO_ONE));
+
+        Map<PipelineReference, PipelineDefinition> firstOrder = new LinkedHashMap<>();
+        firstOrder.put(root, rootDefinition);
+        firstOrder.put(zeta, zetaDefinition);
+        firstOrder.put(alpha, alphaDefinition);
+        Map<PipelineReference, PipelineDefinition> secondOrder = new LinkedHashMap<>();
+        secondOrder.put(alpha, alphaDefinition);
+        secondOrder.put(root, rootDefinition);
+        secondOrder.put(zeta, zetaDefinition);
+
+        PipelineCompositionContractProjector projector = new PipelineCompositionContractProjector();
+        PipelineCompositionDescriptor first = projector.project(linker(firstOrder).link(rootDefinition));
+        PipelineCompositionDescriptor second = projector.project(linker(secondOrder).link(rootDefinition));
+
+        assertEquals(first, second);
+        assertEquals(List.of("root", "alpha", "zeta"),
+            first.definitions().stream().map(definition -> definition.definitionId()).toList());
+    }
+
     private static PipelineDefinitionLinker linker(Map<PipelineReference, PipelineDefinition> definitions) {
         return new PipelineDefinitionLinker(reference -> java.util.Optional.ofNullable(definitions.get(reference)));
     }

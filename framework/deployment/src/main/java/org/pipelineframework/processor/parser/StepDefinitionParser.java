@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
@@ -57,7 +58,8 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
+        new YAMLFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION));
     private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
     private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
         "eq",
@@ -111,6 +113,7 @@ public class StepDefinitionParser {
         "negativeCacheTtl",
         "accepts",
         "terminal",
+        "pipeline",
         "runOnVirtualThreads");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
@@ -169,9 +172,16 @@ public class StepDefinitionParser {
      * @throws IOException if there's an error reading or parsing the file
      */
     public List<StepDefinition> parseStepDefinitions(Path templatePath) throws IOException {
+        return parseDefinitionCatalog(templatePath).rootSteps();
+    }
+
+    /**
+     * Parses root and local definitions through the exact same step grammar.
+     */
+    public ParsedPipelineDefinitionCatalog parseDefinitionCatalog(Path templatePath) throws IOException {
         if (!Files.exists(templatePath)) {
             LOG.warnf("Pipeline template file does not exist: %s", templatePath);
-            return List.of();
+            return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
 
         String yamlContent = Files.readString(templatePath);
@@ -182,13 +192,45 @@ public class StepDefinitionParser {
         Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
         Map<String, ParsedConnectorBinding> connectorBindings = parseConnectorBindings(templateData);
 
-        Object stepsObj = templateData.get("steps");
-        if (!(stepsObj instanceof List)) {
+        List<StepDefinition> rootSteps = parseStepList(
+            templateData.get("steps"), basePackage, version, queryDefinitions, connectorBindings);
+        if (rootSteps.isEmpty() && !(templateData.get("steps") instanceof List)) {
             LOG.debugf("No 'steps' array found in pipeline template");
+        }
+        Map<String, List<StepDefinition>> definitions = new LinkedHashMap<>();
+        Object rawDefinitions = templateData.get("pipelines");
+        if (rawDefinitions != null) {
+            if (version != 3) {
+                throw new IOException("Top-level 'pipelines' requires version: 3");
+            }
+            if (!(rawDefinitions instanceof Map<?, ?> definitionMap)) {
+                throw new IOException("Top-level 'pipelines' must be a map");
+            }
+            for (var entry : definitionMap.entrySet()) {
+                String id = entry.getKey() == null ? null : entry.getKey().toString().trim();
+                if (isBlank(id) || !(entry.getValue() instanceof Map<?, ?> rawDefinition)) {
+                    throw new IOException("Each pipeline definition must have a non-blank ID and be a map");
+                }
+                @SuppressWarnings("unchecked")
+                Map<String, Object> definition = (Map<String, Object>) rawDefinition;
+                if (definitions.putIfAbsent(id, parseStepList(
+                        definition.get("steps"), basePackage, version, queryDefinitions, connectorBindings)) != null) {
+                    throw new IOException("Duplicate pipeline definition ID '" + id + "'");
+                }
+            }
+        }
+        return new ParsedPipelineDefinitionCatalog(rootSteps, definitions);
+    }
+
+    private List<StepDefinition> parseStepList(
+            Object stepsObj,
+            String basePackage,
+            int version,
+            Map<String, QueryDefinition> queryDefinitions,
+            Map<String, ParsedConnectorBinding> connectorBindings) {
+        if (!(stepsObj instanceof List<?> stepsList)) {
             return List.of();
         }
-
-        List<?> stepsList = (List<?>) stepsObj;
         List<StepDefinition> stepDefinitions = new ArrayList<>();
         for (Object stepObj : stepsList) {
             if (!(stepObj instanceof Map)) {
@@ -208,7 +250,7 @@ public class StepDefinitionParser {
             }
         }
 
-        return stepDefinitions;
+        return List.copyOf(stepDefinitions);
     }
 
     /**
@@ -255,6 +297,15 @@ public class StepDefinitionParser {
         String delegateClassName = getStringValue(stepData, "delegate");
         String serviceClassName = getStringValue(stepData, "service");
         String rawKind = getStringValue(stepData, "kind");
+        boolean pipelineDeclared = stepData.containsKey("pipeline");
+        String pipelineReference = getStringValue(stepData, "pipeline");
+        if (pipelineDeclared && isBlank(pipelineReference)) {
+            String message = "Skipping step '" + name + "': pipeline reference must not be blank";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
+        }
+        boolean pipelineStep = pipelineDeclared;
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
         boolean commandStep = "command".equalsIgnoreCase(rawKind);
         boolean queryStep = "query".equalsIgnoreCase(rawKind);
@@ -266,19 +317,19 @@ public class StepDefinitionParser {
             String message = "Skipping step '" + name + "': 'operator' and 'delegate' are aliases and are mutually exclusive";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return null;
+            throw new StepSkippedException();
         }
         if (!isBlank(operatorClassName)) {
             Optional<DelegatedReference> delegatedReference = parseDelegatedReference(operatorClassName, name, "operator");
             if (delegatedReference.isEmpty()) {
-                return null;
+                throw new StepSkippedException();
             }
             delegatedClassName = delegatedReference.get().className();
             delegatedMethodName = delegatedReference.get().methodName();
         } else if (!isBlank(delegateClassName)) {
             Optional<DelegatedReference> delegatedReference = parseDelegatedReference(delegateClassName, name, "delegate");
             if (delegatedReference.isEmpty()) {
-                return null;
+                throw new StepSkippedException();
             }
             delegatedClassName = delegatedReference.get().className();
             delegatedMethodName = delegatedReference.get().methodName();
@@ -289,6 +340,13 @@ public class StepDefinitionParser {
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
+        }
+        if (pipelineStep && (!isBlank(rawKind) || !isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': pipeline invocation may declare only pipeline plus ordinary typed step contracts";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
         }
         if (awaitStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
             String message = "Skipping step '" + name
@@ -337,12 +395,15 @@ public class StepDefinitionParser {
             return null;
         }
         boolean runOnVirtualThreads = parseOptionalBoolean(stepData, name, "runOnVirtualThreads");
-        boolean inferredLegacyInternal = !awaitStep && !commandStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean inferredLegacyInternal = !pipelineStep && !awaitStep && !commandStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
-        if (awaitStep) {
+        if (pipelineStep) {
+            kind = StepKind.PIPELINE;
+            executionClassName = null;
+        } else if (awaitStep) {
             kind = StepKind.AWAIT;
             executionClassName = null;
         } else if (commandStep) {
@@ -877,6 +938,39 @@ public class StepDefinitionParser {
                 false,
                 accepts,
                 terminal);
+        }
+
+        if (kind == StepKind.PIPELINE) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name + "': pipeline invocation cannot declare mapper fields";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name
+                    + "': pipeline invocation must provide Java input and output bindings via java.input and java.output";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            String cardinality = getStringValue(stepData, "cardinality");
+            if (!isBlank(cardinality) && shape == null) {
+                String message = "Skipping step '" + name + "': invalid pipeline cardinality '" + cardinality
+                    + "'. Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, REDUCTION, MANY_TO_MANY";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
+            return StepDefinition.pipeline(
+                name,
+                inputType,
+                outputType,
+                shape == null ? StreamingShape.UNARY_UNARY : shape,
+                accepts,
+                terminal,
+                pipelineReference);
         }
 
         // Create the execution class name

@@ -43,38 +43,79 @@ public final class PipelineInvocationSteps {
         PipelineRunner runner,
         List<Object> linkedChildSteps
     ) {
-        return new OneToOneInvocationStep<>(runner, linkedChildSteps);
+        return oneToOne(runner, "$root", -1, linkedChildSteps);
+    }
+
+    public static <I, O> StepOneToOne<I, O> oneToOne(
+        PipelineRunner runner,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        List<Object> linkedChildSteps
+    ) {
+        return new OneToOneInvocationStep<>(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps);
     }
 
     public static <I, O> StepOneToMany<I, O> oneToMany(
         PipelineRunner runner,
         List<Object> linkedChildSteps
     ) {
-        return new OneToManyInvocationStep<>(runner, linkedChildSteps);
+        return oneToMany(runner, "$root", -1, linkedChildSteps);
+    }
+
+    public static <I, O> StepOneToMany<I, O> oneToMany(
+        PipelineRunner runner,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        List<Object> linkedChildSteps
+    ) {
+        return new OneToManyInvocationStep<>(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps);
     }
 
     public static <I, O> ManyToOne<I, O> manyToOne(
         PipelineRunner runner,
         List<Object> linkedChildSteps
     ) {
-        return new ManyToOneInvocationStep<>(runner, linkedChildSteps);
+        return manyToOne(runner, "$root", -1, linkedChildSteps);
+    }
+
+    public static <I, O> ManyToOne<I, O> manyToOne(
+        PipelineRunner runner,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        List<Object> linkedChildSteps
+    ) {
+        return new ManyToOneInvocationStep<>(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps);
     }
 
     public static <I, O> StepManyToMany<I, O> manyToMany(
         PipelineRunner runner,
         List<Object> linkedChildSteps
     ) {
-        return new ManyToManyInvocationStep<>(runner, linkedChildSteps);
+        return manyToMany(runner, "$root", -1, linkedChildSteps);
+    }
+
+    public static <I, O> StepManyToMany<I, O> manyToMany(
+        PipelineRunner runner,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        List<Object> linkedChildSteps
+    ) {
+        return new ManyToManyInvocationStep<>(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps);
     }
 
     private static final class OneToOneInvocationStep<I, O> extends ConfigurableStep
         implements StepOneToOne<I, O> {
 
         private final PipelineRunner runner;
+        private final String definitionId;
+        private final int definitionTerminalStepIndex;
         private final List<Object> linkedChildSteps;
 
-        private OneToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private OneToOneInvocationStep(PipelineRunner runner, String definitionId, int definitionTerminalStepIndex,
+                List<Object> linkedChildSteps) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
+            this.definitionId = definitionId(definitionId);
+            this.definitionTerminalStepIndex = definitionTerminalStepIndex;
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
@@ -83,7 +124,8 @@ public final class PipelineInvocationSteps {
         @Override
         @SuppressWarnings("unchecked")
         public Uni<O> applyOneToOne(I input) {
-            Object result = nestedResult(runner, linkedChildSteps, Uni.createFrom().item(input));
+            Object result = nestedResult(
+                runner, definitionId, definitionTerminalStepIndex, linkedChildSteps, Uni.createFrom().item(input));
             if (result instanceof Uni<?> uni) {
                 return (Uni<O>) uni;
             }
@@ -95,10 +137,15 @@ public final class PipelineInvocationSteps {
         implements StepOneToMany<I, O> {
 
         private final PipelineRunner runner;
+        private final String definitionId;
+        private final int definitionTerminalStepIndex;
         private final List<Object> linkedChildSteps;
 
-        private OneToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private OneToManyInvocationStep(PipelineRunner runner, String definitionId, int definitionTerminalStepIndex,
+                List<Object> linkedChildSteps) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
+            this.definitionId = definitionId(definitionId);
+            this.definitionTerminalStepIndex = definitionTerminalStepIndex;
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
@@ -107,7 +154,8 @@ public final class PipelineInvocationSteps {
         @Override
         @SuppressWarnings("unchecked")
         public Multi<O> applyOneToMany(I input) {
-            Object result = nestedResult(runner, linkedChildSteps, Uni.createFrom().item(input));
+            Object result = nestedResult(
+                runner, definitionId, definitionTerminalStepIndex, linkedChildSteps, Uni.createFrom().item(input));
             if (result instanceof Multi<?> multi) {
                 return (Multi<O>) multi;
             }
@@ -119,10 +167,15 @@ public final class PipelineInvocationSteps {
         implements ManyToOne<I, O> {
 
         private final PipelineRunner runner;
+        private final String definitionId;
+        private final int definitionTerminalStepIndex;
         private final List<Object> linkedChildSteps;
 
-        private ManyToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private ManyToOneInvocationStep(PipelineRunner runner, String definitionId, int definitionTerminalStepIndex,
+                List<Object> linkedChildSteps) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
+            this.definitionId = definitionId(definitionId);
+            this.definitionTerminalStepIndex = definitionTerminalStepIndex;
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
@@ -131,7 +184,7 @@ public final class PipelineInvocationSteps {
         @Override
         @SuppressWarnings("unchecked")
         public Uni<O> apply(Multi<I> input) {
-            Object result = nestedResult(runner, linkedChildSteps, input);
+            Object result = nestedResult(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps, input);
             if (result instanceof Uni<?> uni) {
                 return (Uni<O>) uni;
             }
@@ -143,10 +196,15 @@ public final class PipelineInvocationSteps {
         implements StepManyToMany<I, O> {
 
         private final PipelineRunner runner;
+        private final String definitionId;
+        private final int definitionTerminalStepIndex;
         private final List<Object> linkedChildSteps;
 
-        private ManyToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private ManyToManyInvocationStep(PipelineRunner runner, String definitionId, int definitionTerminalStepIndex,
+                List<Object> linkedChildSteps) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
+            this.definitionId = definitionId(definitionId);
+            this.definitionTerminalStepIndex = definitionTerminalStepIndex;
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
@@ -155,7 +213,7 @@ public final class PipelineInvocationSteps {
         @Override
         @SuppressWarnings("unchecked")
         public Multi<O> applyTransform(Multi<I> input) {
-            Object result = nestedResult(runner, linkedChildSteps, input);
+            Object result = nestedResult(runner, definitionId, definitionTerminalStepIndex, linkedChildSteps, input);
             if (result instanceof Multi<?> multi) {
                 return (Multi<O>) multi;
             }
@@ -163,13 +221,24 @@ public final class PipelineInvocationSteps {
         }
     }
 
-    private static Object nestedResult(PipelineRunner runner, List<Object> linkedChildSteps, Object input) {
+    private static Object nestedResult(PipelineRunner runner, String definitionId, int definitionTerminalStepIndex,
+            List<Object> linkedChildSteps, Object input) {
         PipelineRunner.ExecutionResult execution = PipelineRunContextHolder.get()
-            .map(context -> runner.runNestedWithContext(input, linkedChildSteps, context))
-            .orElseGet(() -> runner.runNestedWithContext(input, linkedChildSteps));
+            .map(context -> runner.runNestedWithContext(
+                input, linkedChildSteps, definitionId, definitionTerminalStepIndex, context))
+            .orElseGet(() -> runner.runNestedWithContext(
+                input, linkedChildSteps, definitionId, definitionTerminalStepIndex));
         if (execution.terminalOutputPublished()) {
             throw new IllegalStateException("Nested pipeline invocation must not own terminal publication");
         }
         return execution.result();
+    }
+
+    private static String definitionId(String value) {
+        String normalized = Objects.requireNonNull(value, "definitionId must not be null").strip();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("definitionId must not be blank");
+        }
+        return normalized;
     }
 }

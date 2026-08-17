@@ -71,11 +71,19 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         PipelineTransport mode = ctx.getTransportMode();
         PipelineTransport transportMode = Objects.requireNonNullElse(mode, PipelineTransport.GRPC);
         Optional<PipelineStepModel> springRestEntrypoint = springRestEntrypoint(ctx, transportMode);
+        Set<String> localDefinitionServices = localDefinitionServices(ctx);
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
             Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode, springRestEntrypoint);
+            if (transportMode == PipelineTransport.LOCAL
+                && localDefinitionServices.contains(serviceIdentity(model))
+                && usesOrdinaryLocalClient(targets)) {
+                LinkedHashSet<GenerationTarget> childTargets = new LinkedHashSet<>(targets);
+                childTargets.add(GenerationTarget.LOCAL_CLIENT_STEP);
+                targets = Collections.unmodifiableSet(childTargets);
+            }
             PipelineStepModel updatedModel = model.toBuilder()
                 .enabledTargets(targets)
                 .build();
@@ -88,6 +96,35 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             .flatMap(model -> model.enabledTargets().stream())
             .collect(Collectors.toSet());
         ctx.setResolvedTargets(resolvedTargets);
+    }
+
+    private boolean usesOrdinaryLocalClient(Set<GenerationTarget> targets) {
+        return !targets.contains(GenerationTarget.AWAIT_CLIENT_STEP)
+            && !targets.contains(GenerationTarget.COMMAND_CLIENT_STEP)
+            && !targets.contains(GenerationTarget.QUERY_CLIENT_STEP);
+    }
+
+    /**
+     * Local child definitions are invoked as ordinary runtime steps. Generate the existing local
+     * client-step adapter for every direct child so all four service shapes, including
+     * ReactiveStreamingClientService, reach PipelineStepExecutor through its established step
+     * interfaces. The generated invocation bean injects these adapters in compiler-linked order.
+     */
+    private Set<String> localDefinitionServices(PipelineCompilationContext ctx) {
+        if (ctx.getResolvedPipelineDefinitionGraph() == null || ctx.getLocalDefinitionStepModels().isEmpty()) {
+            return Set.of();
+        }
+        return ctx.getLocalDefinitionStepModels().values().stream()
+            .flatMap(List::stream)
+            .map(this::serviceIdentity)
+            .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private String serviceIdentity(PipelineStepModel model) {
+        if (model.serviceClassName() != null) {
+            return model.serviceClassName().canonicalName();
+        }
+        return model.servicePackage() + "." + model.serviceName();
     }
 
     /**

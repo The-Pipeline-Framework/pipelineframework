@@ -49,6 +49,10 @@ public class PipelineOrderMetadataGenerator {
      * @throws IOException if creating or writing the resource file fails
      */
     public void writeOrderMetadata(PipelineCompilationContext ctx) throws IOException {
+        if (!ctx.getGeneratedRootPipelineStepClasses().isEmpty()) {
+            writeExplicitRootOrder(ctx, ctx.getGeneratedRootPipelineStepClasses());
+            return;
+        }
         PipelineYamlConfig config = loadPipelineConfig(ctx);
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
             return;
@@ -98,6 +102,46 @@ public class PipelineOrderMetadataGenerator {
                 writer.write(gson.toJson(metadata));
             }
         }
+    }
+
+    /**
+     * Writes compiler-linked root execution order directly. Local child definitions intentionally
+     * have no order resource: generated invocation beans inject their complete ordered child set.
+     */
+    private void writeExplicitRootOrder(PipelineCompilationContext ctx, List<String> rootSteps) throws IOException {
+        if (processingEnv == null) {
+            return;
+        }
+        List<String> expanded = List.copyOf(rootSteps);
+        PipelineYamlConfig config = loadPipelineConfig(ctx);
+        if (config != null) {
+            expanded = List.copyOf(PipelineOrderExpander.expand(
+                expanded, config, PipelineOrderMetadataGenerator.class.getClassLoader()));
+        }
+        List<String> expandedOrder = expanded;
+        Set<String> missingSideEffects = expectedSideEffectClientSteps(ctx).stream()
+            .filter(step -> !expandedOrder.contains(step))
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (!missingSideEffects.isEmpty()) {
+            throw new IllegalStateException("Explicit root pipeline order is missing generated side-effect client steps: "
+                + missingSideEffects);
+        }
+        PipelineOrderMetadata metadata = new PipelineOrderMetadata(expandedOrder);
+        javax.tools.FileObject resourceFile = processingEnv.getFiler()
+            .createResource(StandardLocation.CLASS_OUTPUT, "", ORDER_RESOURCE, (javax.lang.model.element.Element[]) null);
+        try (var writer = resourceFile.openWriter()) {
+            writer.write(gson.toJson(metadata));
+        }
+    }
+
+    private Set<String> expectedSideEffectClientSteps(PipelineCompilationContext ctx) {
+        if (ctx.getStepModels() == null || ctx.getStepModels().isEmpty()) {
+            return Set.of();
+        }
+        return ctx.getStepModels().stream()
+            .filter(PipelineStepModel::sideEffect)
+            .map(model -> ClientStepClassNames.className(model, ctx.getTransportMode()))
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**
