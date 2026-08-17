@@ -26,6 +26,10 @@ import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.PipelineRunnerTestHarness;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.processor.composition.CompiledPipelineLocation;
+import org.pipelineframework.processor.composition.DefinitionLocalLocation;
+import org.pipelineframework.processor.composition.LocalPipelineInvocationClassName;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,6 +79,7 @@ class PipelineCompositionProductizationTest {
             """;
         Map<String, String> sources = routedSources();
         Fixture fixture = compile("routed", yaml, sources);
+        String invocationName = invocationName("Call routed");
 
         assertThat(fixture.compilation()).succeeded();
         Fixture repeated = compile("routed-repeat", yaml, sources);
@@ -88,7 +93,7 @@ class PipelineCompositionProductizationTest {
         assertTrue(contract.contains("\"NEXT_LOCAL\""));
         assertTrue(contract.contains("\"RETURN\""));
         assertTrue(contract.contains("\"ROOT_TERMINAL\""));
-        String invocation = Files.readString(fixture.generatedClass("PipelineInvocation_root_Call_routed"));
+        String invocation = Files.readString(fixture.generatedClass(invocationName));
         assertTrue(invocation.contains("PipelineInvocationSteps.<Request, FinalResult>oneToOne"));
         assertTrue(invocation.contains("java.util.List.of(child0, child1, child2, child3)"));
         assertFalse(invocation.contains("ExecutionRecord"));
@@ -100,7 +105,7 @@ class PipelineCompositionProductizationTest {
         assertFalse(fixture.metadata("order.json").contains("ProcessHandleApprovedLocalClientStep"));
 
         Path classes = compileGeneratedFixture(fixture, sources,
-            List.of("PipelineInvocation_root_Call_routed", "ProcessClassifyLocalClientStep",
+            List.of(invocationName, "ProcessClassifyLocalClientStep",
                 "ProcessHandleApprovedLocalClientStep", "ProcessHandleRejectedLocalClientStep",
                 "ProcessFinalizeLocalClientStep"));
         Files.createDirectories(classes.resolve("META-INF/pipeline"));
@@ -111,7 +116,7 @@ class PipelineCompositionProductizationTest {
             Thread.currentThread().setContextClassLoader(loader);
             PipelineRunnerTestHarness.Harness harness = PipelineRunnerTestHarness.createHarness();
             Object generated = instantiateGeneratedInvocation(loader, harness.runner(),
-                "com.example.routed.pipeline.PipelineInvocation_root_Call_routed",
+                "com.example.routed.pipeline." + invocationName,
                 List.of("com.example.routed.pipeline.ProcessClassifyLocalClientStep",
                     "com.example.routed.pipeline.ProcessHandleApprovedLocalClientStep",
                     "com.example.routed.pipeline.ProcessHandleRejectedLocalClientStep",
@@ -184,18 +189,19 @@ class PipelineCompositionProductizationTest {
             "package com.example.compatible; import com.example.compatible.domain.*; public class HandlePayloadService implements org.pipelineframework.service.ReactiveService<Payload, Result> { public io.smallrye.mutiny.Uni<Result> process(Payload input) { return io.smallrye.mutiny.Uni.createFrom().item(new Result(input.id())); } }");
 
         Fixture fixture = compile("compatible-boundary", yaml, sources);
+        String invocationName = invocationName("Call handler");
 
         assertThat(fixture.compilation()).succeeded();
-        String invocation = Files.readString(fixture.generatedClass("PipelineInvocation_root_Call_handler"));
+        String invocation = Files.readString(fixture.generatedClass(invocationName));
         assertTrue(invocation.contains("StepOneToOne<Choice, Result>"));
         assertTrue(invocation.contains("PipelineInvocationSteps.<Choice, Result>oneToOne"));
         Path classes = compileGeneratedFixture(fixture, sources,
-            List.of("PipelineInvocation_root_Call_handler", "ProcessHandlePayloadLocalClientStep"));
+            List.of(invocationName, "ProcessHandlePayloadLocalClientStep"));
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()}, previous)) {
             Thread.currentThread().setContextClassLoader(loader);
             Object invocationStep = instantiateGeneratedInvocation(loader,
-                "com.example.compatible.pipeline.PipelineInvocation_root_Call_handler",
+                "com.example.compatible.pipeline." + invocationName,
                 List.of("com.example.compatible.pipeline.ProcessHandlePayloadLocalClientStep"),
                 List.of("com.example.compatible.HandlePayloadService"));
             Object payload = loader.loadClass("com.example.compatible.domain.Payload")
@@ -251,17 +257,19 @@ class PipelineCompositionProductizationTest {
             "com.example.shell.RequestId", "package com.example.shell; public class RequestId implements org.pipelineframework.command.CommandIdGenerator<Request> { public String commandId(org.pipelineframework.command.CommandDescriptor descriptor, Request input) { return input.id(); } }");
 
         Fixture fixture = compile("framework-owned-children", yaml, sources);
+        String writerName = invocationName("Call writer");
+        String readerName = invocationName("Call reader");
 
         assertThat(fixture.compilation()).succeeded();
-        String writer = Files.readString(fixture.generatedClass("PipelineInvocation_root_Call_writer"));
-        String reader = Files.readString(fixture.generatedClass("PipelineInvocation_root_Call_reader"));
+        String writer = Files.readString(fixture.generatedClass(writerName));
+        String reader = Files.readString(fixture.generatedClass(readerName));
         assertTrue(writer.contains("ProcessWriteItemCommandClientStep child0"));
         assertFalse(writer.contains("ProcessWriteItemLocalClientStep"));
         assertTrue(reader.contains("ProcessReadItemQueryClientStep child0"));
         assertFalse(reader.contains("ProcessReadItemLocalClientStep"));
         String order = fixture.metadata("order.json");
-        assertTrue(order.contains("PipelineInvocation_root_Call_writer"));
-        assertTrue(order.contains("PipelineInvocation_root_Call_reader"));
+        assertTrue(order.contains(writerName));
+        assertTrue(order.contains(readerName));
         assertFalse(order.contains("CommandClientStep"));
         assertFalse(order.contains("QueryClientStep"));
     }
@@ -271,20 +279,24 @@ class PipelineCompositionProductizationTest {
         String yaml = cardinalityYaml();
         Map<String, String> sources = cardinalitySources();
         Fixture fixture = compile("cardinalities", yaml, sources);
+        String pointwiseName = invocationName("Pointwise");
+        String expandName = invocationName("Expand");
+        String reduceName = invocationName("Reduce");
+        String transformName = invocationName("Transform");
 
         assertThat(fixture.compilation()).succeeded();
-        assertTrue(Files.readString(fixture.generatedClass("PipelineInvocation_root_Pointwise"))
+        assertTrue(Files.readString(fixture.generatedClass(pointwiseName))
             .contains("PipelineInvocationSteps.<Value, Value>oneToOne"));
-        assertTrue(Files.readString(fixture.generatedClass("PipelineInvocation_root_Expand"))
+        assertTrue(Files.readString(fixture.generatedClass(expandName))
             .contains("PipelineInvocationSteps.<Value, Value>oneToMany"));
-        assertTrue(Files.readString(fixture.generatedClass("PipelineInvocation_root_Reduce"))
+        assertTrue(Files.readString(fixture.generatedClass(reduceName))
             .contains("PipelineInvocationSteps.<Value, Value>manyToOne"));
-        assertTrue(Files.readString(fixture.generatedClass("PipelineInvocation_root_Transform"))
+        assertTrue(Files.readString(fixture.generatedClass(transformName))
             .contains("PipelineInvocationSteps.<Value, Value>manyToMany"));
 
         Path classes = compileGeneratedFixture(fixture, sources,
-            List.of("PipelineInvocation_root_Pointwise", "PipelineInvocation_root_Expand", "PipelineInvocation_root_Reduce",
-                "PipelineInvocation_root_Transform", "ProcessSplitLocalClientStep",
+            List.of(pointwiseName, expandName, reduceName,
+                transformName, "ProcessSplitLocalClientStep",
                 "ProcessIdentityLocalClientStep", "ProcessJoinLocalClientStep", "ProcessMapStreamLocalClientStep"));
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()}, previous)) {
@@ -294,7 +306,7 @@ class PipelineCompositionProductizationTest {
 
             PipelineRunnerTestHarness.Harness pointwiseHarness = PipelineRunnerTestHarness.createHarness();
             Object pointwise = instantiateGeneratedInvocation(loader, pointwiseHarness.runner(),
-                "com.example.cardinality.pipeline.PipelineInvocation_root_Pointwise",
+                "com.example.cardinality.pipeline." + pointwiseName,
                 List.of("com.example.cardinality.pipeline.ProcessIdentityLocalClientStep"),
                 List.of("com.example.cardinality.IdentityService"));
             AtomicInteger rootSubscriptions = new AtomicInteger();
@@ -311,7 +323,7 @@ class PipelineCompositionProductizationTest {
                 "Generated pointwise invocation over Multi must honor the existing maxConcurrency bound");
 
             Object expand = instantiateGeneratedInvocation(loader,
-                "com.example.cardinality.pipeline.PipelineInvocation_root_Expand",
+                "com.example.cardinality.pipeline." + expandName,
                 List.of("com.example.cardinality.pipeline.ProcessSplitLocalClientStep"),
                 List.of("com.example.cardinality.SplitService"));
             Multi<?> expanded = (Multi<?>) expand.getClass().getMethod("applyOneToMany", valueType)
@@ -320,7 +332,7 @@ class PipelineCompositionProductizationTest {
                 expanded.map(Object::toString).collect().asList().await().indefinitely());
 
             Object reduce = instantiateGeneratedInvocation(loader,
-                "com.example.cardinality.pipeline.PipelineInvocation_root_Reduce",
+                "com.example.cardinality.pipeline." + reduceName,
                 List.of("com.example.cardinality.pipeline.ProcessJoinLocalClientStep"),
                 List.of("com.example.cardinality.JoinService"));
             Uni<?> reduced = (Uni<?>) reduce.getClass().getMethod("apply", Multi.class)
@@ -330,7 +342,7 @@ class PipelineCompositionProductizationTest {
                 "A stream-scoped child must be invoked once for the parent stream");
 
             Object transform = instantiateGeneratedInvocation(loader,
-                "com.example.cardinality.pipeline.PipelineInvocation_root_Transform",
+                "com.example.cardinality.pipeline." + transformName,
                 List.of("com.example.cardinality.pipeline.ProcessMapStreamLocalClientStep"),
                 List.of("com.example.cardinality.TransformService"));
             Multi<?> transformed = (Multi<?>) transform.getClass().getMethod("applyTransform", Multi.class)
@@ -355,7 +367,7 @@ class PipelineCompositionProductizationTest {
     }
 
     @Test
-    void rejectsDirectAndTransitiveStaticCyclesWithDefinitionPath() throws Exception {
+    void acceptsDirectSelfRecursionAndRejectsTransitiveStaticCyclesWithDefinitionPath() throws Exception {
         Compilation direct = compile("direct-cycle", diagnosticYaml("""
             loop:
               input: A
@@ -365,8 +377,7 @@ class PipelineCompositionProductizationTest {
             """, """
             - { name: Call loop, pipeline: loop, cardinality: ONE_TO_ONE, input: A, output: A, java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A } }
             """), diagnosticSources()).compilation();
-        assertThat(direct).failed();
-        assertThat(direct).hadErrorContaining("Static pipeline definition cycle is not supported: loop -> loop");
+        assertThat(direct).succeededWithoutWarnings();
 
         Compilation transitive = compile("transitive-cycle", diagnosticYaml("""
             first:
@@ -632,6 +643,12 @@ class PipelineCompositionProductizationTest {
     private String indent(String value, int spaces) {
         String prefix = " ".repeat(spaces);
         return value.lines().map(prefix::concat).collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    private static String invocationName(String callsiteId) {
+        return LocalPipelineInvocationClassName.simpleName(new CompiledPipelineLocation(
+            List.of(),
+            new DefinitionLocalLocation(new PipelineReference("$root"), callsiteId)));
     }
 
     private Map<String, String> diagnosticSources() {

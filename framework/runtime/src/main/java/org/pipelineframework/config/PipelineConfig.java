@@ -32,6 +32,7 @@ public final class PipelineConfig {
     private final java.util.concurrent.atomic.AtomicReference<String> activeProfile = new java.util.concurrent.atomic.AtomicReference<>();
     private volatile ParallelismPolicy parallelism = ParallelismPolicy.AUTO;
     private volatile int maxConcurrency = 128;
+    private volatile int maxRecursiveDepth = 64;
 
     /**
      * Initialises the PipelineConfig with a default profile and sets the active profile
@@ -152,6 +153,20 @@ public final class PipelineConfig {
      */
     public PipelineConfig maxConcurrency(int maxConcurrency) {
         this.maxConcurrency = maxConcurrency;
+        return this;
+    }
+
+    /** Maximum number of recursive pipeline invocations below a root invocation. */
+    public int maxRecursiveDepth() {
+        return maxRecursiveDepth;
+    }
+
+    /** Configure the maximum number of recursive pipeline invocations below a root invocation. */
+    public PipelineConfig maxRecursiveDepth(int maxRecursiveDepth) {
+        if (maxRecursiveDepth < 0) {
+            throw new IllegalArgumentException("maxRecursiveDepth must be non-negative");
+        }
+        this.maxRecursiveDepth = maxRecursiveDepth;
         return this;
     }
 

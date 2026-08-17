@@ -146,7 +146,7 @@ class PipelineCompositionContractProjectorTest {
         PipelineCompositionDescriptor second = projector.project(linker(secondOrder).link(rootDefinition));
 
         assertEquals(first, second);
-        assertEquals(List.of("root", "alpha", "zeta"),
+        assertEquals(List.of("alpha", "root", "zeta"),
             first.definitions().stream().map(definition -> definition.definitionId()).toList());
     }
 

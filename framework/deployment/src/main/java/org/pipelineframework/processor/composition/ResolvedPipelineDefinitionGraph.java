@@ -27,7 +27,8 @@ import java.util.RandomAccess;
 import org.pipelineframework.config.CardinalitySemantics;
 
 /**
- * Immutable compiler result for a statically resolved, acyclic definition graph.
+ * Immutable compiler result for a statically resolved definition graph. Direct self-recursive
+ * edges are represented once at their callsite and are not statically expanded.
  *
  * <p>This is deliberately not a release descriptor. Release-level artifact and digest pinning
  * remains the responsibility of the existing generated contract and release machinery.

@@ -106,6 +106,7 @@ public record PipelineCompositionDescriptor(String rootDefinitionId, List<Pipeli
         definition.nodes().stream()
             .filter(PipelineCompositionNode::invocation)
             .map(PipelineCompositionNode::targetDefinitionId)
+            .filter(target -> !target.equals(definitionId))
             .forEach(target -> visit(target, definitionsById, reached, visiting));
         visiting.remove(definitionId);
         reached.add(definitionId);

@@ -6,6 +6,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import javax.tools.StandardLocation;
 
 import com.google.testing.compile.Compilation;
@@ -13,6 +14,10 @@ import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.processor.composition.CompiledPipelineLocation;
+import org.pipelineframework.processor.composition.DefinitionLocalLocation;
+import org.pipelineframework.processor.composition.LocalPipelineInvocationClassName;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -62,7 +67,8 @@ class PipelineGenerationPhaseIntegrationTest {
                 service("com.example.catalog.YService"), service("com.example.catalog.CService"));
 
         assertThat(compilation).succeeded();
-        Path invocation = findGeneratedClass(generatedSourcesDir, "PipelineInvocation_root_Call_inner");
+        String invocationName = invocationName("Call inner");
+        Path invocation = findGeneratedClass(generatedSourcesDir, invocationName);
         assertTrue(Files.exists(invocation), "Expected generated local pipeline invocation source; found "
             + generatedJavaFiles(generatedSourcesDir));
         String source = Files.readString(invocation);
@@ -77,7 +83,7 @@ class PipelineGenerationPhaseIntegrationTest {
         assertTrue(contract.getCharContent(true).toString().contains("composition"));
         var order = compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "order.json").orElseThrow();
         String orderJson = order.getCharContent(true).toString();
-        assertTrue(orderJson.contains("PipelineInvocation_root_Call_inner"));
+        assertTrue(orderJson.contains(invocationName));
         assertFalse(orderJson.contains("ProcessXLocalClientStep"),
             "Child order must be injected by the invocation bean, not appended to root order.json");
     }
@@ -776,5 +782,11 @@ class PipelineGenerationPhaseIntegrationTest {
                 .toList()
                 .toString();
         }
+    }
+
+    private static String invocationName(String callsiteId) {
+        return LocalPipelineInvocationClassName.simpleName(new CompiledPipelineLocation(
+            List.of(),
+            new DefinitionLocalLocation(new PipelineReference("$root"), callsiteId)));
     }
 }

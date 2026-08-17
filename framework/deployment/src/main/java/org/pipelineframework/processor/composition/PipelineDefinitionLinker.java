@@ -105,6 +105,7 @@ public final class PipelineDefinitionLinker {
         stack.addLast(reference);
         try {
             List<CardinalitySemantics> stepCardinalities = new ArrayList<>();
+            boolean recursive = false;
             for (PipelineDefinitionStep step : definition.steps()) {
                 if (step.directCardinality().isPresent()) {
                     stepCardinalities.add(step.directCardinality().orElseThrow());
@@ -114,9 +115,18 @@ public final class PipelineDefinitionLinker {
                 PipelineDefinition target = resolveDefinition(targetReference);
                 validateResolvedReference(targetReference, target);
                 validateInvocationContract(step, target);
+                if (targetReference.equals(reference)) {
+                    recursive = true;
+                    stepCardinalities.add(CardinalitySemantics.ONE_TO_ONE);
+                    continue;
+                }
                 stepCardinalities.add(resolveCardinality(target, definitions, cardinalities, stack));
             }
             CardinalitySemantics resolved = CardinalitySemantics.compose(stepCardinalities);
+            if (recursive && resolved != CardinalitySemantics.ONE_TO_ONE) {
+                throw new IllegalArgumentException("Recursive pipeline definition '" + reference.logicalId()
+                    + "' currently supports only ONE_TO_ONE invocation cardinality; resolved " + resolved);
+            }
             cardinalities.put(reference, resolved);
             return resolved;
         } finally {
@@ -191,6 +201,9 @@ public final class PipelineDefinitionLinker {
                 throw new IllegalStateException("Resolved cardinality is missing: " + targetReference.logicalId());
             }
             bindings.add(new PipelineInvocationBinding(compiledLocation, targetReference, targetCardinality));
+            if (targetReference.equals(definition.reference())) {
+                continue;
+            }
             List<DefinitionLocalLocation> childPath = new ArrayList<>(invocationPath);
             childPath.add(localLocation);
             expand(target, childPath, definitions, cardinalities, bindings, executableLocations);

@@ -33,4 +33,9 @@ public record PipelineInvocationBinding(
         target = Objects.requireNonNull(target, "target must not be null");
         cardinality = Objects.requireNonNull(cardinality, "cardinality must not be null");
     }
+
+    /** Whether this callsite invokes the definition that owns it. */
+    public boolean recursive() {
+        return invocationLocation.definitionLocalLocation().definition().equals(target);
+    }
 }

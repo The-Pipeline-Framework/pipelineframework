@@ -100,7 +100,7 @@ class PipelineDefinitionLinkerTest {
     }
 
     @Test
-    void rejectsUnresolvedReferencesAndStaticRecursion() {
+    void rejectsUnresolvedReferencesAndRepresentsDirectSelfRecursionOnce() {
         PipelineReference missing = new PipelineReference("missing");
         PipelineDefinition unresolved = definition(
             new PipelineReference("root"),
@@ -120,11 +120,30 @@ class PipelineDefinitionLinkerTest {
             "Value",
             PipelineDefinitionStep.pipeline("again", "Value", "Value", recursiveReference));
 
-        IllegalArgumentException recursionFailure = assertThrows(
+        ResolvedPipelineDefinitionGraph recursiveGraph = linker(Map.of(recursiveReference, recursive)).link(recursive);
+
+        assertEquals(CardinalitySemantics.ONE_TO_ONE, recursiveGraph.rootCardinality());
+        assertEquals(1, recursiveGraph.invocationBindings().size());
+        assertTrue(recursiveGraph.invocationBindings().getFirst().recursive());
+        assertEquals("recursive:again", recursiveGraph.invocationBindings().getFirst().invocationLocation().display());
+    }
+
+    @Test
+    void rejectsRecursiveCardinalityOutsideTheSupportedOneToOneBoundary() {
+        PipelineReference recursiveReference = new PipelineReference("recursive-stream");
+        PipelineDefinition recursive = definition(
+            recursiveReference,
+            "Value",
+            "Value",
+            PipelineDefinitionStep.direct("expand", "Value", "Value", CardinalitySemantics.ONE_TO_MANY),
+            PipelineDefinitionStep.pipeline("again", "Value", "Value", recursiveReference));
+
+        IllegalArgumentException failure = assertThrows(
             IllegalArgumentException.class,
             () -> linker(Map.of(recursiveReference, recursive)).link(recursive));
-        assertEquals("Static pipeline definition cycle is not supported: recursive -> recursive",
-            recursionFailure.getMessage());
+
+        assertEquals("Recursive pipeline definition 'recursive-stream' currently supports only ONE_TO_ONE "
+            + "invocation cardinality; resolved ONE_TO_MANY", failure.getMessage());
     }
 
     @Test

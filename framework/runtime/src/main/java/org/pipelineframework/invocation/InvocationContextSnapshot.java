@@ -18,9 +18,10 @@ final class InvocationContextSnapshot {
     private final AwaitExecutionContext awaitContext;
     private final Optional<PipelineRunContext> runContext;
     private final boolean inheritRunContext;
+    private final Optional<PipelineInvocationContext> invocationContext;
 
     InvocationContextSnapshot(PipelineContext pipelineContext, AwaitExecutionContext awaitContext) {
-        this(pipelineContext, awaitContext, Optional.empty(), true);
+        this(pipelineContext, awaitContext, Optional.empty(), true, Optional.empty());
     }
 
     InvocationContextSnapshot(
@@ -28,19 +29,21 @@ final class InvocationContextSnapshot {
         AwaitExecutionContext awaitContext,
         Optional<PipelineRunContext> runContext
     ) {
-        this(pipelineContext, awaitContext, runContext, false);
+        this(pipelineContext, awaitContext, runContext, false, Optional.empty());
     }
 
     InvocationContextSnapshot(
         PipelineContext pipelineContext,
         AwaitExecutionContext awaitContext,
         Optional<PipelineRunContext> runContext,
-        boolean inheritRunContext
+        boolean inheritRunContext,
+        Optional<PipelineInvocationContext> invocationContext
     ) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
         this.runContext = Objects.requireNonNull(runContext, "runContext must not be null");
         this.inheritRunContext = inheritRunContext;
+        this.invocationContext = Objects.requireNonNull(invocationContext, "invocationContext must not be null");
     }
 
     <T> T call(Supplier<T> supplier) {
@@ -68,6 +71,7 @@ final class InvocationContextSnapshot {
         AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
         Optional<PipelineExecutionContext> previousExecution = PipelineExecutionContextHolder.get();
         Optional<PipelineRunContext> previousRun = PipelineRunContextHolder.get();
+        Optional<PipelineInvocationContext> previousInvocation = PipelineInvocationContextHolder.get();
         if (pipelineContext != null) {
             PipelineContextHolder.set(pipelineContext);
         } else {
@@ -86,7 +90,9 @@ final class InvocationContextSnapshot {
         if (!inheritRunContext) {
             runContext.ifPresentOrElse(PipelineRunContextHolder::set, PipelineRunContextHolder::clear);
         }
-        return new InvocationContextScope(previousPipeline, previousAwait, previousExecution, previousRun);
+        invocationContext.ifPresentOrElse(PipelineInvocationContextHolder::set, PipelineInvocationContextHolder::clear);
+        return new InvocationContextScope(
+            previousPipeline, previousAwait, previousExecution, previousRun, previousInvocation);
     }
 
     private final class InvocationContextScope implements AutoCloseable {
@@ -94,22 +100,27 @@ final class InvocationContextSnapshot {
         private final AwaitExecutionContext previousAwait;
         private final Optional<PipelineExecutionContext> previousExecution;
         private final Optional<PipelineRunContext> previousRun;
+        private final Optional<PipelineInvocationContext> previousInvocation;
 
         private InvocationContextScope(
             PipelineContext previousPipeline,
             AwaitExecutionContext previousAwait,
             Optional<PipelineExecutionContext> previousExecution,
-            Optional<PipelineRunContext> previousRun
+            Optional<PipelineRunContext> previousRun,
+            Optional<PipelineInvocationContext> previousInvocation
         ) {
             this.previousPipeline = previousPipeline;
             this.previousAwait = previousAwait;
             this.previousExecution = Objects.requireNonNull(previousExecution, "previousExecution must not be null");
             this.previousRun = Objects.requireNonNull(previousRun, "previousRun must not be null");
+            this.previousInvocation = Objects.requireNonNull(previousInvocation, "previousInvocation must not be null");
         }
 
         @Override
         public void close() {
             previousRun.ifPresentOrElse(PipelineRunContextHolder::set, PipelineRunContextHolder::clear);
+            previousInvocation.ifPresentOrElse(
+                PipelineInvocationContextHolder::set, PipelineInvocationContextHolder::clear);
             if (previousAwait != null) {
                 AwaitExecutionContextHolder.set(previousAwait);
             } else {

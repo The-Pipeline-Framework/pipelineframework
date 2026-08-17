@@ -25,6 +25,7 @@ import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineInvocationBinding;
 import org.pipelineframework.processor.composition.PipelineReference;
+import org.pipelineframework.processor.composition.LocalPipelineInvocationClassName;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -36,6 +37,7 @@ public final class LocalPipelineInvocationRenderer {
     private static final ClassName PIPELINE_RUNNER = ClassName.get(PipelineRunner.class);
     private static final ClassName INVOCATION_STEPS = ClassName.get("org.pipelineframework.invocation", "PipelineInvocationSteps");
     private static final ClassName CONFIGURABLE_STEP = ClassName.get("org.pipelineframework.step", "ConfigurableStep");
+    private static final ClassName PROVIDER = ClassName.get("jakarta.inject", "Provider");
 
     public void render(PipelineCompilationContext ctx, Path outputDir) throws IOException {
         var resolvedGraph = ctx.getResolvedPipelineDefinitionGraph();
@@ -50,7 +52,7 @@ public final class LocalPipelineInvocationRenderer {
         Map<CompiledPipelineLocation, ClassName> invocationTypes = new LinkedHashMap<>();
         for (PipelineInvocationBinding binding : bindings.values()) {
             invocationTypes.put(binding.invocationLocation(), ClassName.get(template.basePackage() + ".pipeline",
-                invocationClassName(binding.invocationLocation())));
+                LocalPipelineInvocationClassName.simpleName(binding.invocationLocation())));
         }
         for (PipelineInvocationBinding binding : bindings.values()) {
             writeInvocation(ctx, outputDir, graph, binding, invocationTypes);
@@ -78,9 +80,14 @@ public final class LocalPipelineInvocationRenderer {
         for (PipelineDefinitionStep step : target.steps()) {
             ClassName childType = childType(ctx, binding, step, invocationTypes);
             String field = "child" + childFields.size();
-            type.addField(FieldSpec.builder(childType, field)
+            boolean recursiveChild = binding.recursive()
+                && step.pipelineReference().filter(binding.target()::equals).isPresent();
+            TypeName fieldType = recursiveChild
+                ? ParameterizedTypeName.get(PROVIDER, childType)
+                : childType;
+            type.addField(FieldSpec.builder(fieldType, field)
                 .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build());
-            childFields.add(field);
+            childFields.add(recursiveChild ? field + ".get()" : field);
         }
         var targetPlan = ctx.getLocalDefinitionBranchingPlans().get(binding.target());
         if (targetPlan == null) {
@@ -88,13 +95,30 @@ public final class LocalPipelineInvocationRenderer {
                 + binding.target().logicalId() + "'.");
         }
         type.addMethod(invocationMethod(
-            binding.cardinality(), input, output, binding.target().logicalId(), targetPlan.terminalStepIndex(), childFields));
+            binding.cardinality(), input, output, binding.target().logicalId(), targetPlan.terminalStepIndex(),
+            binding.recursive(), binding.invocationLocation().definitionLocalLocation().localStepId(), childFields));
+        if (binding.recursive()) {
+            type.addMethod(recursiveReactiveMethod(
+                input, output, binding.target().logicalId(),
+                binding.invocationLocation().definitionLocalLocation().localStepId(),
+                targetPlan.terminalStepIndex(), childFields));
+        }
         JavaFile.builder(invocationTypes.get(binding.invocationLocation()).packageName(), type.build()).build().writeTo(outputDir);
     }
 
     private ClassName childType(PipelineCompilationContext ctx, PipelineInvocationBinding parent,
             PipelineDefinitionStep child, Map<CompiledPipelineLocation, ClassName> invocationTypes) {
         if (child.pipelineReference().isPresent()) {
+            if (parent.recursive() && child.pipelineReference().filter(parent.target()::equals).isPresent()) {
+                CompiledPipelineLocation location = new CompiledPipelineLocation(
+                    parent.invocationLocation().invocationPath(),
+                    new DefinitionLocalLocation(parent.target(), child.localStepId()));
+                ClassName type = invocationTypes.get(location);
+                if (type == null) {
+                    throw new IllegalStateException("No generated recursive invocation type for " + location.display());
+                }
+                return type;
+            }
             List<DefinitionLocalLocation> path = new ArrayList<>(parent.invocationLocation().invocationPath());
             path.add(parent.invocationLocation().definitionLocalLocation());
             CompiledPipelineLocation location = new CompiledPipelineLocation(path,
@@ -164,8 +188,18 @@ public final class LocalPipelineInvocationRenderer {
     }
 
     private MethodSpec invocationMethod(CardinalitySemantics cardinality, TypeName input, TypeName output,
-            String definitionId, int definitionTerminalStepIndex, List<String> children) {
+            String definitionId, int definitionTerminalStepIndex, boolean recursive, String callsiteId,
+            List<String> children) {
         String list = "java.util.List.of(" + String.join(", ", children) + ")";
+        if (recursive && cardinality != CardinalitySemantics.ONE_TO_ONE) {
+            throw new IllegalStateException("Recursive invocation renderer received unsupported cardinality " + cardinality);
+        }
+        if (recursive) {
+            return MethodSpec.methodBuilder("applyOneToOne").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output)).addParameter(input, "input")
+                .addStatement("return $T.<$T, $T>recursiveOneToOne(runner, $S, $S, $L, $L, effectiveConfig()).applyOneToOne(input)",
+                    INVOCATION_STEPS, input, output, definitionId, callsiteId, definitionTerminalStepIndex, list).build();
+        }
         return switch (cardinality) {
             case ONE_TO_ONE -> MethodSpec.methodBuilder("applyOneToOne").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output)).addParameter(input, "input")
@@ -188,6 +222,26 @@ public final class LocalPipelineInvocationRenderer {
         };
     }
 
+    private MethodSpec recursiveReactiveMethod(
+        TypeName input,
+        TypeName output,
+        String definitionId,
+        String callsiteId,
+        int definitionTerminalStepIndex,
+        List<String> children
+    ) {
+        String list = "java.util.List.of(" + String.join(", ", children) + ")";
+        TypeName inputUni = ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), input);
+        return MethodSpec.methodBuilder("apply")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output))
+            .addParameter(inputUni, "input")
+            .addStatement("return $T.<$T, $T>recursiveOneToOne(runner, $S, $S, $L, $L, effectiveConfig()).apply(input)",
+                INVOCATION_STEPS, input, output, definitionId, callsiteId, definitionTerminalStepIndex, list)
+            .build();
+    }
+
     private ClassName interfaceFor(CardinalitySemantics cardinality) {
         return switch (cardinality) {
             case ONE_TO_ONE -> ClassName.get("org.pipelineframework.step", "StepOneToOne");
@@ -195,12 +249,6 @@ public final class LocalPipelineInvocationRenderer {
             case MANY_TO_ONE -> ClassName.get("org.pipelineframework.step.functional", "ManyToOne");
             case MANY_TO_MANY -> ClassName.get("org.pipelineframework.step", "StepManyToMany");
         };
-    }
-
-    private String invocationClassName(CompiledPipelineLocation location) {
-        String normalized = location.display().replaceAll("[^A-Za-z0-9_]", "_")
-            .replaceAll("_+", "_").replaceFirst("^_+", "");
-        return "PipelineInvocation_" + normalized;
     }
 
     private static String toYamlServiceName(String stepName) {
