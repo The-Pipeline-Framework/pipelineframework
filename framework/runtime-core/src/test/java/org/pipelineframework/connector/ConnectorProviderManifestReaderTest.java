@@ -13,6 +13,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConnectorProviderManifestReaderTest {
 
     @Test
+    void readsGeneratedNormalizedTypeContractsAndKeepsVersionOneCompatible() {
+        ConnectorProviderManifest current = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":2,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1,
+            "typeContract":{"input":"string","output":"list<integer>"}}]}]}
+            """));
+        assertEquals(
+            new ConnectorOperationTypeContract("string", java.util.Optional.of("list<integer>")),
+            current.providers().getFirst().operations().getFirst().typeContract().orElseThrow());
+
+        ConnectorProviderManifest legacy = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1}]}]}
+            """));
+        assertTrue(legacy.providers().getFirst().operations().getFirst().typeContract().isEmpty());
+
+        IllegalArgumentException incompatible = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"find","kind":"tpf:query","majorVersion":1,
+                "typeContract":{"input":"string"}}]}]}
+                """)));
+        assertTrue(incompatible.getMessage().contains("field absent from schema version 1"));
+    }
+
+    @Test
     void readsStaticMetadataWithoutProviderConstruction() {
         ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
             {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":2},

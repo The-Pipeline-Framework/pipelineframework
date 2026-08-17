@@ -228,6 +228,14 @@ It must support deterministic validation and lookup for:
 
 The registry must be constructible without CDI for plain-Java tests and external-provider conformance.
 
+## Authorized callable-operation snapshots
+
+Registration and discovery establish the available operation universe; they do not grant model authority. An external authority supplies an immutable set of already-authorized `ConnectorOperationIdentity` values. `CallableOperationSnapshotProjector` resolves only those identities from `ConnectorProviderManifestCatalog`, the same framework-generated provider and operation metadata consumed by compiler/runtime validation, and produces a deterministic `CallableOperationSnapshot` sorted by stable identity.
+
+The framework derives normalized input/output contracts from the typed `QueryOperation` and `CommandOperation` declarations when it generates provider artifacts; operation authors do not supply a second descriptor. The projection contains operation identity/kind/version, a stable description derived from that identity, the generated type contract, Query cache semantics and only model-relevant Command posture/confirmation semantics. It excludes provider and operation configuration schemas, retry/idempotency/reconciliation mechanics, durable-reference mechanics, provider instances, connection/secret references, resolved credentials, sessions and runtime handles.
+
+The snapshot identity is a versioned SHA-256 digest over a canonical encoding of its model-visible contents. Registry order, authorization-set order and provider implementation technology do not affect it. A recursive caller retains the same immutable snapshot; refresh policy, authorization policy, operation dispatch, LLM integration and MCP import are separate concerns.
+
 ## Command contract
 
 A Command represents an external effect.

@@ -29,13 +29,14 @@ public final class ConnectorProviderManifestReader {
 
     private static ConnectorProviderManifest manifest(Map<String, Object> root) {
         requireOnly(root, "schemaVersion", "providers");
+        int schemaVersion = integer(root, "schemaVersion");
         List<ConnectorProviderArtifactDescriptor> providers = array(root, "providers").stream()
-            .map(value -> artifact(object(value, "provider descriptor")))
+            .map(value -> artifact(object(value, "provider descriptor"), schemaVersion))
             .toList();
-        return new ConnectorProviderManifest(integer(root, "schemaVersion"), providers);
+        return new ConnectorProviderManifest(schemaVersion, providers);
     }
 
-    private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value) {
+    private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value, int schemaVersion) {
         requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations");
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
@@ -46,18 +47,32 @@ public final class ConnectorProviderManifestReader {
                 "connector provider ID is reserved for framework use: " + provider.id().value());
         }
         List<ConnectorOperationDescriptor> operations = array(value, "operations").stream()
-            .map(entry -> operation(object(entry, "operation descriptor")))
+            .map(entry -> operation(object(entry, "operation descriptor"), schemaVersion))
             .toList();
         return new ConnectorProviderArtifactDescriptor(provider, operations);
     }
 
-    private static ConnectorOperationDescriptor operation(Map<String, Object> value) {
+    private static ConnectorOperationDescriptor operation(Map<String, Object> value, int schemaVersion) {
         requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities",
-            "queryCapabilities");
+            "queryCapabilities", "typeContract");
+        if (schemaVersion == 1 && value.containsKey("typeContract")) {
+            throw malformed("typeContract", "field absent from schema version 1");
+        }
         return new ConnectorOperationDescriptor(
             string(value, "id"), ConnectorOperationKind.of(string(value, "kind")), integer(value, "majorVersion"),
             optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value),
-            optionalQueryCapabilities(value));
+            optionalQueryCapabilities(value), optionalTypeContract(value));
+    }
+
+    private static Optional<ConnectorOperationTypeContract> optionalTypeContract(Map<String, Object> value) {
+        if (!value.containsKey("typeContract")) {
+            return Optional.empty();
+        }
+        Map<String, Object> contract = object(value.get("typeContract"), "typeContract");
+        requireOnly(contract, "input", "output");
+        return Optional.of(new ConnectorOperationTypeContract(
+            string(contract, "input"),
+            contract.containsKey("output") ? Optional.of(string(contract, "output")) : Optional.empty()));
     }
 
     private static ConnectorProviderVersion version(Map<String, Object> value) {

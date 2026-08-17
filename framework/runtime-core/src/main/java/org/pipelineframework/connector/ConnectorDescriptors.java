@@ -34,7 +34,7 @@ final class ConnectorDescriptors {
         }
         return new ConnectorOperationDescriptor(
             operation.id(), kind(operation), operation.majorVersion(), configurationSchema,
-            commandCapabilities, queryCapabilities);
+            commandCapabilities, queryCapabilities, ConnectorOperationTypes.contract(operation));
     }
 
     static ConnectorOperationKind kind(ConnectorOperation operation) {
