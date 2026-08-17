@@ -513,6 +513,280 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void validatesOperationFirstCommandAndQueryAgainstOneNamedBinding() throws IOException {
+        Path metadataRoot = tempDir.resolve("binding-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},
+            "operations":[
+            {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
+            "configurationSchema":{"id":"acme.work.send","version":1,"fields":[
+            {"name":"destination","type":"STRING","required":true}]},
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}},
+            {"id":"invoice.find","kind":"tpf:query","majorVersion":1,
+            "configurationSchema":{"id":"acme.work.find","version":1,"fields":[
+            {"name":"index","type":"STRING","required":true}]}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("binding-operations.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  connection: work-session
+            steps:
+              - name: Send invoice
+                kind: command
+                cardinality: ONE_TO_ONE
+                operation: invoice.send
+                using: work
+                policy:
+                  requireIdempotency: true
+                config:
+                  destination: billing
+                input: Invoice
+                output: SendResult
+                java:
+                  input: com.example.Invoice
+                  output: com.example.SendResult
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+              - name: Find invoice
+                kind: query
+                cardinality: ONE_TO_ONE
+                operation: invoice.find
+                using: work
+                config:
+                  index: invoices
+                input: FindInvoice
+                output: Invoice
+                java:
+                  input: com.example.FindInvoice
+                  output: com.example.Invoice
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(2, steps.size(), diagnostics.toString());
+            assertEquals("work", steps.get(0).commandConfig().get("__tpf_native_binding"));
+            assertEquals("native-binding:work/invoice.send", steps.get(0).command());
+            assertEquals("native-binding:work/invoice.find", steps.get(1).queryId());
+            assertEquals("work", steps.get(1).queryConfig().get("__tpf_native_binding"));
+            assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
+            assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsNullCommandAndQueryOperationConfigurationValues() throws IOException {
+        Path metadataRoot = tempDir.resolve("null-operation-config-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "operations":[
+            {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
+            "userConfirmationSupported":false,"durableReferenceKinds":[]}},
+            {"id":"invoice.find","kind":"tpf:query","majorVersion":1}]}]}
+            """);
+        Path pipeline = tempDir.resolve("null-operation-config.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Send invoice
+                kind: command
+                cardinality: ONE_TO_ONE
+                operation: invoice.send
+                using: work
+                config:
+                  destination:
+                input: Invoice
+                output: SendResult
+                java: { input: com.example.Invoice, output: com.example.SendResult }
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+              - name: Find invoice
+                kind: query
+                cardinality: ONE_TO_ONE
+                operation: invoice.find
+                using: work
+                config:
+                input: FindInvoice
+                output: Invoice
+                java: { input: com.example.FindInvoice, output: com.example.Invoice }
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty(), diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.equals(
+                "ERROR:Skipping step 'Send invoice': command config must not contain null values")),
+                diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.equals(
+                "ERROR:Skipping step 'Find invoice': query config must be a map")),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsInvalidBindingConfigBeforeOperationSelection() throws IOException {
+        Path metadataRoot = tempDir.resolve("invalid-binding-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},"operations":[]}]}
+            """);
+        Path pipeline = tempDir.resolve("invalid-binding.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  connection:
+            steps:
+              - name: Send invoice
+                kind: command
+                operation: invoice.send
+                using: work
+                input: Invoice
+                output: SendResult
+                java:
+                  input: com.example.Invoice
+                  output: com.example.SendResult
+                commandIdGenerator: com.example.InvoiceCommandIdGenerator
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+                "configuration field 'connection' must not be null")),
+                diagnostics.toString());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unknown connector binding 'work'")),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsUnknownConnectorProviderConfigurationFields() throws IOException {
+        Path metadataRoot = tempDir.resolve("unknown-binding-field-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},"operations":[]}]}
+            """);
+        Path pipeline = tempDir.resolve("unknown-binding-field.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+                config:
+                  connection: work-session
+                  unexpected: value
+            steps: []
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+        }
+
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("field 'unexpected': unknown")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAmbiguousAndPartialOperationFirstSelections() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            basePackage: com.example
+            steps:
+              - name: Ambiguous command
+                kind: command
+                cardinality: ONE_TO_ONE
+                command: legacy.command
+                operation: invoice.send
+                using: work
+                input: Invoice
+                output: Result
+                java: { input: com.example.Invoice, output: com.example.Result }
+                commandIdGenerator: com.example.IdGenerator
+              - name: Partial command
+                kind: command
+                cardinality: ONE_TO_ONE
+                operation: invoice.send
+                input: Invoice
+                output: Result
+                java: { input: com.example.Invoice, output: com.example.Result }
+                commandIdGenerator: com.example.IdGenerator
+              - name: Ambiguous query
+                kind: query
+                cardinality: ONE_TO_ONE
+                query: legacy-query
+                operation: invoice.find
+                using: work
+                input: Lookup
+                output: Invoice
+                java: { input: com.example.Lookup, output: com.example.Invoice }
+              - name: Orphaned query policy
+                kind: query
+                cardinality: ONE_TO_ONE
+                policy: { requireIdempotency: true }
+                input: Lookup
+                output: Invoice
+                java: { input: com.example.Lookup, output: com.example.Invoice }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty(), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "command, connector, and operation/using selections are mutually exclusive")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "operation-first selection requires both operation and using")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "query and operation/using are mutually exclusive")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "operationVersion/policy requires operation and using")), diagnostics.toString());
+    }
+
+    @Test
     void rejectsUnknownNativeCommandPolicyFields() throws IOException {
         assertNativeCommandPolicyRejected("unsupportedGuarantee: true", "unsupported field 'unsupportedGuarantee'");
     }

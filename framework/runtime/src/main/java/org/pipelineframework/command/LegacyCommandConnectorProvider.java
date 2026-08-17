@@ -20,18 +20,13 @@ import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.connector.CommandInvocation;
 import org.pipelineframework.connector.CommandOperation;
 import org.pipelineframework.connector.CommandOutcome;
-import org.pipelineframework.connector.ConnectorCompletionStages;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorOperation;
-import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
-import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProvider;
-import org.pipelineframework.connector.ConnectorProviderDescriptor;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderVersion;
 import org.pipelineframework.connector.ConnectorRegistry;
-import org.pipelineframework.connector.ConnectorRuntimeContext;
 
 /**
  * Runtime-only bridge that registers existing Mutiny-based {@link CommandConnector} beans as
@@ -40,8 +35,6 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
  */
 public final class LegacyCommandConnectorProvider implements ConnectorProvider<Void> {
     public static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("tpf.legacy.command");
-    private static final ConnectorProviderDescriptor DESCRIPTOR = new ConnectorProviderDescriptor(
-        PROVIDER_ID, new ConnectorProviderVersion(1, 0));
 
     private final List<LegacyCommandOperation> operations;
     private final Map<String, LegacyCommandOperation> operationsByCommand;
@@ -117,23 +110,18 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
     }
 
     @Override
-    public ConnectorProviderDescriptor descriptor() {
-        return DESCRIPTOR;
+    public ConnectorProviderId id() {
+        return PROVIDER_ID;
+    }
+
+    @Override
+    public ConnectorProviderVersion version() {
+        return new ConnectorProviderVersion(1, 0);
     }
 
     @Override
     public Collection<? extends ConnectorOperation> operations() {
         return operations;
-    }
-
-    @Override
-    public CompletionStage<Void> start(ConnectorRuntimeContext context) {
-        return ConnectorCompletionStages.completed();
-    }
-
-    @Override
-    public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-        return ConnectorCompletionStages.completed();
     }
 
     private LegacyCommandOperation requireOperation(String command) {
@@ -230,20 +218,20 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
     }
 
     static final class LegacyCommandOperation implements CommandOperation<Object, LegacyCommandRequestConfiguration, Object> {
-        private final ConnectorOperationDescriptor descriptor;
+        private final String operationId;
         private final String command;
         private final CommandConnector<Object, Object> connector;
 
         @SuppressWarnings("unchecked")
         private LegacyCommandOperation(String operationId, String command, CommandConnector<?, ?> connector) {
-            descriptor = new ConnectorOperationDescriptor(operationId, ConnectorOperationKind.COMMAND, 1);
+            this.operationId = operationId;
             this.command = command;
             this.connector = (CommandConnector<Object, Object>) connector;
         }
 
         @Override
-        public ConnectorOperationDescriptor descriptor() {
-            return descriptor;
+        public String id() {
+            return operationId;
         }
 
         @Override

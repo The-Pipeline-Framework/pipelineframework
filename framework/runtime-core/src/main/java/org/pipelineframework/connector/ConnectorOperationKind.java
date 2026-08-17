@@ -11,7 +11,8 @@ public record ConnectorOperationKind(String value) implements Comparable<Connect
 
     public static final ConnectorOperationKind COMMAND = new ConnectorOperationKind("tpf:command");
     public static final ConnectorOperationKind QUERY = new ConnectorOperationKind("tpf:query");
-    public static final ConnectorOperationKind AGENT = new ConnectorOperationKind("tpf:agent");
+    public static final ConnectorOperationKind OBJECT_SOURCE = new ConnectorOperationKind("tpf:object-source");
+    public static final ConnectorOperationKind OBJECT_TARGET = new ConnectorOperationKind("tpf:object-target");
 
     public ConnectorOperationKind {
         Objects.requireNonNull(value, "operation kind must not be null");

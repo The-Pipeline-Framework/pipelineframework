@@ -158,8 +158,6 @@ public class PipelineYamlConfigLoader {
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline config root is not a map for " + source);
         }
-        rejectLegacyConnectors(rootMap);
-
         String basePackage = readString(rootMap, "basePackage");
         String transport = resolveConfigValue(
             readString(rootMap, "transport"),
@@ -173,7 +171,8 @@ public class PipelineYamlConfigLoader {
             PlatformOverrideResolver::normalizeKnownPlatform,
             "COMPUTE",
             "platform");
-        List<PipelineYamlStep> steps = readSteps(rootMap);
+        Map<String, PipelineYamlConnectorBinding> connectors = readConnectorBindings(rootMap);
+        List<PipelineYamlStep> steps = readSteps(rootMap, connectors);
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         Map<String, PipelineYamlQuery> queries = readQueries(rootMap);
         Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
@@ -183,7 +182,8 @@ public class PipelineYamlConfigLoader {
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
         validateObjectOutputTarget(output, publish);
 
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output);
+        return new PipelineYamlConfig(
+            basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output, connectors);
     }
 
     /**
@@ -241,7 +241,10 @@ public class PipelineYamlConfigLoader {
      * @param rootMap the parsed YAML root map potentially containing a "steps" entry
      * @return a list of PipelineYamlStep instances for entries that have a non-blank name; returns an empty list if no valid "steps" section is present
      */
-    private List<PipelineYamlStep> readSteps(Map<?, ?> rootMap) {
+    private List<PipelineYamlStep> readSteps(
+        Map<?, ?> rootMap,
+        Map<String, PipelineYamlConnectorBinding> connectorBindings
+    ) {
         Object stepsObj = rootMap.get("steps");
         if (!(stepsObj instanceof Iterable<?> steps)) {
             return List.of();
@@ -268,6 +271,30 @@ public class PipelineYamlConfigLoader {
             String duplicatePolicy = readString(stepMap, "duplicatePolicy");
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             Optional<NativeCommandYaml> nativeCommand = readNativeCommand(stepMap, name);
+            Optional<PipelineYamlOperationSelection> operationSelection = readOperationSelection(stepMap, name);
+            if (operationSelection.isPresent()) {
+                if (nativeCommand.isPresent()) {
+                    throw new IllegalArgumentException(
+                        "step '" + name + "' must declare either operation/using or connector, not both");
+                }
+                PipelineYamlOperationSelection selectedOperation = operationSelection.orElseThrow();
+                PipelineYamlConnectorBinding binding = connectorBindings.get(selectedOperation.using());
+                if (binding == null) {
+                    throw new IllegalArgumentException(
+                        "step '" + name + "' references unknown connector binding '" + selectedOperation.using() + "'");
+                }
+                if ("command".equalsIgnoreCase(kind)) {
+                    nativeCommand = Optional.of(NativeCommandYaml.bound(binding, selectedOperation));
+                } else if ("query".equalsIgnoreCase(kind)) {
+                    if (!selectedOperation.policy().isEmpty()) {
+                        throw new IllegalArgumentException(
+                            "query step '" + name + "' operation selection does not support command policy");
+                    }
+                } else {
+                    throw new IllegalArgumentException(
+                        "step '" + name + "' operation/using selection requires kind command or query");
+                }
+            }
             if (nativeCommand.isPresent()) {
                 NativeCommandYaml selector = nativeCommand.orElseThrow();
                 if (command != null && !command.isBlank()) {
@@ -277,6 +304,14 @@ public class PipelineYamlConfigLoader {
                 commandConfig = selector.embed(commandConfig);
             }
             String queryId = trimToNull(readString(stepMap, "query"));
+            if (operationSelection.isPresent() && "query".equalsIgnoreCase(kind)) {
+                if (queryId != null) {
+                    throw new IllegalArgumentException(
+                        "query step '" + name + "' must declare either query or operation/using, not both");
+                }
+                PipelineYamlOperationSelection selectedOperation = operationSelection.orElseThrow();
+                queryId = "native-binding:" + selectedOperation.using() + "/" + selectedOperation.operation();
+            }
             PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
             List<String> accepts = readStringList(stepMap, "accepts");
             boolean terminal = readBoolean(stepMap, "terminal", false);
@@ -299,7 +334,8 @@ public class PipelineYamlConfigLoader {
                     queryId,
                     queryCapture,
                     accepts,
-                    terminal));
+                    terminal,
+                    operationSelection));
             }
         }
         return stepInfos;
@@ -343,6 +379,34 @@ public class PipelineYamlConfigLoader {
         return Optional.of(new NativeCommandYaml(provider, providerVersion, operation, operationVersion, normalizedPolicy));
     }
 
+    private Optional<PipelineYamlOperationSelection> readOperationSelection(Map<?, ?> stepMap, String stepName) {
+        String operation = trimToNull(readString(stepMap, "operation"));
+        String using = trimToNull(readString(stepMap, "using"));
+        if (operation == null && using == null) {
+            if (stepMap.containsKey("operationVersion") || stepMap.containsKey("policy")) {
+                throw new IllegalArgumentException(
+                    "step '" + stepName + "' operationVersion/policy requires operation and using");
+            }
+            return Optional.empty();
+        }
+        if (operation == null || using == null) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' operation-first connector selection requires both operation and using");
+        }
+        int operationVersion = stepMap.containsKey("operationVersion")
+            ? readPositiveInteger(stepMap, "operationVersion", "step '" + stepName + "'")
+            : 1;
+        Object policy = stepMap.get("policy");
+        if (policy != null && !(policy instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("step '" + stepName + "' policy must be a map");
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalizedPolicy = policy == null
+            ? Map.of()
+            : (Map<String, Object>) normalizeConfigValue(policy);
+        return Optional.of(new PipelineYamlOperationSelection(operation, operationVersion, using, normalizedPolicy));
+    }
+
     private int readPositiveInteger(Map<?, ?> values, String key, String context) {
         Object value = values.get(key);
         if (!(value instanceof Number number) || number.intValue() < 1 || number.doubleValue() != number.intValue()) {
@@ -352,14 +416,39 @@ public class PipelineYamlConfigLoader {
     }
 
     private record NativeCommandYaml(
+        Optional<String> binding,
         String provider,
         int providerVersion,
         String operation,
         int operationVersion,
         Map<String, Object> policy
     ) {
+        private NativeCommandYaml(
+            String provider,
+            int providerVersion,
+            String operation,
+            int operationVersion,
+            Map<String, Object> policy
+        ) {
+            this(Optional.empty(), provider, providerVersion, operation, operationVersion, policy);
+        }
+
+        private static NativeCommandYaml bound(
+            PipelineYamlConnectorBinding binding,
+            PipelineYamlOperationSelection selection
+        ) {
+            return new NativeCommandYaml(
+                Optional.of(binding.name()),
+                binding.provider(),
+                binding.version(),
+                selection.operation(),
+                selection.operationVersion(),
+                selection.policy());
+        }
+
         private String commandName() {
-            return "native:" + provider + "/" + operation;
+            return binding.map(name -> "native-binding:" + name + "/" + operation)
+                .orElseGet(() -> "native:" + provider + "/" + operation);
         }
 
         private Map<String, Object> embed(Map<String, Object> config) {
@@ -369,8 +458,53 @@ public class PipelineYamlConfigLoader {
             embedded.put("__tpf_native_operation", operation);
             embedded.put("__tpf_native_operation_version", operationVersion);
             embedded.put("__tpf_native_policy", policy);
+            binding.ifPresent(name -> embedded.put("__tpf_native_binding", name));
             return Map.copyOf(embedded);
         }
+    }
+
+    private Map<String, PipelineYamlConnectorBinding> readConnectorBindings(Map<?, ?> rootMap) {
+        Object connectors = rootMap.get("connectors");
+        if (connectors == null) {
+            return Map.of();
+        }
+        if (!(connectors instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("connectors must be defined as a map");
+        }
+        Map<String, PipelineYamlConnectorBinding> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            String name = entry.getKey() == null ? "" : entry.getKey().toString().trim();
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("connector binding name must not be blank");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> binding)) {
+                throw new IllegalArgumentException("connector binding '" + name + "' must be defined as a map");
+            }
+            binding.keySet().stream()
+                .map(String::valueOf)
+                .filter(key -> !java.util.Set.of("provider", "version", "config").contains(key))
+                .sorted()
+                .findFirst()
+                .ifPresent(key -> {
+                    throw new IllegalArgumentException(
+                        "connector binding '" + name + "' has unsupported field '" + key + "'");
+                });
+            String provider = readRequiredString(binding, "provider", "connector binding '" + name + "'");
+            int version = readPositiveInteger(binding, "version", "connector binding '" + name + "'");
+            Object config = binding.get("config");
+            if (config != null && !(config instanceof Map<?, ?>)) {
+                throw new IllegalArgumentException("connector binding '" + name + "' config must be a map");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> normalized = config == null
+                ? Map.of()
+                : (Map<String, Object>) normalizeConfigValue(config);
+            PipelineYamlConnectorBinding parsed = new PipelineYamlConnectorBinding(name, provider, version, normalized);
+            if (result.putIfAbsent(parsed.name(), parsed) != null) {
+                throw new IllegalArgumentException("duplicate connector binding name: " + parsed.name());
+            }
+        }
+        return Map.copyOf(result);
     }
 
     private Map<String, PipelineYamlQuery> readQueries(Map<?, ?> rootMap) {
@@ -976,13 +1110,6 @@ public class PipelineYamlConfigLoader {
     ) {
         if (output != null && output.object() != null && !publish.containsKey(output.object().target())) {
             throw new IllegalArgumentException("output.object publish target not found: " + output.object().target());
-        }
-    }
-
-    private void rejectLegacyConnectors(Map<?, ?> rootMap) {
-        if (rootMap.get("connectors") != null) {
-            throw new IllegalArgumentException(
-                "Top-level connectors are no longer supported; use input.subscription and output.checkpoint");
         }
     }
 

@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import javax.tools.JavaCompiler;
@@ -39,13 +40,20 @@ class ConnectorProviderExternalJarDiscoveryTest {
             assertEquals(1, registry.providers().size());
             assertFalse(registry.operations().isEmpty());
             assertTrue(Boolean.getBoolean("tpf.connector.external-provider-created"));
+            ConnectorProvider<?> runtimeProvider = registry.requireProvider(
+                ConnectorProviderId.of("external.fake"), 1);
+            ConnectorProviderArtifactDescriptor manifestProvider = metadata.providers().getFirst();
+            assertEquals(manifestProvider.provider(), ConnectorDescriptors.provider(runtimeProvider));
+            assertEquals(
+                manifestProvider.operations(),
+                runtimeProvider.operations().stream().map(ConnectorDescriptors::operation).toList());
         }
     }
 
     private Path compileExternalProviderJar() throws IOException {
         Path sourceRoot = temporaryDirectory.resolve("source");
         Path classesRoot = temporaryDirectory.resolve("classes");
-        Path source = sourceRoot.resolve("external/fake/ExternalProviderFactory.java");
+        Path source = sourceRoot.resolve("external/fake/ExternalProvider.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesRoot);
         Files.writeString(source, externalProviderSource(), StandardCharsets.UTF_8);
@@ -69,12 +77,20 @@ class ConnectorProviderExternalJarDiscoveryTest {
             throw new IllegalStateException("external provider fixture did not compile");
         }
 
+        try (URLClassLoader buildLoader = new URLClassLoader(
+            new URL[] {classesRoot.toUri().toURL()}, getClass().getClassLoader())) {
+            ConnectorProvider<?> provider = (ConnectorProvider<?>) buildLoader
+                .loadClass("external.fake.ExternalProvider").getConstructor().newInstance();
+            ConnectorProviderArtifacts.write(classesRoot, List.of(provider));
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("external provider fixture could not be packaged", exception);
+        }
+
         Path jar = temporaryDirectory.resolve("external-provider.jar");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
             addCompiledClasses(classesRoot, output);
-            addEntry(output, "META-INF/services/org.pipelineframework.connector.ConnectorProviderFactory", "external.fake.ExternalProviderFactory\n");
-            addEntry(output, "META-INF/pipeline/connector-providers.json", manifest());
         }
+        System.clearProperty("tpf.connector.external-provider-created");
         return jar;
     }
 
@@ -89,71 +105,51 @@ class ConnectorProviderExternalJarDiscoveryTest {
         }
     }
 
-    private static void addEntry(JarOutputStream output, String name, String content) throws IOException {
-        output.putNextEntry(new JarEntry(name));
-        output.write(content.getBytes(StandardCharsets.UTF_8));
-        output.closeEntry();
-    }
-
-    private static String manifest() {
-        return """
-            {
-              "schemaVersion": 1,
-              "providers": [
-                {
-                  "id": "external.fake",
-                  "version": {"major": 1, "minor": 0},
-                  "operations": [{"id": "echo", "kind": "tpf:query", "majorVersion": 1}]
-                }
-              ]
-            }
-            """;
-    }
-
     private static String externalProviderSource() {
         return """
             package external.fake;
 
             import java.util.Collection;
             import java.util.List;
+            import java.util.concurrent.CompletableFuture;
             import java.util.concurrent.CompletionStage;
-            import org.pipelineframework.connector.ConnectorCompletionStages;
             import org.pipelineframework.connector.ConnectorOperation;
-            import org.pipelineframework.connector.ConnectorOperationDescriptor;
-            import org.pipelineframework.connector.ConnectorOperationKind;
             import org.pipelineframework.connector.ConnectorProvider;
-            import org.pipelineframework.connector.ConnectorProviderDescriptor;
-            import org.pipelineframework.connector.ConnectorProviderFactory;
             import org.pipelineframework.connector.ConnectorProviderId;
             import org.pipelineframework.connector.ConnectorProviderVersion;
-            import org.pipelineframework.connector.ConnectorRuntimeContext;
+            import org.pipelineframework.connector.QueryInvocation;
+            import org.pipelineframework.connector.QueryOperation;
+            import org.pipelineframework.connector.QueryOutcome;
 
-            public final class ExternalProviderFactory implements ConnectorProviderFactory {
-                @Override
-                public ConnectorProvider<?> create() {
+            public final class ExternalProvider implements ConnectorProvider<Void> {
+                public ExternalProvider() {
                     System.setProperty("tpf.connector.external-provider-created", "true");
-                    return new ExternalProvider();
                 }
 
-                private static final class ExternalProvider implements ConnectorProvider<Void> {
+                @Override
+                public ConnectorProviderId id() {
+                    return ConnectorProviderId.of("external.fake");
+                }
+
+                @Override
+                public ConnectorProviderVersion version() {
+                    return new ConnectorProviderVersion(1, 0);
+                }
+
+                @Override
+                public Collection<? extends ConnectorOperation> operations() {
+                    return List.of(new Echo());
+                }
+
+                private static final class Echo implements QueryOperation<String, Void, String> {
                     @Override
-                    public ConnectorProviderDescriptor descriptor() {
-                        return new ConnectorProviderDescriptor(ConnectorProviderId.of("external.fake"), new ConnectorProviderVersion(1, 0));
+                    public String id() {
+                        return "echo";
                     }
 
                     @Override
-                    public Collection<? extends ConnectorOperation> operations() {
-                        return List.of(() -> new ConnectorOperationDescriptor("echo", ConnectorOperationKind.QUERY, 1));
-                    }
-
-                    @Override
-                    public CompletionStage<Void> start(ConnectorRuntimeContext context) {
-                        return ConnectorCompletionStages.completed();
-                    }
-
-                    @Override
-                    public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-                        return ConnectorCompletionStages.completed();
+                    public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, Void, String> invocation) {
+                        return CompletableFuture.completedFuture(new QueryOutcome.Found<>(invocation.input()));
                     }
                 }
             }

@@ -56,7 +56,8 @@ public record PipelineYamlStep(
     String queryId,
     PipelineYamlQueryCapture queryCapture,
     java.util.List<String> accepts,
-    boolean terminal
+    boolean terminal,
+    java.util.Optional<PipelineYamlOperationSelection> operationSelection
 ) {
     public PipelineYamlStep {
         kind = kind == null || kind.isBlank() ? "internal" : kind;
@@ -67,6 +68,32 @@ public record PipelineYamlStep(
         commandConfig = commandConfig == null ? java.util.Map.of() : java.util.Map.copyOf(commandConfig);
         queryCapture = queryCapture == null ? new PipelineYamlQueryCapture(java.util.List.of()) : queryCapture;
         accepts = accepts == null ? java.util.List.of() : java.util.List.copyOf(accepts);
+        operationSelection = java.util.Objects.requireNonNull(operationSelection, "operation selection must not be null");
+    }
+
+    public PipelineYamlStep(
+        String name,
+        String kind,
+        String cardinality,
+        String inputType,
+        String inboundMapper,
+        String outputType,
+        String outboundMapper,
+        String timeout,
+        java.util.List<String> idempotencyKeyFields,
+        PipelineYamlAwaitConfig awaitConfig,
+        String command,
+        String commandIdGenerator,
+        String duplicatePolicy,
+        java.util.Map<String, Object> commandConfig,
+        String queryId,
+        PipelineYamlQueryCapture queryCapture,
+        java.util.List<String> accepts,
+        boolean terminal
+    ) {
+        this(name, kind, cardinality, inputType, inboundMapper, outputType, outboundMapper, timeout,
+            idempotencyKeyFields, awaitConfig, command, commandIdGenerator, duplicatePolicy, commandConfig,
+            queryId, queryCapture, accepts, terminal, java.util.Optional.empty());
     }
 
     public PipelineYamlStep(
@@ -111,5 +138,12 @@ public record PipelineYamlStep(
         return values.stream()
             .map(value -> value == null ? null : value.toString())
             .toList();
+    }
+
+    /**
+     * Returns the configuration owned by a selected native operation.
+     */
+    public java.util.Map<String, Object> operationConfig() {
+        return commandConfig;
     }
 }

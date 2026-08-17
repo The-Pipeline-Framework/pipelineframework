@@ -19,6 +19,10 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
 
 /**
  * Builds query descriptors from runtime pipeline YAML.
@@ -76,6 +80,30 @@ public class QueryStepDescriptorFactory {
             .orElseThrow(() -> new IllegalStateException("No query YAML step found for generated service " + serviceName));
         if (!"query".equalsIgnoreCase(step.kind())) {
             throw new IllegalStateException("Generated query service " + serviceName + " maps to non-query YAML step");
+        }
+        if (step.operationSelection().isPresent()) {
+            org.pipelineframework.config.pipeline.PipelineYamlOperationSelection selectedOperation =
+                step.operationSelection().orElseThrow();
+            org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding binding =
+                config.connectors().get(selectedOperation.using());
+            if (binding == null) {
+                throw new IllegalStateException("Query step " + serviceName + " references unknown connector binding '"
+                    + selectedOperation.using() + "'");
+            }
+            return QueryStepDescriptor.nativeQuery(
+                serviceName,
+                inputType,
+                outputType,
+                step.cardinality(),
+                new NativeQuerySelector(
+                    ConnectorBindingName.of(binding.name()),
+                    new ConnectorOperationIdentity(
+                        ConnectorProviderId.of(binding.provider()),
+                        selectedOperation.operation(),
+                        ConnectorOperationKind.QUERY,
+                        selectedOperation.operationVersion()),
+                    binding.version()),
+                step.operationConfig());
         }
         if (step.queryId() == null || step.queryId().isBlank()) {
             throw new IllegalStateException("Query step " + serviceName + " is missing query");

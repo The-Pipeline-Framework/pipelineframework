@@ -23,8 +23,8 @@ public interface CommandOperation<I, C, O> extends ConnectorOperation {
         ConnectorExecutionContext executionContext
     ) {
         ConnectorConfigSchema<C> schema = configurationSchema().orElseThrow(() -> new ConnectorConfigurationException(
-            "command operation " + descriptor().id() + " does not declare a configuration schema"));
-        C boundConfiguration = ConnectorConfigurationBinder.bind(schema, configuration, "command operation " + descriptor().id());
+            "command operation " + id() + " does not declare a configuration schema"));
+        C boundConfiguration = ConnectorConfigurationBinder.bind(schema, configuration, "command operation " + id());
         return dispatch(new CommandInvocation<>(input, boundConfiguration, executionContext));
     }
 }

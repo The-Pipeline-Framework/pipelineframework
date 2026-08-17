@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +16,10 @@ import org.hibernate.reactive.mutiny.Mutiny;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
+import org.pipelineframework.connector.ConnectorExecutionContext;
+import org.pipelineframework.connector.QueryInvocation;
+import org.pipelineframework.connector.QueryOperation;
+import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.query.QueryRequest;
 import org.pipelineframework.query.QueryStepDescriptor;
 
@@ -39,6 +44,33 @@ class JpaQueryConnectorQuarkusTest {
                 new QueryRequest<>(descriptor(), new CustomerRiskLookup("customer-1")),
                 CustomerRiskFacts.class)),
             facts -> assertEquals(new CustomerRiskFacts("customer-1", "HIGH", 91), facts));
+    }
+
+    @Test
+    @RunOnVertxContext
+    @SuppressWarnings("unchecked")
+    void nativeOperationUsesInvocationOutputTypeAndReturnsSemanticOutcome(UniAsserter asserter) {
+        asserter.execute(() -> sessionFactory.withTransaction((session, tx) ->
+            session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
+                .replaceWithVoid()
+                .chain(() -> session.persist(new CustomerRiskEntity("customer-native", "HIGH", 93)))));
+
+        QueryOperation<Object, QueryRequest<?>, Object> operation =
+            (QueryOperation<Object, QueryRequest<?>, Object>) connector.operations().stream()
+                .filter(QueryOperation.class::isInstance)
+                .filter(candidate -> "find.one".equals(candidate.id()))
+                .findFirst()
+                .orElseThrow();
+        QueryRequest<?> configuration = new QueryRequest<>(descriptor(), new CustomerRiskLookup("ignored"));
+        asserter.assertThat(
+            () -> Uni.createFrom().completionStage(operation.query(new QueryInvocation<>(
+                new CustomerRiskLookup("customer-native"),
+                configuration,
+                (Class<Object>) (Class<?>) CustomerRiskFacts.class,
+                ConnectorExecutionContext.empty()))),
+            outcome -> assertEquals(
+                new CustomerRiskFacts("customer-native", "HIGH", 93),
+                assertInstanceOf(QueryOutcome.Found.class, outcome).output()));
     }
 
     @Test

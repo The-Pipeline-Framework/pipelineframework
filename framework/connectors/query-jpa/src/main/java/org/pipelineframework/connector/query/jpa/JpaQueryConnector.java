@@ -1,6 +1,9 @@
 package org.pipelineframework.connector.query.jpa;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,19 +15,32 @@ import org.hibernate.FlushMode;
 import org.hibernate.reactive.mutiny.Mutiny;
 import org.pipelineframework.query.FrameworkQueryConnector;
 import org.pipelineframework.query.QueryRequest;
+import org.pipelineframework.connector.ConnectorOperation;
+import org.pipelineframework.connector.ConnectorProvider;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderVersion;
+import org.pipelineframework.connector.QueryInvocation;
+import org.pipelineframework.connector.QueryOperation;
+import org.pipelineframework.connector.QueryOutcome;
 
 /**
  * First-party captured query connector for declarative JPA entity reads.
  */
 @ApplicationScoped
-public class JpaQueryConnector implements FrameworkQueryConnector {
+public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProvider<Void> {
     static final String CONNECTOR_NAME = "jpa";
+    static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("jpa.query");
 
-    private final Instance<Mutiny.SessionFactory> sessionFactory;
+    private final Optional<Instance<Mutiny.SessionFactory>> sessionFactory;
+
+    /** Side-effect-free constructor used by connector artifact packaging. */
+    public JpaQueryConnector() {
+        this.sessionFactory = Optional.empty();
+    }
 
     @Inject
     public JpaQueryConnector(Instance<Mutiny.SessionFactory> sessionFactory) {
-        this.sessionFactory = sessionFactory;
+        this.sessionFactory = Optional.of(sessionFactory);
     }
 
     @Override
@@ -33,15 +49,30 @@ public class JpaQueryConnector implements FrameworkQueryConnector {
     }
 
     @Override
+    public ConnectorProviderId id() {
+        return PROVIDER_ID;
+    }
+
+    @Override
+    public ConnectorProviderVersion version() {
+        return new ConnectorProviderVersion(1, 0);
+    }
+
+    @Override
+    public Collection<? extends ConnectorOperation> operations() {
+        return List.of(new JpaFindOneOperation());
+    }
+
+    @Override
     public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
-        if (sessionFactory == null || sessionFactory.isUnsatisfied()) {
+        if (sessionFactory.isEmpty() || sessionFactory.orElseThrow().isUnsatisfied()) {
             return CompletableFuture.failedStage(new IllegalStateException(
                 "No Hibernate Reactive SessionFactory is available for connector jpa"));
         }
         try {
             JpaQueryPlan plan = JpaQueryPlan.from(request.descriptor());
             Class<?> entityType = plan.entityType();
-            return sessionFactory.get().withSession(session -> executeQuery(session, plan, request.input(), entityType))
+            return sessionFactory.orElseThrow().get().withSession(session -> executeQuery(session, plan, request.input(), entityType))
                 .onItem().transform(rows -> projectSingle(plan, rows, outputType))
                 .subscribeAsCompletionStage();
         } catch (RuntimeException ex) {
@@ -61,11 +92,56 @@ public class JpaQueryConnector implements FrameworkQueryConnector {
 
     private <O> O projectSingle(JpaQueryPlan plan, List<?> rows, Class<O> outputType) {
         if (rows.isEmpty()) {
-            throw new IllegalStateException("JPA query '" + plan.queryId() + "' returned no rows");
+            throw new JpaNotFoundException("JPA query '" + plan.queryId() + "' returned no rows");
         }
         if (!plan.firstResultOnly() && rows.size() > 1) {
-            throw new IllegalStateException("JPA query '" + plan.queryId() + "' returned multiple rows");
+            throw new JpaMultipleResultsException("JPA query '" + plan.queryId() + "' returned multiple rows");
         }
         return JpaQueryProjection.project(rows.getFirst(), outputType, plan.projection());
+    }
+
+    private final class JpaFindOneOperation implements QueryOperation<Object, QueryRequest<?>, Object> {
+        @Override
+        public String id() {
+            return "find.one";
+        }
+
+        @Override
+        public CompletionStage<QueryOutcome<Object>> query(QueryInvocation<Object, QueryRequest<?>, Object> invocation) {
+            QueryRequest<?> request = new QueryRequest<>(invocation.configuration().descriptor(), invocation.input());
+            return queryOne(request, invocation.outputType()).handle((output, failure) -> {
+                if (failure == null) {
+                    return new QueryOutcome.Found<>(output);
+                }
+                Throwable cause = unwrap(failure);
+                if (cause instanceof JpaNotFoundException) {
+                    return new QueryOutcome.NotFound<>("not-found");
+                }
+                if (cause instanceof JpaMultipleResultsException) {
+                    return new QueryOutcome.TerminalFailure<>("multiple-results");
+                }
+                return new QueryOutcome.TerminalFailure<>("jpa-query-failed");
+            });
+        }
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        Throwable current = failure;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private static final class JpaNotFoundException extends IllegalStateException {
+        private JpaNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    private static final class JpaMultipleResultsException extends IllegalStateException {
+        private JpaMultipleResultsException(String message) {
+            super(message);
+        }
     }
 }

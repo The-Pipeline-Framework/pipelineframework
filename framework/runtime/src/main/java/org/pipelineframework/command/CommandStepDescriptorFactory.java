@@ -22,6 +22,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
+import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorConcurrencyScope;
 import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
@@ -147,10 +148,22 @@ public class CommandStepDescriptorFactory {
         int providerVersion = requiredPositiveInteger(configuration, "__tpf_native_provider_version");
         int operationVersion = requiredPositiveInteger(configuration, "__tpf_native_operation_version");
         return Optional.of(new NativeCommandSelector(
+            optionalString(configuration, "__tpf_native_binding").map(ConnectorBindingName::of),
             new ConnectorOperationIdentity(
                 ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion),
             providerVersion,
             policy(configuration.get("__tpf_native_policy"))));
+    }
+
+    private static Optional<String> optionalString(Map<String, Object> values, String key) {
+        Object value = values.get(key);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof String string) || string.isBlank()) {
+            throw new IllegalArgumentException("native command selector " + key + " must be a non-blank string");
+        }
+        return Optional.of(string);
     }
 
     private static CommandPolicy policy(Object value) {

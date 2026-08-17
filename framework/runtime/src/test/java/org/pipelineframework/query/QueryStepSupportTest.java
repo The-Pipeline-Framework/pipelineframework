@@ -10,12 +10,23 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Optional;
+import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorCompletionStages;
+import org.pipelineframework.config.pipeline.PipelineJson;
 
 class QueryStepSupportTest {
 
@@ -56,6 +67,40 @@ class QueryStepSupportTest {
 
         assertEquals(first, second);
         assertEquals(1, connector.calls.get());
+    }
+
+    @Test
+    void nativeDescriptorReplaysCapturedOutputBeforeRejectingUnavailableLiveExecution() {
+        QueryStepDescriptor descriptor = QueryStepDescriptor.nativeQuery(
+            "LoadCustomerRisk",
+            Lookup.class.getName(),
+            Snapshot.class.getName(),
+            "ONE_TO_ONE",
+            new NativeQuerySelector(
+                ConnectorBindingName.of("risk"),
+                new ConnectorOperationIdentity(
+                    ConnectorProviderId.of("acme.risk"), "risk.find", ConnectorOperationKind.QUERY, 1),
+                1),
+            Map.of());
+        Lookup input = new Lookup("customer-1", "US");
+        String inputJson;
+        try {
+            inputJson = PipelineJson.mapper().writeValueAsString(PipelineJson.mapper().valueToTree(input));
+        } catch (Exception failure) {
+            throw new IllegalStateException("test query input could not be serialized", failure);
+        }
+        String captureKey = captureKey("tenant-1", "exec-1", 2, descriptor, inputJson);
+        QueryCaptureRecord captured = new QueryCaptureRecord(
+            "tenant-1", "exec-1", 2, descriptor.queryId(), descriptor.version(), captureKey,
+            inputJson, "{\"customerId\":\"captured\",\"riskBand\":\"LOW\",\"callNumber\":7}",
+            Snapshot.class.getName(), Instant.now());
+        QueryStepSupport support = new QueryStepSupport(List.of(), List.of(new PreloadedCaptureStore(captured)));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant-1", "exec-1", 2));
+
+        Snapshot replayed = support.queryOneToOne(
+            descriptor, input, Snapshot.class).await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(new Snapshot("captured", "LOW", 7), replayed);
     }
 
     @Test
@@ -140,6 +185,23 @@ class QueryStepSupportTest {
                 "single"));
     }
 
+    private static String captureKey(
+        String tenant,
+        String execution,
+        int stepIndex,
+        QueryStepDescriptor descriptor,
+        String inputJson
+    ) {
+        String basis = tenant + ":" + execution + ":" + stepIndex + ":"
+            + descriptor.queryId() + ":" + descriptor.version() + ":" + inputJson;
+        try {
+            return HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(basis.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception failure) {
+            throw new IllegalStateException("SHA-256 digest is unavailable to the test", failure);
+        }
+    }
+
     private static final class CountingFrameworkConnector implements FrameworkQueryConnector {
         private final AtomicInteger calls = new AtomicInteger();
 
@@ -166,6 +228,29 @@ class QueryStepSupportTest {
         @Override
         public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
             return null;
+        }
+    }
+
+    private record PreloadedCaptureStore(QueryCaptureRecord record) implements QueryCaptureStore {
+        @Override
+        public CompletionStage<Optional<QueryCaptureRecord>> get(String captureKey) {
+            return CompletableFuture.completedFuture(
+                record.captureKey().equals(captureKey) ? Optional.of(record) : Optional.empty());
+        }
+
+        @Override
+        public CompletionStage<QueryCaptureRecord> putIfAbsent(QueryCaptureRecord candidate) {
+            return CompletableFuture.completedFuture(record);
+        }
+
+        @Override
+        public CompletionStage<Boolean> remove(String captureKey) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        @Override
+        public CompletionStage<Void> clear() {
+            return ConnectorCompletionStages.completed();
         }
     }
 

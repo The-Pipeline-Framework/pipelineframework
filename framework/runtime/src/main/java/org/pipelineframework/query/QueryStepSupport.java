@@ -49,15 +49,9 @@ public class QueryStepSupport {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
-        FrameworkQueryConnector connector;
-        try {
-            connector = resolveConnector(descriptor.connector());
-        } catch (RuntimeException ex) {
-            return Uni.createFrom().failure(ex);
-        }
         Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         if (context.isEmpty()) {
-            return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType);
+            return executeLive(descriptor, input, outputType);
         }
         PipelineExecutionContext executionContext = context.orElseThrow();
         QueryCaptureStore store;
@@ -75,9 +69,24 @@ public class QueryStepSupport {
                 if (existing.isPresent()) {
                     return coerce(existing.get(), outputType);
                 }
-                return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType)
+                return executeLive(descriptor, input, outputType)
                     .onItem().transformToUni(output -> capture(store, executionContext, descriptor, captureKey, inputJson, output, outputType));
             });
+    }
+
+    private <I, O> Uni<O> executeLive(QueryStepDescriptor descriptor, I input, Class<O> outputType) {
+        if (descriptor.nativeSelector().isPresent()) {
+            NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
+            return Uni.createFrom().failure(new UnsupportedOperationException(
+                "provider-backed Query execution is not available in this runtime: binding '"
+                    + selector.binding().value() + "', operation " + selector.operationIdentity().operationId()));
+        }
+        try {
+            FrameworkQueryConnector connector = resolveConnector(descriptor.connector());
+            return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType);
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
+        }
     }
 
     private <O> Uni<O> executeConnector(
