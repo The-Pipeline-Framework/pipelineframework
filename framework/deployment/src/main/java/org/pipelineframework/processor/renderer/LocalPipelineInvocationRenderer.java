@@ -169,7 +169,8 @@ public final class LocalPipelineInvocationRenderer {
         return model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
-            || model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP);
+            || model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)
+            || model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);
     }
 
     private StepDefinition invocationCallsite(PipelineCompilationContext ctx, PipelineInvocationBinding binding) {

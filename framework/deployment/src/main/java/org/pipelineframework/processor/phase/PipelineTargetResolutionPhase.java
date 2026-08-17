@@ -27,6 +27,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitStepDescriptor";
     public static final String COMMAND_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.command.CommandStepDescriptor";
     public static final String QUERY_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.query.QueryStepDescriptor";
+    public static final String DYNAMIC_OPERATION_DESCRIPTOR_CLASS =
+        "org.pipelineframework.dispatch.OperationDispatchDescriptor";
 
     private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
 
@@ -101,7 +103,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     private boolean usesOrdinaryLocalClient(Set<GenerationTarget> targets) {
         return !targets.contains(GenerationTarget.AWAIT_CLIENT_STEP)
             && !targets.contains(GenerationTarget.COMMAND_CLIENT_STEP)
-            && !targets.contains(GenerationTarget.QUERY_CLIENT_STEP);
+            && !targets.contains(GenerationTarget.QUERY_CLIENT_STEP)
+            && !targets.contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);
     }
 
     /**
@@ -170,6 +173,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         if (model.serviceClassName() != null
             && QUERY_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.QUERY_CLIENT_STEP);
+        }
+        if (model.serviceClassName() != null
+            && DYNAMIC_OPERATION_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
+            return Set.of(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);
         }
         var remoteExecution = model.remoteExecution();
         if (remoteExecution != null && remoteExecution.isRemote()) {

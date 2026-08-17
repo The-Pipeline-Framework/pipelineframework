@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class CanonicalTypeCatalogueTest {
     private final CanonicalTypeCatalogue catalogue =
@@ -23,11 +24,11 @@ class CanonicalTypeCatalogueTest {
         assertDoesNotThrow(() -> catalogue.validateAndCanonicalize("ConstraintArguments", """
             {"email":"a@example.test","large":9223372036854775807,"small":2147483647}
             """));
-        assertThrows(InvalidModelDecisionException.class,
+        assertThrows(IllegalArgumentException.class,
             () -> catalogue.validateAndCanonicalize("ConstraintArguments", """
                 {"email":"a@example.test","large":0,"small":2147483648}
                 """));
-        assertThrows(InvalidModelDecisionException.class,
+        assertThrows(IllegalArgumentException.class,
             () -> catalogue.validateAndCanonicalize("ConstraintArguments", """
                 {"email":"a@example.test","large":9223372036854775808,"small":0}
                 """));
@@ -35,7 +36,7 @@ class CanonicalTypeCatalogueTest {
 
     @Test
     void validatesSupportedFormatsAndRejectsUnsupportedCanonicalFormats() {
-        assertThrows(InvalidModelDecisionException.class,
+        assertThrows(IllegalArgumentException.class,
             () -> catalogue.validateAndCanonicalize("ConstraintArguments", """
                 {"email":"not-an-email","large":0,"small":0}
                 """));
@@ -47,7 +48,7 @@ class CanonicalTypeCatalogueTest {
     void boundsModelTextBeforeRegularExpressionMatching() {
         String oversized = "a".repeat(4_097);
 
-        assertThrows(InvalidModelDecisionException.class,
+        assertThrows(IllegalArgumentException.class,
             () -> catalogue.validateAndCanonicalize("PatternArguments", "{\"value\":\"" + oversized + "\"}"));
     }
 }

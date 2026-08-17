@@ -111,6 +111,7 @@ public class StepDefinitionParser {
         "query",
         "capture",
         "negativeCacheTtl",
+        "callables",
         "accepts",
         "terminal",
         "pipeline",
@@ -309,6 +310,8 @@ public class StepDefinitionParser {
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
         boolean commandStep = "command".equalsIgnoreCase(rawKind);
         boolean queryStep = "query".equalsIgnoreCase(rawKind);
+        Optional<String> dynamicOperationSource = parseDynamicOperationSource(stepData, name);
+        boolean dynamicOperationStep = dynamicOperationSource.isPresent();
         reportUnknownStepKeys(name, stepData, awaitStep);
         String delegatedClassName = null;
         Optional<String> delegatedMethodName = Optional.empty();
@@ -373,6 +376,14 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (dynamicOperationStep && (!isBlank(rawKind) || !isBlank(delegatedClassName)
+            || !isBlank(serviceClassName) || remoteExecution != null || pipelineStep)) {
+            String message = "Skipping step '" + name
+                + "': operation.mode dynamic is an invocation binding and cannot declare kind or authored execution";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         if (!isBlank(rawKind)
             && !awaitStep
             && !commandStep
@@ -395,7 +406,8 @@ public class StepDefinitionParser {
             return null;
         }
         boolean runOnVirtualThreads = parseOptionalBoolean(stepData, name, "runOnVirtualThreads");
-        boolean inferredLegacyInternal = !pipelineStep && !awaitStep && !commandStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean inferredLegacyInternal = !pipelineStep && !awaitStep && !commandStep && !queryStep && !dynamicOperationStep
+            && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
@@ -411,6 +423,9 @@ public class StepDefinitionParser {
             executionClassName = null;
         } else if (queryStep) {
             kind = StepKind.QUERY;
+            executionClassName = null;
+        } else if (dynamicOperationStep) {
+            kind = StepKind.INTERNAL;
             executionClassName = null;
         } else if (remoteExecution != null) {
             kind = StepKind.REMOTE;
@@ -940,6 +955,40 @@ public class StepDefinitionParser {
                 terminal);
         }
 
+        if (dynamicOperationStep) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null
+                || mapperFallback != MapperFallbackMode.NONE) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + name
+                    + "': dynamic operation invocation cannot declare mapper fields");
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + name
+                    + "': dynamic operation invocation requires input and output types");
+                return null;
+            }
+            StreamingShape invocationShape = parseStreamingShapeHint(stepData, name);
+            if (invocationShape != null && invocationShape != StreamingShape.UNARY_UNARY) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + name
+                    + "': dynamic operation invocation supports only ONE_TO_ONE cardinality");
+                return null;
+            }
+            String logicalInput = contracts.logicalInput().orElse("");
+            String logicalOutput = contracts.logicalOutput().orElse("");
+            if (!"<tpf.llm.AgentCall>".equals(logicalInput)
+                || !"<tpf.connector.OperationObservation>".equals(logicalOutput)) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + name
+                    + "': dynamic operation invocation requires <tpf.llm.AgentCall>"
+                    + " -> <tpf.connector.OperationObservation>");
+                return null;
+            }
+            return new StepDefinition(
+                name, StepKind.INTERNAL, null, Optional.empty(), null, Map.of(), null, List.of(), null, null, null,
+                Map.of(), null, Map.of(), List.of(), null, null, null, MapperFallbackMode.NONE,
+                inputType, outputType, StreamingShape.UNARY_UNARY, false, accepts, terminal,
+                Optional.empty(), dynamicOperationSource);
+        }
+
         if (kind == StepKind.PIPELINE) {
             if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
                 String message = "Skipping step '" + name + "': pipeline invocation cannot declare mapper fields";
@@ -1093,6 +1142,30 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return Optional.empty();
         }
+    }
+
+    private Optional<String> parseDynamicOperationSource(Map<String, Object> stepData, String stepName) {
+        Object raw = stepData.get("operation");
+        if (!(raw instanceof Map<?, ?> values)) {
+            return Optional.empty();
+        }
+        Map<String, Object> operation = stringKeyedMap(values);
+        operation.keySet().stream().filter(key -> !Set.of("mode", "from").contains(key)).sorted().findFirst()
+            .ifPresent(key -> {
+                throw new IllegalArgumentException("step '" + stepName
+                    + "' dynamic operation has unsupported field '" + key + "'");
+            });
+        String mode = operation.get("mode") instanceof String value ? value.trim() : "";
+        if (!"dynamic".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("step '" + stepName
+                + "' operation map requires mode: dynamic");
+        }
+        String source = operation.get("from") instanceof String value ? value.trim() : "";
+        if (source.isEmpty()) {
+            throw new IllegalArgumentException("step '" + stepName
+                + "' operation.mode dynamic requires a non-blank from step");
+        }
+        return Optional.of(source);
     }
 
     private boolean validateNativeQueryBinding(

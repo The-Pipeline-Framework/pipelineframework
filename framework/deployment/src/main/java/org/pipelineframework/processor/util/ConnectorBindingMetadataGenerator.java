@@ -78,30 +78,40 @@ public final class ConnectorBindingMetadataGenerator {
             document,
             "connector binding '" + binding.name() + "' provider " + providerId.value());
         Map<String, Object> configuration = sanitizedConfiguration(provider, document);
-        config.steps().stream()
-            .flatMap(step -> step.callables().values().stream())
-            .filter(callable -> binding.name().equals(callable.using()))
-            .forEach(callable -> catalog.requireOperation(
-                providerId,
-                binding.version(),
-                callable.operation(),
-                callable.kind(),
-                callable.operationVersion()));
-        List<OperationReference> operations = config.steps().stream()
+        List<OperationReference> operations = config.stepDefinitions().values().stream().flatMap(List::stream)
             .filter(step -> step.operationSelection().isPresent())
             .filter(step -> binding.name().equals(step.operationSelection().orElseThrow().using()))
             .map(step -> operationReference(step.name(), step.kind(), step.operationSelection().orElseThrow()))
             .sorted(Comparator.comparing(OperationReference::step))
             .toList();
-        List<CallableReference> callables = config.steps().stream()
+        List<CallableReference> callables = config.stepDefinitions().values().stream().flatMap(List::stream)
             .flatMap(step -> step.callables().values().stream()
                 .filter(callable -> binding.name().equals(callable.using()))
-                .map(callable -> new CallableReference(
-                    step.name(), callable.alias(), callable.kindToken(), callable.operation(),
-                    callable.operationVersion(), callable.input())))
+                .map(callable -> callableReference(step.name(), callable, providerId, binding.version(), catalog)))
             .sorted(Comparator.comparing(CallableReference::step).thenComparing(CallableReference::alias))
             .toList();
         return new BindingMetadata(binding.name(), binding.provider(), binding.version(), configuration, operations, callables);
+    }
+
+    private static CallableReference callableReference(
+        String step,
+        org.pipelineframework.config.pipeline.PipelineYamlCallable callable,
+        ConnectorProviderId providerId,
+        int providerVersion,
+        ConnectorProviderManifestCatalog catalog
+    ) {
+        var operation = catalog.requireOperation(
+            providerId, providerVersion, callable.operation(), callable.kind(), callable.operationVersion());
+        var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
+            "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
+        if (!contract.inputType().equals(callable.input())) {
+            throw new IllegalArgumentException("callable input contract for " + callable.using() + "/" + callable.operation()
+                + " does not match trusted connector metadata: " + contract.inputType());
+        }
+        return new CallableReference(
+            step, callable.alias(), operation.kind().value(), operation.id(), operation.majorVersion(),
+            contract.inputType(), contract.outputType().orElseThrow(() -> new IllegalArgumentException(
+                "callable operation has no output contract: " + callable.using() + "/" + callable.operation())));
     }
 
     private static Map<String, Object> sanitizedConfiguration(
@@ -175,7 +185,8 @@ public final class ConnectorBindingMetadataGenerator {
         String kind,
         String operation,
         int operationVersion,
-        String input
+        String input,
+        String output
     ) {
     }
 }

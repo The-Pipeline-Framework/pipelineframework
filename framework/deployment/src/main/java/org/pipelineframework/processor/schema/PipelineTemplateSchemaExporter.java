@@ -1934,6 +1934,18 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$"
         },
+        "kind": {
+          "type": "string",
+          "enum": ["command", "query"]
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "input": {
+          "$ref": "#/$defs/logicalContractReference"
+        },
         "operationVersion": {
           "type": "integer",
           "minimum": 1,
@@ -2204,17 +2216,21 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$"
         },
-        "kind": {
+        "commandIdGenerator": {
           "type": "string",
-          "enum": ["command", "query"]
+          "minLength": 1
         },
-        "operationVersion": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 1
+        "duplicatePolicy": {
+          "type": "string",
+          "enum": ["RETURN_RECORDED", "FAIL"]
         },
-        "input": {
-          "$ref": "#/$defs/logicalContractReference"
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "required": ["using", "operation", "kind", "input"]
@@ -2341,6 +2357,26 @@ public final class PipelineTemplateSchemaExporter {
         "kind",
         "cardinality"
       ]
+    },
+    "dynamicOperationTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "cardinality": { "const": "ONE_TO_ONE" },
+        "input": { "const": "<tpf.llm.AgentCall>" },
+        "output": { "const": "<tpf.connector.OperationObservation>" },
+        "operation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "const": "dynamic" },
+            "from": { "type": "string", "minLength": 1 }
+          },
+          "required": ["mode", "from"]
+        }
+      },
+      "required": ["name", "input", "output", "operation"]
     },
     "v3RecordField": {
       "oneOf": [
@@ -2503,6 +2539,9 @@ public final class PipelineTemplateSchemaExporter {
                   "$ref": "#/$defs/queryTemplateStep"
                 },
                 {
+                  "$ref": "#/$defs/dynamicOperationTemplateStep"
+                },
+                {
                   "$ref": "#/$defs/awaitTemplateStep"
                 },
                 {
@@ -2565,6 +2604,7 @@ public final class PipelineTemplateSchemaExporter {
                 {
                   "oneOf": [
                     { "$ref": "#/$defs/queryTemplateStep" },
+                    { "$ref": "#/$defs/dynamicOperationTemplateStep" },
                     { "$ref": "#/$defs/awaitTemplateStep" },
                     { "$ref": "#/$defs/commandTemplateStep" },
                     { "$ref": "#/$defs/v2TemplateStep" },

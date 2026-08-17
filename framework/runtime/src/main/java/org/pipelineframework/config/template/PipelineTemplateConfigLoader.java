@@ -1395,7 +1395,11 @@ public class PipelineTemplateConfigLoader {
                         readString(descriptor, "operation"),
                         org.pipelineframework.config.pipeline.PipelineYamlCallable.parseKind(readString(descriptor, "kind")),
                         authoredVersion == null ? 1 : authoredVersion,
-                        readString(descriptor, "input"));
+                        readString(descriptor, "input"),
+                        Optional.ofNullable(readString(descriptor, "commandIdGenerator")),
+                        readString(descriptor, "duplicatePolicy"),
+                        callableMap(descriptor.get("config"), stepName, alias, "config"),
+                        callableMap(descriptor.get("policy"), stepName, alias, "policy"));
                 if (result.putIfAbsent(callable.alias(), callable) != null) {
                     throw new IllegalArgumentException("duplicate callable alias '" + alias + "'");
                 }
@@ -1405,6 +1409,18 @@ public class PipelineTemplateConfigLoader {
             }
         });
         return Map.copyOf(result);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> callableMap(Object value, String stepName, String alias, String field) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> values)) {
+            throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "' " + field
+                + " must be a map");
+        }
+        return (Map<String, Object>) normalizeConfigValue(values);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

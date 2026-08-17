@@ -31,4 +31,6 @@ public enum GenerationTarget {
     COMMAND_CLIENT_STEP,
     /** Generated query client step that invokes a captured query connector */
     QUERY_CLIENT_STEP,
+    /** Generated adapter for runtime selection of one explicitly exposed bound operation. */
+    DYNAMIC_OPERATION_CLIENT_STEP,
 }

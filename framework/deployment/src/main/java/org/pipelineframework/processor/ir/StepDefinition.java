@@ -80,7 +80,8 @@ public record StepDefinition(
         boolean runOnVirtualThreads,
         List<String> accepts,
         boolean terminal,
-        Optional<String> pipelineReference
+        Optional<String> pipelineReference,
+        Optional<String> dynamicOperationSource
 ) {
 
     /** Creates the typed immutable state for a statically linked pipeline invocation step. */
@@ -97,7 +98,24 @@ public record StepDefinition(
             name, StepKind.PIPELINE, null, Optional.empty(), null, Map.of(), null, List.of(), null, null,
             null, Map.of(), null, Map.of(), List.of(), null, null, null, MapperFallbackMode.NONE,
             inputType, outputType, streamingShapeHint, false, accepts, terminal,
-            Optional.ofNullable(pipelineReference));
+            Optional.ofNullable(pipelineReference), Optional.empty());
+    }
+
+    /** Backward-compatible canonical constructor shape before dynamic operation bindings were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal, Optional<String> pipelineReference
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, Optional.empty());
     }
 
     /** Backward-compatible canonical constructor shape before pipeline references were added. */
@@ -524,7 +542,8 @@ public record StepDefinition(
             throw new IllegalArgumentException("Name cannot be blank");
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
-        if (runOnVirtualThreads && kind != StepKind.INTERNAL) {
+        dynamicOperationSource = normalizeOptionalString(dynamicOperationSource);
+        if (runOnVirtualThreads && (kind != StepKind.INTERNAL || dynamicOperationSource.isPresent())) {
             throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
         }
         if (executionClass != null && remoteExecution != null) {
@@ -535,7 +554,15 @@ public record StepDefinition(
         accepts = accepts == null ? List.of() : List.copyOf(accepts);
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
-        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
+        } else if (dynamicOperationSource.isPresent()) {
+            if (kind != StepKind.INTERNAL || executionClass != null || remoteExecution != null) {
+                throw new IllegalArgumentException(
+                    "dynamic operation bindings use ordinary INTERNAL step semantics without authored execution");
+            }
+            Objects.requireNonNull(inputType, "Input type cannot be null for dynamic operation steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for dynamic operation steps");
+        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY
+            || kind == StepKind.PIPELINE) {
             if (executionClass != null || remoteExecution != null) {
                 throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
             }

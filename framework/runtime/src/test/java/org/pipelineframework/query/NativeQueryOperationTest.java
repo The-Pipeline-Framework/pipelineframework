@@ -101,6 +101,26 @@ class NativeQueryOperationTest {
     }
 
     @Test
+    void exposesCapturedNotFoundAsAValidSemanticObservationWithoutChangingOrdinaryQueryBehavior() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 5));
+        operation.outcome = new QueryOutcome.NotFound<>("customer-missing");
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
+
+        QueryOutcome.NotFound<?> first = assertInstanceOf(QueryOutcome.NotFound.class,
+            support.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        QueryOutcome.NotFound<?> replayed = assertInstanceOf(QueryOutcome.NotFound.class,
+            replayWithoutProvider.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertEquals("customer-missing", first.code());
+        assertEquals(first.code(), replayed.code());
+        assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
     void mapsEveryNonSuccessOutcomeToItsRetryClassification() {
         assertOutcome(
             new QueryOutcome.TemporarilyUnavailable<>("provider-busy"),

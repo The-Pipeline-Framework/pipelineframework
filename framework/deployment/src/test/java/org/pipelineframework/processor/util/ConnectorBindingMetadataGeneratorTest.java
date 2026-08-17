@@ -106,11 +106,12 @@ class ConnectorBindingMetadataGeneratorTest {
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
-            {"schemaVersion":1,"providers":[
+            {"schemaVersion":2,"providers":[
               {"id":"llm.query","version":{"major":1,"minor":0},"operations":[
                 {"id":"decide","kind":"tpf:query","majorVersion":1,"queryCapabilities":{"cacheability":"LIVE_ONLY"}}]},
               {"id":"acme.payments","version":{"major":1,"minor":0},"operations":[
-                {"id":"charge.create","kind":"tpf:command","majorVersion":2}]}
+                {"id":"charge.create","kind":"tpf:command","majorVersion":2,
+                 "typeContract":{"input":"ChargeArguments","output":"ChargeResult"}}]}
             ]}
             """);
         Path pipeline = tempDir.resolve("llm-pipeline.yaml");

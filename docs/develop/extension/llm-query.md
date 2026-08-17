@@ -75,6 +75,7 @@ steps:
     operationVersion: 1
     config:
       instructions: Decide whether to propose the charge or complete the invoice.
+      structuredOutputSchema: REQUIRED
     callables:
       charge:
         using: payments
@@ -82,13 +83,40 @@ steps:
         operationVersion: 1
         kind: command
         input: ChargeArguments
+        commandIdGenerator: example.invoice.ChargeCommandIdGenerator
 ```
 
-`using`, `operation`, `kind`, `operationVersion`, and `input` are build-time declarations, not model-authored fields. The current Connector manifest identifies operations by provider, operation, kind, and major version and does not publish operation input contracts. TPF therefore validates these declarations against the selected binding's release metadata and the normalized v3 type graph instead of pretending `using + operation` alone is sufficient.
+`using` and `operation` select the configured capability. The compiler verifies `kind`, `operationVersion`, and `input` against the selected operation's normalized type contract from Connector metadata; they are never trusted model output. Command callables that can be invoked also declare their ordinary command ID generator and may declare the existing duplicate and command policies.
 
 The compiler emits the canonical v3 catalogue into the release contract. At runtime the connector projects the selected input types into model-safe JSON Schema and validates returned arguments against the same canonical metadata. The schema is a projection for the model, not an alternative application schema language. Unknown aliases, missing or extra fields, malformed JSON, and type mismatches become `TerminalFailure("invalid-model-decision")`.
 
 Model aliases are untrusted observations. TPF looks up the exact compiled alias and constructs `binding + operation` from the catalogue; it never copies a provider or operation identity supplied inside model arguments.
+
+`structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas fails before inference. `OPTIONAL` is an explicit best-effort mode for prompt-guided JSON; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
+
+## Invoke one proposal
+
+A following ordinary step dynamically invokes exactly one capability from the named Query step's compiled catalogue:
+
+```yaml
+  - name: Invoke proposal
+    input: <tpf.llm.AgentCall>
+    output: <tpf.connector.OperationObservation>
+    operation:
+      mode: dynamic
+      from: Decide invoice
+```
+
+The generated invocation adapter revalidates the proposed `binding + operation` and canonical arguments before invoking a provider. Query operations use captured Query semantics; Command operations use the existing effect store, idempotency, duplicate, confirmation, ambiguity, and user-action semantics. Dynamic operation selection is binding mechanics, not a new semantic step kind; it neither loops nor updates application state.
+
+`OperationObservation` is a discriminated union:
+
+- `result` carries the bound operation identity, normalized outcome/code, canonical result type, and canonical `resultJson`;
+- `empty` carries the same identity and outcome/code without inventing a result payload.
+
+`QueryOutcome.NotFound` becomes an `empty` observation with outcome `not-found`, because absence is normally information the next application decision may need. `Found` and successful Commands become `result` observations. `TemporarilyUnavailable`, authentication/authority failures, terminal failures, Command ambiguity, confirmation barriers, and user-action requirements retain their existing Query/Command failure or effect-state semantics; they are not flattened into successful observations.
+
+The application maps the generic observation into its own state in a later Mapper, service, or reducer step. Dynamic invocation never manufactures `InvoiceState`, `EngineeringState`, or another application-owned type.
 
 ## Adapter boundary
 
@@ -108,7 +136,6 @@ Operational model/provider failures remain exceptional Query failures. A syntact
 
 ## Deliberate limits
 
-- No operation dispatch or authorization is implemented here.
 - No recursive tool loop, Agent runtime, Agent state, memory bag, or Agent execution identity exists.
 - No runtime discovery snapshot or dynamic grant subsystem is required for the release-pinned v1 catalogue.
 - No MCP or AskUser protocol is included.

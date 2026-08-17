@@ -38,6 +38,22 @@ class QueryClientStepRendererTest {
         assertEquals(GenerationTarget.QUERY_CLIENT_STEP, new QueryClientStepRenderer().target());
     }
 
+    @Test
+    void rendersOneShotDynamicOperationAdapter() throws IOException {
+        PipelineStepModel model = model(
+            ClassName.get("com.example.common.domain", "AgentCall"),
+            ClassName.get("com.example.common.domain", "OperationObservation"));
+
+        new QueryClientStepRenderer().renderDynamicOperation(model, generationContext("LOCAL"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/LoadCustomerRiskDynamicOperationClientStep.java"));
+        assertTrue(source.contains("OperationDispatchSupport support"));
+        assertTrue(source.contains("OperationDispatchDescriptorFactory descriptorFactory"));
+        assertTrue(source.contains("support.dispatch(descriptorFactory.descriptor(\"LoadCustomerRisk\"), "
+            + "input.binding(), input.operation(), input.argumentsJson(), OperationObservation.class)"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"LOCAL", "REST", "GRPC"})
     void rendersReactiveStepThatDelegatesToQuerySupport(String transport) throws IOException {

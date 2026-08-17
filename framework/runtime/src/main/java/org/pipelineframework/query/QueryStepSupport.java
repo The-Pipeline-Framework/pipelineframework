@@ -122,6 +122,44 @@ public class QueryStepSupport {
             });
     }
 
+    /**
+     * Executes a native Query while preserving its typed semantic outcome for a caller that can
+     * interpret valid negative observations. Existing {@link #queryOneToOne} behavior is unchanged.
+     */
+    public <I, O> Uni<QueryOutcome<O>> queryOutcomeOneToOne(
+        QueryStepDescriptor descriptor,
+        I input,
+        Class<O> outputType
+    ) {
+        if (descriptor == null || descriptor.nativeSelector().isEmpty()) {
+            return Uni.createFrom().failure(new IllegalArgumentException(
+                "semantic Query outcomes require a native Query descriptor"));
+        }
+        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
+        if (context.isEmpty()) {
+            return executeNative(descriptor, input, outputType)
+                .onItem().transformToUni(outcome -> preserveNativeOutcome(
+                    descriptor, outputType, outcome, Optional.empty()));
+        }
+        PipelineExecutionContext executionContext = context.orElseThrow();
+        try {
+            QueryCaptureStore store = resolveStore();
+            String inputJson = json.writeValueAsString(normalizedKeyInput(input, descriptor.keyFields()));
+            String captureKey = captureKey(executionContext, descriptor, inputJson);
+            return getCaptured(store, captureKey).onItem().transformToUni(existing -> {
+                if (existing.isPresent()) {
+                    return replayCapturedOutcome(existing.orElseThrow(), outputType);
+                }
+                NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
+                return executeNative(descriptor, input, outputType)
+                    .onItem().transformToUni(outcome -> preserveNativeOutcome(
+                        descriptor, outputType, outcome, Optional.of(capture)));
+            });
+        } catch (Exception failure) {
+            return Uni.createFrom().failure(failure);
+        }
+    }
+
     private <I, O> Uni<O> executeLive(QueryStepDescriptor descriptor, I input, Class<O> outputType) {
         if (descriptor.nativeSelector().isPresent()) {
             return executeNative(descriptor, input, outputType)
@@ -302,6 +340,47 @@ public class QueryStepSupport {
             "unsupported query outcome from " + selector.operationIdentity() + ": " + outcome.getClass().getName()));
     }
 
+    @SuppressWarnings("unchecked")
+    private <O> Uni<QueryOutcome<O>> preserveNativeOutcome(
+        QueryStepDescriptor descriptor,
+        Class<O> outputType,
+        QueryOutcome<Object> outcome,
+        Optional<NativeCapture> capture
+    ) {
+        NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
+        if (outcome == null) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "native query operation " + selector.operationIdentity() + " returned a null outcome"));
+        }
+        if (outcome instanceof QueryOutcome.Found<Object> found) {
+            final O output;
+            try {
+                output = outputType.cast(found.output());
+            } catch (ClassCastException failure) {
+                return Uni.createFrom().failure(new IllegalStateException(
+                    "native query operation " + selector.operationIdentity() + " returned "
+                        + found.output().getClass().getName() + " but step expected " + outputType.getName(), failure));
+            }
+            if (capture.isEmpty()) {
+                return Uni.createFrom().item(new QueryOutcome.Found<>(output));
+            }
+            NativeCapture resolved = capture.orElseThrow();
+            return captureFound(
+                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), output, outputType)
+                .replaceWith(new QueryOutcome.Found<>(output));
+        }
+        if (outcome instanceof QueryOutcome.NotFound<Object> notFound) {
+            if (capture.isEmpty()) {
+                return Uni.createFrom().item(new QueryOutcome.NotFound<>(notFound.code()));
+            }
+            NativeCapture resolved = capture.orElseThrow();
+            return captureNotFoundRecord(
+                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), notFound.code())
+                .replaceWith(new QueryOutcome.NotFound<>(notFound.code()));
+        }
+        return Uni.createFrom().item((QueryOutcome<O>) outcome);
+    }
+
     private ConnectorBindingRegistry requireBindingRegistry(NativeQuerySelector selector) {
         return bindingRegistry.orElseThrow(() -> new IllegalStateException(
             "connector binding registry is not available for Query operation " + selector.operationIdentity()));
@@ -426,6 +505,18 @@ public class QueryStepSupport {
         String outcomeCode,
         Class<O> outputType
     ) {
+        return captureNotFoundRecord(store, context, descriptor, captureKey, inputJson, outcomeCode)
+            .onItem().transformToUni(captured -> replayCaptured(captured, outputType));
+    }
+
+    private Uni<QueryCaptureRecord> captureNotFoundRecord(
+        QueryCaptureStore store,
+        PipelineExecutionContext context,
+        QueryStepDescriptor descriptor,
+        String captureKey,
+        String inputJson,
+        String outcomeCode
+    ) {
         QueryCaptureRecord record = new QueryCaptureRecord(
             context.tenantId(),
             context.executionId(),
@@ -439,7 +530,14 @@ public class QueryStepSupport {
             Instant.now(),
             QueryCaptureStatus.NOT_FOUND,
             outcomeCode);
-        return putCaptured(store, record).onItem().transformToUni(captured -> replayCaptured(captured, outputType));
+        return putCaptured(store, record);
+    }
+
+    private <O> Uni<QueryOutcome<O>> replayCapturedOutcome(QueryCaptureRecord record, Class<O> outputType) {
+        if (record.status() == QueryCaptureStatus.NOT_FOUND) {
+            return Uni.createFrom().item(new QueryOutcome.NotFound<>(record.outcomeCode()));
+        }
+        return replayCaptured(record, outputType).onItem().transform(output -> new QueryOutcome.Found<>(output));
     }
 
     private <O> Uni<O> replayCaptured(QueryCaptureRecord record, Class<O> outputType) {
