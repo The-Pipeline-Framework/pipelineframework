@@ -2,6 +2,7 @@ package org.pipelineframework.connector;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -131,6 +132,47 @@ class ConnectorProviderManifestReaderTest {
                 """)));
         assertEquals("malformed connector provider manifest: field 'executionPosture' must be a CommandExecutionPosture",
             invalid.getMessage());
+    }
+
+    @Test
+    void readsMinimalQueryCapabilitiesAndDefaultsUndeclaredValuesConservatively() {
+        ConnectorProviderManifest declared = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE","maximumCacheAge":"PT10M",
+            "maximumNegativeCacheTtl":"PT30S"}}]}]}
+            """));
+        QueryCapabilities capabilities = declared.providers().getFirst().operations().getFirst()
+            .queryCapabilities().orElseThrow();
+        assertEquals(QueryCacheability.CACHEABLE, capabilities.cacheability());
+        assertEquals(Duration.ofMinutes(10), capabilities.maximumCacheAge().orElseThrow());
+        assertEquals(Duration.ofSeconds(30), capabilities.maximumNegativeCacheTtl().orElseThrow());
+
+        ConnectorProviderManifest undeclared = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1}]}]}
+            """));
+        ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of("metadata.provider"), "find", ConnectorOperationKind.QUERY, 1);
+        assertEquals(
+            QueryCapabilities.conservative(),
+            new ConnectorProviderManifestCatalog(List.of(undeclared)).requireQueryCapabilities(identity, 1));
+    }
+
+    @Test
+    void rejectsCommandIdentityWhenQueryCapabilitiesAreRequested() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find","kind":"tpf:query","majorVersion":1}]}]}
+            """));
+        ConnectorOperationIdentity commandIdentity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of("metadata.provider"), "find", ConnectorOperationKind.COMMAND, 1);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> new ConnectorProviderManifestCatalog(List.of(manifest))
+                .requireQueryCapabilities(commandIdentity, 1));
+
+        assertTrue(failure.getMessage().contains("require a Query operation identity"));
     }
 
     private static ByteArrayInputStream input(String value) {

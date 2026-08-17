@@ -232,6 +232,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("capture"));
         assertTrue(properties.has("operation"));
         assertTrue(properties.has("using"));
+        assertEquals("duration", properties.getAsJsonObject("negativeCacheTtl").get("format").getAsString());
         JsonArray selections = queryStep.getAsJsonArray("allOf").get(1).getAsJsonObject().getAsJsonArray("oneOf");
         assertContains(selections.get(0).getAsJsonObject().getAsJsonArray("required"), "query");
         assertContains(selections.get(1).getAsJsonObject().getAsJsonArray("required"), "operation");

@@ -17,6 +17,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
+import org.jboss.logging.Logger;
 import org.pipelineframework.command.CommandConnector;
 import org.pipelineframework.command.LegacyCommandConnectorProvider;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
@@ -28,6 +29,8 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
  */
 @ApplicationScoped
 public class ConnectorRegistryLifecycle {
+    private static final Logger LOG = Logger.getLogger(ConnectorRegistryLifecycle.class);
+
     @Inject
     Instance<ConnectorProvider<?>> providerInstances;
 
@@ -50,6 +53,10 @@ public class ConnectorRegistryLifecycle {
         List<ConnectorBindingDefinition> definitions = loadBindingDefinitions();
         ConnectorBindingRegistry configuredBindings = createBindingRegistry(
             definitions, providers, providerInstanceFactory);
+        if (!configuredBindings.unavailableBindingNames().isEmpty()) {
+            LOG.warnf("Connector providers are unavailable for configured bindings %s; replay-only execution remains available",
+                configuredBindings.unavailableBindingNames().stream().map(ConnectorBindingName::value).toList());
+        }
         bindingRegistry = Optional.of(configuredBindings);
     }
 
@@ -97,7 +104,7 @@ public class ConnectorRegistryLifecycle {
         if (definitions == null || definitions.isEmpty()) {
             return ConnectorBindingRegistry.empty();
         }
-        return ConnectorBindingRegistry.fromProviders(
+        return ConnectorBindingRegistry.fromProvidersAllowingUnavailable(
             definitions,
             providers == null ? List.of() : providers);
     }
@@ -110,7 +117,7 @@ public class ConnectorRegistryLifecycle {
         if (definitions == null || definitions.isEmpty()) {
             return ConnectorBindingRegistry.empty();
         }
-        return ConnectorBindingRegistry.fromProviders(
+        return ConnectorBindingRegistry.fromProvidersAllowingUnavailable(
             definitions,
             providers == null ? List.of() : providers,
             instanceFactory);

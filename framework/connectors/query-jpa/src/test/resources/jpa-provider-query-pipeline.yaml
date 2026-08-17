@@ -1,0 +1,22 @@
+basePackage: org.pipelineframework.connector
+transport: LOCAL
+connectors:
+  jpa:
+    provider: jpa.query
+    version: 1
+steps:
+  - name: Load Customer Risk
+    kind: query
+    operation: find.one
+    using: jpa
+    config:
+      entity: org.pipelineframework.connector.query.jpa.CustomerRiskEntity
+      where:
+        customerId:
+          operator: eq
+          values: [input.customerId]
+      projection:
+        customerId: customerId
+        riskBand: riskBand
+        score: score
+      result: single

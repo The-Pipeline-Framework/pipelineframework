@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -55,13 +56,13 @@ class JpaQueryConnectorQuarkusTest {
                 .replaceWithVoid()
                 .chain(() -> session.persist(new CustomerRiskEntity("customer-native", "HIGH", 93)))));
 
-        QueryOperation<Object, QueryRequest<?>, Object> operation =
-            (QueryOperation<Object, QueryRequest<?>, Object>) connector.operations().stream()
+        QueryOperation<Object, JpaFindOneConfiguration, Object> operation =
+            (QueryOperation<Object, JpaFindOneConfiguration, Object>) connector.operations().stream()
                 .filter(QueryOperation.class::isInstance)
                 .filter(candidate -> "find.one".equals(candidate.id()))
                 .findFirst()
                 .orElseThrow();
-        QueryRequest<?> configuration = new QueryRequest<>(descriptor(), new CustomerRiskLookup("ignored"));
+        JpaFindOneConfiguration configuration = nativeConfiguration();
         asserter.assertThat(
             () -> Uni.createFrom().completionStage(operation.query(new QueryInvocation<>(
                 new CustomerRiskLookup("customer-native"),
@@ -71,6 +72,16 @@ class JpaQueryConnectorQuarkusTest {
             outcome -> assertEquals(
                 new CustomerRiskFacts("customer-native", "HIGH", 93),
                 assertInstanceOf(QueryOutcome.Found.class, outcome).output()));
+    }
+
+    private static JpaFindOneConfiguration nativeConfiguration() {
+        return new JpaFindOneConfiguration(
+            CustomerRiskEntity.class.getName(),
+            Map.of("customerId", new JpaPredicate("eq", List.of("input.customerId"))),
+            Optional.of(Map.of("customerId", "customerId", "riskBand", "riskBand", "score", "score")),
+            Optional.empty(),
+            Optional.empty(),
+            Optional.of("single"));
     }
 
     @Test

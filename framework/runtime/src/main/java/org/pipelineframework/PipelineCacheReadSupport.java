@@ -16,6 +16,7 @@
 
 package org.pipelineframework;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,18 +25,33 @@ import java.util.function.Predicate;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CachePolicy;
 import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.context.PipelineContext;
 
 class PipelineCacheReadSupport {
 
     private final PipelineCacheReader reader;
+    private final Optional<PipelineCacheWriter> writer;
     private final List<CacheKeyStrategy> strategies;
     private final String defaultPolicy;
+    private final Optional<Duration> configuredTtl;
 
     PipelineCacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {
+        this(reader, Optional.empty(), strategies, defaultPolicy, Optional.empty());
+    }
+
+    PipelineCacheReadSupport(
+        PipelineCacheReader reader,
+        Optional<PipelineCacheWriter> writer,
+        List<CacheKeyStrategy> strategies,
+        String defaultPolicy,
+        Optional<Duration> configuredTtl
+    ) {
         this.reader = Objects.requireNonNull(reader, "reader must not be null");
+        this.writer = Objects.requireNonNull(writer, "writer must not be null");
         this.strategies = List.copyOf(Objects.requireNonNull(strategies, "strategies must not be null"));
         this.defaultPolicy = Objects.requireNonNull(defaultPolicy, "defaultPolicy must not be null");
+        this.configuredTtl = Objects.requireNonNull(configuredTtl, "configuredTtl must not be null");
     }
 
     Optional<String> resolveKey(Object item, PipelineContext context) {
@@ -105,5 +121,13 @@ class PipelineCacheReadSupport {
 
     PipelineCacheReader reader() {
         return reader;
+    }
+
+    Optional<PipelineCacheWriter> writer() {
+        return writer;
+    }
+
+    Optional<Duration> configuredTtl() {
+        return configuredTtl;
     }
 }

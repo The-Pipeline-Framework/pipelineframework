@@ -19,6 +19,7 @@ package org.pipelineframework.processor.parser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
@@ -44,6 +45,7 @@ import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
+import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
@@ -106,6 +108,7 @@ public class StepDefinitionParser {
         "config",
         "query",
         "capture",
+        "negativeCacheTtl",
         "accepts",
         "terminal",
         "runOnVirtualThreads");
@@ -620,8 +623,16 @@ public class StepDefinitionParser {
             String operation = getStringValue(stepData, "operation");
             String using = getStringValue(stepData, "using");
             boolean operationFirst = !isBlank(operation) || !isBlank(using);
+            if (stepData.containsKey("negativeCacheTtl")) {
+                String message = "Skipping step '" + name
+                    + "': negativeCacheTtl is supported only for provider-backed query selections";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
             if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy"))) {
-                String message = "Skipping step '" + name + "': operationVersion/policy requires operation and using";
+                String message = "Skipping step '" + name
+                    + "': operationVersion/policy requires operation and using";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 throw new StepSkippedException();
@@ -747,8 +758,13 @@ public class StepDefinitionParser {
             String operation = getStringValue(stepData, "operation");
             String using = getStringValue(stepData, "using");
             boolean operationFirst = !isBlank(operation) || !isBlank(using);
-            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy"))) {
-                String message = "Skipping step '" + name + "': operationVersion/policy requires operation and using";
+            if (!operationFirst && (stepData.containsKey("operationVersion") || stepData.containsKey("policy")
+                || stepData.containsKey("negativeCacheTtl"))) {
+                String unsupportedFields = stepData.containsKey("negativeCacheTtl")
+                    ? "operationVersion/policy/negativeCacheTtl"
+                    : "operationVersion/policy";
+                String message = "Skipping step '" + name
+                    + "': " + unsupportedFields + " requires operation and using";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 throw new StepSkippedException();
@@ -760,9 +776,20 @@ public class StepDefinitionParser {
                 throw new StepSkippedException();
             }
             if (operationFirst) {
+                Map<String, Object> captureConfig = parseQueryCaptureConfig(stepData, name);
+                if (captureConfig == null) {
+                    throw new StepSkippedException();
+                }
+                List<String> keyFields = parseStringList(captureConfig.get("keyFields"), name, "capture.keyFields");
+                if (keyFields == null) {
+                    throw new StepSkippedException();
+                }
                 Map<String, Object> operationConfig = parseStepConfig(stepData, name, "query");
+                Optional<Duration> negativeCacheTtl = parsePositiveDuration(
+                    stepData.get("negativeCacheTtl"), name, "negativeCacheTtl");
                 if (operationConfig == null
-                    || !validateNativeQueryBinding(name, operation, using, stepData, operationConfig, connectorBindings)) {
+                    || !validateNativeQueryBinding(
+                        name, operation, using, stepData, operationConfig, negativeCacheTtl, connectorBindings)) {
                     throw new StepSkippedException();
                 }
                 String bindingName = ConnectorBindingName.of(using).value();
@@ -783,7 +810,7 @@ public class StepDefinitionParser {
                     Map.of(),
                     queryId,
                     embedded,
-                    List.of(),
+                    keyFields,
                     null,
                     null,
                     null,
@@ -980,6 +1007,7 @@ public class StepDefinitionParser {
         String using,
         Map<String, Object> stepData,
         Map<String, Object> operationConfig,
+        Optional<Duration> negativeCacheTtl,
         Map<String, ParsedConnectorBinding> bindings
     ) {
         try {
@@ -987,20 +1015,59 @@ public class StepDefinitionParser {
                 throw new IllegalArgumentException("query operation selection does not support command policy");
             }
             ParsedConnectorBinding binding = requiredBinding(stepName, operation, using, bindings);
-            providerManifestCatalog().validateOperationConfiguration(
-                ConnectorProviderId.of(binding.provider()),
+            ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+                ConnectorProviderId.of(binding.provider()), operation, ConnectorOperationKind.QUERY,
+                operationVersion(stepData));
+            ConnectorProviderManifestCatalog catalog = providerManifestCatalog();
+            catalog.validateOperationConfiguration(
+                identity.providerId(),
                 binding.providerVersion(),
                 operation,
                 ConnectorOperationKind.QUERY,
-                operationVersion(stepData),
+                identity.majorVersion(),
                 new ConnectorConfigurationDocument(operationConfig),
                 "query step '" + stepName + "' operation " + operation);
+            validateNegativeCacheTtl(
+                identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
             return true;
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return false;
+        }
+    }
+
+    private static void validateNegativeCacheTtl(
+        ConnectorOperationIdentity identity,
+        QueryCapabilities capabilities,
+        Optional<Duration> requested
+    ) {
+        if (requested.isEmpty()) {
+            return;
+        }
+        Duration maximum = capabilities.maximumNegativeCacheTtl().orElseThrow(() ->
+            new IllegalArgumentException("query operation " + identity + " does not support negative caching"));
+        if (requested.orElseThrow().compareTo(maximum) > 0) {
+            throw new IllegalArgumentException(
+                "negativeCacheTtl " + requested.orElseThrow() + " exceeds query operation " + identity
+                    + " maximum " + maximum);
+        }
+    }
+
+    private static Optional<Duration> parsePositiveDuration(Object value, String stepName, String field) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        try {
+            Duration duration = Duration.parse(value.toString().trim());
+            if (duration.isZero() || duration.isNegative()) {
+                throw new IllegalArgumentException("duration must be positive");
+            }
+            return Optional.of(duration);
+        } catch (RuntimeException failure) {
+            throw new IllegalArgumentException(
+                "query step '" + stepName + "' " + field + " must be a positive ISO-8601 duration", failure);
         }
     }
 

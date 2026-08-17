@@ -96,6 +96,20 @@ public class CacheManager {
      *         if the input was null the Uni emits `null`
      */
     public <T> Uni<T> cache(String key, T item) {
+        return cache(key, item, cacheTtl == null ? Optional.empty() : cacheTtl);
+    }
+
+    /**
+     * Cache an item with an explicit entry TTL, independent of the global default.
+     */
+    public <T> Uni<T> cache(String key, T item, Duration ttl) {
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("cache TTL must be positive"));
+        }
+        return cache(key, item, Optional.of(ttl));
+    }
+
+    private <T> Uni<T> cache(String key, T item, Optional<Duration> ttl) {
         if (item == null) {
             LOG.debug("Item is null, returning empty Uni");
             return Uni.createFrom().nullItem();
@@ -125,8 +139,8 @@ public class CacheManager {
         CacheProvider<T> p = (CacheProvider<T>) provider;
         LOG.debugf("About to cache with provider: %s", provider.getClass().getName());
 
-        if (cacheTtl.isPresent()) {
-            return p.cache(key, item, cacheTtl.get());
+        if (ttl.isPresent()) {
+            return p.cache(key, item, ttl.orElseThrow());
         }
         return p.cache(key, item);
     }

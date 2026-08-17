@@ -2228,6 +2228,11 @@ public final class PipelineTemplateSchemaExporter {
           "type": "object",
           "additionalProperties": true
         },
+        "negativeCacheTtl": {
+          "type": "string",
+          "format": "duration",
+          "description": "Optional bounded TTL for provider-declared cacheable NotFound outcomes."
+        },
         "cardinality": {
           "type": "string",
           "enum": [

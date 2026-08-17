@@ -16,7 +16,7 @@ class JpaQueryPlanTest {
 
     @Test
     void buildsHqlAndBindingsFromDeclarativeWhereMap() {
-        JpaQueryPlan plan = JpaQueryPlan.from(descriptor(
+        JpaQueryPlan plan = plan(descriptor(
             Map.of("customerId", "input.customerId"),
             Map.of()));
 
@@ -34,7 +34,7 @@ class JpaQueryPlanTest {
         where.put("deletedAt", new PipelineYamlJpaPredicate("isNull", List.of(true)));
         where.put("account.status", new PipelineYamlJpaPredicate("isNull", List.of(false)));
 
-        JpaQueryPlan plan = JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        JpaQueryPlan plan = plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(),
             where,
             Map.of(),
@@ -56,12 +56,12 @@ class JpaQueryPlanTest {
     void bindsInPredicateFromInputCollectionAndArray() {
         Map<String, PipelineYamlJpaPredicate> collectionWhere = new LinkedHashMap<>();
         collectionWhere.put("riskBand", new PipelineYamlJpaPredicate("in", List.of("input.riskBands")));
-        JpaQueryPlan collectionPlan = JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        JpaQueryPlan collectionPlan = plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(), collectionWhere, Map.of(), Map.of(), null, "single")));
 
         Map<String, PipelineYamlJpaPredicate> arrayWhere = new LinkedHashMap<>();
         arrayWhere.put("status", new PipelineYamlJpaPredicate("in", List.of("input.statuses")));
-        JpaQueryPlan arrayPlan = JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        JpaQueryPlan arrayPlan = plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(), arrayWhere, Map.of(), Map.of(), null, "single")));
 
         CustomerRiskLookup input = new CustomerRiskLookup("customer-1", 80, List.of("HIGH", "CRITICAL"), new String[] {"ACTIVE", "PENDING"});
@@ -73,7 +73,7 @@ class JpaQueryPlanTest {
     void rendersBetweenPredicateWithTwoBindings() {
         Map<String, PipelineYamlJpaPredicate> where = new LinkedHashMap<>();
         where.put("score", new PipelineYamlJpaPredicate("between", List.of(50, "input.minimumScore")));
-        JpaQueryPlan plan = JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        JpaQueryPlan plan = plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(), where, Map.of(), Map.of(), null, "single")));
 
         assertEquals(
@@ -90,7 +90,7 @@ class JpaQueryPlanTest {
         orderBy.put("updatedAt", "desc");
         orderBy.put("account.status", "asc");
 
-        JpaQueryPlan plan = JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        JpaQueryPlan plan = plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(), where, Map.of(), orderBy, 1, "single")));
 
         assertEquals(
@@ -107,7 +107,7 @@ class JpaQueryPlanTest {
             Map.of("customerId = customerId", "input.customerId"),
             Map.of());
 
-        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.from(descriptor));
+        assertThrows(IllegalArgumentException.class, () -> plan(descriptor));
     }
 
     @Test
@@ -115,7 +115,7 @@ class JpaQueryPlanTest {
         Map<String, PipelineYamlJpaPredicate> where = new LinkedHashMap<>();
         where.put("account..status", PipelineYamlJpaPredicate.equalTo("ACTIVE"));
 
-        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.from(descriptor(new PipelineYamlJpaQuery(
+        assertThrows(IllegalArgumentException.class, () -> plan(descriptor(new PipelineYamlJpaQuery(
             CustomerRiskEntity.class.getName(), where, Map.of(), Map.of(), null, "single"))));
     }
 
@@ -134,6 +134,11 @@ class JpaQueryPlanTest {
             "ONE_TO_ONE",
             List.of("customerId"),
             jpa);
+    }
+
+    private static JpaQueryPlan plan(QueryStepDescriptor descriptor) {
+        return JpaQueryPlan.from(
+            descriptor.queryId(), JpaPipelineQueryAdapter.configuration(descriptor.jpa()));
     }
 
     record CustomerRiskLookup(String customerId, int minimumScore, List<String> riskBands, String[] statuses) {

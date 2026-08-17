@@ -272,6 +272,7 @@ public class PipelineYamlConfigLoader {
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             Optional<NativeCommandYaml> nativeCommand = readNativeCommand(stepMap, name);
             Optional<PipelineYamlOperationSelection> operationSelection = readOperationSelection(stepMap, name);
+            Optional<Duration> negativeCacheTtl = readPositiveDuration(stepMap, "negativeCacheTtl", name);
             if (operationSelection.isPresent()) {
                 if (nativeCommand.isPresent()) {
                     throw new IllegalArgumentException(
@@ -294,6 +295,11 @@ public class PipelineYamlConfigLoader {
                     throw new IllegalArgumentException(
                         "step '" + name + "' operation/using selection requires kind command or query");
                 }
+            }
+            if (negativeCacheTtl.isPresent()
+                && (!"query".equalsIgnoreCase(kind) || operationSelection.isEmpty())) {
+                throw new IllegalArgumentException(
+                    "step '" + name + "' negativeCacheTtl is supported only for provider-backed Query steps");
             }
             if (nativeCommand.isPresent()) {
                 NativeCommandYaml selector = nativeCommand.orElseThrow();
@@ -335,7 +341,8 @@ public class PipelineYamlConfigLoader {
                     queryCapture,
                     accepts,
                     terminal,
-                    operationSelection));
+                    operationSelection,
+                    negativeCacheTtl));
             }
         }
         return stepInfos;
@@ -1222,6 +1229,19 @@ public class PipelineYamlConfigLoader {
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Invalid duration value '" + value + "' for key '" + key + "'", e);
         }
+    }
+
+    private Optional<Duration> readPositiveDuration(Map<?, ?> map, String key, String stepName) {
+        Object value = map.get(key);
+        if (value == null) {
+            return Optional.empty();
+        }
+        Duration duration = readDuration(map, key, Duration.ZERO);
+        if (duration.isZero() || duration.isNegative()) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' " + key + " must be a positive ISO-8601 duration");
+        }
+        return Optional.of(duration);
     }
 
     private Charset readCharset(Map<?, ?> map, String key, Charset defaultValue) {

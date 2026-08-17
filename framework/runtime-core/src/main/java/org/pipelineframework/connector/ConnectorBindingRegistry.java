@@ -78,6 +78,14 @@ public final class ConnectorBindingRegistry {
         return fromProviders(definitions, providers, instanceFactory, false);
     }
 
+    static ConnectorBindingRegistry fromProvidersAllowingUnavailable(
+        Collection<ConnectorBindingDefinition> definitions,
+        Collection<? extends ConnectorProvider<?>> providers,
+        ConnectorProviderInstanceFactory instanceFactory
+    ) {
+        return fromProviders(definitions, providers, instanceFactory, true);
+    }
+
     private static ConnectorBindingRegistry fromProviders(
         Collection<ConnectorBindingDefinition> definitions,
         Collection<? extends ConnectorProvider<?>> providers,
@@ -212,6 +220,11 @@ public final class ConnectorBindingRegistry {
         bindings.forEach((name, binding) ->
             result.put(name, ConnectorDescriptors.provider(binding.prototype())));
         return Collections.unmodifiableMap(result);
+    }
+
+    /** Configured binding names whose provider implementation is unavailable on this host. */
+    public List<ConnectorBindingName> unavailableBindingNames() {
+        return unavailableBindings.keySet().stream().sorted().toList();
     }
 
     /**

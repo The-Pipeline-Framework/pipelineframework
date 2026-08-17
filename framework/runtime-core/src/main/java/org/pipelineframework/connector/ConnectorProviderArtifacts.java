@@ -75,6 +75,8 @@ public final class ConnectorProviderArtifacts {
         operation.configurationSchema().ifPresent(schema -> json.append(",\"configurationSchema\":").append(schema(schema)));
         operation.commandCapabilities().ifPresent(capabilities -> json.append(",\"commandCapabilities\":")
             .append(commandCapabilities(capabilities)));
+        operation.queryCapabilities().ifPresent(capabilities -> json.append(",\"queryCapabilities\":")
+            .append(queryCapabilities(capabilities)));
         return json.append('}').toString();
     }
 
@@ -106,6 +108,16 @@ public final class ConnectorProviderArtifacts {
             .append(",\"durableReferenceKinds\":[");
         appendJoined(json, capabilities.durableReferenceKinds().stream().sorted().toList(), ConnectorProviderArtifacts::quote);
         return json.append("]}").toString();
+    }
+
+    private static String queryCapabilities(QueryCapabilities capabilities) {
+        StringBuilder json = new StringBuilder("{\"cacheability\":")
+            .append(quote(capabilities.cacheability().name()));
+        capabilities.maximumCacheAge().ifPresent(value ->
+            json.append(",\"maximumCacheAge\":").append(quote(value.toString())));
+        capabilities.maximumNegativeCacheTtl().ifPresent(value ->
+            json.append(",\"maximumNegativeCacheTtl\":").append(quote(value.toString())));
+        return json.append('}').toString();
     }
 
     private static <T> void appendJoined(StringBuilder target, Collection<T> values, java.util.function.Function<T, String> mapper) {

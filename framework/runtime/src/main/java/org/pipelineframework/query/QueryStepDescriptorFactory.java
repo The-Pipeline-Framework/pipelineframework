@@ -23,6 +23,9 @@ import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
+import org.pipelineframework.connector.QueryCapabilities;
 
 /**
  * Builds query descriptors from runtime pipeline YAML.
@@ -90,6 +93,13 @@ public class QueryStepDescriptorFactory {
                 throw new IllegalStateException("Query step " + serviceName + " references unknown connector binding '"
                     + selectedOperation.using() + "'");
             }
+            ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+                ConnectorProviderId.of(binding.provider()),
+                selectedOperation.operation(),
+                ConnectorOperationKind.QUERY,
+                selectedOperation.operationVersion());
+            QueryCapabilities capabilities = providerManifestCatalog().requireQueryCapabilities(
+                identity, binding.version());
             return QueryStepDescriptor.nativeQuery(
                 serviceName,
                 inputType,
@@ -97,13 +107,14 @@ public class QueryStepDescriptorFactory {
                 step.cardinality(),
                 new NativeQuerySelector(
                     ConnectorBindingName.of(binding.name()),
-                    new ConnectorOperationIdentity(
-                        ConnectorProviderId.of(binding.provider()),
-                        selectedOperation.operation(),
-                        ConnectorOperationKind.QUERY,
-                        selectedOperation.operationVersion()),
+                    identity,
                     binding.version()),
-                step.operationConfig());
+                step.operationConfig(),
+                step.queryCapture() == null || step.queryCapture().keyFields() == null
+                    ? java.util.List.of()
+                    : step.queryCapture().keyFields(),
+                capabilities,
+                step.negativeCacheTtl());
         }
         if (step.queryId() == null || step.queryId().isBlank()) {
             throw new IllegalStateException("Query step " + serviceName + " is missing query");
@@ -182,6 +193,12 @@ public class QueryStepDescriptorFactory {
             }
         }
         return Optional.empty();
+    }
+
+    private static ConnectorProviderManifestCatalog providerManifestCatalog() {
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        return ConnectorProviderManifestLoader.load(
+            context == null ? QueryStepDescriptorFactory.class.getClassLoader() : context);
     }
 
     private static String toServiceName(String stepName) {

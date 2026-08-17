@@ -114,10 +114,12 @@ class ConnectorProviderExternalJarDiscoveryTest {
             import java.util.concurrent.CompletableFuture;
             import java.util.concurrent.CompletionStage;
             import org.pipelineframework.connector.ConnectorOperation;
+            import org.pipelineframework.connector.ConnectorConfigurationDocument;
             import org.pipelineframework.connector.ConnectorProvider;
             import org.pipelineframework.connector.ConnectorProviderId;
             import org.pipelineframework.connector.ConnectorProviderVersion;
             import org.pipelineframework.connector.QueryInvocation;
+            import org.pipelineframework.connector.QueryCapabilities;
             import org.pipelineframework.connector.QueryOperation;
             import org.pipelineframework.connector.QueryOutcome;
 
@@ -141,14 +143,21 @@ class ConnectorProviderExternalJarDiscoveryTest {
                     return List.of(new Echo());
                 }
 
-                private static final class Echo implements QueryOperation<String, Void, String> {
+                private static final class Echo implements QueryOperation<String, ConnectorConfigurationDocument, String> {
                     @Override
                     public String id() {
                         return "echo";
                     }
 
                     @Override
-                    public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, Void, String> invocation) {
+                    public QueryCapabilities capabilities() {
+                        return QueryCapabilities.cacheable();
+                    }
+
+                    @Override
+                    public CompletionStage<QueryOutcome<String>> query(
+                        QueryInvocation<String, ConnectorConfigurationDocument, String> invocation
+                    ) {
                         return CompletableFuture.completedFuture(new QueryOutcome.Found<>(invocation.input()));
                     }
                 }

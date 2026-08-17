@@ -296,6 +296,16 @@ public class PipelineRunner implements AutoCloseable {
         CacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {
             super(reader, strategies, defaultPolicy);
         }
+
+        CacheReadSupport(
+            PipelineCacheReader reader,
+            java.util.Optional<org.pipelineframework.cache.PipelineCacheWriter> writer,
+            List<CacheKeyStrategy> strategies,
+            String defaultPolicy,
+            java.util.Optional<java.time.Duration> configuredTtl
+        ) {
+            super(reader, writer, strategies, defaultPolicy, configuredTtl);
+        }
     }
 
     /**
