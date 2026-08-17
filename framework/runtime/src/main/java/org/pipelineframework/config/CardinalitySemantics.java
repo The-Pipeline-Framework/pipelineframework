@@ -16,7 +16,9 @@
 
 package org.pipelineframework.config;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Canonical cardinality semantics shared by runtime and deployment code paths.
@@ -103,5 +105,112 @@ public enum CardinalitySemantics {
             return false;
         }
         return currentStreaming;
+    }
+
+    /**
+     * Returns the reactive invocation shape represented by this cardinality.
+     *
+     * <p>The two output values intentionally model unary and streaming input separately. A
+     * terminal streaming flag is insufficient because {@link #ONE_TO_MANY} and
+     * {@link #MANY_TO_MANY} both produce streaming output while only the latter must receive the
+     * complete upstream stream in one invocation.
+     *
+     * @return the invocation shape used when composing ordered pipeline steps
+     */
+    public InvocationShape invocationShape() {
+        return switch (this) {
+            case ONE_TO_ONE -> new InvocationShape(ReactiveShape.ONE, ReactiveShape.MANY, false);
+            case ONE_TO_MANY -> new InvocationShape(ReactiveShape.MANY, ReactiveShape.MANY, false);
+            case MANY_TO_ONE -> new InvocationShape(ReactiveShape.ONE, ReactiveShape.ONE, true);
+            case MANY_TO_MANY -> new InvocationShape(ReactiveShape.MANY, ReactiveShape.MANY, true);
+        };
+    }
+
+    /**
+     * Folds a non-empty ordered sequence of step cardinalities into the cardinality of their
+     * pipeline invocation.
+     *
+     * @param cardinalities ordered child-step cardinalities
+     * @return the unique existing cardinality represented by the composed invocation shape
+     */
+    public static CardinalitySemantics compose(List<CardinalitySemantics> cardinalities) {
+        Objects.requireNonNull(cardinalities, "cardinalities must not be null");
+        if (cardinalities.isEmpty()) {
+            throw new IllegalArgumentException("Pipeline cardinality requires at least one step");
+        }
+        InvocationShape composed = null;
+        for (CardinalitySemantics cardinality : cardinalities) {
+            CardinalitySemantics current = Objects.requireNonNull(
+                cardinality,
+                "cardinalities must not contain null");
+            composed = composed == null
+                ? current.invocationShape()
+                : composed.then(current.invocationShape());
+        }
+        return composed.toCardinality();
+    }
+
+    /**
+     * Reactive multiplicity of a pipeline invocation boundary.
+     */
+    public enum ReactiveShape {
+        ONE,
+        MANY
+    }
+
+    /**
+     * Composable reactive shape for a cardinality.
+     *
+     * @param unaryInputOutput output shape for a unary input
+     * @param streamingInputOutput output shape for a streaming input
+     * @param streamScoped whether the step must be invoked over the complete upstream stream
+     */
+    public record InvocationShape(
+        ReactiveShape unaryInputOutput,
+        ReactiveShape streamingInputOutput,
+        boolean streamScoped
+    ) {
+        public InvocationShape {
+            Objects.requireNonNull(unaryInputOutput, "unaryInputOutput must not be null");
+            Objects.requireNonNull(streamingInputOutput, "streamingInputOutput must not be null");
+        }
+
+        /**
+         * Composes this shape with the following ordered step shape.
+         *
+         * @param following shape of the next step
+         * @return composed invocation shape
+         */
+        public InvocationShape then(InvocationShape following) {
+            Objects.requireNonNull(following, "following must not be null");
+            return new InvocationShape(
+                following.outputFor(unaryInputOutput),
+                following.outputFor(streamingInputOutput),
+                streamScoped || following.streamScoped);
+        }
+
+        private ReactiveShape outputFor(ReactiveShape input) {
+            return input == ReactiveShape.ONE ? unaryInputOutput : streamingInputOutput;
+        }
+
+        private CardinalitySemantics toCardinality() {
+            if (!streamScoped && unaryInputOutput == ReactiveShape.ONE
+                && streamingInputOutput == ReactiveShape.MANY) {
+                return ONE_TO_ONE;
+            }
+            if (!streamScoped && unaryInputOutput == ReactiveShape.MANY
+                && streamingInputOutput == ReactiveShape.MANY) {
+                return ONE_TO_MANY;
+            }
+            if (streamScoped && unaryInputOutput == ReactiveShape.ONE
+                && streamingInputOutput == ReactiveShape.ONE) {
+                return MANY_TO_ONE;
+            }
+            if (streamScoped && unaryInputOutput == ReactiveShape.MANY
+                && streamingInputOutput == ReactiveShape.MANY) {
+                return MANY_TO_MANY;
+            }
+            throw new IllegalStateException("Unsupported composed pipeline invocation shape: " + this);
+        }
     }
 }

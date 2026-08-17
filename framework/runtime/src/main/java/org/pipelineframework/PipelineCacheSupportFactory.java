@@ -16,8 +16,10 @@
 
 package org.pipelineframework;
 
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -26,6 +28,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.cache.PipelineCacheWriter;
 
 @ApplicationScoped
 class PipelineCacheSupportFactory {
@@ -35,15 +38,26 @@ class PipelineCacheSupportFactory {
     private final Instance<CacheKeyStrategy> cacheKeyStrategies;
     private final Instance<PipelineCacheReader> cacheReaders;
     private final String cachePolicyDefault;
+    private final Optional<Duration> cacheTtl;
 
     @Inject
     PipelineCacheSupportFactory(
         Instance<CacheKeyStrategy> cacheKeyStrategies,
         Instance<PipelineCacheReader> cacheReaders,
-        @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache") String cachePolicyDefault) {
+        @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache") String cachePolicyDefault,
+        @ConfigProperty(name = "pipeline.cache.ttl") Optional<Duration> cacheTtl) {
         this.cacheKeyStrategies = cacheKeyStrategies;
         this.cacheReaders = cacheReaders;
         this.cachePolicyDefault = cachePolicyDefault;
+        this.cacheTtl = cacheTtl;
+    }
+
+    PipelineCacheSupportFactory(
+        Instance<CacheKeyStrategy> cacheKeyStrategies,
+        Instance<PipelineCacheReader> cacheReaders,
+        String cachePolicyDefault
+    ) {
+        this(cacheKeyStrategies, cacheReaders, cachePolicyDefault, Optional.empty());
     }
 
     PipelineRunner.CacheReadSupport buildCacheReadSupport() {
@@ -76,7 +90,10 @@ class PipelineCacheSupportFactory {
         if (ordered.isEmpty()) {
             return null;
         }
-        return new PipelineRunner.CacheReadSupport(reader, ordered, cachePolicyDefault);
+        Optional<PipelineCacheWriter> writer = reader instanceof PipelineCacheWriter cacheWriter
+            ? Optional.of(cacheWriter)
+            : Optional.empty();
+        return new PipelineRunner.CacheReadSupport(reader, writer, ordered, cachePolicyDefault, cacheTtl);
     }
 
     private String beanTypeName(Object bean) {

@@ -4,13 +4,19 @@ import java.util.List;
 import java.util.Optional;
 
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
+import org.pipelineframework.connector.ObjectSourceOperation;
 
 /**
  * Runtime-neutral provider SPI for listing and optionally loading object source items.
  */
-public interface ObjectSourceProvider {
+public interface ObjectSourceProvider extends ObjectSourceOperation {
 
     String providerName();
+
+    @Override
+    default String id() {
+        return providerName();
+    }
 
     /**
      * Lists object source items up to {@code limit}.

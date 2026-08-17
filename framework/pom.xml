@@ -79,6 +79,7 @@
         <module>api</module>
         <module>representation-provider-api</module>
         <module>runtime-core</module>
+        <module>connector-maven-plugin</module>
         <module>runtime-spring</module>
         <module>runtime</module>
         <module>representation-provider-fixture</module>

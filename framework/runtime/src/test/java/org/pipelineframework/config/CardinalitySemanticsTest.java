@@ -1,5 +1,9 @@
 package org.pipelineframework.config;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,5 +59,102 @@ class CardinalitySemanticsTest {
         assertTrue(CardinalitySemantics.applyToOutputStreaming("MANY_TO_MANY", false));
         assertThrows(IllegalArgumentException.class, () -> CardinalitySemantics.applyToOutputStreaming("UNKNOWN", true));
         assertThrows(IllegalArgumentException.class, () -> CardinalitySemantics.applyToOutputStreaming("UNKNOWN", false));
+    }
+
+    @Test
+    void invocationShapeDistinguishesPointwiseAndStreamScopedExpansion() {
+        CardinalitySemantics.InvocationShape pointwise = CardinalitySemantics.ONE_TO_MANY.invocationShape();
+        CardinalitySemantics.InvocationShape streamScoped = CardinalitySemantics.MANY_TO_MANY.invocationShape();
+
+        assertEquals(pointwise.unaryInputOutput(), streamScoped.unaryInputOutput());
+        assertEquals(pointwise.streamingInputOutput(), streamScoped.streamingInputOutput());
+        assertFalse(pointwise.streamScoped());
+        assertTrue(streamScoped.streamScoped());
+    }
+
+    @Test
+    void composeOneToOneThenOneToOneRemainsPointwiseOneToOne() {
+        assertEquals(CardinalitySemantics.ONE_TO_ONE,
+            CardinalitySemantics.compose(List.of(
+                CardinalitySemantics.ONE_TO_ONE,
+                CardinalitySemantics.ONE_TO_ONE)));
+    }
+
+    @Test
+    void composeOneToManyThenManyToOneBecomesManyToOne() {
+        assertEquals(CardinalitySemantics.MANY_TO_ONE,
+            CardinalitySemantics.compose(List.of(
+                CardinalitySemantics.ONE_TO_MANY,
+                CardinalitySemantics.MANY_TO_ONE)));
+    }
+
+    @Test
+    void composeManyToOneThenOneToManyBecomesManyToMany() {
+        assertEquals(CardinalitySemantics.MANY_TO_MANY,
+            CardinalitySemantics.compose(List.of(
+                CardinalitySemantics.MANY_TO_ONE,
+                CardinalitySemantics.ONE_TO_MANY)));
+    }
+
+    @Test
+    void composeOneToManyThenManyToManyPreservesStreamScopedManyToMany() {
+        assertEquals(CardinalitySemantics.MANY_TO_MANY,
+            CardinalitySemantics.compose(List.of(
+                CardinalitySemantics.ONE_TO_MANY,
+                CardinalitySemantics.MANY_TO_MANY)));
+    }
+
+    @Test
+    void composeLongMixedChainPreservesAggregateScopeAndOutputShape() {
+        assertEquals(CardinalitySemantics.MANY_TO_ONE,
+            CardinalitySemantics.compose(List.of(
+                CardinalitySemantics.ONE_TO_ONE,
+                CardinalitySemantics.ONE_TO_MANY,
+                CardinalitySemantics.MANY_TO_ONE,
+                CardinalitySemantics.ONE_TO_ONE)));
+    }
+
+    @Test
+    void composeIsClosedForEverySequenceThroughDepthSeven() {
+        int maximumDepth = 7;
+        Set<CardinalitySemantics> observed = EnumSet.noneOf(CardinalitySemantics.class);
+        int[] evaluated = {0};
+        for (int depth = 1; depth <= maximumDepth; depth++) {
+            composeAll(depth, new ArrayList<>(), observed, evaluated);
+        }
+
+        int alternatives = CardinalitySemantics.values().length;
+        int expected = 0;
+        for (int depth = 1; depth <= maximumDepth; depth++) {
+            expected += (int) Math.pow(alternatives, depth);
+        }
+        assertEquals(expected, evaluated[0]);
+        assertEquals(EnumSet.allOf(CardinalitySemantics.class), observed);
+    }
+
+    @Test
+    void composeRejectsEmptyAndNullSequences() {
+        assertThrows(IllegalArgumentException.class, () -> CardinalitySemantics.compose(List.of()));
+        assertThrows(NullPointerException.class, () -> CardinalitySemantics.compose(null));
+        assertThrows(NullPointerException.class, () -> CardinalitySemantics.compose(
+            java.util.Arrays.asList(CardinalitySemantics.ONE_TO_ONE, null)));
+    }
+
+    private static void composeAll(
+        int remaining,
+        List<CardinalitySemantics> prefix,
+        Set<CardinalitySemantics> observed,
+        int[] evaluated
+    ) {
+        if (remaining == 0) {
+            observed.add(CardinalitySemantics.compose(prefix));
+            evaluated[0]++;
+            return;
+        }
+        for (CardinalitySemantics cardinality : CardinalitySemantics.values()) {
+            prefix.add(cardinality);
+            composeAll(remaining - 1, prefix, observed, evaluated);
+            prefix.remove(prefix.size() - 1);
+        }
     }
 }

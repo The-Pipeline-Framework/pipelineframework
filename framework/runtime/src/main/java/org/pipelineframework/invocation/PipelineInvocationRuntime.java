@@ -76,7 +76,23 @@ public class PipelineInvocationRuntime {
         AwaitExecutionContext awaitContext,
         Supplier<Uni<T>> supplier
     ) {
-        return invokeUni(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
+        return invokeUni(new StepInvocationStrategy(
+            pipelineContext, awaitContext, PipelineInvocationContextHolder.get()), supplier);
+    }
+
+    public <T> Uni<T> invokeStepUni(
+        PipelineContext pipelineContext,
+        AwaitExecutionContext awaitContext,
+        PipelineInvocationContext invocationContext,
+        Supplier<Uni<T>> supplier
+    ) {
+        return invokeUni(new StepInvocationStrategy(
+            pipelineContext, awaitContext,
+            Optional.of(Objects.requireNonNull(invocationContext, "invocationContext must not be null"))), supplier);
+    }
+
+    public <T> Uni<T> invokeStepUni(Supplier<Uni<T>> supplier) {
+        return invokeStepUni(null, null, supplier);
     }
 
     public <T> Multi<T> invokeStepMulti(
@@ -84,7 +100,8 @@ public class PipelineInvocationRuntime {
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
     ) {
-        return invokeMulti(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
+        return invokeMulti(new StepInvocationStrategy(
+            pipelineContext, awaitContext, PipelineInvocationContextHolder.get()), supplier);
     }
 
     public <T> Uni<T> invokeTransitionWorker(
@@ -119,8 +136,12 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            InvocationContextSnapshot context =
-                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context = new InvocationContextSnapshot(
+                strategy.pipelineContext(),
+                strategy.awaitContext(),
+                strategy.runContext(),
+                strategy.inheritRunContext(),
+                strategy.invocationContext());
             try {
                 Uni<T> result = context.call(supplier);
                 if (result == null) {
@@ -141,8 +162,12 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            InvocationContextSnapshot context =
-                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context = new InvocationContextSnapshot(
+                strategy.pipelineContext(),
+                strategy.awaitContext(),
+                strategy.runContext(),
+                strategy.inheritRunContext(),
+                strategy.invocationContext());
             try {
                 Multi<T> result = context.call(supplier);
                 if (result == null) {

@@ -3,10 +3,12 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -17,9 +19,18 @@ import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
+import org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding;
+import org.pipelineframework.config.pipeline.PipelineYamlOperationSelection;
+import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
+import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -40,6 +51,7 @@ public class QueryClientStepRenderer {
             : model.generatedName();
         String className = baseName + "QueryClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
+        Optional<NativeCacheRequirements> nativeCacheRequirements = resolveNativeCacheRequirements(model, ctx);
         TypeName inputType = clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage());
         TypeName outputType = clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage());
 
@@ -72,7 +84,7 @@ public class QueryClientStepRenderer {
                 outputType)
             .build();
 
-        TypeSpec type = TypeSpec.classBuilder(className)
+        TypeSpec.Builder type = TypeSpec.classBuilder(className)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.enterprise.context", "Dependent")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get(Unremovable.class)).build())
@@ -92,12 +104,114 @@ public class QueryClientStepRenderer {
             .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(cacheKeyTargetType)
-            .addMethod(apply)
-            .build();
+            .addMethod(apply);
 
-        JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
+        nativeCacheRequirements.ifPresent(requirements -> type
+            .addSuperinterface(ClassName.get("org.pipelineframework.query", "ProviderQueryStep"))
+            .addMethod(queryCacheRequirementsMethod(requirements)));
+
+        JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type.build())
             .build()
             .writeTo(ctx.outputDir());
+    }
+
+    private MethodSpec queryCacheRequirementsMethod(NativeCacheRequirements requirements) {
+        QueryCapabilities capabilities = requirements.capabilities();
+        CodeBlock maximumCacheAge = capabilities.maximumCacheAge()
+            .map(value -> CodeBlock.of("$T.of($T.parse($S))", Optional.class, java.time.Duration.class, value.toString()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
+        CodeBlock maximumNegativeCacheTtl = capabilities.maximumNegativeCacheTtl()
+            .map(value -> CodeBlock.of("$T.of($T.parse($S))", Optional.class, java.time.Duration.class, value.toString()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
+        CodeBlock negativeCacheTtl = requirements.negativeCacheTtl()
+            .map(value -> CodeBlock.of("$T.of($T.parse($S))", Optional.class, java.time.Duration.class, value.toString()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
+        return MethodSpec.methodBuilder("queryCacheRequirements")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ClassName.get("org.pipelineframework.query", "QueryCacheRequirements"))
+            .addStatement(
+                "return new $T(new $T($T.of($S), $S, $T.QUERY, $L), $L, "
+                    + "new $T($T.$L, $L, $L), $L)",
+                ClassName.get("org.pipelineframework.query", "QueryCacheRequirements"),
+                ConnectorOperationIdentity.class,
+                ConnectorProviderId.class,
+                requirements.providerId(),
+                requirements.operationId(),
+                ConnectorOperationKind.class,
+                requirements.operationMajorVersion(),
+                requirements.providerMajorVersion(),
+                QueryCapabilities.class,
+                org.pipelineframework.connector.QueryCacheability.class,
+                capabilities.cacheability().name(),
+                maximumCacheAge,
+                maximumNegativeCacheTtl,
+                negativeCacheTtl)
+            .build();
+    }
+
+    private Optional<NativeCacheRequirements> resolveNativeCacheRequirements(
+        PipelineStepModel model,
+        GenerationContext ctx
+    ) {
+        if (ctx.processingEnv() == null || ctx.processingEnv().getOptions() == null) {
+            return Optional.empty();
+        }
+        String configuredPath = ctx.processingEnv().getOptions().get("pipeline.config");
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return Optional.empty();
+        }
+        PipelineYamlConfig config = new PipelineYamlConfigLoader(
+            ctx.processingEnv().getOptions()::get, System::getenv).load(Path.of(configuredPath));
+        Optional<PipelineYamlStep> selected = config.steps().stream()
+            .filter(step -> matchesServiceName(model.serviceName(), step.name()))
+            .filter(step -> "query".equalsIgnoreCase(step.kind()))
+            .filter(step -> step.operationSelection().isPresent())
+            .findFirst();
+        if (selected.isEmpty()) {
+            return Optional.empty();
+        }
+        PipelineYamlStep step = selected.orElseThrow();
+        PipelineYamlOperationSelection operation = step.operationSelection().orElseThrow();
+        PipelineYamlConnectorBinding binding = Optional.ofNullable(config.connectors().get(operation.using()))
+            .orElseThrow(() -> new IllegalStateException(
+                "Query step " + model.serviceName() + " references unknown connector binding '"
+                    + operation.using() + "'"));
+        ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of(binding.provider()),
+            operation.operation(),
+            ConnectorOperationKind.QUERY,
+            operation.operationVersion());
+        QueryCapabilities capabilities = ConnectorProviderManifestLoader.load(metadataClassLoader())
+            .requireQueryCapabilities(identity, binding.version());
+        return Optional.of(new NativeCacheRequirements(
+            binding.provider(),
+            binding.version(),
+            operation.operation(),
+            operation.operationVersion(),
+            capabilities,
+            step.negativeCacheTtl()));
+    }
+
+    private static ClassLoader metadataClassLoader() {
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        return context == null ? QueryClientStepRenderer.class.getClassLoader() : context;
+    }
+
+    private static boolean matchesServiceName(String generatedServiceName, String stepName) {
+        String serviceName = toServiceName(stepName);
+        String compact = serviceName.startsWith("Process") && serviceName.endsWith("Service")
+            ? serviceName.substring("Process".length(), serviceName.length() - "Service".length())
+            : serviceName;
+        return generatedServiceName.equals(serviceName) || generatedServiceName.equals(compact);
+    }
+
+    private static String toServiceName(String stepName) {
+        if (stepName == null || stepName.isBlank()) {
+            return "ProcessStepService";
+        }
+        String formatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
+        return formatted.isBlank() ? "ProcessStepService" : "Process" + formatted + "Service";
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
@@ -166,5 +280,15 @@ public class QueryClientStepRenderer {
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
+    }
+
+    private record NativeCacheRequirements(
+        String providerId,
+        int providerMajorVersion,
+        String operationId,
+        int operationMajorVersion,
+        QueryCapabilities capabilities,
+        Optional<java.time.Duration> negativeCacheTtl
+    ) {
     }
 }

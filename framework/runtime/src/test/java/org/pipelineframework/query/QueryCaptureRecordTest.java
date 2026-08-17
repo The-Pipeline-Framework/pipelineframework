@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.pipeline.PipelineJson;
 
 class QueryCaptureRecordTest {
 
@@ -36,6 +37,30 @@ class QueryCaptureRecordTest {
         assertEquals("{\"riskScore\":42}", record.outputJson());
         assertEquals("com.example.CustomerRiskSnapshot", record.outputType());
         assertEquals(FIXED_TIME, record.capturedAt());
+    }
+
+    @Test
+    void deserializesLegacyFoundRecordWithoutOutcomeFields() throws Exception {
+        String json = """
+            {
+              "tenantId":"tenant-1",
+              "executionId":"exec-abc",
+              "stepIndex":2,
+              "queryId":"customer-risk-by-id",
+              "queryVersion":"v1",
+              "captureKey":"capture-key",
+              "inputJson":"{}",
+              "outputJson":"{\\\"riskScore\\\":42}",
+              "outputType":"com.example.CustomerRiskSnapshot",
+              "capturedAt":"2024-01-01T00:00:00Z"
+            }
+            """;
+
+        QueryCaptureRecord record = PipelineJson.mapper().readValue(json, QueryCaptureRecord.class);
+
+        assertEquals(QueryCaptureStatus.FOUND, record.status());
+        assertEquals("found", record.outcomeCode());
+        assertEquals("{\"riskScore\":42}", record.outputJson());
     }
 
     @Test

@@ -20,6 +20,7 @@ public final class ConnectorRegistry {
     private final Map<ConnectorOperationIdentity, ConnectorOperation> operations;
     private final List<ConnectorProvider<?>> providerOrder;
     private final List<ConnectorProvider<?>> startedProviders = new ArrayList<>();
+    private final Map<ConnectorProviderId, CompletionStage<Void>> activations = new LinkedHashMap<>();
     private LifecycleState state = LifecycleState.NEW;
     private CompletionStage<Void> lifecycle = ConnectorCompletionStages.completed();
 
@@ -57,16 +58,14 @@ public final class ConnectorRegistry {
             orderedProviders.add(Objects.requireNonNull(provider, "provider must not be null"));
         }
         orderedProviders.sort(Comparator
-            .comparing((ConnectorProvider<?> provider) -> provider.descriptor().id())
+            .comparing((ConnectorProvider<?> provider) -> provider.id())
             .thenComparing(provider -> provider.getClass().getName()));
         providerOrder = List.copyOf(orderedProviders);
         Map<ConnectorProviderId, ConnectorProvider<?>> providersById = new LinkedHashMap<>();
         Map<ConnectorOperationIdentity, ConnectorOperation> operationsByIdentity = new LinkedHashMap<>();
         for (ConnectorProvider<?> provider : providerOrder) {
-            ConnectorProviderDescriptor providerDescriptor = Objects.requireNonNull(
-                provider.descriptor(), "provider descriptor must not be null");
+            ConnectorProviderDescriptor providerDescriptor = ConnectorDescriptors.provider(provider);
             validateReservedProviderId(providerDescriptor.id(), frameworkProviderIds);
-            validateProviderSchema(provider, providerDescriptor);
             if (providersById.putIfAbsent(providerDescriptor.id(), provider) != null) {
                 throw new IllegalArgumentException("duplicate connector provider ID: " + providerDescriptor.id().value());
             }
@@ -75,10 +74,7 @@ public final class ConnectorRegistry {
             for (ConnectorOperation operation : declaredOperations) {
                 ConnectorOperation checkedOperation = Objects.requireNonNull(
                     operation, "operation must not be null for provider " + providerDescriptor.id().value());
-                ConnectorOperationDescriptor operationDescriptor = Objects.requireNonNull(
-                    checkedOperation.descriptor(), "operation descriptor must not be null for provider " + providerDescriptor.id().value());
-                validateOperationFamily(checkedOperation, operationDescriptor, providerDescriptor);
-                validateOperationSchema(checkedOperation, operationDescriptor, providerDescriptor);
+                ConnectorOperationDescriptor operationDescriptor = ConnectorDescriptors.operation(checkedOperation);
                 ConnectorOperationIdentity identity = ConnectorOperationIdentity.of(providerDescriptor, operationDescriptor);
                 if (operationsByIdentity.putIfAbsent(identity, checkedOperation) != null) {
                     throw new IllegalArgumentException("duplicate connector operation identity: " + identity);
@@ -97,7 +93,7 @@ public final class ConnectorRegistry {
         Objects.requireNonNull(configurations, "provider configurations must not be null");
         Map<ConnectorProviderId, Object> bound = new LinkedHashMap<>();
         for (ConnectorProvider<?> provider : providerOrder) {
-            ConnectorProviderId id = provider.descriptor().id();
+            ConnectorProviderId id = provider.id();
             ConnectorConfigurationDocument document = configurations.values().getOrDefault(id, ConnectorConfigurationDocument.empty());
             provider.configurationSchema().ifPresent(schema -> bound.put(id, bindProvider(schema, document, id)));
             if (provider.configurationSchema().isEmpty() && !document.values().isEmpty()) {
@@ -128,7 +124,7 @@ public final class ConnectorRegistry {
         if (provider == null) {
             throw new IllegalStateException("no connector provider registered for ID: " + providerId.value());
         }
-        int actualMajor = provider.descriptor().version().major();
+        int actualMajor = provider.version().major();
         if (actualMajor != expectedMajorVersion) {
             throw new IllegalStateException(
                 "incompatible connector provider major version for " + providerId.value() + ": requested "
@@ -152,11 +148,6 @@ public final class ConnectorRegistry {
     ) {
         Objects.requireNonNull(operationType, "operation type must not be null");
         ConnectorOperation operation = requireOperation(identity);
-        if (!isExecutionKindSupported(operation.descriptor().kind())) {
-            throw new UnsupportedOperationException(
-                "connector operation kind is registered as metadata only and has no execution path in M1: "
-                    + operation.descriptor().kind().value());
-        }
         if (!operationType.isInstance(operation)) {
             throw new IllegalStateException(
                 "connector operation " + identity + " is " + operation.getClass().getName() + ", not " + operationType.getName());
@@ -173,52 +164,84 @@ public final class ConnectorRegistry {
         requireProvider(identity.providerId(), expectedProviderMajorVersion);
         CommandOperation<?, ?, ?> operation = requireExecutionOperation(identity, CommandOperation.class);
         CommandPolicyValidator.validate(
-            providers.get(identity.providerId()).descriptor(), operation.descriptor(), policy);
+            ConnectorDescriptors.provider(providers.get(identity.providerId())), ConnectorDescriptors.operation(operation), policy);
         return operation;
     }
 
-    public synchronized CompletionStage<Void> start(ConnectorRuntimeContext context) {
+    public CompletionStage<Void> start(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.NEW) {
-            state = LifecycleState.STARTING;
-            lifecycle = startSequentially(context)
-                .whenComplete((ignored, failure) -> {
-                    synchronized (this) {
-                        if (state == LifecycleState.STARTING) {
-                            state = failure == null ? LifecycleState.STARTED : LifecycleState.FAILED;
-                        }
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector registry cannot start after stop has begun");
+            }
+            state = LifecycleState.RUNNING;
+        }
+        CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
+        for (ConnectorProvider<?> provider : providerOrder) {
+            sequence = sequence.thenCompose(ignored -> activate(provider.id(), context));
+        }
+        synchronized (this) {
+            lifecycle = sequence;
+        }
+        return sequence;
+    }
+
+    /**
+     * Lazily activates one discovered provider for deprecated provider-first live execution.
+     * Discovery alone never makes the provider a lifecycle or resource owner.
+     */
+    public CompletionStage<Void> activate(
+        ConnectorProviderId providerId,
+        ConnectorRuntimeContext context
+    ) {
+        Objects.requireNonNull(context, "runtime context must not be null");
+        Objects.requireNonNull(providerId, "connector provider ID must not be null");
+        ConnectorProvider<?> provider = providers.get(providerId);
+        if (provider == null) {
+            return failed("no connector provider registered for ID: " + providerId.value());
+        }
+        CompletableFuture<Void> activation;
+        synchronized (this) {
+            if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+                return failed("connector registry cannot activate a provider after stop has begun");
+            }
+            state = LifecycleState.RUNNING;
+            CompletionStage<Void> existing = activations.get(providerId);
+            if (existing != null) {
+                return existing;
+            }
+            activation = new CompletableFuture<>();
+            activations.put(providerId, activation);
+        }
+        startProvider(provider, context).whenComplete((ignored, failure) -> {
+            if (failure == null) {
+                activation.complete(null);
+            } else {
+                synchronized (this) {
+                    if (state == LifecycleState.RUNNING) {
+                        activations.remove(providerId, activation);
                     }
-                });
-        }
-        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
-            return failed("connector registry cannot start after stop has begun");
-        }
-        return lifecycle;
+                }
+                activation.completeExceptionally(failure);
+            }
+        });
+        return activation;
     }
 
     public synchronized CompletionStage<Void> stop(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
-        if (state == LifecycleState.NEW) {
-            state = LifecycleState.STOPPED;
-            lifecycle = ConnectorCompletionStages.completed();
-        } else if (state == LifecycleState.STARTING || state == LifecycleState.STARTED || state == LifecycleState.FAILED) {
-            state = LifecycleState.STOPPING;
-            lifecycle = lifecycle.handle((ignored, failure) -> ConnectorCompletionStages.completed())
-                .thenCompose(ignored -> ignored)
-                .thenCompose(ignored -> stopSequentially(context))
-                .whenComplete((ignored, failure) -> {
-                    synchronized (this) {
-                        if (state == LifecycleState.STOPPING) {
-                            state = failure == null ? LifecycleState.STOPPED : LifecycleState.FAILED;
-                        }
-                    }
-                });
+        if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
+            return lifecycle;
         }
+        state = LifecycleState.STOPPING;
+        CompletionStage<Void> settled = ConnectorCompletionStages.completed();
+        for (CompletionStage<Void> activation : List.copyOf(activations.values())) {
+            settled = settled.thenCompose(ignored -> activation.handle((activated, failure) -> null));
+        }
+        lifecycle = settled
+            .thenCompose(ignored -> stopSequentially(context))
+            .whenComplete((ignored, failure) -> markStopped());
         return lifecycle;
-    }
-
-    private static boolean isExecutionKindSupported(ConnectorOperationKind kind) {
-        return ConnectorOperationKind.COMMAND.equals(kind) || ConnectorOperationKind.QUERY.equals(kind);
     }
 
     private static void validateReservedProviderId(
@@ -243,97 +266,36 @@ public final class ConnectorRegistry {
         return ConnectorConfigurationBinder.bind(schema, document, "connector provider " + id.value());
     }
 
-    private static void validateOperationFamily(
-        ConnectorOperation operation,
-        ConnectorOperationDescriptor descriptor,
-        ConnectorProviderDescriptor provider
-    ) {
-        if (operation instanceof CommandOperation<?, ?, ?> && !ConnectorOperationKind.COMMAND.equals(descriptor.kind())) {
-            throw new IllegalArgumentException(
-                "command operation " + descriptor.id() + " for provider " + provider.id().value() + " must use kind "
-                    + ConnectorOperationKind.COMMAND.value());
-        }
-        if (operation instanceof QueryOperation<?, ?, ?> && !ConnectorOperationKind.QUERY.equals(descriptor.kind())) {
-            throw new IllegalArgumentException(
-                "query operation " + descriptor.id() + " for provider " + provider.id().value() + " must use kind "
-                    + ConnectorOperationKind.QUERY.value());
-        }
-        if (operation instanceof AgentOperation && !ConnectorOperationKind.AGENT.equals(descriptor.kind())) {
-            throw new IllegalArgumentException(
-                "agent operation " + descriptor.id() + " for provider " + provider.id().value() + " must use kind "
-                    + ConnectorOperationKind.AGENT.value());
-        }
-    }
-
-    private static void validateProviderSchema(ConnectorProvider<?> provider, ConnectorProviderDescriptor descriptor) {
-        provider.configurationSchema().ifPresent(schema -> {
-            if (!descriptor.configurationSchema().equals(java.util.Optional.of(schema.descriptor()))) {
-                throw new IllegalArgumentException(
-                    "connector provider " + descriptor.id().value() + " configuration schema does not match its descriptor");
-            }
-        });
-        if (!descriptor.executionCapabilities().orElse(ConnectorExecutionCapabilities.conservative())
-            .equals(provider.executionCapabilities())) {
-            throw new IllegalArgumentException(
-                "connector provider " + descriptor.id().value() + " execution capabilities do not match its descriptor");
-        }
-    }
-
-    private static void validateOperationSchema(
-        ConnectorOperation operation,
-        ConnectorOperationDescriptor descriptor,
-        ConnectorProviderDescriptor provider
-    ) {
-        if (operation instanceof CommandOperation<?, ?, ?> command) {
-            validateOperationSchema(command.configurationSchema(), descriptor, provider);
-            if (!descriptor.commandCapabilities().orElse(CommandCapabilities.conservative())
-                .equals(command.capabilities())) {
-                throw new IllegalArgumentException(
-                    "command operation " + descriptor.id() + " for provider " + provider.id().value()
-                        + " capabilities do not match its descriptor");
-            }
-        }
-        if (operation instanceof QueryOperation<?, ?, ?> query) {
-            validateOperationSchema(query.configurationSchema(), descriptor, provider);
-        }
-    }
-
-    private static void validateOperationSchema(
-        java.util.Optional<? extends ConnectorConfigSchema<?>> schema,
-        ConnectorOperationDescriptor descriptor,
-        ConnectorProviderDescriptor provider
-    ) {
-        schema.ifPresent(value -> {
-            if (!descriptor.configurationSchema().equals(java.util.Optional.of(value.descriptor()))) {
-                throw new IllegalArgumentException(
-                    "connector operation " + descriptor.id() + " for provider " + provider.id().value()
-                        + " configuration schema does not match its descriptor");
-            }
-        });
-    }
-
     private static List<ConnectorProvider<?>> reverse(List<ConnectorProvider<?>> providers) {
         List<ConnectorProvider<?>> reversed = new ArrayList<>(providers);
         java.util.Collections.reverse(reversed);
         return reversed;
     }
 
-    private CompletionStage<Void> startSequentially(ConnectorRuntimeContext context) {
-        CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
-        for (ConnectorProvider<?> provider : providerOrder) {
-            sequence = sequence.thenCompose(ignored -> {
-                CompletionStage<Void> stage = provider.start(context);
-                if (stage == null) {
-                    return failed("connector provider " + provider.descriptor().id().value() + " returned null from start");
-                }
-                return stage.thenRun(() -> recordStarted(provider));
-            });
+    private CompletionStage<Void> startProvider(
+        ConnectorProvider<?> provider,
+        ConnectorRuntimeContext context
+    ) {
+        final CompletionStage<Void> stage;
+        try {
+            stage = provider.start(context);
+        } catch (RuntimeException failure) {
+            return failed(failure);
         }
-        return sequence;
+        if (stage == null) {
+            return failed("connector provider " + provider.id().value() + " returned null from start");
+        }
+        return stage.thenRun(() -> recordStarted(provider));
     }
 
     private synchronized void recordStarted(ConnectorProvider<?> provider) {
-        startedProviders.add(provider);
+        if (!startedProviders.contains(provider)) {
+            startedProviders.add(provider);
+        }
+    }
+
+    private synchronized void markStopped() {
+        state = LifecycleState.STOPPED;
     }
 
     private CompletionStage<Void> stopSequentially(ConnectorRuntimeContext context) {
@@ -359,7 +321,7 @@ public final class ConnectorRegistry {
             stage = CompletableFuture.failedFuture(exception);
         }
         if (stage == null) {
-            stage = failed("connector provider " + provider.descriptor().id().value() + " returned null from stop");
+            stage = failed("connector provider " + provider.id().value() + " returned null from stop");
         }
         return stage.handle((ignored, failure) -> {
             synchronized (this) {
@@ -367,7 +329,7 @@ public final class ConnectorRegistry {
                     startedProviders.remove(provider);
                 } else {
                     failures.add(new IllegalStateException(
-                        "connector provider " + provider.descriptor().id().value() + " failed to stop", failure));
+                        "connector provider " + provider.id().value() + " failed to stop", failure));
                 }
             }
             return null;
@@ -394,10 +356,8 @@ public final class ConnectorRegistry {
 
     private enum LifecycleState {
         NEW,
-        STARTING,
-        STARTED,
+        RUNNING,
         STOPPING,
-        STOPPED,
-        FAILED
+        STOPPED
     }
 }

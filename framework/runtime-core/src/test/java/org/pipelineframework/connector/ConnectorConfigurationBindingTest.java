@@ -44,6 +44,7 @@ class ConnectorConfigurationBindingTest {
         provider.operation.query(
             "input",
             new ConnectorConfigurationDocument(Map.of("index", "orders", "limit", 20, "mode", "FAST")),
+            String.class,
             ConnectorExecutionContext.empty()).toCompletableFuture().join();
 
         assertEquals(new OperationConfig("orders", 20, Mode.FAST), provider.operation.invokedWith);
@@ -58,6 +59,7 @@ class ConnectorConfigurationBindingTest {
         ConnectorConfigurationException failure = assertThrows(ConnectorConfigurationException.class, () -> provider.operation.query(
             "input",
             new ConnectorConfigurationDocument(Map.of("index", "orders", "limit", "not-an-integer", "mode", "FAST")),
+            String.class,
             ConnectorExecutionContext.empty()));
 
         assertTrue(failure.getMessage().contains("fake.config.query"));
@@ -89,6 +91,33 @@ class ConnectorConfigurationBindingTest {
         assertFalse(manifest.toString().contains("literal-secret-reference"));
     }
 
+    @Test
+    void bindsMapConfigurationIncludingNestedImmutableRecords() {
+        ConnectorConfigSchema<NestedConfig> schema =
+            ConnectorConfigSchema.record(NestedConfig.class, "fake.config.nested", 1);
+        ConnectorConfigurationDocument document = new ConnectorConfigurationDocument(Map.of(
+            "predicates", Map.of("customerId", Map.of(
+                "operator", "eq",
+                "values", List.of("input.customerId"))),
+            "projection", Map.of("customerId", "customerId")));
+
+        ConnectorConfigurationValidator.validate(schema.descriptor(), document, "nested operation");
+        NestedConfig configuration = ConnectorConfigurationBinder.bind(schema, document, "nested operation");
+
+        assertEquals(
+            new NestedPredicate("eq", List.of("input.customerId")),
+            configuration.predicates().get("customerId"));
+        assertEquals(Map.of("customerId", "customerId"), configuration.projection().orElseThrow());
+        assertEquals(ConnectorConfigValueType.MAP, schema.descriptor().fields().getFirst().type());
+
+        ConnectorConfigurationException failure = assertThrows(ConnectorConfigurationException.class, () ->
+            ConnectorConfigurationValidator.validate(
+                schema.descriptor(),
+                new ConnectorConfigurationDocument(Map.of("predicates", "not-a-map")),
+                "nested operation"));
+        assertTrue(failure.getMessage().contains("expected MAP value"));
+    }
+
     private static ConnectorRuntimeContext context(AtomicInteger connections, AtomicInteger secrets) {
         ConnectionResolver connectionResolver = reference -> {
             connections.incrementAndGet();
@@ -117,6 +146,15 @@ class ConnectorConfigurationBindingTest {
     record OperationConfig(String index, int limit, Mode mode) {
     }
 
+    record NestedConfig(
+        Map<String, NestedPredicate> predicates,
+        Optional<Map<String, String>> projection
+    ) {
+    }
+
+    record NestedPredicate(String operator, List<Object> values) {
+    }
+
     private enum Mode {
         FAST,
         SAFE
@@ -133,11 +171,13 @@ class ConnectorConfigurationBindingTest {
         private ProviderConfig startedWith;
 
         @Override
-        public ConnectorProviderDescriptor descriptor() {
-            return new ConnectorProviderDescriptor(
-                ConnectorProviderId.of("fake.config"),
-                new ConnectorProviderVersion(1, 0),
-                Optional.of(providerSchema().descriptor()));
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("fake.config");
+        }
+
+        @Override
+        public ConnectorProviderVersion version() {
+            return new ConnectorProviderVersion(1, 0);
         }
 
         @Override
@@ -175,12 +215,8 @@ class ConnectorConfigurationBindingTest {
         private OperationConfig invokedWith;
 
         @Override
-        public ConnectorOperationDescriptor descriptor() {
-            return new ConnectorOperationDescriptor(
-                "query",
-                ConnectorOperationKind.QUERY,
-                1,
-                Optional.of(operationSchema().descriptor()));
+        public String id() {
+            return "query";
         }
 
         @Override
@@ -189,12 +225,11 @@ class ConnectorConfigurationBindingTest {
         }
 
         @Override
-        public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, OperationConfig> invocation) {
+        public CompletionStage<QueryOutcome<String>> query(QueryInvocation<String, OperationConfig, String> invocation) {
             invocations.incrementAndGet();
             invokedWith = invocation.configuration();
             return runtimeContext.secretResolver().orElseThrow().resolve(new SecretRef("query-token"))
-                .thenApply(ignored -> new QueryOutcome<>() {
-                });
+                .thenApply(ignored -> new QueryOutcome.Found<>("found"));
         }
     }
 }

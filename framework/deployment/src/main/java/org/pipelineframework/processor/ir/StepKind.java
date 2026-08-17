@@ -53,5 +53,8 @@ public enum StepKind {
      * A captured query step that reads through an application connector and makes
      * decision-affecting external state an explicit pipeline input.
      */
-    QUERY
+    QUERY,
+
+    /** A statically linked local pipeline definition invoked as an ordinary typed step. */
+    PIPELINE
 }

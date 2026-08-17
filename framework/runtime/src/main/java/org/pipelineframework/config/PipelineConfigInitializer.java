@@ -59,6 +59,7 @@ public class PipelineConfigInitializer {
         logger.info("Initializing pipeline global/default configuration");
         logger.infof("Parallelism policy: %s", stepConfig.parallelism());
         logger.infof("Max concurrency: %s", stepConfig.maxConcurrency());
+        logger.infof("Max recursive depth: %s", stepConfig.maxRecursiveDepth());
         logger.infof("Retry limit: %s", config.retryLimit());
         logger.infof("Retry wait: %s ms", config.retryWaitMs());
         logger.infof("Backpressure buffer capacity: %s", config.backpressureBufferCapacity());
@@ -79,6 +80,7 @@ public class PipelineConfigInitializer {
 
         pipelineConfig.parallelism(stepConfig.parallelism());
         pipelineConfig.maxConcurrency(stepConfig.maxConcurrency());
+        pipelineConfig.maxRecursiveDepth(stepConfig.maxRecursiveDepth());
 
         logger.info("Pipeline configuration loaded from Quarkus config system");
     }

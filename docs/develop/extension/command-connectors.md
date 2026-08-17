@@ -33,7 +33,49 @@ Keep both classes typed. Do not implement command connectors as `CommandConnecto
 
 Native connector providers use the host-neutral `CommandOperation<I, C, O>` SPI. They return a
 JDK `CompletionStage<CommandOutcome<O>>`; Mutiny, CDI, and Quarkus types do not appear in that
-public provider contract. Select one from YAML instead of `command`, never alongside it:
+public provider contract. Authors implement provider identity/version, an operation catalog, typed
+configuration records when needed, and the family-specific operation method. Lifecycle methods are
+optional no-ops. Do not construct provider/operation descriptors or write provider factories.
+Configure a provider instance once under top-level `connectors`, then select an operation from a
+Command step with `operation` and `using`:
+
+```yaml
+connectors:
+  search:
+    provider: acme.search
+    version: 1
+    config:
+      connection: search-primary
+
+steps:
+  - name: Write document
+    kind: command
+    operation: write.document
+    operationVersion: 1
+    using: search
+    commandIdGenerator: com.example.DocumentCommandIdGenerator
+    config:
+      index: orders
+    policy:
+      requireIdempotency: true
+      requireReconciliation: true
+      requiredExecutionPosture: AUTOMATED
+      requiredExecutionStyle: PROVIDER_MANAGED
+      requiredConcurrencyScope: PROVIDER_MANAGED
+      minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+```
+
+`connectors.search.config` is provider-lifetime configuration. The step's `config` is operation
+configuration; the pipeline item remains the dynamic invocation input. Every step using `search`
+shares that named binding, while different bindings receive distinct provider instances. Bindings
+activate on first live use, so replay of an already recorded outcome does not start the provider.
+
+`using` is a pipeline-local binding name, not a provider ID. `ConnectionRef` and `SecretRef` values
+remain logical deployment-owned references and are resolved only at provider start or operation
+invocation, never while parsing or compiling. `operationVersion` defaults to `1` when omitted.
+
+The deprecated provider-first form remains readable during migration and is not silently
+reinterpreted. Select it instead of `command`, never alongside it:
 
 ```yaml
 connector:
@@ -50,10 +92,29 @@ connector:
     minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
-Provider metadata in `META-INF/pipeline/connector-providers.json` is validated during compilation;
-the provider is not constructed for that check. The operation configuration remains the step's
-`config` map, but TPF binds it to the provider's declared immutable configuration record before
+Prefer named bindings for new pipelines. Operation IDs remain provider-scoped; selecting
+`write.document` through `search` does not make it a provider-independent operation contract.
+
+TPF packaging derives provider metadata and direct service registration from the executable provider.
+The resulting `META-INF/pipeline/connector-providers.json` is validated during consumer compilation;
+the provider is not constructed by that consumer-side check. TPF binds provider and operation
+configuration independently to their declared immutable configuration records before
 an effect is created or the operation is invoked.
+
+Bind the packaging goal to the provider artifact's canonical lifecycle; it scans the artifact's public,
+concrete `ConnectorProvider` implementations after compilation. Provider constructors must therefore be
+public and side-effect free; acquire connections and other resources during `start`.
+
+```xml
+<plugin>
+  <groupId>org.pipelineframework</groupId>
+  <artifactId>connector-maven-plugin</artifactId>
+  <version>${pipeline-framework.version}</version>
+  <executions>
+    <execution><goals><goal>generate-provider-artifacts</goal></goals></execution>
+  </executions>
+</plugin>
+```
 
 `CommandOutcome` distinguishes success, retryable failure, terminal failure, ambiguous submission,
 and user action required. Only declared safe correlation or reconciliation references, outcome
@@ -76,6 +137,51 @@ kind as safe for durable storage.
 An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
 `FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
 blocking execution or bounded framework-managed concurrency.
+
+## Native Provider Queries
+
+The same named provider binding can expose a unary `QueryOperation<I, C, O>`. Select it with the
+shared operation-first grammar; there is no separate provider-first Query selector:
+
+```yaml
+connectors:
+  search:
+    provider: acme.search
+    version: 1
+
+steps:
+  - name: Find document
+    kind: query
+    operation: find.document
+    operationVersion: 1
+    using: search
+    config:
+      index: orders
+    negativeCacheTtl: PT20S
+```
+
+TPF binds `config` to the operation's immutable configuration record before invocation. Provider
+authors receive a typed `QueryInvocation` and return a JDK
+`CompletionStage<QueryOutcome<O>>`. `Found` supplies the step output. `NotFound` becomes the typed
+non-retryable `QueryNotFoundException`; `TemporarilyUnavailable` remains retryable, while
+`AuthenticationRequired` and `TerminalFailure` are non-retryable failures. Public provider code
+does not depend on Mutiny, CDI, or Quarkus.
+
+Query capabilities are conservative when omitted. `LIVE_ONLY` requires `BYPASS_CACHE`.
+`CACHEABLE` permits the ordinary pipeline cache policies; a declared `maximumCacheAge` requires
+the configured positive cache TTL to be no greater than that maximum. Without a provider maximum,
+a positive TTL is not required.
+
+`negativeCacheTtl` is optional. It is valid only when the operation declares a maximum negative
+cache TTL, must not exceed that maximum, and stores only a bounded internal `NotFound` marker.
+It does not cache authentication, temporary availability, terminal failures, provider payloads,
+or arbitrary metadata.
+
+Pipeline cache replay, execution-scoped Query capture replay, and a live provider observation are
+separate paths. A generic cache hit returns before Query runtime. After a cache miss that permits
+execution, an existing Query capture is replayed before resolving the provider. Only a miss in
+both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
+[Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
 
 ## Command Id Generator
 
@@ -158,6 +264,21 @@ The generated command step calls the generator and connector. TPF also handles:
 - marking terminal DLQ failures.
 
 The connector should not read or write the `CommandEffectStore` directly.
+
+## Pipeline cache replay and Command effect replay
+
+Generated Command steps remain eligible for generic step-result caching. A warm `PREFER_CACHE` or
+`REQUIRE_CACHE` hit returns the versioned cached output without entering `CommandStepSupport`; no effect record is
+created and no provider is invoked. This is pipeline replay, not evidence of a live external effect.
+
+On a cache miss, `CACHE_ONLY`, or `BYPASS_CACHE`, normal Command execution applies. `CommandId` identifies the
+logical external effect and `CommandEffectStore` decides whether to dispatch, return a recorded success, or
+preserve a terminal barrier. The generic cache key is a separate replay identity and follows the configured
+`CacheKeyStrategy` and version tag.
+
+`SKIP_IF_PRESENT` is not valid for Command steps because it could perform a new live effect while deliberately
+leaving an older replay output under the same cache key. Use `PREFER_CACHE`, `REQUIRE_CACHE`, `CACHE_ONLY`, or
+`BYPASS_CACHE` instead.
 
 ## Error Classification
 

@@ -1,0 +1,19 @@
+basePackage: org.pipelineframework.connector
+connectors:
+  cdi-first:
+    provider: test.cdi
+    version: 1
+    config:
+      name: first
+  cdi-second:
+    provider: test.cdi
+    version: 1
+    config:
+      name: second
+  cdi-racing:
+    provider: test.cdi
+    version: 1
+    config:
+      name: racing
+
+steps: []

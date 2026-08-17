@@ -1,16 +1,31 @@
 package org.pipelineframework.invocation;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.LongConsumer;
 
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 
 interface PipelineInvocationStrategy {
 
     PipelineContext pipelineContext();
 
     AwaitExecutionContext awaitContext();
+
+    default Optional<PipelineRunContext> runContext() {
+        return Optional.empty();
+    }
+
+    default boolean inheritRunContext() {
+        return true;
+    }
+
+    default Optional<PipelineInvocationContext> invocationContext() {
+        return Optional.empty();
+    }
 
     void recordTermination(long startNanos, Throwable failure, boolean cancelled);
 
@@ -22,10 +37,15 @@ interface PipelineInvocationStrategy {
 final class StepInvocationStrategy implements PipelineInvocationStrategy {
     private final PipelineContext pipelineContext;
     private final AwaitExecutionContext awaitContext;
+    private final Optional<PipelineRunContext> runContext;
+    private final Optional<PipelineInvocationContext> invocationContext;
 
-    StepInvocationStrategy(PipelineContext pipelineContext, AwaitExecutionContext awaitContext) {
+    StepInvocationStrategy(PipelineContext pipelineContext, AwaitExecutionContext awaitContext,
+            Optional<PipelineInvocationContext> invocationContext) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
+        this.runContext = PipelineRunContextHolder.get();
+        this.invocationContext = Objects.requireNonNull(invocationContext, "invocationContext must not be null");
     }
 
     @Override
@@ -36,6 +56,21 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
     @Override
     public AwaitExecutionContext awaitContext() {
         return awaitContext;
+    }
+
+    @Override
+    public Optional<PipelineRunContext> runContext() {
+        return runContext;
+    }
+
+    @Override
+    public boolean inheritRunContext() {
+        return runContext.isEmpty();
+    }
+
+    @Override
+    public Optional<PipelineInvocationContext> invocationContext() {
+        return invocationContext;
     }
 
     @Override

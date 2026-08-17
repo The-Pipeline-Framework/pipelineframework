@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.StreamSupport;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -32,6 +33,11 @@ import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.composition.PipelineDefinition;
+import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
+import org.pipelineframework.processor.composition.PipelineDefinitionStep;
+import org.pipelineframework.config.CardinalitySemantics;
+import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -128,6 +134,41 @@ class PipelineContractMetadataGeneratorTest {
             .getAsJsonArray("fields").get(0).getAsJsonObject().getAsJsonObject("type");
         assertEquals("map", nestedMap.get("kind").getAsString());
         assertEquals("Alpha", nestedMap.getAsJsonObject("value").get("id").getAsString());
+    }
+
+    @Test
+    void embedsTheResolvedCompositionInTheExistingHashedContract() throws IOException {
+        Path output = tempDir.resolve("composition");
+        ProcessingEnvironment processingEnv = processingEnv(output, Map.of());
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineReference outer = new PipelineReference("outer");
+        PipelineReference inner = new PipelineReference("inner");
+        PipelineDefinition innerDefinition = new PipelineDefinition(inner, "Value", "Value", List.of(
+            PipelineDefinitionStep.direct("x", "Value", "Value", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("y", "Value", "Value", CardinalitySemantics.ONE_TO_ONE)));
+        PipelineDefinition outerDefinition = new PipelineDefinition(outer, "Value", "Value", List.of(
+            PipelineDefinitionStep.direct("a", "Value", "Value", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.pipeline("call-inner", "Value", "Value", inner),
+            PipelineDefinitionStep.direct("c", "Value", "Value", CardinalitySemantics.ONE_TO_ONE)));
+        ctx.setResolvedPipelineDefinitionGraph(new PipelineDefinitionLinker(
+            reference -> java.util.Optional.ofNullable(Map.of(inner, innerDefinition).get(reference))).link(outerDefinition));
+        ctx.setStepModels(List.of(step("ProcessCompositionService", "Value", "Value",
+            StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.REST_CLIENT_STEP))));
+
+        new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
+
+        JsonObject contract = readContract(output);
+        assertEquals(3, contract.get("schemaVersion").getAsInt());
+        assertTrue(contract.get("contractVersion").getAsString().startsWith("sha256:"));
+        assertEquals("outer", contract.getAsJsonObject("composition").get("rootDefinitionId").getAsString());
+        JsonArray definitions = contract.getAsJsonObject("composition").getAsJsonArray("definitions");
+        JsonObject projectedOuter = StreamSupport.stream(definitions.spliterator(), false)
+            .map(element -> element.getAsJsonObject())
+            .filter(definition -> "outer".equals(definition.get("definitionId").getAsString()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("ROOT_TERMINAL", projectedOuter.getAsJsonArray("continuations")
+            .get(2).getAsJsonObject().get("kind").getAsString());
     }
 
     @Test

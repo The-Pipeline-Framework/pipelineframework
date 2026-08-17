@@ -126,4 +126,50 @@ class PipelineOrderExpanderTest {
             expanded
         );
     }
+
+    @Test
+    void globalCacheKeepsCommandOutputWriteInExpandedOrder() {
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.example",
+            "GRPC",
+            List.of(commandStep()),
+            List.of(new PipelineYamlAspect("cache", true, "GLOBAL", "AFTER_STEP", List.of()))
+        );
+
+        List<String> expanded = PipelineOrderExpander.expand(
+            List.of("org.example.service.pipeline.ProcessWriteExternalEffectCommandClientStep"),
+            config,
+            null
+        );
+
+        assertEquals(
+            List.of(
+                "org.example.service.pipeline.ProcessWriteExternalEffectCommandClientStep",
+                "org.example.service.pipeline.CacheWriteResultSideEffectGrpcClientStep"),
+            expanded
+        );
+    }
+
+    private static PipelineYamlStep commandStep() {
+        return new PipelineYamlStep(
+            "Write External Effect",
+            "command",
+            "ONE_TO_ONE",
+            "PreparedInput",
+            null,
+            "WriteResult",
+            null,
+            null,
+            List.of(),
+            null,
+            "external-command",
+            "org.example.StableCommandIdGenerator",
+            "RETURN_RECORDED",
+            java.util.Map.of(),
+            null,
+            null,
+            List.of(),
+            false
+        );
+    }
 }

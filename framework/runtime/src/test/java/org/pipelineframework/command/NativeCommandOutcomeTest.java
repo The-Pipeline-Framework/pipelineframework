@@ -36,7 +36,11 @@ import org.pipelineframework.connector.CommandOutcome;
 import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandReference;
 import org.pipelineframework.connector.CommandReferencePurpose;
+import org.pipelineframework.connector.ConnectorBindingDefinition;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.connector.ConnectorCompletionStages;
+import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorConfigurationSnapshot;
 import org.pipelineframework.connector.ConnectorExecutionCapabilities;
@@ -61,6 +65,19 @@ class NativeCommandOutcomeTest {
         new ConnectorRegistry(List.of(new NativeProvider(operation))),
         List.of(store),
         queueAsyncConfig());
+
+    @Test
+    void bindingQualifiedCommandNamesSeparateSharedProviderOperations() {
+        ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
+            ConnectorProviderId.of("acme.search"), "write.document", ConnectorOperationKind.COMMAND, 1);
+        NativeCommandSelector first = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("first")), identity, 1, CommandPolicy.none());
+        NativeCommandSelector second = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("second")), identity, 1, CommandPolicy.none());
+
+        assertEquals("native-binding:first/write.document", first.commandName());
+        assertEquals("native-binding:second/write.document", second.commandName());
+    }
 
     @AfterEach
     void clearContext() {
@@ -103,6 +120,68 @@ class NativeCommandOutcomeTest {
             changedDescriptor, (ignored, input) -> "stable-1", "input")
             .await().atMost(Duration.ofSeconds(5)));
         assertEquals(1, operation.invocations);
+    }
+
+    @Test
+    void routesThroughNamedBindingAndActivatesItOnlyForLiveDispatch() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        NativeProvider prototype = new NativeProvider();
+        ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
+            List.of(new ConnectorBindingDefinition(
+                ConnectorBindingName.of("work"),
+                ConnectorProviderId.of("acme.search"),
+                1,
+                ConnectorConfigurationDocument.empty())),
+            List.of(prototype));
+        assertTrue(bindings.providerInstances().isEmpty());
+        CommandStepSupport boundSupport = new CommandStepSupport(
+            new ConnectorRegistry(List.of()), bindings, List.of(store), queueAsyncConfig());
+        NativeCommandSelector selector = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("work")),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("acme.search"), "write.document", ConnectorOperationKind.COMMAND, 1),
+            1,
+            CommandPolicy.none());
+        CommandDescriptor descriptor = CommandDescriptor.nativeCommand(
+            "BoundNativeService", selector, String.class.getName(), String.class.getName(), "test",
+            CommandDuplicatePolicy.RETURN_RECORDED, Map.of("target", "orders"));
+
+        assertEquals("bound-result", boundSupport.<String, String>execute(
+            descriptor, (ignored, input) -> "bound-command", "input").await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, bindings.providerInstances().size());
+        NativeProvider boundProvider = (NativeProvider) bindings.providerInstances().getFirst();
+        assertEquals(1, boundProvider.starts);
+        assertEquals(1, boundProvider.operation.invocations);
+        assertEquals(0, prototype.starts);
+        assertEquals(0, prototype.operation.invocations);
+    }
+
+    @Test
+    void rejectsBindingWhoseRuntimeProviderDoesNotMatchTheSelector() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
+            List.of(new ConnectorBindingDefinition(
+                ConnectorBindingName.of("work"),
+                ConnectorProviderId.of("acme.search"),
+                1,
+                ConnectorConfigurationDocument.empty())),
+            List.of(new NativeProvider()));
+        CommandStepSupport boundSupport = new CommandStepSupport(
+            new ConnectorRegistry(List.of()), bindings, List.of(store), queueAsyncConfig());
+        NativeCommandSelector mismatched = new NativeCommandSelector(
+            Optional.of(ConnectorBindingName.of("work")),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("other.search"), "write.document", ConnectorOperationKind.COMMAND, 1),
+            1,
+            CommandPolicy.none());
+        CommandDescriptor descriptor = CommandDescriptor.nativeCommand(
+            "MismatchedBindingService", mismatched, String.class.getName(), String.class.getName(), "test",
+            CommandDuplicatePolicy.RETURN_RECORDED, Map.of("target", "orders"));
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> boundSupport.<String, String>execute(
+            descriptor, (ignored, input) -> "mismatched-binding", "input").await().atMost(Duration.ofSeconds(5)));
+
+        assertTrue(failure.getMessage().contains("command descriptor requires other.search v1"), failure.getMessage());
     }
 
     @Test
@@ -395,9 +474,16 @@ class NativeCommandOutcomeTest {
     public record OperationConfig(String target) {
     }
 
-    private static final class NativeProvider implements ConnectorProvider<Void> {
+    public static final class NativeProvider implements ConnectorProvider<Void> {
         private final NativeOperation operation;
         private final ConnectorExecutionCapabilities executionCapabilities;
+        private int starts;
+
+        public NativeProvider() {
+            this(new NativeOperation());
+            operation.outcome = new CommandOutcome.Succeeded<>(
+                "bound-result", CommandConfirmation.none(), Set.of(), List.of());
+        }
 
         private NativeProvider(NativeOperation operation) {
             this(operation, new ConnectorExecutionCapabilities(
@@ -410,10 +496,13 @@ class NativeCommandOutcomeTest {
         }
 
         @Override
-        public ConnectorProviderDescriptor descriptor() {
-            return new ConnectorProviderDescriptor(
-                ConnectorProviderId.of("acme.search"), new ConnectorProviderVersion(1, 0), Optional.empty(),
-                Optional.of(executionCapabilities));
+        public ConnectorProviderId id() {
+            return ConnectorProviderId.of("acme.search");
+        }
+
+        @Override
+        public ConnectorProviderVersion version() {
+            return new ConnectorProviderVersion(1, 0);
         }
 
         @Override
@@ -428,13 +517,10 @@ class NativeCommandOutcomeTest {
 
         @Override
         public CompletionStage<Void> start(ConnectorRuntimeContext context) {
+            starts++;
             return ConnectorCompletionStages.completed();
         }
 
-        @Override
-        public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-            return ConnectorCompletionStages.completed();
-        }
     }
 
     private static final class NativeOperation implements CommandOperation<String, OperationConfig, String> {
@@ -446,11 +532,8 @@ class NativeCommandOutcomeTest {
         private boolean returnNullStage;
 
         @Override
-        public ConnectorOperationDescriptor descriptor() {
-            return new ConnectorOperationDescriptor(
-                "write.document", ConnectorOperationKind.COMMAND, 1,
-                Optional.of(schema().descriptor()),
-                Optional.of(declaredCapabilities()));
+        public String id() {
+            return "write.document";
         }
 
         @Override

@@ -79,8 +79,43 @@ public record StepDefinition(
         @Nullable StreamingShape streamingShapeHint,
         boolean runOnVirtualThreads,
         List<String> accepts,
-        boolean terminal
+        boolean terminal,
+        Optional<String> pipelineReference
 ) {
+
+    /** Creates the typed immutable state for a statically linked pipeline invocation step. */
+    public static StepDefinition pipeline(
+        String name,
+        ClassName inputType,
+        ClassName outputType,
+        StreamingShape streamingShapeHint,
+        List<String> accepts,
+        boolean terminal,
+        String pipelineReference
+    ) {
+        return new StepDefinition(
+            name, StepKind.PIPELINE, null, Optional.empty(), null, Map.of(), null, List.of(), null, null,
+            null, Map.of(), null, Map.of(), List.of(), null, null, null, MapperFallbackMode.NONE,
+            inputType, outputType, streamingShapeHint, false, accepts, terminal,
+            Optional.ofNullable(pipelineReference));
+    }
+
+    /** Backward-compatible canonical constructor shape before pipeline references were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, Optional.empty());
+    }
 
     public StepDefinition(
         String name,
@@ -496,15 +531,19 @@ public record StepDefinition(
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }
         delegatedMethodName = normalizeOptionalString(delegatedMethodName);
+        pipelineReference = normalizeOptionalString(pipelineReference);
         accepts = accepts == null ? List.of() : List.copyOf(accepts);
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
-        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {
+        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
             if (executionClass != null || remoteExecution != null) {
                 throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
             }
             Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
             Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            if (kind == StepKind.PIPELINE && pipelineReference.isEmpty()) {
+                throw new IllegalArgumentException("pipelineReference cannot be blank for PIPELINE steps");
+            }
             if (kind == StepKind.COMMAND) {
                 if (command == null || command.isBlank()) {
                     throw new IllegalArgumentException("Command cannot be blank for COMMAND steps");
@@ -529,7 +568,8 @@ public record StepDefinition(
     }
 
     private static StepKind requireNonRemoteKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY
+            || kind == StepKind.PIPELINE) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;

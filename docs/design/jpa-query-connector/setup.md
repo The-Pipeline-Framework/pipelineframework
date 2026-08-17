@@ -62,6 +62,10 @@ steps:
 
 `version` participates in captured query identity. Bump it when the read meaning changes, such as a predicate or projection change that should not reuse earlier captured facts.
 
+This first-party captured JPA form remains supported and, in this release, continues to use its
+existing top-level `queries` definition. Provider-backed Query execution is not yet enabled in the
+runtime; do not select JPA queries through connector `operation`/`using` bindings yet.
+
 ## Java records
 
 Use small input and output records that make the read boundary obvious:

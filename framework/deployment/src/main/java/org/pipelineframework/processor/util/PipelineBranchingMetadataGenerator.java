@@ -2,6 +2,7 @@ package org.pipelineframework.processor.util;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,7 +26,10 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
+import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
+import org.pipelineframework.processor.composition.PipelineReference;
+import org.pipelineframework.processor.composition.LocalPipelineInvocationClassName;
 import org.pipelineframework.branching.BranchVariantIdentity;
 
 /**
@@ -44,45 +48,38 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     public void writeBranchingMetadata(PipelineCompilationContext ctx) throws IOException {
-        if (ctx == null || ctx.getBranchingPlan() == null || !ctx.getBranchingPlan().branchAware()) {
+        if (ctx == null) {
             return;
         }
-        PipelineBranchingPlan plan = ctx.getBranchingPlan();
-        List<PipelineStepModel> orderedModels = orderedModels(ctx);
-        if (orderedModels.isEmpty()) {
+        PipelineBranchingPlan rootPlan = ctx.getBranchingPlan();
+        boolean rootBranchAware = rootPlan != null && rootPlan.branchAware();
+        boolean childBranchAware = ctx.getLocalDefinitionBranchingPlans().values().stream()
+            .anyMatch(PipelineBranchingPlan::branchAware);
+        if (!rootBranchAware && !childBranchAware) {
             return;
         }
-        Map<String, PipelineStepModel> modelsByStepName = indexModelsByStepName(orderedModels);
         List<StepMetadata> steps = new ArrayList<>();
-        for (PipelineBranchingPlan.BranchStep step : plan.steps()) {
-            PipelineStepModel model = modelsByStepName.get(normalizeStepToken(step.stepName()));
-            if (model == null) {
-                warn(ctx, "Branch-aware step '" + step.stepName()
-                    + "' could not be matched to a runtime step model while generating branching metadata.");
+        if (rootBranchAware) {
+            appendPlan(ctx, rootPlan, indexModelsByStepName(orderedModels(ctx)), false, "$root", steps);
+        }
+        for (Map.Entry<PipelineReference, PipelineBranchingPlan> entry
+                : ctx.getLocalDefinitionBranchingPlans().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparing(PipelineReference::logicalId)))
+                    .toList()) {
+            if (!entry.getValue().branchAware()) {
                 continue;
             }
-            String runtimeStepClass = runtimeStepClass(model, ctx);
-            boolean transportMappedRuntime = usesTransportMappedRuntime(model, ctx);
-            String inputRuntimeClass = runtimeInputType(model, ctx, transportMappedRuntime).orElse(null);
-            List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
-                .map(type -> runtimeAcceptedType(type, ctx, transportMappedRuntime))
-                .toList();
-            steps.add(new StepMetadata(
-                step.index(),
-                step.stepName(),
-                runtimeStepClass,
-                inputRuntimeClass,
-                step.acceptedContractTypes(),
-                acceptedRuntimeClasses,
-                variants(step.inputVariants()),
-                variants(step.acceptedVariants()),
-                variants(step.producedVariants()),
-                step.terminal()));
+            List<PipelineStepModel> childModels = ctx.getLocalDefinitionStepModels()
+                .getOrDefault(entry.getKey().logicalId(), List.of());
+            appendPlan(ctx, entry.getValue(), indexModelsByStepName(childModels), true,
+                entry.getKey().logicalId(), steps);
         }
         if (steps.isEmpty()) {
             return;
         }
-        BranchingMetadata metadata = new BranchingMetadata(plan.terminalStepIndex(), steps);
+        BranchingMetadata metadata = new BranchingMetadata(
+            rootBranchAware ? rootPlan.terminalStepIndex() : -1,
+            steps);
         if (processingEnv != null) {
             javax.tools.FileObject resourceFile = processingEnv.getFiler()
                 .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE, (javax.lang.model.element.Element[]) null);
@@ -90,6 +87,106 @@ public final class PipelineBranchingMetadataGenerator {
                 writer.write(gson.toJson(metadata));
             }
         }
+    }
+
+    private void appendPlan(
+        PipelineCompilationContext ctx,
+        PipelineBranchingPlan plan,
+        Map<String, PipelineStepModel> modelsByStepName,
+        boolean generatedLocalRuntime,
+        String definitionId,
+        List<StepMetadata> steps
+    ) {
+        for (PipelineBranchingPlan.BranchStep step : plan.steps()) {
+            PipelineStepModel model = modelsByStepName.get(normalizeStepToken(step.stepName()));
+            if (model == null) {
+                List<String> invocationClasses = invocationRuntimeClasses(ctx, definitionId, step.stepName());
+                if (!invocationClasses.isEmpty()) {
+                    String inputRuntimeClass = invocationInputRuntimeClass(ctx, definitionId, step.stepName());
+                    List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
+                        .map(type -> runtimeAcceptedType(type, ctx, false))
+                        .toList();
+                    for (String runtimeStepClass : invocationClasses) {
+                        steps.add(stepMetadata(
+                            definitionId, plan, step, runtimeStepClass,
+                            inputRuntimeClass, acceptedRuntimeClasses));
+                    }
+                    continue;
+                }
+                warn(ctx, "Branch-aware step '" + step.stepName() + "' in definition '" + definitionId
+                    + "' could not be matched to a runtime step model while generating branching metadata.");
+                continue;
+            }
+            String runtimeStepClass = generatedLocalRuntime ? clientClass(model, ctx) : runtimeStepClass(model, ctx);
+            boolean transportMappedRuntime = usesTransportMappedRuntime(model, ctx);
+            String inputRuntimeClass = runtimeInputType(model, ctx, transportMappedRuntime).orElse(null);
+            List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
+                .map(type -> runtimeAcceptedType(type, ctx, transportMappedRuntime))
+                .toList();
+            steps.add(stepMetadata(
+                definitionId, plan, step, runtimeStepClass, inputRuntimeClass, acceptedRuntimeClasses));
+        }
+    }
+
+    private StepMetadata stepMetadata(
+        String definitionId,
+        PipelineBranchingPlan plan,
+        PipelineBranchingPlan.BranchStep step,
+        String runtimeStepClass,
+        String inputRuntimeClass,
+        List<String> acceptedRuntimeClasses
+    ) {
+        return new StepMetadata(
+            definitionId,
+            plan.terminalStepIndex(),
+            step.index(),
+            step.stepName(),
+            runtimeStepClass,
+            inputRuntimeClass,
+            step.acceptedContractTypes(),
+            acceptedRuntimeClasses,
+            variants(step.inputVariants()),
+            variants(step.acceptedVariants()),
+            variants(step.producedVariants()),
+            step.terminal());
+    }
+
+    private List<String> invocationRuntimeClasses(
+        PipelineCompilationContext ctx,
+        String definitionId,
+        String stepName
+    ) {
+        if (ctx.getResolvedPipelineDefinitionGraph().isEmpty()
+            || !(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig template)) {
+            return List.of();
+        }
+        PipelineReference owner = new PipelineReference(definitionId);
+        return ctx.getResolvedPipelineDefinitionGraph().orElseThrow().invocationBindings().stream()
+            .filter(binding -> binding.invocationLocation().definitionLocalLocation().definition().equals(owner))
+            .filter(binding -> binding.invocationLocation().definitionLocalLocation().localStepId().equals(stepName))
+            .map(binding -> LocalPipelineInvocationClassName.canonicalName(
+                template.basePackage(), binding.invocationLocation()))
+            .distinct()
+            .sorted()
+            .toList();
+    }
+
+    private String invocationInputRuntimeClass(
+        PipelineCompilationContext ctx,
+        String definitionId,
+        String stepName
+    ) {
+        List<StepDefinition> ownerSteps = "$root".equals(definitionId)
+            ? ctx.getParsedPipelineDefinitionCatalog().rootSteps()
+            : ctx.getParsedPipelineDefinitionCatalog().localDefinitions().getOrDefault(definitionId, List.of());
+        return ownerSteps.stream()
+            .filter(candidate -> candidate.name().equals(stepName))
+            .findFirst()
+            .map(StepDefinition::inputType)
+            .map(ClassName::canonicalName)
+            .orElseThrow(() -> new IllegalStateException(
+                "No compiler-resolved input runtime type for pipeline invocation '"
+                    + definitionId + ":" + stepName + "'."));
     }
 
     private List<PipelineStepModel> orderedModels(PipelineCompilationContext ctx) {
@@ -341,6 +438,8 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     private record StepMetadata(
+        String definitionId,
+        int definitionTerminalStepIndex,
         int index,
         String step,
         String runtimeStepClass,

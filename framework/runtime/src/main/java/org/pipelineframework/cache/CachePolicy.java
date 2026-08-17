@@ -20,7 +20,7 @@ package org.pipelineframework.cache;
  * Cache policy applied by the cache plugin and pipeline cache support.
  */
 public enum CachePolicy {
-    /** Always read from cache and never invoke the underlying step. */
+    /** Execute the underlying step without a pre-read and cache its resulting output. */
     CACHE_ONLY,
     /** Return cached value when present, otherwise continue pipeline execution. */
     RETURN_CACHED,

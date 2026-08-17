@@ -27,6 +27,11 @@ class RuntimeCoreDependencyGuardTest {
     }
 
     @Test
+    void runtimeCoreHasNoMutinyDependencies() {
+        assertNoForbiddenDependency("io.smallrye.mutiny");
+    }
+
+    @Test
     void runtimeCoreHasNoReactiveMessagingDependencies() {
         assertNoForbiddenDependency("io.smallrye.reactive.messaging");
         assertNoForbiddenDependency("org.eclipse.microprofile.reactive.messaging");
