@@ -31,6 +31,18 @@ public final class ProtocolTypeRegistry {
         return new ProtocolTypeRegistry(List.of(), new ConnectorProviderManifestCatalog(List.of()));
     }
 
+    /** Discover extension-owned protocol vocabulary without constructing connector providers. */
+    public static List<ProtocolTypeDescriptor> discoverContributions(ClassLoader classLoader) {
+        Objects.requireNonNull(classLoader, "protocol type contribution class loader must not be null");
+        List<ProtocolTypeDescriptor> result = new ArrayList<>();
+        ServiceLoader.load(ProtocolTypeContributor.class, classLoader).stream()
+            .sorted(Comparator.comparing(provider -> provider.type().getName()))
+            .map(ServiceLoader.Provider::get)
+            .forEach(contributor -> result.addAll(Objects.requireNonNull(
+                contributor.protocolTypes(), "protocol type contributions must not be null")));
+        return List.copyOf(result);
+    }
+
     public Map<ProtocolTypeIdentity, ProtocolTypeDescriptor> descriptors() {
         return descriptors;
     }

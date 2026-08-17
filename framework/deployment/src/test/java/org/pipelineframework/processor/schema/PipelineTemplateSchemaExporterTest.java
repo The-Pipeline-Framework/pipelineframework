@@ -63,6 +63,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("jpaQueryDefinition"));
         assertTrue(definitions.has("queryCapture"));
         assertTrue(definitions.has("queryTemplateStep"));
+        assertTrue(definitions.has("llmCallable"));
         assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 3,
+  "pipelineId": "llm-query-test",
+  "contractVersion": "sha256:test",
+  "contractHash": "test",
+  "steps": [],
+  "canonicalCatalogFingerprint": "sha256:test",
+  "canonicalTypes": {
+    "AgentCall": {
+      "contributedIdentity": "tpf.llm.AgentCall",
+      "definition": {
+        "id": "AgentCall",
+        "kind": "record",
+        "fields": [
+          {"name":"argumentsJson","type":{"kind":"scalar","id":"string"}},
+          {"name":"binding","type":{"kind":"scalar","id":"string"}},
+          {"name":"operation","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
+    "CompleteResult": {
+      "definition": {
+        "id": "CompleteResult",
+        "kind": "record",
+        "fields": [{"name":"status","type":{"kind":"scalar","id":"string"}}]
+      }
+    },
+    "Decision": {
+      "definition": {
+        "id": "Decision",
+        "kind": "union",
+        "variants": [
+          {"discriminator":"call","payload":{"kind":"named","id":"AgentCall"}},
+          {"discriminator":"complete","payload":{"kind":"named","id":"CompleteResult"}}
+        ]
+      }
+    },
+    "ToolArguments": {
+      "definition": {
+        "id": "ToolArguments",
+        "kind": "record",
+        "fields": [
+          {"name":"amount","type":{"kind":"scalar","id":"int32"}},
+          {"name":"note","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    }
+  }
+}

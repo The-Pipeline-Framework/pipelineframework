@@ -89,8 +89,13 @@ public class PipelineTemplateConfigLoader {
         Function<String, String> envLookup,
         Consumer<String> warningReporter
     ) {
-        this(propertyLookup, envLookup, warningReporter, new ProtocolTypeRegistry(
-            List.of(), ConnectorProviderManifestLoader.load(PipelineResources.resolveClassLoader())));
+        this(propertyLookup, envLookup, warningReporter, discoveredProtocolTypes());
+    }
+
+    private static ProtocolTypeRegistry discoveredProtocolTypes() {
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        return new ProtocolTypeRegistry(
+            ProtocolTypeRegistry.discoverContributions(classLoader), ConnectorProviderManifestLoader.load(classLoader));
     }
 
     /** Creates a loader with explicit contributed protocol vocabulary for plain-Java tooling and tests. */
@@ -723,6 +728,19 @@ public class PipelineTemplateConfigLoader {
             if (!typeModel.contains(step.outputTypeName())) {
                 throw new IllegalStateException("Step '" + step.name() + "' references unknown output type '" + step.outputTypeName() + "'.");
             }
+            for (org.pipelineframework.config.pipeline.PipelineYamlCallable callable : step.callables().values()) {
+                if (!typeModel.contains(callable.input())) {
+                    throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                        + "' references unknown input type '" + callable.input() + "'.");
+                }
+                if (!isRecordContract(typeModel, callable.input())) {
+                    throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                        + "' input '" + callable.input() + "' must resolve to a v3 record for model tool arguments.");
+                }
+            }
+            if (!step.callables().isEmpty()) {
+                validateLlmDecisionContract(typeModel, step);
+            }
         }
         if (steps.isEmpty()) {
             return;
@@ -747,6 +765,61 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Final step '" + last.name() + "' output '" + last.outputTypeName()
                 + "' is not assignable to pipeline output contract '" + outputContract + "'.");
         }
+    }
+
+    private boolean isRecordContract(PipelineTemplateTypeModel typeModel, String contract) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(contract));
+        return resolved instanceof PipelineTemplateTypeReference.Named named
+            && typeModel.definition(named.name()).orElseThrow() instanceof PipelineTemplateTypeDefinition.RecordType;
+    }
+
+    private void validateLlmDecisionContract(PipelineTemplateTypeModel typeModel, PipelineTemplateStep step) {
+        PipelineTemplateTypeDefinition definition = typeModel.definition(step.outputTypeName()).orElseThrow();
+        if (!(definition instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+            throw new IllegalStateException("Step '" + step.name()
+                + "' declares callables and must output an application-authored v3 decision union.");
+        }
+        long agentCallVariants = union.variants().values().stream()
+            .map(PipelineTemplateTypeDefinition.Variant::payload)
+            .map(typeModel::resolveAliases)
+            .filter(PipelineTemplateTypeReference.Named.class::isInstance)
+            .map(PipelineTemplateTypeReference.Named.class::cast)
+            .map(PipelineTemplateTypeReference.Named::name)
+            .filter(name -> typeModel.contributedTypeIdentity(name)
+                .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isPresent())
+            .count();
+        if (agentCallVariants != 1) {
+            throw new IllegalStateException("Step '" + step.name()
+                + "' decision union must declare exactly one <tpf.llm.AgentCall> variant.");
+        }
+        union.variants().values().stream()
+            .filter(variant -> {
+                PipelineTemplateTypeReference resolved = typeModel.resolveAliases(variant.payload());
+                return !(resolved instanceof PipelineTemplateTypeReference.Named named)
+                    || typeModel.contributedTypeIdentity(named.name())
+                        .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isEmpty();
+            })
+            .map(PipelineTemplateTypeDefinition.Variant::discriminator)
+            .filter(step.callables()::containsKey)
+            .findFirst()
+            .ifPresent(alias -> {
+                throw new IllegalStateException("Step '" + step.name() + "' callable alias '" + alias
+                    + "' conflicts with a completion discriminator.");
+            });
+        union.variants().values().stream()
+            .map(PipelineTemplateTypeDefinition.Variant::payload)
+            .map(typeModel::resolveAliases)
+            .filter(PipelineTemplateTypeReference.Named.class::isInstance)
+            .map(PipelineTemplateTypeReference.Named.class::cast)
+            .map(PipelineTemplateTypeReference.Named::name)
+            .filter(name -> typeModel.contributedTypeIdentity(name)
+                .filter(identity -> "tpf.llm.AgentCall".equals(identity.qualifiedName())).isEmpty())
+            .filter(name -> !isRecordContract(typeModel, name))
+            .findFirst()
+            .ifPresent(name -> {
+                throw new IllegalStateException("Step '" + step.name() + "' completion payload '" + name
+                    + "' must resolve to a v3 record for model tool arguments.");
+            });
     }
 
     /**
@@ -1259,6 +1332,8 @@ public class PipelineTemplateConfigLoader {
             Optional<String> pipelineReference = Optional.ofNullable(readString(stepMap, "pipeline"))
                 .map(String::trim)
                 .filter(reference -> !reference.isEmpty());
+            Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> callables =
+                readTemplateCallables(stepMap, name, version);
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
@@ -1275,9 +1350,52 @@ public class PipelineTemplateConfigLoader {
                 execution,
                 accepts,
                 terminal,
-                pipelineReference));
+                pipelineReference,
+                callables));
         }
         return stepInfos;
+    }
+
+    private Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> readTemplateCallables(
+        Map<?, ?> stepMap,
+        String stepName,
+        int version
+    ) {
+        Object raw = stepMap.get("callables");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (version != 3) {
+            throw new IllegalStateException("Step '" + stepName + "' callables require version: 3");
+        }
+        if (!(raw instanceof Map<?, ?> values) || values.isEmpty()) {
+            throw new IllegalStateException("Step '" + stepName + "' callables must be a non-empty map");
+        }
+        Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> result = new LinkedHashMap<>();
+        values.forEach((aliasValue, descriptorValue) -> {
+            String alias = aliasValue == null ? "" : aliasValue.toString().trim();
+            if (!(descriptorValue instanceof Map<?, ?> descriptor)) {
+                throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "' must be a map");
+            }
+            Integer authoredVersion = readIntegerObject(descriptor, "operationVersion");
+            try {
+                org.pipelineframework.config.pipeline.PipelineYamlCallable callable =
+                    new org.pipelineframework.config.pipeline.PipelineYamlCallable(
+                        alias,
+                        readString(descriptor, "using"),
+                        readString(descriptor, "operation"),
+                        org.pipelineframework.config.pipeline.PipelineYamlCallable.parseKind(readString(descriptor, "kind")),
+                        authoredVersion == null ? 1 : authoredVersion,
+                        readString(descriptor, "input"));
+                if (result.putIfAbsent(callable.alias(), callable) != null) {
+                    throw new IllegalStateException("duplicate callable alias '" + alias + "'");
+                }
+            } catch (IllegalArgumentException failure) {
+                throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "': "
+                    + failure.getMessage(), failure);
+            }
+        });
+        return Map.copyOf(result);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

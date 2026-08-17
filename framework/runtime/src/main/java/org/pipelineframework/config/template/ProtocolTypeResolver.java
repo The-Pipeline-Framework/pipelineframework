@@ -48,7 +48,13 @@ final class ProtocolTypeResolver {
             step.name(), step.cardinality(), normalizeContract(step.inputTypeName()), step.inputFields(),
             step.inboundMapper(), normalizeContract(step.outputTypeName()), step.outputFields(), step.outboundMapper(),
             step.execution(), step.accepts().stream().map(this::normalizeContract).toList(), step.terminal(),
-            step.pipelineReference());
+            step.pipelineReference(), step.callables().entrySet().stream().collect(java.util.stream.Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> new org.pipelineframework.config.pipeline.PipelineYamlCallable(
+                    entry.getValue().alias(), entry.getValue().using(), entry.getValue().operation(),
+                    entry.getValue().kind(), entry.getValue().operationVersion(), normalizeContract(entry.getValue().input())),
+                (left, right) -> { throw new IllegalStateException("duplicate callable alias: " + left.alias()); },
+                LinkedHashMap::new)));
     }
 
     private String normalizeContract(String contract) {

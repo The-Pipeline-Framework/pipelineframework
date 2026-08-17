@@ -14,6 +14,42 @@ import org.junit.jupiter.api.Test;
 class PipelineYamlConfigLoaderTest {
 
     @Test
+    void loadsReleasePinnedCallableCatalogueIntoQueryOperationConfiguration() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
+              payments: { provider: acme.payments, version: 1 }
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: Decision
+                using: model
+                operation: decide
+                config: { instructions: Decide once. }
+                callables:
+                  charge:
+                    using: payments
+                    operation: charge.create
+                    operationVersion: 2
+                    kind: command
+                    input: ChargeArguments
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        PipelineYamlCallable callable = step.callables().get("charge");
+        assertEquals("payments", callable.using());
+        assertEquals("charge.create", callable.operation());
+        assertEquals(2, callable.operationVersion());
+        assertTrue(step.operationConfig().containsKey("callables"));
+        @SuppressWarnings("unchecked")
+        var compiled = (java.util.Map<String, java.util.Map<String, Object>>) step.operationConfig().get("callables");
+        assertEquals("command", compiled.get("charge").get("kind"));
+    }
+
+    @Test
     void trimsConnectorBindingKeysAndRejectsBlankOnes() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: com.example

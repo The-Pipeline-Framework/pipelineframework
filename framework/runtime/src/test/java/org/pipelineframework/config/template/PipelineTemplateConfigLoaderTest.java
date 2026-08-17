@@ -228,6 +228,76 @@ class PipelineTemplateConfigLoaderTest {
         assertFalse(config.typeModel().contains("UnusedProtocol"));
     }
 
+    @Test
+    void normalizesCallableInputAgainstTheCanonicalV3TypeGraph() throws Exception {
+        Path configPath = write("llm-callables.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[id, string]] }
+              ChargeArguments: { fields: [[id, string]] }
+              Complete: { fields: [[status, string]] }
+              Decision:
+                variants:
+                  call: <tpf.llm.AgentCall>
+                  complete: Complete
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: Decision
+                callables:
+                  charge:
+                    using: payments
+                    operation: charge.create
+                    operationVersion: 2
+                    kind: command
+                    input: ChargeArguments
+            """);
+        ProtocolTypeDescriptor agentCall = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AgentCall"),
+            new PipelineTemplateTypeDefinition.RecordType("AgentCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("binding", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")))));
+
+        PipelineTemplateStep step = loader(agentCall).load(configPath).steps().getFirst();
+
+        var callable = step.callables().get("charge");
+        assertEquals("payments", callable.using());
+        assertEquals("charge.create", callable.operation());
+        assertEquals(2, callable.operationVersion());
+        assertEquals("ChargeArguments", callable.input());
+    }
+
+    @Test
+    void rejectsCallableInputOutsideTheCanonicalV3TypeGraph() throws Exception {
+        Path configPath = write("unknown-llm-callable-input.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[id, string]] }
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: State
+                callables:
+                  charge: { using: payments, operation: charge.create, kind: command, input: MissingArguments }
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> loader().load(configPath));
+
+        assertTrue(failure.getMessage().contains("unknown input type 'MissingArguments'"), failure.getMessage());
+    }
+
     private Path write(String name, String content) throws Exception {
         Path path = tempDir.resolve(name);
         Files.writeString(path, content);

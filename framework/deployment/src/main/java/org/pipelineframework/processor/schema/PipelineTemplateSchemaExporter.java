@@ -2192,6 +2192,33 @@ public final class PipelineTemplateSchemaExporter {
         "await"
       ]
     },
+    "llmCallable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\\\.[a-z][a-z0-9]*)*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["command", "query"]
+        },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "input": {
+          "$ref": "#/$defs/logicalContractReference"
+        }
+      },
+      "required": ["using", "operation", "kind", "input"]
+    },
     "queryTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -2226,6 +2253,16 @@ public final class PipelineTemplateSchemaExporter {
         "config": {
           "type": "object",
           "additionalProperties": true
+        },
+        "callables": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/llmCallable"
+          }
         },
         "negativeCacheTtl": {
           "type": "string",

@@ -17,8 +17,11 @@
 package org.pipelineframework.config.template;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+
+import org.pipelineframework.config.pipeline.PipelineYamlCallable;
 
 /**
  * Step configuration from the pipeline template definition.
@@ -47,13 +50,15 @@ public record PipelineTemplateStep(
     PipelineTemplateStepExecution execution,
     List<String> accepts,
     boolean terminal,
-    Optional<String> pipelineReference
+    Optional<String> pipelineReference,
+    Map<String, PipelineYamlCallable> callables
 ) {
     public PipelineTemplateStep {
         accepts = accepts == null ? List.of() : List.copyOf(accepts);
         pipelineReference = Objects.requireNonNull(pipelineReference, "pipelineReference must not be null")
             .map(String::trim)
             .filter(reference -> !reference.isEmpty());
+        callables = callables == null ? Map.of() : Map.copyOf(callables);
     }
 
     public PipelineTemplateStep(
@@ -65,7 +70,7 @@ public record PipelineTemplateStep(
         List<PipelineTemplateField> outputFields
     ) {
         this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null, List.of(), false,
-            Optional.empty());
+            Optional.empty(), Map.of());
     }
 
     public PipelineTemplateStep(
@@ -78,7 +83,7 @@ public record PipelineTemplateStep(
         PipelineTemplateStepExecution execution
     ) {
         this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution, List.of(), false,
-            Optional.empty());
+            Optional.empty(), Map.of());
     }
 
     public PipelineTemplateStep(
@@ -92,7 +97,7 @@ public record PipelineTemplateStep(
         String outboundMapper
     ) {
         this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null,
-            List.of(), false, Optional.empty());
+            List.of(), false, Optional.empty(), Map.of());
     }
 
     /**
@@ -111,7 +116,8 @@ public record PipelineTemplateStep(
             execution,
             accepts,
             terminal,
-            pipelineReference);
+            pipelineReference,
+            callables);
     }
 
     /** Backward-compatible constructor shape before pipeline invocation references were added. */
@@ -120,6 +126,16 @@ public record PipelineTemplateStep(
             List<PipelineTemplateField> outputFields, String outboundMapper,
             PipelineTemplateStepExecution execution, List<String> accepts, boolean terminal) {
         this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields,
-            outboundMapper, execution, accepts, terminal, Optional.empty());
+            outboundMapper, execution, accepts, terminal, Optional.empty(), Map.of());
+    }
+
+    /** Backward-compatible constructor shape before callable catalogues were added. */
+    public PipelineTemplateStep(String name, String cardinality, String inputTypeName,
+            List<PipelineTemplateField> inputFields, String inboundMapper, String outputTypeName,
+            List<PipelineTemplateField> outputFields, String outboundMapper,
+            PipelineTemplateStepExecution execution, List<String> accepts, boolean terminal,
+            Optional<String> pipelineReference) {
+        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields,
+            outboundMapper, execution, accepts, terminal, pipelineReference, Map.of());
     }
 }

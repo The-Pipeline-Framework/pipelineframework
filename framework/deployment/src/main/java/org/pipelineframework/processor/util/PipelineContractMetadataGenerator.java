@@ -150,6 +150,15 @@ public class PipelineContractMetadataGenerator {
         } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
             encoded.put("kind", "wrapper");
             encoded.put("wraps", typeExpression(wrapper.wraps()));
+            var constraints = wrapper.constraints();
+            constraints.minLength().ifPresent(value -> encoded.put("minLength", value));
+            constraints.maxLength().ifPresent(value -> encoded.put("maxLength", value));
+            constraints.pattern().ifPresent(value -> encoded.put("pattern", value));
+            constraints.format().ifPresent(value -> encoded.put("format", value.name().toLowerCase(java.util.Locale.ROOT)));
+            constraints.minimum().ifPresent(value -> encoded.put("minimum", value));
+            constraints.minimumExclusive().ifPresent(value -> encoded.put("minimumExclusive", value));
+            constraints.maximum().ifPresent(value -> encoded.put("maximum", value));
+            constraints.maximumExclusive().ifPresent(value -> encoded.put("maximumExclusive", value));
         } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
             encoded.put("kind", "alias");
             encoded.put("target", typeExpression(alias.target()));
