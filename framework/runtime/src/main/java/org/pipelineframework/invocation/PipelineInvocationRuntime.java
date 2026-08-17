@@ -79,6 +79,10 @@ public class PipelineInvocationRuntime {
         return invokeUni(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
     }
 
+    public <T> Uni<T> invokeStepUni(Supplier<Uni<T>> supplier) {
+        return invokeStepUni(null, null, supplier);
+    }
+
     public <T> Multi<T> invokeStepMulti(
         PipelineContext pipelineContext,
         AwaitExecutionContext awaitContext,
@@ -119,8 +123,11 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            InvocationContextSnapshot context =
-                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context = new InvocationContextSnapshot(
+                strategy.pipelineContext(),
+                strategy.awaitContext(),
+                strategy.runContext(),
+                strategy.inheritRunContext());
             try {
                 Uni<T> result = context.call(supplier);
                 if (result == null) {
@@ -141,8 +148,11 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            InvocationContextSnapshot context =
-                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context = new InvocationContextSnapshot(
+                strategy.pipelineContext(),
+                strategy.awaitContext(),
+                strategy.runContext(),
+                strategy.inheritRunContext());
             try {
                 Multi<T> result = context.call(supplier);
                 if (result == null) {

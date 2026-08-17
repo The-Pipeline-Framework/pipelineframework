@@ -1,16 +1,27 @@
 package org.pipelineframework.invocation;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.LongConsumer;
 
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 
 interface PipelineInvocationStrategy {
 
     PipelineContext pipelineContext();
 
     AwaitExecutionContext awaitContext();
+
+    default Optional<PipelineRunContext> runContext() {
+        return Optional.empty();
+    }
+
+    default boolean inheritRunContext() {
+        return true;
+    }
 
     void recordTermination(long startNanos, Throwable failure, boolean cancelled);
 
@@ -22,10 +33,12 @@ interface PipelineInvocationStrategy {
 final class StepInvocationStrategy implements PipelineInvocationStrategy {
     private final PipelineContext pipelineContext;
     private final AwaitExecutionContext awaitContext;
+    private final Optional<PipelineRunContext> runContext;
 
     StepInvocationStrategy(PipelineContext pipelineContext, AwaitExecutionContext awaitContext) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
+        this.runContext = PipelineRunContextHolder.get();
     }
 
     @Override
@@ -36,6 +49,16 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
     @Override
     public AwaitExecutionContext awaitContext() {
         return awaitContext;
+    }
+
+    @Override
+    public Optional<PipelineRunContext> runContext() {
+        return runContext;
+    }
+
+    @Override
+    public boolean inheritRunContext() {
+        return runContext.isEmpty();
     }
 
     @Override

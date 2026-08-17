@@ -60,6 +60,7 @@ import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 
@@ -83,7 +84,27 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
-        PipelineStepTelemetry stepTelemetry = PipelineStepTelemetry.of(telemetry, telemetryContext);
+        return applyStep(
+            step,
+            current,
+            parallelismPolicy,
+            maxConcurrency,
+            PipelineStepTelemetry.of(telemetry, telemetryContext),
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot);
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
@@ -700,6 +721,23 @@ class PipelineStepExecutor {
         Supplier<Multi<T>> supplier
     ) {
         return DEFAULT_INVOCATION_RUNTIME.invokeStepMulti(context, awaitContext, supplier);
+    }
+
+    static Object contextualizeInput(
+        Object input,
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        PipelineRunContext runContext
+    ) {
+        return PipelineRunContextHolder.call(runContext, () -> {
+            if (input instanceof Uni<?> uni) {
+                return withStepExecutionUni(context, awaitContext, () -> uni);
+            }
+            if (input instanceof Multi<?> multi) {
+                return withStepExecutionMulti(context, awaitContext, () -> multi);
+            }
+            throw new IllegalArgumentException("Pipeline input must be a Uni or Multi");
+        });
     }
 
     @SuppressWarnings("unchecked")
