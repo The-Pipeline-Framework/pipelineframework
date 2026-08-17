@@ -5,9 +5,9 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import javax.annotation.processing.Filer;
@@ -26,17 +26,18 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateMaterialization;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
-import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -48,10 +49,9 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -172,6 +172,23 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void includesContributedIdentityInReleaseContractAndHash() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path firstOutput = tempDir.resolve("contributed-first");
+        Path secondOutput = tempDir.resolve("contributed-second");
+
+        writeV3Metadata(pipelineYaml, firstOutput, contributedModel("tpf.alpha"));
+        writeV3Metadata(pipelineYaml, secondOutput, contributedModel("tpf.beta"));
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        assertEquals(3, first.get("schemaVersion").getAsInt());
+        assertEquals("tpf.alpha.Alpha", first.getAsJsonObject("canonicalTypes")
+            .getAsJsonObject("Alpha").get("contributedIdentity").getAsString());
+        assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
+    }
+
+    @Test
     void emitsOneDescriptorPerAuthoredStepWhenMonolithHasClientAndServerModels() throws IOException {
         Path pipelineYaml = writePipelineYaml();
         Path output = tempDir.resolve("monolith");
@@ -272,6 +289,12 @@ class PipelineContractMetadataGeneratorTest {
             definitions.put("Zeta", zeta);
         }
         return new PipelineTemplateTypeModel(definitions);
+    }
+
+    private static PipelineTemplateTypeModel contributedModel(String namespace) {
+        PipelineTemplateTypeModel base = v3TypeModel(false);
+        return new PipelineTemplateTypeModel(base.definitions(), Map.of(), Map.of(), Map.of(
+            "Alpha", new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "Alpha")));
     }
 
     private PipelineStepModel step(

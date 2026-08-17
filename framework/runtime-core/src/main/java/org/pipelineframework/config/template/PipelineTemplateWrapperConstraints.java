@@ -16,7 +16,7 @@
 
 package org.pipelineframework.config.template;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.beans.Transient;
 import java.math.BigDecimal;
 import java.util.Optional;
 
@@ -55,7 +55,7 @@ public record PipelineTemplateWrapperConstraints(
         return new PipelineTemplateWrapperConstraints();
     }
 
-    @JsonIgnore
+    @Transient
     public boolean isEmpty() {
         return minLength.isEmpty() && maxLength.isEmpty() && pattern.isEmpty() && format.isEmpty()
             && minimum.isEmpty() && minimumExclusive.isEmpty() && maximum.isEmpty() && maximumExclusive.isEmpty();

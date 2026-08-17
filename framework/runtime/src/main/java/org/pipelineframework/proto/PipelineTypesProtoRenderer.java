@@ -263,10 +263,24 @@ final class PipelineTypesProtoRenderer {
     }
 
     private void renderPayloadReferenceMessage(StringBuilder builder) {
+        builder.append("message ConnectorPayloadOrigin {\n");
+        builder.append("  string binding_name = 1;\n");
+        builder.append("  string provider_id = 2;\n");
+        builder.append("  string operation_id = 3;\n");
+        builder.append("  string operation_kind = 4;\n");
+        builder.append("  int32 operation_major_version = 5;\n");
+        builder.append("  int32 provider_major_version = 6;\n");
+        builder.append("  bool has_configuration = 7;\n");
+        builder.append("  string configuration_schema_id = 8;\n");
+        builder.append("  int32 configuration_schema_version = 9;\n");
+        builder.append("  string configuration_digest = 10;\n");
+        builder.append("  repeated string connection_references = 11;\n");
+        builder.append("}\n\n");
         builder.append("message PayloadReference {\n");
         builder.append("  string provider = 1;\n  string container = 2;\n  string key = 3;\n");
         builder.append("  string content_type = 4;\n  string codec = 5;\n  string checksum = 6;\n");
-        builder.append("  int64 size_bytes = 7;\n  string version = 8;\n  map<string, string> metadata = 9;\n}\n");
+        builder.append("  int64 size_bytes = 7;\n  string version = 8;\n  map<string, string> metadata = 9;\n");
+        builder.append("  ConnectorPayloadOrigin connector_origin = 10;\n}\n");
     }
 
     private String toProtoFieldName(String input) {

@@ -41,6 +41,7 @@ public class QueryStepSupport {
     private final Optional<ConnectorBindingRegistry> bindingRegistry;
     private final ConnectorRuntimeContext runtimeContext;
     private final ObjectMapper json = PipelineJson.mapper();
+    private final QueryCapturePayloadCodec capturePayloadCodec = new QueryCapturePayloadCodec(json);
 
     @Inject
     public QueryStepSupport(
@@ -396,7 +397,7 @@ public class QueryStepSupport {
         Class<O> outputType
     ) {
         try {
-            String outputJson = json.writeValueAsString(output);
+            String outputJson = capturePayloadCodec.encode(output, outputType);
             QueryCaptureRecord record = new QueryCaptureRecord(
                 context.tenantId(),
                 context.executionId(),
@@ -452,7 +453,7 @@ public class QueryStepSupport {
                     + " but step expected " + outputType.getName()));
         }
         try {
-            return Uni.createFrom().item(json.readValue(record.outputJson(), outputType));
+            return Uni.createFrom().item(capturePayloadCodec.decode(record.outputJson(), outputType));
         } catch (Exception ex) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "Captured query output for key '" + record.captureKey()

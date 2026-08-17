@@ -17,7 +17,10 @@
 package org.pipelineframework.plugin.repository;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -28,14 +31,18 @@ import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
+import org.pipelineframework.connector.MaterializedPayload;
+import org.pipelineframework.connector.PayloadMaterializer;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.repository.RepositoryChecksums;
 import org.pipelineframework.repository.RepositoryProvider;
 import org.pipelineframework.repository.RepositoryReadResult;
 import org.pipelineframework.repository.RepositoryWriteRequest;
 
 @ApplicationScoped
 @Unremovable
-public class RepositoryManager {
+public class RepositoryManager implements PayloadMaterializer {
 
     private static final Logger LOG = Logger.getLogger(RepositoryManager.class);
 
@@ -43,6 +50,9 @@ public class RepositoryManager {
 
     @Inject
     Instance<RepositoryProvider> providerInstance;
+
+    @Inject
+    ConnectorBindingRegistry connectorBindings;
 
     @ConfigProperty(name = "pipeline.repository.provider")
     Optional<String> providerName;
@@ -64,6 +74,43 @@ public class RepositoryManager {
     public Uni<RepositoryReadResult> load(PayloadReference reference) {
         RepositoryProvider provider = resolveProvider(reference);
         return provider.load(reference);
+    }
+
+    @Override
+    public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
+        Objects.requireNonNull(reference, "payload reference must not be null");
+        if (maxBytes < 1) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("maxBytes must be positive"));
+        }
+        if (reference.sizeBytes() > maxBytes) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                "payload reference exceeds maxBytes: " + reference.sizeBytes() + " > " + maxBytes));
+        }
+        if (reference.connectorOrigin().isPresent()) {
+            if (connectorBindings == null) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                    "connector binding registry is unavailable for connector-owned payload reference"));
+            }
+            return connectorBindings.materialize(reference, maxBytes);
+        }
+        return load(reference).map(result -> {
+            if (!reference.equals(result.reference())) {
+                throw new IllegalStateException("repository materialized a different payload reference");
+            }
+            byte[] bytes = result.payload();
+            if (bytes.length > maxBytes) {
+                throw new IllegalStateException(
+                    "materialized payload exceeds maxBytes: " + bytes.length + " > " + maxBytes);
+            }
+            String expectedChecksum = result.reference().checksum();
+            if (expectedChecksum != null
+                && !expectedChecksum.equalsIgnoreCase(RepositoryChecksums.sha256Hex(bytes))) {
+                throw new IllegalStateException(
+                    "materialized repository payload checksum mismatch for " + result.reference().key());
+            }
+            return new MaterializedPayload(
+                result.reference(), bytes, result.contentType(), result.codec(), result.checksum());
+        }).subscribeAsCompletionStage();
     }
 
     public Uni<Boolean> delete(PayloadReference reference) {

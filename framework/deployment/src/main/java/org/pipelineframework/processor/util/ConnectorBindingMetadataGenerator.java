@@ -60,7 +60,7 @@ public final class ConnectorBindingMetadataGenerator {
         var resource = processingEnv.getFiler()
             .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);
         try (var writer = resource.openWriter()) {
-            writer.write(GSON.toJson(new Metadata(1, bindings)));
+            writer.write(GSON.toJson(new Metadata(2, bindings)));
         }
     }
 
@@ -78,13 +78,30 @@ public final class ConnectorBindingMetadataGenerator {
             document,
             "connector binding '" + binding.name() + "' provider " + providerId.value());
         Map<String, Object> configuration = sanitizedConfiguration(provider, document);
+        config.steps().stream()
+            .flatMap(step -> step.callables().values().stream())
+            .filter(callable -> binding.name().equals(callable.using()))
+            .forEach(callable -> catalog.requireOperation(
+                providerId,
+                binding.version(),
+                callable.operation(),
+                callable.kind(),
+                callable.operationVersion()));
         List<OperationReference> operations = config.steps().stream()
             .filter(step -> step.operationSelection().isPresent())
             .filter(step -> binding.name().equals(step.operationSelection().orElseThrow().using()))
             .map(step -> operationReference(step.name(), step.kind(), step.operationSelection().orElseThrow()))
             .sorted(Comparator.comparing(OperationReference::step))
             .toList();
-        return new BindingMetadata(binding.name(), binding.provider(), binding.version(), configuration, operations);
+        List<CallableReference> callables = config.steps().stream()
+            .flatMap(step -> step.callables().values().stream()
+                .filter(callable -> binding.name().equals(callable.using()))
+                .map(callable -> new CallableReference(
+                    step.name(), callable.alias(), callable.kindToken(), callable.operation(),
+                    callable.operationVersion(), callable.input())))
+            .sorted(Comparator.comparing(CallableReference::step).thenComparing(CallableReference::alias))
+            .toList();
+        return new BindingMetadata(binding.name(), binding.provider(), binding.version(), configuration, operations, callables);
     }
 
     private static Map<String, Object> sanitizedConfiguration(
@@ -144,10 +161,21 @@ public final class ConnectorBindingMetadataGenerator {
         String provider,
         int providerVersion,
         Map<String, Object> configuration,
-        List<OperationReference> operations
+        List<OperationReference> operations,
+        List<CallableReference> callables
     ) {
     }
 
     private record OperationReference(String step, String kind, String operation, int operationVersion) {
+    }
+
+    private record CallableReference(
+        String step,
+        String alias,
+        String kind,
+        String operation,
+        int operationVersion,
+        String input
+    ) {
     }
 }
