@@ -137,6 +137,7 @@ const mainSidebar = [
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
                     {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
+                    {text: 'One-turn LLM Query', link: '/develop/extension/llm-query'},
                     {text: 'Reactive Services', link: '/develop/extension/reactive-services'},
                     {text: 'REST Resources', link: '/develop/extension/rest-resources'}
                 ]

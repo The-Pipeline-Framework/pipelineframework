@@ -49,8 +49,8 @@ public final class PipelineTemplateStepContractSyntax {
                 throw new IllegalStateException("Step '" + stepName
                     + "' inputTypeName/outputTypeName are not supported in version: 3; use input/output.");
             }
-            if (canonicalInput.filter(value -> !isLogicalName(value)).isPresent()
-                || canonicalOutput.filter(value -> !isLogicalName(value)).isPresent()) {
+            if (canonicalInput.filter(value -> !isV3LogicalReference(value)).isPresent()
+                || canonicalOutput.filter(value -> !isV3LogicalReference(value)).isPresent()) {
                 throw new IllegalStateException("Step '" + stepName
                     + "' version: 3 input/output must be named logical contracts; put Java bindings under java.input/java.output.");
             }
@@ -118,6 +118,20 @@ public final class PipelineTemplateStepContractSyntax {
 
     public static boolean isLogicalName(String value) {
         return value != null && !value.isBlank() && !value.contains(".");
+    }
+
+    private static boolean isV3LogicalReference(String value) {
+        if (isLogicalName(value)) {
+            return true;
+        }
+        if (value == null) {
+            return false;
+        }
+        try {
+            return ProtocolTypeReferences.parseContributed(value).isPresent();
+        } catch (IllegalArgumentException failure) {
+            return false;
+        }
     }
 
     public record StepContracts(

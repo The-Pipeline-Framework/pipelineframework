@@ -272,6 +272,7 @@ public class PipelineYamlConfigLoader {
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             Optional<NativeCommandYaml> nativeCommand = readNativeCommand(stepMap, name);
             Optional<PipelineYamlOperationSelection> operationSelection = readOperationSelection(stepMap, name);
+            Map<String, PipelineYamlCallable> callables = readCallables(stepMap, name, connectorBindings);
             Optional<Duration> negativeCacheTtl = readPositiveDuration(stepMap, "negativeCacheTtl", name);
             if (operationSelection.isPresent()) {
                 if (nativeCommand.isPresent()) {
@@ -300,6 +301,10 @@ public class PipelineYamlConfigLoader {
                 && (!"query".equalsIgnoreCase(kind) || operationSelection.isEmpty())) {
                 throw new IllegalArgumentException(
                     "step '" + name + "' negativeCacheTtl is supported only for provider-backed Query steps");
+            }
+            if (!callables.isEmpty() && (!"query".equalsIgnoreCase(kind) || operationSelection.isEmpty())) {
+                throw new IllegalArgumentException(
+                    "step '" + name + "' callables are supported only for provider-backed Query steps");
             }
             if (nativeCommand.isPresent()) {
                 NativeCommandYaml selector = nativeCommand.orElseThrow();
@@ -342,10 +347,50 @@ public class PipelineYamlConfigLoader {
                     accepts,
                     terminal,
                     operationSelection,
-                    negativeCacheTtl));
+                    negativeCacheTtl,
+                    callables));
             }
         }
         return stepInfos;
+    }
+
+    private Map<String, PipelineYamlCallable> readCallables(
+        Map<?, ?> stepMap,
+        String stepName,
+        Map<String, PipelineYamlConnectorBinding> connectorBindings
+    ) {
+        Object raw = stepMap.get("callables");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (!(raw instanceof Map<?, ?> values) || values.isEmpty()) {
+            throw new IllegalArgumentException("step '" + stepName + "' callables must be a non-empty map");
+        }
+        Map<String, PipelineYamlCallable> result = new LinkedHashMap<>();
+        values.forEach((aliasValue, descriptorValue) -> {
+            String alias = aliasValue == null ? "" : aliasValue.toString().trim();
+            if (!(descriptorValue instanceof Map<?, ?> descriptor)) {
+                throw new IllegalArgumentException("step '" + stepName + "' callable '" + alias + "' must be a map");
+            }
+            String using = trimToNull(readString(descriptor, "using"));
+            if (using == null || !connectorBindings.containsKey(using)) {
+                throw new IllegalArgumentException("step '" + stepName + "' callable '" + alias
+                    + "' references unknown connector binding '" + using + "'");
+            }
+            PipelineYamlCallable callable = new PipelineYamlCallable(
+                alias,
+                using,
+                readString(descriptor, "operation"),
+                PipelineYamlCallable.parseKind(readString(descriptor, "kind")),
+                descriptor.containsKey("operationVersion")
+                    ? readPositiveInteger(descriptor, "operationVersion", "step '" + stepName + "' callable '" + alias + "'")
+                    : 1,
+                readString(descriptor, "input"));
+            if (result.putIfAbsent(callable.alias(), callable) != null) {
+                throw new IllegalArgumentException("step '" + stepName + "' declares duplicate callable alias '" + alias + "'");
+            }
+        });
+        return Map.copyOf(result);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

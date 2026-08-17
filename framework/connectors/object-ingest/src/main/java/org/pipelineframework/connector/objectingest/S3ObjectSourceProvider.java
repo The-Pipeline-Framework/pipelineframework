@@ -136,7 +136,8 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
             etag,
             size,
             null,
-            Map.of("source", source.name()));
+            Map.of("source", source.name()),
+            Optional.empty());
         return new ObjectSourceItem(
             providerName(),
             bucket,

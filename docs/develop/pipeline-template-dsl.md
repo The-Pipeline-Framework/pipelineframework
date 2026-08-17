@@ -55,6 +55,24 @@ Every entry in `types` declares exactly one kind of type.
 | `alias` | A transparent name for another type. |
 | `variants` | A closed sum type: this value is one declared alternative. |
 
+### Contributed protocol types
+
+Version 3 can reference framework- or extension-owned protocol vocabulary without copying its declaration into the application:
+
+```yaml
+types:
+  Decision:
+    variants:
+      call: <acme.tools.ProtocolCall>
+      complete: Recommendation
+```
+
+`<namespace.TypeName>` is a build-time type reference. The compiler resolves it from the framework catalog or static Connector Provider artifact metadata, imports that immutable definition into the normalized v3 type model, and then applies the same union, assignability, generation, adapter, serialization, and release-contract rules as an application-authored type. It is not a generic type expression or a dynamic payload escape.
+
+A short reference such as `<ProtocolCall>` is accepted only when exactly one registered contribution has that type name. Use the qualified identity in durable source when multiple providers publish the same short name. Unknown references, ambiguous short names, duplicate identities, and collisions with application-authored names fail compilation.
+
+Only referenced contributions and their dependencies enter the application contract. Installing an unused provider does not change generated domain types or release identity. Provider metadata encodes the same record, wrapper, alias, and union shapes documented on this page; it is not an external schema-import language. Provider construction, configuration, connections, credentials, and execution are not involved in type resolution.
+
 ### Product types
 
 Use `fields` for a named business record. A compact field is a YAML tuple in the exact form `[name, type]`; the object form is `{ name, type }`.
@@ -161,7 +179,7 @@ types:
       requiresReview: PaymentRequiresReview
 ```
 
-A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
+A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types, including contributed `<Type>` references; inline payload records and payload-less variants are intentionally outside this DSL.
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 

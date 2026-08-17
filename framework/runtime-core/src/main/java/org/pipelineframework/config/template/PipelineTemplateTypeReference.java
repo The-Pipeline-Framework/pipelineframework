@@ -19,14 +19,14 @@ package org.pipelineframework.config.template;
 /** A resolved spelling-independent reference to either a scalar or named TPF type. */
 public sealed interface PipelineTemplateTypeReference
     permits PipelineTemplateTypeReference.Scalar, PipelineTemplateTypeReference.Named,
-    PipelineTemplateTypeReference.MapType {
+    PipelineTemplateTypeReference.Contributed, PipelineTemplateTypeReference.MapType {
 
     String name();
 
     record Scalar(String name) implements PipelineTemplateTypeReference {
         public Scalar {
             name = name == null ? null : name.trim().toLowerCase(java.util.Locale.ROOT);
-            if (!PipelineTemplateTypeMappings.isV3ScalarType(name)) {
+            if (!PipelineTemplateScalarTypes.isScalar(name)) {
                 throw new IllegalArgumentException("Unsupported scalar type '" + name + "'");
             }
         }
@@ -36,6 +36,16 @@ public sealed interface PipelineTemplateTypeReference
         public Named {
             if (name == null || name.isBlank()) {
                 throw new IllegalArgumentException("Named type reference must not be blank");
+            }
+            name = name.trim();
+        }
+    }
+
+    /** Build-time reference to framework- or extension-contributed protocol vocabulary. */
+    record Contributed(String name) implements PipelineTemplateTypeReference {
+        public Contributed {
+            if (name == null || name.isBlank()) {
+                throw new IllegalArgumentException("Contributed type reference must not be blank");
             }
             name = name.trim();
         }

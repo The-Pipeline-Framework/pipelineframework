@@ -568,7 +568,8 @@ class LocalPipelineInvocationBinderTest {
                     request.checksum(),
                     request.bytes().length,
                     "test",
-                    Map.of()),
+                    Map.of(),
+                    Optional.empty()),
                 request.bytes().length,
                 request.checksum(),
                 null));

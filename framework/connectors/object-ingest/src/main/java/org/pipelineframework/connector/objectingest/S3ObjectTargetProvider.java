@@ -259,7 +259,8 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                     closeRequest.checksum(),
                     closeRequest.bytes(),
                     null,
-                    metadata);
+                    metadata,
+                    Optional.empty());
                 return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
             }, executor);
         }

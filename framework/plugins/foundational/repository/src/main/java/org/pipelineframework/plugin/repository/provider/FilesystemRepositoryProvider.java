@@ -22,6 +22,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -95,7 +96,8 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
                 request.checksum(),
                 request.payload().length,
                 request.version(),
-                request.metadata());
+                request.metadata(),
+                Optional.empty());
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 

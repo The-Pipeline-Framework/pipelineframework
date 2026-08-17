@@ -9,9 +9,14 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
+import org.pipelineframework.protocol.ProtocolTypeRegistry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -128,6 +133,223 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException invocationFailure = assertThrows(IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(invocation));
         assertEquals("Step property 'pipeline' requires version: 3", invocationFailure.getMessage());
+    }
+
+    @Test
+    void resolvesContributedProtocolTypeInOrdinaryV3Union() throws Exception {
+        Path configPath = write("contributed-union.yaml", """
+            version: 3
+            appName: Protocol Types
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Recommendation:
+                fields:
+                  - [message, string]
+              Decision:
+                variants:
+                  call: <tpf.test.ProtocolCall>
+                  complete: Recommendation
+            contract:
+              input: Recommendation
+              output: Decision
+            steps:
+              - name: Decide
+                cardinality: ONE_TO_ONE
+                input: Recommendation
+                output: Decision
+            """);
+
+        PipelineTemplateConfig config = loader(protocolCall("tpf.test")).load(configPath);
+
+        PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
+            config.typeModel().definition("Decision").orElseThrow();
+        assertEquals("ProtocolCall", decision.variants().get("call").payload().name());
+        assertEquals("tpf.test.ProtocolCall",
+            config.typeModel().contributedTypeIdentity("ProtocolCall").orElseThrow().qualifiedName());
+        assertTrue(config.typeModel().definition("ProtocolCall").isPresent());
+        assertEquals("tpf.test.ProtocolCall", PipelineIdlSnapshot.from(config).types().get("ProtocolCall")
+            .contributedIdentity().orElseThrow());
+    }
+
+    @Test
+    void resolvesUniqueShortReferenceAndReportsUnknownOrAmbiguousReferences() throws Exception {
+        Path unique = write("contributed-short.yaml", protocolUnionYaml("<ProtocolCall>"));
+        PipelineTemplateConfig config = loader(protocolCall("tpf.test")).load(unique);
+        assertTrue(config.typeModel().contains("ProtocolCall"));
+
+        IllegalArgumentException unknown = assertThrows(IllegalArgumentException.class,
+            () -> loader(protocolCall("tpf.test")).load(write("contributed-unknown.yaml", protocolUnionYaml("<Missing>"))));
+        assertTrue(unknown.getMessage().contains("unknown contributed protocol type '<Missing>'"));
+
+        ProtocolTypeRegistry ambiguousRegistry = registry(protocolCall("tpf.alpha"), protocolCall("tpf.beta"));
+        IllegalArgumentException ambiguous = assertThrows(IllegalArgumentException.class,
+            () -> loader(ambiguousRegistry).load(write("contributed-ambiguous.yaml", protocolUnionYaml("<ProtocolCall>"))));
+        assertTrue(ambiguous.getMessage().contains("tpf.alpha.ProtocolCall, tpf.beta.ProtocolCall"));
+    }
+
+    @Test
+    void normalizesContributedContractsAndImportsOnlyTheirDependencyClosure() throws Exception {
+        Path configPath = write("contributed-contracts.yaml", """
+            version: 3
+            appName: Protocol Contracts
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Marker:
+                fields: [[value, string]]
+            contract:
+              input: <tpf.test.ProtocolCall>
+              output: <tpf.test.ProtocolCall>
+            steps:
+              - name: Dispatch
+                cardinality: ONE_TO_ONE
+                input: <ProtocolCall>
+                output: <ProtocolCall>
+                accepts: [<ProtocolCall>]
+            """);
+        ProtocolTypeDescriptor observation = protocolObservation();
+        ProtocolTypeDescriptor call = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "ProtocolCall"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("observation",
+                    new PipelineTemplateTypeReference.Contributed("tpf.test.ProtocolObservation")))));
+        ProtocolTypeDescriptor unused = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "UnusedProtocol"),
+            new PipelineTemplateTypeDefinition.RecordType("UnusedProtocol", List.of()));
+
+        PipelineTemplateConfig config = loader(call, observation, unused).load(configPath);
+
+        assertEquals("ProtocolCall", config.inputContract());
+        assertEquals("ProtocolCall", config.outputContract());
+        assertEquals("ProtocolCall", config.steps().getFirst().inputTypeName());
+        assertEquals(List.of("ProtocolCall"), config.steps().getFirst().accepts());
+        assertTrue(config.typeModel().contains("ProtocolObservation"));
+        assertFalse(config.typeModel().contains("UnusedProtocol"));
+    }
+
+    @Test
+    void normalizesCallableInputAgainstTheCanonicalV3TypeGraph() throws Exception {
+        Path configPath = write("llm-callables.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[id, string]] }
+              ChargeArguments: { fields: [[id, string]] }
+              Complete: { fields: [[status, string]] }
+              Decision:
+                variants:
+                  call: <tpf.llm.AgentCall>
+                  complete: Complete
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: Decision
+                callables:
+                  charge:
+                    using: payments
+                    operation: charge.create
+                    operationVersion: 2
+                    kind: command
+                    input: ChargeArguments
+            """);
+        ProtocolTypeDescriptor agentCall = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AgentCall"),
+            new PipelineTemplateTypeDefinition.RecordType("AgentCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("binding", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")))));
+
+        PipelineTemplateStep step = loader(agentCall).load(configPath).steps().getFirst();
+
+        var callable = step.callables().get("charge");
+        assertEquals("payments", callable.using());
+        assertEquals("charge.create", callable.operation());
+        assertEquals(2, callable.operationVersion());
+        assertEquals("ChargeArguments", callable.input());
+    }
+
+    @Test
+    void rejectsCallableInputOutsideTheCanonicalV3TypeGraph() throws Exception {
+        Path configPath = write("unknown-llm-callable-input.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[id, string]] }
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: State
+                callables:
+                  charge: { using: payments, operation: charge.create, kind: command, input: MissingArguments }
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> loader().load(configPath));
+
+        assertTrue(failure.getMessage().contains("unknown input type 'MissingArguments'"), failure.getMessage());
+    }
+
+    private Path write(String name, String content) throws Exception {
+        Path path = tempDir.resolve(name);
+        Files.writeString(path, content);
+        return path;
+    }
+
+    private static PipelineTemplateConfigLoader loader(ProtocolTypeDescriptor... descriptors) {
+        return loader(registry(descriptors));
+    }
+
+    private static PipelineTemplateConfigLoader loader(ProtocolTypeRegistry registry) {
+        return new PipelineTemplateConfigLoader(key -> null, key -> null, warning -> { }, registry);
+    }
+
+    private static ProtocolTypeRegistry registry(ProtocolTypeDescriptor... descriptors) {
+        return new ProtocolTypeRegistry(List.of(descriptors), new ConnectorProviderManifestCatalog(List.of()));
+    }
+
+    private static ProtocolTypeDescriptor protocolCall(String namespace) {
+        return new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "ProtocolCall"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolCall", List.of(
+                new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")))));
+    }
+
+    private static ProtocolTypeDescriptor protocolObservation() {
+        return new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.test"), "ProtocolObservation"),
+            new PipelineTemplateTypeDefinition.RecordType("ProtocolObservation", List.of(
+                new PipelineTemplateTypeDefinition.Field("value", new PipelineTemplateTypeReference.Scalar("string")))));
+    }
+
+    private static String protocolUnionYaml(String reference) {
+        return """
+            version: 3
+            appName: Protocol Types
+            basePackage: com.example.protocol
+            transport: LOCAL
+            types:
+              Recommendation:
+                fields:
+                  - [message, string]
+              Decision:
+                variants:
+                  call: %s
+                  complete: Recommendation
+            steps:
+              - name: Decide
+                cardinality: ONE_TO_ONE
+                input: Recommendation
+                output: Decision
+            """.formatted(reference);
     }
 
     @Test
@@ -1680,6 +1902,23 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException pattern = assertThrows(IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(unboundedPattern));
         assertTrue(pattern.getMessage().contains("pattern requires maxLength"));
+
+        Path unsafePattern = tempDir.resolve("v3-unsafe-wrapper-pattern.yaml");
+        Files.writeString(unsafePattern, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              AccountCode:
+                wraps: string
+                pattern: "(a+)+"
+                maxLength: 128
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: AccountCode, output: AccountCode }]
+            """);
+        IllegalStateException unsafe = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(unsafePattern));
+        assertTrue(unsafe.getMessage().contains("unsafe for runtime model validation"));
     }
 
     @Test

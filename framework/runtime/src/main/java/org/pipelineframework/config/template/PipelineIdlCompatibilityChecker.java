@@ -55,6 +55,10 @@ public final class PipelineIdlCompatibilityChecker {
                 continue;
             }
             PipelineIdlSnapshot.TypeSnapshot baseline = entry.getValue();
+            if (!Objects.equals(baseline.contributedIdentity(), current.contributedIdentity())) {
+                errors.add("Type '" + entry.getKey() + "' changed contributed protocol identity");
+                continue;
+            }
             if (!Objects.equals(baseline.kind(), current.kind()) || !Objects.equals(baseline.target(), current.target())) {
                 errors.add("Type '" + entry.getKey() + "' changed semantic representation");
                 continue;
