@@ -40,7 +40,7 @@ class PipelineInvocationRuntimeTest {
         PipelineRunContextHolder.clear();
         PipelineRunContext ambient = PipelineRunTelemetry.nonOwningContext();
         AtomicReference<PipelineRunContext> observed = new AtomicReference<>();
-        Uni<String> invocation = runtime.invokeStepUni(null, null, () -> {
+        Uni<String> invocation = runtime.invokeStepUni(() -> {
             observed.set(PipelineRunContextHolder.get().orElseThrow());
             return Uni.createFrom().item("ok");
         });
@@ -48,6 +48,7 @@ class PipelineInvocationRuntimeTest {
         try {
             String result = PipelineRunContextHolder.call(ambient, () -> invocation.await().indefinitely());
 
+            assertTrue(PipelineRunContextHolder.get().isEmpty());
             assertEquals("ok", result);
             assertSame(ambient, observed.get());
         } finally {

@@ -13,7 +13,7 @@ import org.pipelineframework.config.ParallelismPolicy;
 /** Focused runtime seam for pipeline-run lifecycle ownership. */
 public interface PipelineRunTelemetry {
     /** Returns a context for execution that does not own a pipeline-run telemetry lifecycle. */
-    static PipelineRunContext nonOwningContext() {
+    public static PipelineRunContext nonOwningContext() {
         return PipelineRunContext.disabled();
     }
 

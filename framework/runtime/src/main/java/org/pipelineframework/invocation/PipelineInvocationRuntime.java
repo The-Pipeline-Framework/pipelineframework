@@ -79,6 +79,10 @@ public class PipelineInvocationRuntime {
         return invokeUni(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
     }
 
+    public <T> Uni<T> invokeStepUni(Supplier<Uni<T>> supplier) {
+        return invokeStepUni(null, null, supplier);
+    }
+
     public <T> Multi<T> invokeStepMulti(
         PipelineContext pipelineContext,
         AwaitExecutionContext awaitContext,
