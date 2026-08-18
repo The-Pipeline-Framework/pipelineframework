@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -19,8 +20,12 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.pdf.PdfFile;
 import dev.langchain4j.data.image.Image;
+import dev.langchain4j.model.chat.Capability;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -60,6 +65,7 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             .timeout(timeout)
             .think(thinking)
             .maxRetries(maxRetries)
+            .supportedCapabilities(Capability.RESPONSE_FORMAT_JSON_SCHEMA)
             .build();
     }
 
@@ -126,8 +132,8 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         }
 
         @Override
-        public boolean supportsNativeStructuredOutput() {
-            return true;
+        public boolean supportsNativeStructuredOutput(List<LlmToolDefinition> tools) {
+            return directCompletion(tools).isPresent();
         }
 
         @Override
@@ -136,11 +142,42 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         }
 
         private LlmToolProposal decideBlocking(LlmTurnRequest request) {
+            if (request.structuredOutputSchema()
+                == org.pipelineframework.connector.llm.StructuredOutputSchemaMode.REQUIRED) {
+                return decideNativeCompletion(request);
+            }
+            return decideToolProposal(request);
+        }
+
+        private LlmToolProposal decideNativeCompletion(LlmTurnRequest request) {
+            LlmToolDefinition completion = directCompletion(request.tools()).orElseThrow(() ->
+                new IllegalArgumentException(
+                    "Ollama native structured output requires one direct 'complete' alternative"));
+            ToolSpecification specification = tool(completion);
+            ResponseFormat responseFormat = ResponseFormat.builder()
+                .type(ResponseFormatType.JSON)
+                .jsonSchema(JsonSchema.builder()
+                    .name(completion.alias())
+                    .rootElement(Objects.requireNonNull(
+                        specification.parameters(), "completion schema parameters must not be null"))
+                    .build())
+                .build();
+            ChatRequest chat = ChatRequest.builder()
+                .messages(
+                    SystemMessage.from(request.instructions()),
+                    userMessage(request, true))
+                .responseFormat(responseFormat)
+                .build();
+            String arguments = model.chat(chat).aiMessage().text();
+            return new LlmToolProposal(completion.alias(), arguments == null ? "{}" : arguments);
+        }
+
+        private LlmToolProposal decideToolProposal(LlmTurnRequest request) {
             List<ToolSpecification> tools = request.tools().stream().map(this::tool).toList();
             ChatRequest chat = ChatRequest.builder()
                 .messages(
                     SystemMessage.from(request.instructions()),
-                    userMessage(request))
+                    userMessage(request, false))
                 .toolSpecifications(tools)
                 .build();
             List<ToolExecutionRequest> proposals = model.chat(chat).aiMessage().toolExecutionRequests();
@@ -154,10 +191,18 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             return new LlmToolProposal(name, arguments);
         }
 
-        private UserMessage userMessage(LlmTurnRequest request) {
+        private static Optional<LlmToolDefinition> directCompletion(List<LlmToolDefinition> tools) {
+            return tools.size() == 1 && "complete".equals(tools.getFirst().alias())
+                ? Optional.of(tools.getFirst())
+                : Optional.empty();
+        }
+
+        private UserMessage userMessage(LlmTurnRequest request, boolean nativeCompletion) {
             List<Content> contents = new ArrayList<>();
             contents.add(TextContent.from("Application state:\n" + request.applicationStateJson()
-                + "\nSelect exactly one available function. Do not execute it."));
+                + (nativeCompletion
+                    ? "\nReturn exactly one JSON object matching the required response schema."
+                    : "\nSelect exactly one available function. Do not execute it.")));
             request.media().forEach(payload -> {
                 String contentType = payload.contentType() == null ? "" : payload.contentType().toLowerCase(java.util.Locale.ROOT);
                 String base64 = Base64.getEncoder().encodeToString(payload.bytes());

@@ -88,7 +88,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             return CompletableFuture.failedStage(failure);
         }
         if (invocation.configuration().structuredOutputMode() == StructuredOutputSchemaMode.REQUIRED
-            && !active.supportsNativeStructuredOutput()) {
+            && !active.supportsNativeStructuredOutput(contract.tools())) {
             return CompletableFuture.completedStage(new QueryOutcome.TerminalFailure<>("structured-output-unavailable"));
         }
         return CompletableFuture.completedStage(invocation)

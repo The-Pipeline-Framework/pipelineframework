@@ -136,15 +136,23 @@ class LlmQueryOperationTest {
         PayloadReference reference = new PayloadReference(
             "test", "invoices", "invoice.pdf", "application/pdf", null, "sha256:test", 4,
             null, Map.of(), Optional.empty());
-        LlmDecisionClient client = request -> {
-            observed.set(request);
-            assertEquals(java.util.List.of("complete"),
-                request.tools().stream().map(LlmToolDefinition::alias).toList());
-            return CompletableFuture.completedFuture(
-                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+        LlmDecisionClient client = new LlmDecisionClient() {
+            @Override
+            public boolean supportsNativeStructuredOutput(java.util.List<LlmToolDefinition> tools) {
+                assertEquals(java.util.List.of("complete"),
+                    tools.stream().map(LlmToolDefinition::alias).toList());
+                return true;
+            }
+
+            @Override
+            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+                observed.set(request);
+                return CompletableFuture.completedFuture(
+                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+            }
         };
         LlmTurnConfiguration completion = new LlmTurnConfiguration(
-            "Analyse once.", Map.of(), StructuredOutputSchemaMode.OPTIONAL);
+            "Analyse once.", Map.of());
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) ReviewReady.class;
         QueryInvocation<Object, LlmTurnConfiguration, Object> invocation = new QueryInvocation<>(

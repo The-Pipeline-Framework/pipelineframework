@@ -1,8 +1,10 @@
 package org.pipelineframework.connector.llm.langchain4j;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
@@ -18,6 +20,8 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
@@ -111,11 +115,47 @@ class LangChain4jOllamaQueryConnectorTest {
                      "required":["amount"],"additionalProperties":false,
                      "$defs":{"Arguments":{"type":"object","properties":{"amount":{"type":"integer"}},
                      "required":["amount"],"additionalProperties":false}}}
-                    """))))
+                    """)),
+            org.pipelineframework.connector.llm.StructuredOutputSchemaMode.OPTIONAL))
             .toCompletableFuture().join();
 
         assertEquals("charge", proposal.alias());
         assertEquals("{\"amount\":42}", proposal.argumentsJson());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void usesNativeJsonSchemaForRequiredDirectCompletion() {
+        AtomicInteger calls = new AtomicInteger();
+        ChatModel model = new ChatModel() {
+            @Override
+            public ChatResponse doChat(ChatRequest request) {
+                calls.incrementAndGet();
+                assertTrue(request.toolSpecifications().isEmpty());
+                assertEquals(ResponseFormatType.JSON, request.responseFormat().type());
+                JsonObjectSchema schema = assertInstanceOf(
+                    JsonObjectSchema.class, request.responseFormat().jsonSchema().rootElement());
+                assertTrue(schema.properties().containsKey("review"));
+                assertTrue(schema.definitions().containsKey("InvoiceReview"));
+                return ChatResponse.builder().aiMessage(AiMessage.from("{\"review\":{}}")).build();
+            }
+        };
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        LlmToolDefinition completion = new LlmToolDefinition("complete", "Complete", """
+            {"type":"object","properties":{"review":{"$ref":"#/$defs/InvoiceReview"}},
+             "required":["review"],"additionalProperties":false,
+             "$defs":{"InvoiceReview":{"type":"object","properties":{},
+             "required":[],"additionalProperties":false}}}
+            """);
+
+        assertTrue(client.supportsNativeStructuredOutput(List.of(completion)));
+        assertFalse(client.supportsNativeStructuredOutput(List.of(
+            completion, new LlmToolDefinition("charge", "Charge", "{\"type\":\"object\"}"))));
+        var proposal = client.decide(new LlmTurnRequest("Analyse once.", "{}", List.of(completion)))
+            .toCompletableFuture().join();
+
+        assertEquals("complete", proposal.alias());
+        assertEquals("{\"review\":{}}", proposal.argumentsJson());
         assertEquals(1, calls.get());
     }
 
@@ -144,8 +184,7 @@ class LangChain4jOllamaQueryConnectorTest {
             public ChatResponse doChat(ChatRequest request) {
                 calls.incrementAndGet();
                 observed.set(request);
-                return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
-                    .name("complete").arguments("{}").build())).build();
+                return ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
             }
         };
         PayloadReference reference = new PayloadReference(
@@ -181,8 +220,7 @@ class LangChain4jOllamaQueryConnectorTest {
             public ChatResponse doChat(ChatRequest request) {
                 calls.incrementAndGet();
                 observed.set(request);
-                return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
-                    .name("complete").arguments("{}").build())).build();
+                return ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
             }
         };
         PayloadReference reference = new PayloadReference(
@@ -213,7 +251,7 @@ class LangChain4jOllamaQueryConnectorTest {
         return client.decide(new LlmTurnRequest("Decide once.", "{}", List.of(
             new LlmToolDefinition("complete", "Complete", """
                 {"type":"object","properties":{},"required":[],"additionalProperties":false}
-                """))))
+                """)), org.pipelineframework.connector.llm.StructuredOutputSchemaMode.OPTIONAL))
             .toCompletableFuture().join();
     }
 
