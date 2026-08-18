@@ -241,6 +241,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineStepIRExtractor irExtractor,
             Consumer<String> ctxWarningLogger) {
 
+        if (stepDef.dynamicOperationSource().isPresent()) {
+            return createDynamicOperationStepModel(ctx, stepDef, ctxWarningLogger);
+        }
+
         // Determine if this is an internal or delegated step using switch for exhaustiveness
         return switch (stepDef.kind()) {
             case INTERNAL -> {
@@ -351,6 +355,40 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .enabledTargets(java.util.Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
+    private PipelineStepModel createDynamicOperationStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Dynamic operation step '" + stepDef.name() + "' must resolve both Java input and output bindings");
+            return null;
+        }
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage() : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.dispatch", "OperationDispatchDescriptor"))
+            .inputMapping(TypeMapping.withoutMapper(inputType))
+            .outputMapping(TypeMapping.withoutMapper(outputType))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .sideEffect(false)

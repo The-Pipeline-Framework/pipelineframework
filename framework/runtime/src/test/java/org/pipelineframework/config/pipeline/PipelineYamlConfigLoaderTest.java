@@ -36,6 +36,12 @@ class PipelineYamlConfigLoaderTest {
                     operationVersion: 2
                     kind: command
                     input: ChargeArguments
+              - name: Invoke proposal
+                input: <tpf.llm.AgentCall>
+                output: <tpf.connector.OperationObservation>
+                operation:
+                  mode: dynamic
+                  from: Decide
             """));
 
         PipelineYamlStep step = config.steps().getFirst();
@@ -47,6 +53,45 @@ class PipelineYamlConfigLoaderTest {
         @SuppressWarnings("unchecked")
         var compiled = (java.util.Map<String, java.util.Map<String, Object>>) step.operationConfig().get("callables");
         assertEquals("command", compiled.get("charge").get("kind"));
+        PipelineYamlStep invocation = config.steps().get(1);
+        assertEquals("internal", invocation.kind());
+        assertEquals("Decide", invocation.dynamicOperation().orElseThrow().from());
+    }
+
+    @Test
+    void retainsDynamicOperationBindingInsideLocalPipelineDefinition() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
+              payments: { provider: acme.payments, version: 1 }
+            pipelines:
+              invoice-agent:
+                steps:
+                  - name: Decide
+                    kind: query
+                    input: State
+                    output: Decision
+                    using: model
+                    operation: decide
+                    callables:
+                      charge:
+                        using: payments
+                        operation: charge.create
+                        operationVersion: 2
+                        kind: command
+                        input: ChargeArguments
+                  - name: Invoke proposal
+                    input: <tpf.llm.AgentCall>
+                    output: <tpf.connector.OperationObservation>
+                    operation: { mode: dynamic, from: Decide }
+            steps: []
+            """));
+
+        List<PipelineYamlStep> local = config.localPipelines().get("invoice-agent");
+        assertEquals(2, local.size());
+        assertEquals("Decide", local.get(1).dynamicOperation().orElseThrow().from());
+        assertEquals(local, config.stepDefinitions().get("invoice-agent"));
     }
 
     @Test

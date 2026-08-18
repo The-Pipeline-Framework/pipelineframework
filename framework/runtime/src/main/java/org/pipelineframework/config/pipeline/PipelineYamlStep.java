@@ -59,7 +59,8 @@ public record PipelineYamlStep(
     boolean terminal,
     java.util.Optional<PipelineYamlOperationSelection> operationSelection,
     java.util.Optional<java.time.Duration> negativeCacheTtl,
-    java.util.Map<String, PipelineYamlCallable> callables
+    java.util.Map<String, PipelineYamlCallable> callables,
+    java.util.Optional<PipelineYamlDynamicOperation> dynamicOperation
 ) {
     public PipelineYamlStep {
         kind = kind == null || kind.isBlank() ? "internal" : kind;
@@ -73,6 +74,24 @@ public record PipelineYamlStep(
         operationSelection = java.util.Objects.requireNonNull(operationSelection, "operation selection must not be null");
         negativeCacheTtl = java.util.Objects.requireNonNull(negativeCacheTtl, "negative cache TTL must not be null");
         callables = callables == null ? java.util.Map.of() : java.util.Map.copyOf(callables);
+        dynamicOperation = java.util.Objects.requireNonNull(dynamicOperation, "dynamic operation must not be null");
+    }
+
+    /** Backward-compatible canonical constructor shape before dynamic operation bindings were added. */
+    public PipelineYamlStep(
+        String name, String kind, String cardinality, String inputType, String inboundMapper,
+        String outputType, String outboundMapper, String timeout, java.util.List<String> idempotencyKeyFields,
+        PipelineYamlAwaitConfig awaitConfig, String command, String commandIdGenerator, String duplicatePolicy,
+        java.util.Map<String, Object> commandConfig, String queryId, PipelineYamlQueryCapture queryCapture,
+        java.util.List<String> accepts, boolean terminal,
+        java.util.Optional<PipelineYamlOperationSelection> operationSelection,
+        java.util.Optional<java.time.Duration> negativeCacheTtl,
+        java.util.Map<String, PipelineYamlCallable> callables
+    ) {
+        this(name, kind, cardinality, inputType, inboundMapper, outputType, outboundMapper, timeout,
+            idempotencyKeyFields, awaitConfig, command, commandIdGenerator, duplicatePolicy, commandConfig,
+            queryId, queryCapture, accepts, terminal, operationSelection, negativeCacheTtl, callables,
+            java.util.Optional.empty());
     }
 
     public PipelineYamlStep(

@@ -1,14 +1,10 @@
 # Template Generator (Reference)
 
 ::: tip Repository Boundary
-The generator-facing schema is exported from this repository, but the MCP bridge and Node template generator live in [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge). For the current user-facing entry point, see [MCP and Template Generation](/develop/mcp-template-generation).
+The generator-facing schema is exported from this repository. The template generator tooling that consumes it lives in a separate, internal repository.
 :::
 
 This guide explains how to use the Pipeline Framework template generator to create complete pipeline applications from YAML configuration files.
-
-<Callout type="tip" title="Canvas Is the Default">
-Use the visual Canvas designer at <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">https://app.pipelineframework.org</a> for day-to-day creation. The template generator is a secondary option for automation or CI-only workflows.
-</Callout>
 
 ## Overview
 
@@ -20,16 +16,15 @@ The template generator creates a complete Maven multi-module pipeline project fr
 - the orchestrator module
 - runtime config and test scaffolding
 
-The generator source now lives in the separate [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) repository. The source in this repository no longer carries a local `template-generator-node` checkout.
+The generator source lives in a separate repository. The source in this repository no longer carries a local `template-generator-node` checkout.
 
-The generator-facing schema authority remains in this repository: `framework/deployment` packages `META-INF/pipeline/pipeline-template-schema.json` in the deployment artifact. The bridge repo vendors that generated schema for package/runtime use and refreshes it from a built framework artifact.
+The generator-facing schema authority remains in this repository: `framework/deployment` packages `META-INF/pipeline/pipeline-template-schema.json` in the deployment artifact.
 
 ## Schema Reference
 
 Use the exported JSON schema for automation:
 
 - `framework/deployment/target/classes/META-INF/pipeline/pipeline-template-schema.json`
-- <https://github.com/The-Pipeline-Framework/tpf-mcp-bridge/blob/main/template-generator-node/src/pipeline-template-schema.json>
 
 ## v2 Template Shape
 
@@ -75,14 +70,7 @@ steps:
 
 ## Generating a Sample Config
 
-Use the generator snapshot in the `tpf-mcp-bridge` repository when you need a sample config or direct generator development:
-
-```bash
-git clone https://github.com/The-Pipeline-Framework/tpf-mcp-bridge.git
-cd tpf-mcp-bridge
-```
-
-For normal application scaffolding, prefer the MCP bridge workflow and its `generate_scaffold` tool. The bridge owns the vendored generator snapshot used for scaffold creation.
+The template generator tooling lives in a separate, internal repository. When you need a sample config or direct generator development, use the generator snapshot checked out from that repository.
 
 ## Generating an Application
 
@@ -97,7 +85,7 @@ You can determine that version with `template-generator --version`, by checking 
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
-Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The generator scaffolding surface lives in the `tpf-mcp-bridge` repository and must keep runtime support separate from generated dependency wiring. Runtime supports `interaction-api`, `webhook`, Kafka await, and SQS await; scaffold support for Kafka and SQS must emit the matching Quarkus dependencies, channel or poller properties, and queue/topic configuration rather than assuming generic await wiring is enough.
+Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. Runtime supports `interaction-api`, `webhook`, Kafka await, and SQS await; scaffold support for Kafka and SQS must emit the matching Quarkus dependencies, channel or poller properties, and queue/topic configuration rather than assuming generic await wiring is enough.
 
 ## Semantic Types and Derived Bindings
 

@@ -63,6 +63,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("jpaQueryDefinition"));
         assertTrue(definitions.has("queryCapture"));
         assertTrue(definitions.has("queryTemplateStep"));
+        assertTrue(definitions.has("dynamicOperationTemplateStep"));
         assertTrue(definitions.has("llmCallable"));
         assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
@@ -82,6 +83,10 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals(bindingNamePattern, definitions.getAsJsonObject("queryTemplateStep")
             .getAsJsonObject("properties").getAsJsonObject("using").get("pattern").getAsString());
         assertContains(definitions.getAsJsonObject("queryTemplateStep").getAsJsonArray("required"), "cardinality");
+        JsonObject dynamicOperation = definitions.getAsJsonObject("dynamicOperationTemplateStep")
+            .getAsJsonObject("properties").getAsJsonObject("operation");
+        assertEquals("dynamic", dynamicOperation.getAsJsonObject("properties")
+            .getAsJsonObject("mode").get("const").getAsString());
 
         JsonObject properties = schema.getAsJsonObject("properties");
         assertTrue(properties.has("types"));

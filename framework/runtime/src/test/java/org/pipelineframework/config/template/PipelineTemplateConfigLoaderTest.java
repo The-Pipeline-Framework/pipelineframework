@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
@@ -839,28 +840,39 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
-    void rejectsLegacyConnectorSection() throws Exception {
+    void acceptsConnectorBindingsUsedByProviderBackedSteps() throws Exception {
         String yaml = """
+            version: 3
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "GRPC"
+            types:
+              FooInput: { fields: [[id, string]] }
+              FooOutput: { fields: [[id, string]] }
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
             steps:
-              - name: "Process Foo"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "FooInput"
-                outputTypeName: "FooOutput"
-            connectors: []
+              - name: Analyse
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: FooInput
+                output: FooOutput
+                operation: decide
+                operationVersion: 1
+                using: model
             """;
         Path configPath = tempDir.resolve("pipeline-config-connectors.yaml");
         Files.writeString(configPath, yaml);
 
-        IllegalArgumentException exception = assertThrows(
-            IllegalArgumentException.class,
-            () -> new PipelineTemplateConfigLoader().load(configPath));
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        var operation = new PipelineYamlConfigLoader().load(configPath).steps().getFirst()
+            .operationSelection().orElseThrow();
 
-        assertEquals(
-            "Top-level connectors are no longer supported; use input.subscription and output.checkpoint",
-            exception.getMessage());
+        assertEquals(3, config.version());
+        assertEquals("FooInput", config.steps().getFirst().inputTypeName());
+        assertEquals("FooOutput", config.steps().getFirst().outputTypeName());
+        assertEquals("decide", operation.operation());
+        assertEquals("model", operation.using());
     }
 
     @Test

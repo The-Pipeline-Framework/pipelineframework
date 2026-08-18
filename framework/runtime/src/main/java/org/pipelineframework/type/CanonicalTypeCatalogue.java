@@ -1,4 +1,4 @@
-package org.pipelineframework.connector.llm;
+package org.pipelineframework.type;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -16,7 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -36,7 +38,8 @@ import org.pipelineframework.orchestrator.release.PipelineContractDescriptorLoad
  * <p>JSON Schema is only a model-facing projection. Validation is performed against the same
  * canonical metadata, so the projection does not become a second type system.</p>
  */
-final class CanonicalTypeCatalogue {
+public final class CanonicalTypeCatalogue {
+    private static final String DEFINITIONS_REFERENCE_PREFIX = "#/$defs/";
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private final Map<String, TypeBinding> types;
@@ -45,15 +48,24 @@ final class CanonicalTypeCatalogue {
         this.types = Map.copyOf(types);
     }
 
-    static CanonicalTypeCatalogue load(ClassLoader classLoader) {
+    public static CanonicalTypeCatalogue load(ClassLoader classLoader) {
         PipelineContractDescriptor contract = new PipelineContractDescriptorLoader().load(classLoader)
             .orElseThrow(() -> new IllegalStateException(
                 "LLM Query requires " + PipelineContractDescriptor.RESOURCE_PATH));
         if (contract.canonicalTypes().isEmpty()) {
             throw new IllegalStateException("LLM Query requires compiler-emitted canonical v3 type metadata");
         }
+        return fromCanonicalTypes(contract.canonicalTypes());
+    }
+
+    /** Creates a catalogue from the canonical-type region of a compiler-emitted contract. */
+    public static CanonicalTypeCatalogue fromCanonicalTypes(Map<String, ?> canonicalTypes) {
+        Objects.requireNonNull(canonicalTypes, "canonical types must not be null");
+        if (canonicalTypes.isEmpty()) {
+            throw new IllegalArgumentException("canonical types must not be empty");
+        }
         Map<String, TypeBinding> bindings = new LinkedHashMap<>();
-        contract.canonicalTypes().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+        canonicalTypes.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             JsonNode binding = JSON.valueToTree(entry.getValue());
             JsonNode definition = binding.path("definition");
             if (!definition.isObject()) {
@@ -65,18 +77,46 @@ final class CanonicalTypeCatalogue {
         return new CanonicalTypeCatalogue(bindings);
     }
 
-    String schema(String typeName) {
+    public String schema(String typeName) {
         ObjectNode root = rootSchema(requireType(typeName), new ArrayList<>());
         if (!"object".equals(root.path("type").asText())) {
             throw new IllegalStateException("LLM tool argument contract must project as a JSON object: " + typeName);
         }
         ObjectNode definitions = root.putObject("$defs");
-        types.keySet().stream().sorted().forEach(name -> definitions.set(name, schemaDefinition(requireType(name))));
+        reachableDefinitions(root).forEach(name -> definitions.set(name, schemaDefinition(requireType(name))));
         try {
             return JSON.writeValueAsString(root);
         } catch (IOException failure) {
             throw new IllegalStateException("Failed to serialize canonical schema for '" + typeName + "'", failure);
         }
+    }
+
+    private Set<String> reachableDefinitions(JsonNode root) {
+        Set<String> reachable = new TreeSet<>();
+        TreeSet<String> pending = new TreeSet<>();
+        collectDefinitionReferences(root, pending);
+        while (!pending.isEmpty()) {
+            String name = pending.pollFirst();
+            if (reachable.add(name)) {
+                collectDefinitionReferences(schemaDefinition(requireType(name)), pending);
+            }
+        }
+        return reachable;
+    }
+
+    private void collectDefinitionReferences(JsonNode schema, Set<String> references) {
+        if (schema.isObject()) {
+            JsonNode reference = schema.get("$ref");
+            if (reference != null && reference.isTextual()) {
+                String value = reference.textValue();
+                if (!value.startsWith(DEFINITIONS_REFERENCE_PREFIX)
+                    || value.length() == DEFINITIONS_REFERENCE_PREFIX.length()) {
+                    throw new IllegalStateException("Unsupported canonical schema reference: " + value);
+                }
+                references.add(value.substring(DEFINITIONS_REFERENCE_PREFIX.length()));
+            }
+        }
+        schema.forEach(child -> collectDefinitionReferences(child, references));
     }
 
     private ObjectNode rootSchema(TypeBinding binding, List<String> aliases) {
@@ -96,12 +136,12 @@ final class CanonicalTypeCatalogue {
         };
     }
 
-    String validateAndCanonicalize(String typeName, String payload) {
+    public String validateAndCanonicalize(String typeName, String payload) {
         JsonNode value;
         try {
             value = JSON.readTree(Objects.requireNonNull(payload, "model arguments JSON must not be null"));
         } catch (IOException failure) {
-            throw new InvalidModelDecisionException("arguments are not valid JSON", failure);
+            throw new IllegalArgumentException("payload is not valid JSON", failure);
         }
         validateNamed(typeName, value, "$", new ArrayList<>());
         try {
@@ -111,7 +151,7 @@ final class CanonicalTypeCatalogue {
         }
     }
 
-    Map<String, String> unionVariants(String unionType) {
+    public Map<String, String> unionVariants(String unionType) {
         TypeBinding binding = requireType(unionType);
         if (!"union".equals(text(binding.definition(), "kind"))) {
             throw new IllegalStateException("LLM Query output must be a canonical union: " + unionType);
@@ -123,7 +163,11 @@ final class CanonicalTypeCatalogue {
         return Collections.unmodifiableMap(variants);
     }
 
-    Optional<String> contributedIdentity(String typeName) {
+    public boolean isUnion(String typeName) {
+        return "union".equals(text(requireType(typeName).definition(), "kind"));
+    }
+
+    public Optional<String> contributedIdentity(String typeName) {
         return requireType(typeName).contributedIdentity();
     }
 
@@ -417,8 +461,8 @@ final class CanonicalTypeCatalogue {
         return value.textValue();
     }
 
-    private static InvalidModelDecisionException invalid(String path, String reason) {
-        return new InvalidModelDecisionException("invalid model decision at " + path + ": " + reason);
+    private static IllegalArgumentException invalid(String path, String reason) {
+        return new IllegalArgumentException("invalid canonical payload at " + path + ": " + reason);
     }
 
     private record TypeBinding(String name, JsonNode definition, Optional<String> contributedIdentity) {

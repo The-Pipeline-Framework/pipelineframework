@@ -154,6 +154,24 @@ class StepArtifactGenerationService {
                         ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
                     roleMetadataGenerator.recordClassWithRole(queryClientClassName, clientRole.name());
                 }
+                case DYNAMIC_OPERATION_CLIENT_STEP -> {
+                    String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
+                    String dynamicOperationClientClassName = model.servicePackage() + PIPELINE_DOT
+                        + baseName + "DynamicOperationClientStep";
+                    DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
+                    queryClientStepRenderer.renderDynamicOperation(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, clientRole),
+                        clientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        template == null ? null : template.basePackage(),
+                        null,
+                        v3GeneratedDomainTypes));
+                    roleMetadataGenerator.recordClassWithRole(dynamicOperationClientClassName, clientRole.name());
+                }
                 case GRPC_SERVICE -> {
                     if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER
                         && !generationPolicy.allowPluginServerArtifacts(ctx)) {

@@ -2,10 +2,6 @@
 
 This guide describes the recommended module layout for a Pipeline Framework application and how generated artifacts fit into it.
 
-<Callout type="tip" title="Visual Design with Canvas">
-The Canvas designer at <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">https://app.pipelineframework.org</a> generates this structure automatically and keeps it consistent across services.
-</Callout>
-
 ## Core Modules
 
 A typical pipeline application consists of:

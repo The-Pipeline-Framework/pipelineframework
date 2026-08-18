@@ -2,24 +2,31 @@ package org.pipelineframework.connector.llm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
+import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class LlmQueryOperationTest {
+    private record InvoiceInput(PayloadReference payloadReference) { }
+    private record InvoiceBatchInput(java.util.List<PayloadReference> payloadReferences) { }
+
     private static final LlmTurnConfiguration CONFIGURATION = new LlmTurnConfiguration(
         "Choose one alternative.",
         Map.of("charge", new LlmCallableConfiguration(
-            "payments", "charge.create", "command", 1, "ToolArguments")));
+            "payments", "charge.create", "command", 1, "ToolArguments")),
+        StructuredOutputSchemaMode.OPTIONAL);
 
     @Test
     void performsOneInferenceAndConstructsTrustedBoundAgentCall() {
@@ -52,11 +59,34 @@ class LlmQueryOperationTest {
     }
 
     @Test
-    void providerFailuresRemainExceptional() {
-        LlmQueryOperation operation = operation(request -> CompletableFuture.failedStage(
-            new IllegalStateException("provider unavailable")));
+    void providerFailureIsTerminalAfterExactlyOneInferenceAttempt() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmQueryOperation operation = operation(request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.failedStage(new IllegalStateException("provider unavailable"));
+        });
 
-        assertThrows(java.util.concurrent.CompletionException.class, () -> operation.query(invocation()).toCompletableFuture().join());
+        QueryOutcome<?> outcome = operation.query(invocation()).toCompletableFuture().join();
+
+        assertEquals("llm-query-failed", assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void requiredStructuredOutputFailsBeforeInferenceWhenAdapterCannotEnforceIt() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmTurnConfiguration required = new LlmTurnConfiguration(
+            CONFIGURATION.instructions(), CONFIGURATION.callableCatalogue());
+        LlmDecisionClient unsupported = request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.completedFuture(new LlmToolProposal("complete", "{\"status\":\"ok\"}"));
+        };
+
+        QueryOutcome<?> outcome = operation(unsupported).query(invocation(required)).toCompletableFuture().join();
+
+        assertEquals("structured-output-unavailable",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(0, calls.get());
     }
 
     @Test
@@ -76,8 +106,9 @@ class LlmQueryOperationTest {
                     "input", "ToolArguments")))),
             "test LLM Query");
 
-        assertEquals("payments", bound.callables().get("charge").using());
-        assertEquals("command", bound.callables().get("charge").kind());
+        assertEquals("payments", bound.callableCatalogue().get("charge").using());
+        assertEquals("command", bound.callableCatalogue().get("charge").kind());
+        assertEquals(StructuredOutputSchemaMode.REQUIRED, bound.structuredOutputMode());
     }
 
     @Test
@@ -98,6 +129,117 @@ class LlmQueryOperationTest {
         assertEquals(1, loads.get());
     }
 
+    @Test
+    void completesDirectApplicationRecordAndMaterializesNestedPayloadOnce() {
+        AtomicInteger materializations = new AtomicInteger();
+        AtomicReference<LlmTurnRequest> observed = new AtomicReference<>();
+        PayloadReference reference = new PayloadReference(
+            "test", "invoices", "invoice.pdf", "application/pdf", null, "sha256:test", 4,
+            null, Map.of(), Optional.empty());
+        LlmDecisionClient client = new LlmDecisionClient() {
+            @Override
+            public boolean supportsNativeStructuredOutput(java.util.List<LlmToolDefinition> tools) {
+                assertEquals(java.util.List.of("complete"),
+                    tools.stream().map(LlmToolDefinition::alias).toList());
+                return true;
+            }
+
+            @Override
+            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+                observed.set(request);
+                return CompletableFuture.completedFuture(
+                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+            }
+        };
+        LlmTurnConfiguration completion = new LlmTurnConfiguration(
+            "Analyse once.", Map.of());
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class<Object> output = (Class) ReviewReady.class;
+        QueryInvocation<Object, LlmTurnConfiguration, Object> invocation = new QueryInvocation<>(
+            new InvoiceInput(reference),
+            completion,
+            output,
+            ConnectorExecutionContext.empty(),
+            Optional.of((candidate, maxBytes) -> {
+                materializations.incrementAndGet();
+                return CompletableFuture.completedFuture(new MaterializedPayload(
+                    candidate, new byte[]{1, 2, 3, 4}, "application/pdf", null, "sha256:test"));
+            }));
+
+        QueryOutcome<Object> outcome = operation(client).query(invocation).toCompletableFuture().join();
+
+        ReviewReady review = assertInstanceOf(ReviewReady.class,
+            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+        assertEquals("Acme", review.supplier());
+        assertEquals(1, materializations.get());
+        assertEquals(1, observed.get().media().size());
+    }
+
+    @Test
+    void missingPayloadMaterializerIsReportedAsTerminalFailure() {
+        AtomicInteger calls = new AtomicInteger();
+        PayloadReference reference = new PayloadReference(
+            "test", "invoices", "invoice.pdf", "application/pdf", null, "sha256:test", 4,
+            null, Map.of(), Optional.empty());
+        LlmTurnConfiguration completion = new LlmTurnConfiguration(
+            "Analyse once.", Map.of(), StructuredOutputSchemaMode.OPTIONAL);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class<Object> output = (Class) ReviewReady.class;
+        QueryInvocation<Object, LlmTurnConfiguration, Object> invocation = new QueryInvocation<>(
+            new InvoiceInput(reference),
+            completion,
+            output,
+            ConnectorExecutionContext.empty());
+
+        QueryOutcome<Object> outcome = operation(request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.completedFuture(
+                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+        }).query(invocation).toCompletableFuture().join();
+
+        assertEquals("llm-query-failed",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(0, calls.get());
+    }
+
+    @Test
+    void combinedMaterializedPayloadsCannotExceedTheTotalBudget() {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger materializations = new AtomicInteger();
+        int payloadBytes = 11 * 1024 * 1024;
+        PayloadReference first = new PayloadReference(
+            "test", "invoices", "first.pdf", "application/pdf", null, "sha256:first", 1,
+            null, Map.of(), Optional.empty());
+        PayloadReference second = new PayloadReference(
+            "test", "invoices", "second.pdf", "application/pdf", null, "sha256:second", 1,
+            null, Map.of(), Optional.empty());
+        LlmTurnConfiguration completion = new LlmTurnConfiguration(
+            "Analyse once.", Map.of(), StructuredOutputSchemaMode.OPTIONAL);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class<Object> output = (Class) ReviewReady.class;
+        QueryInvocation<Object, LlmTurnConfiguration, Object> invocation = new QueryInvocation<>(
+            new InvoiceBatchInput(java.util.List.of(first, second)),
+            completion,
+            output,
+            ConnectorExecutionContext.empty(),
+            Optional.of((reference, maxBytes) -> {
+                materializations.incrementAndGet();
+                return CompletableFuture.completedFuture(new MaterializedPayload(
+                    reference, new byte[payloadBytes], reference.contentType(), null, reference.checksum()));
+            }));
+
+        QueryOutcome<Object> outcome = operation(request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.completedFuture(
+                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+        }).query(invocation).toCompletableFuture().join();
+
+        assertEquals("llm-query-failed",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(2, materializations.get());
+        assertEquals(0, calls.get());
+    }
+
     private static QueryOutcome<Object> query(LlmDecisionClient client) {
         return operation(client).query(invocation()).toCompletableFuture().join();
     }
@@ -107,8 +249,12 @@ class LlmQueryOperationTest {
     }
 
     private static QueryInvocation<Object, LlmTurnConfiguration, Object> invocation() {
+        return invocation(CONFIGURATION);
+    }
+
+    private static QueryInvocation<Object, LlmTurnConfiguration, Object> invocation(LlmTurnConfiguration configuration) {
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) Decision.class;
-        return new QueryInvocation<>(Map.of("invoiceId", "7"), CONFIGURATION, output, ConnectorExecutionContext.empty());
+        return new QueryInvocation<>(Map.of("invoiceId", "7"), configuration, output, ConnectorExecutionContext.empty());
     }
 }
