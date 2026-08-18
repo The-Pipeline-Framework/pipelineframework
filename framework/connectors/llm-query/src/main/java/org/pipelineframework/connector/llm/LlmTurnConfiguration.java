@@ -7,7 +7,7 @@ import java.util.Optional;
 /** Operation-owned prompt and compiler-validated release catalogue. */
 public record LlmTurnConfiguration(
     String instructions,
-    Map<String, LlmCallableConfiguration> callables,
+    Optional<Map<String, LlmCallableConfiguration>> callables,
     Optional<StructuredOutputSchemaMode> structuredOutputSchema
 ) {
     public LlmTurnConfiguration {
@@ -15,10 +15,11 @@ public record LlmTurnConfiguration(
         if (instructions.isEmpty()) {
             throw new IllegalArgumentException("LLM instructions must not be blank");
         }
-        callables = callables == null ? Map.of() : Map.copyOf(callables);
+        callables = Objects.requireNonNull(callables, "LLM callables must not be null")
+            .map(Map::copyOf);
         structuredOutputSchema = Objects.requireNonNull(
             structuredOutputSchema, "structured output schema mode must not be null");
-        callables.keySet().forEach(alias -> {
+        callables.orElseGet(Map::of).keySet().forEach(alias -> {
             if (!alias.matches("[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*")) {
                 throw new IllegalArgumentException("LLM callable alias must be a lowercase model-safe token: " + alias);
             }
@@ -26,7 +27,7 @@ public record LlmTurnConfiguration(
     }
 
     public LlmTurnConfiguration(String instructions, Map<String, LlmCallableConfiguration> callables) {
-        this(instructions, callables, Optional.empty());
+        this(instructions, Optional.ofNullable(callables), Optional.empty());
     }
 
     public LlmTurnConfiguration(
@@ -34,8 +35,12 @@ public record LlmTurnConfiguration(
         Map<String, LlmCallableConfiguration> callables,
         StructuredOutputSchemaMode structuredOutputSchema
     ) {
-        this(instructions, callables, Optional.of(Objects.requireNonNull(
+        this(instructions, Optional.ofNullable(callables), Optional.of(Objects.requireNonNull(
             structuredOutputSchema, "structured output schema mode must not be null")));
+    }
+
+    public Map<String, LlmCallableConfiguration> callableCatalogue() {
+        return callables.orElseGet(Map::of);
     }
 
     public StructuredOutputSchemaMode structuredOutputMode() {

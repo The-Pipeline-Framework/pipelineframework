@@ -238,8 +238,7 @@ public class QueryClientStepRenderer {
     }
 
     private static ClassLoader metadataClassLoader() {
-        ClassLoader context = Thread.currentThread().getContextClassLoader();
-        return context == null ? QueryClientStepRenderer.class.getClassLoader() : context;
+        return ConnectorProviderManifestLoader.metadataClassLoader(QueryClientStepRenderer.class);
     }
 
     private static boolean matchesServiceName(String generatedServiceName, String stepName) {

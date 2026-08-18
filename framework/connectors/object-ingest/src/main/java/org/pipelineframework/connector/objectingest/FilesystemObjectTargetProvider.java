@@ -9,10 +9,14 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.HexFormat;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -30,6 +34,7 @@ import org.pipelineframework.repository.PayloadReference;
  * Filesystem object target provider for Object Publish.
  */
 public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
+    private static final String LOCATOR_DIGEST_METADATA = "tpf.filesystem.locator.sha256";
     private final Executor executor;
 
     public FilesystemObjectTargetProvider() {
@@ -137,9 +142,15 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
                         Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
                         metadata.putAll(closeRequest.metadata());
                         metadata.put("target", request.targetName());
+                        Path canonicalRoot = root.toRealPath();
+                        Path canonicalPath = finalPath.toRealPath();
+                        metadata.put(
+                            LOCATOR_DIGEST_METADATA,
+                            sha256((canonicalRoot + "\n" + request.objectKey() + "\n" + canonicalPath)
+                                .getBytes(StandardCharsets.UTF_8)));
                         PayloadReference reference = new PayloadReference(
                             "filesystem",
-                            root.toString(),
+                            canonicalRoot.toString(),
                             request.objectKey(),
                             request.contentType(),
                             "raw",
@@ -182,6 +193,14 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
             byte[] bytes = new byte[duplicate.remaining()];
             duplicate.get(bytes);
             return bytes;
+        }
+
+        private static String sha256(byte[] bytes) {
+            try {
+                return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            } catch (NoSuchAlgorithmException failure) {
+                throw new IllegalStateException("SHA-256 is unavailable", failure);
+            }
         }
 
         private void moveAtomicallyReplacingExistingTarget() throws IOException {

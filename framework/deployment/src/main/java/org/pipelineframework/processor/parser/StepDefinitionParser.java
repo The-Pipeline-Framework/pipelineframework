@@ -1323,8 +1323,8 @@ public class StepDefinitionParser {
     }
 
     private static ClassLoader providerMetadataClassLoader() {
-        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-        return contextClassLoader != null ? contextClassLoader : StepDefinitionParser.class.getClassLoader();
+        return org.pipelineframework.connector.ConnectorProviderManifestLoader.metadataClassLoader(
+            StepDefinitionParser.class);
     }
 
     private ConnectorProviderManifestCatalog providerManifestCatalog() {

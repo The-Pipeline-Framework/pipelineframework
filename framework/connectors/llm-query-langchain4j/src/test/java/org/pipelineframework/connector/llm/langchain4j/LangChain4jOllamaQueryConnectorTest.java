@@ -11,6 +11,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.PdfFileContent;
+import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -18,6 +22,8 @@ import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
+import org.pipelineframework.connector.MaterializedPayload;
+import org.pipelineframework.repository.PayloadReference;
 
 class LangChain4jOllamaQueryConnectorTest {
     @Test
@@ -92,6 +98,73 @@ class LangChain4jOllamaQueryConnectorTest {
 
         assertEquals("", proposal.alias());
         assertEquals("{}", proposal.argumentsJson());
+    }
+
+    @Test
+    void mapsMaterializedPdfToLangChain4jMediaWithoutAnotherModelCall() {
+        AtomicReference<ChatRequest> observed = new AtomicReference<>();
+        ChatModel model = new ChatModel() {
+            @Override
+            public ChatResponse doChat(ChatRequest request) {
+                observed.set(request);
+                return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
+                    .name("complete").arguments("{}").build())).build();
+            }
+        };
+        PayloadReference reference = new PayloadReference(
+            "test", "invoices", "invoice.pdf", "application/pdf", null, "sha256:test", 4,
+            null, java.util.Map.of(), Optional.empty());
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+
+        client.decide(new LlmTurnRequest(
+            "Analyse once.",
+            "{}",
+            List.of(new MaterializedPayload(
+                reference, new byte[]{1, 2, 3, 4}, "application/pdf", null, "sha256:test")),
+            List.of(new LlmToolDefinition("complete", "Complete", """
+                {"type":"object","properties":{},"required":[],"additionalProperties":false}
+                """)),
+            org.pipelineframework.connector.llm.StructuredOutputSchemaMode.REQUIRED))
+            .toCompletableFuture().join();
+
+        UserMessage user = assertInstanceOf(UserMessage.class, observed.get().messages().get(1));
+        assertInstanceOf(TextContent.class, user.contents().get(0));
+        PdfFileContent pdf = assertInstanceOf(PdfFileContent.class, user.contents().get(1));
+        assertEquals("AQIDBA==", pdf.pdfFile().base64Data());
+        assertEquals("application/pdf", pdf.pdfFile().mimeType());
+    }
+
+    @Test
+    void mapsMaterializedPngToLangChain4jVisionContent() {
+        AtomicReference<ChatRequest> observed = new AtomicReference<>();
+        ChatModel model = new ChatModel() {
+            @Override
+            public ChatResponse doChat(ChatRequest request) {
+                observed.set(request);
+                return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
+                    .name("complete").arguments("{}").build())).build();
+            }
+        };
+        PayloadReference reference = new PayloadReference(
+            "test", "invoices", "invoice.png", "image/png", null, "sha256:test", 4,
+            null, java.util.Map.of(), Optional.empty());
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+
+        client.decide(new LlmTurnRequest(
+            "Analyse once.",
+            "{}",
+            List.of(new MaterializedPayload(
+                reference, new byte[]{1, 2, 3, 4}, "image/png", null, "sha256:test")),
+            List.of(new LlmToolDefinition("complete", "Complete", """
+                {"type":"object","properties":{},"required":[],"additionalProperties":false}
+                """)),
+            org.pipelineframework.connector.llm.StructuredOutputSchemaMode.REQUIRED))
+            .toCompletableFuture().join();
+
+        UserMessage user = assertInstanceOf(UserMessage.class, observed.get().messages().get(1));
+        ImageContent image = assertInstanceOf(ImageContent.class, user.contents().get(1));
+        assertEquals("AQIDBA==", image.image().base64Data());
+        assertEquals("image/png", image.image().mimeType());
     }
 
     private static org.pipelineframework.connector.llm.LlmToolProposal decide(AiMessage message) {

@@ -839,28 +839,25 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
-    void rejectsLegacyConnectorSection() throws Exception {
+    void acceptsConnectorBindingsUsedByProviderBackedSteps() throws Exception {
         String yaml = """
+            version: 3
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "GRPC"
-            steps:
-              - name: "Process Foo"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "FooInput"
-                outputTypeName: "FooOutput"
-            connectors: []
+            types:
+              FooInput: { fields: [[id, string]] }
+              FooOutput: { fields: [[id, string]] }
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
+            steps: []
             """;
         Path configPath = tempDir.resolve("pipeline-config-connectors.yaml");
         Files.writeString(configPath, yaml);
 
-        IllegalArgumentException exception = assertThrows(
-            IllegalArgumentException.class,
-            () -> new PipelineTemplateConfigLoader().load(configPath));
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
 
-        assertEquals(
-            "Top-level connectors are no longer supported; use input.subscription and output.checkpoint",
-            exception.getMessage());
+        assertEquals(3, config.version());
     }
 
     @Test

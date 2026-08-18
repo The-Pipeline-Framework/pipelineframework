@@ -35,6 +35,15 @@
         ]
       }
     },
+    "ReviewReady": {
+      "definition": {
+        "id": "ReviewReady",
+        "kind": "record",
+        "fields": [
+          {"name":"supplier","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
     "ToolArguments": {
       "definition": {
         "id": "ToolArguments",

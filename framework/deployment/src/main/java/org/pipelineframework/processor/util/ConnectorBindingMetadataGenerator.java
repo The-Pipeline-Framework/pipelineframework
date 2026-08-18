@@ -159,8 +159,7 @@ public final class ConnectorBindingMetadataGenerator {
     }
 
     private static ClassLoader metadataClassLoader() {
-        ClassLoader context = Thread.currentThread().getContextClassLoader();
-        return context == null ? ConnectorBindingMetadataGenerator.class.getClassLoader() : context;
+        return ConnectorProviderManifestLoader.metadataClassLoader(ConnectorBindingMetadataGenerator.class);
     }
 
     private record Metadata(int schemaVersion, List<BindingMetadata> bindings) {
