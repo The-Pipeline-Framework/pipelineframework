@@ -2390,6 +2390,15 @@ public final class PipelineTemplateSchemaExporter {
           "additionalProperties": false
         },
         {
+          "type": "object",
+          "required": ["name", "repeated"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "repeated": { "$ref": "#/$defs/v3TypeReference" }
+          },
+          "additionalProperties": false
+        },
+        {
           "type": "array",
           "prefixItems": [
             { "type": "string", "minLength": 1 },

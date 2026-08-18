@@ -75,7 +75,7 @@ Only referenced contributions and their dependencies enter the application contr
 
 ### Product types
 
-Use `fields` for a named business record. A compact field is a YAML tuple in the exact form `[name, type]`; the object form is `{ name, type }`.
+Use `fields` for a named business record. A compact singular field is a YAML tuple in the exact form `[name, type]`; the singular object form is `{ name, type }`. Use `{ name, repeated: type }` for an ordered, finite, zero-or-more field that preserves duplicates.
 
 ```yaml
 types:
@@ -84,10 +84,27 @@ types:
       - [orderId, OrderId]
       - [amount, decimal]
       - name: lineItems
-        type: PaymentLineItem
+        repeated: PaymentLineItem
 ```
 
-Field names are unique within a product type. A field can reference a semantic scalar or another named type.
+Field names are unique within a product type. A singular or repeated field can reference a semantic scalar or another named type. `type` and `repeated` are mutually exclusive; `repeated: true` is not valid v3 syntax.
+
+`repeated` describes multiplicity inside one domain value. Generated Java records expose it as an immutable, non-null `List<T>`; generated protobuf uses a `repeated` field; and generated JSON Schema uses an array whose missing value normalizes to an empty array. Order and duplicates are preserved. Adding a repeated field is therefore compatible with an older pinned IDL snapshot and with protobuf/JSON readers: old payloads observe the field as empty. Changing an existing field between singular and repeated is incompatible.
+
+Repeated fields do not imply reactive cardinality. Expanding a `List<T>` into a `Multi<T>` or collecting a `Multi<T>` into a list is application logic and must be explicit in the step implementation, for example:
+
+```java
+public Multi<PaymentLineItem> process(PaymentRequest request) {
+    return Multi.createFrom().iterable(request.lineItems());
+}
+
+public Uni<PaymentRequest> process(Multi<PaymentLineItem> items) {
+    return items.collect().asList()
+        .map(collected -> new PaymentRequest(orderId, amount, collected));
+}
+```
+
+The corresponding steps declare `ONE_TO_MANY` and `MANY_TO_ONE`. TPF does not insert a collection-to-stream or stream-to-collection conversion.
 
 ### External representations
 
@@ -241,7 +258,7 @@ Generated Java sources live under `<basePackage>.domain`. A record field keeps i
 
 The generated `PipelineDomainProtoAdapters` class converts generated records, wrappers, and unions to and from the generated protobuf types. It is public application-facing generated code, but its exact class and method shape remains provisional while the Java target continues to evolve.
 
-Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
+Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. Repeated components are different: their generated compact constructor normalizes `null` to `List.of()` and defensively copies supplied values with `List.copyOf(...)`. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
 
 Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
 

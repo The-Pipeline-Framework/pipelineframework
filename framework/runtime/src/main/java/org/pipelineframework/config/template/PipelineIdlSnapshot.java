@@ -18,6 +18,8 @@ package org.pipelineframework.config.template;
 
 import java.util.*;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * Normalized IDL snapshot used for compatibility checking and build metadata emission.
  *
@@ -356,9 +358,19 @@ public record PipelineIdlSnapshot(
         }
     }
 
-    public record TypeFieldSnapshot(int number, String name, String protoName, String type) {
+    public record TypeFieldSnapshot(
+        int number,
+        String name,
+        String protoName,
+        String type,
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated
+    ) {
+        public TypeFieldSnapshot(int number, String name, String protoName, String type) {
+            this(number, name, protoName, type, false);
+        }
+
         public TypeFieldSnapshot(int number, String name, String type) {
-            this(number, name, name, type);
+            this(number, name, name, type, false);
         }
     }
 

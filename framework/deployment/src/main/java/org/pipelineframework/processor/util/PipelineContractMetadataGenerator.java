@@ -144,7 +144,7 @@ public class PipelineContractMetadataGenerator {
             encoded.put("kind", "record");
             List<Map<String, Object>> fields = record.fields().stream()
                 .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Field::name))
-                .map(field -> immutableSortedMap(Map.of("name", field.name(), "type", typeExpression(field.type()))))
+                .map(this::fieldDefinition)
                 .toList();
             encoded.put("fields", fields);
         } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
@@ -170,6 +170,16 @@ public class PipelineContractMetadataGenerator {
                     "discriminator", variant.discriminator(), "payload", typeExpression(variant.payload()))))
                 .toList();
             encoded.put("variants", variants);
+        }
+        return immutableSortedMap(encoded);
+    }
+
+    private Map<String, Object> fieldDefinition(PipelineTemplateTypeDefinition.Field field) {
+        Map<String, Object> encoded = new LinkedHashMap<>();
+        encoded.put("name", field.name());
+        encoded.put("type", typeExpression(field.type()));
+        if (field.repeated()) {
+            encoded.put("repeated", true);
         }
         return immutableSortedMap(encoded);
     }

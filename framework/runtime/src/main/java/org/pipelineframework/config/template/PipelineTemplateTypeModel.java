@@ -78,7 +78,8 @@ public final class PipelineTemplateTypeModel {
         if (messages != null) {
             messages.forEach((name, message) -> definitions.put(name,
                 new PipelineTemplateTypeDefinition.RecordType(name, message.fields().stream()
-                    .map(field -> new PipelineTemplateTypeDefinition.Field(field.name(), legacyReference(field)))
+                    .map(field -> new PipelineTemplateTypeDefinition.Field(
+                        field.name(), legacyReference(field), field.repeated()))
                     .toList())));
         }
         if (unions != null) {

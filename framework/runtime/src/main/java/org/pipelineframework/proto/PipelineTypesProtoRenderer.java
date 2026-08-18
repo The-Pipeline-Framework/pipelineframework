@@ -108,7 +108,11 @@ final class PipelineTypesProtoRenderer {
             }
             String protoType = protoType(definition.type(), model);
             builder.append("  ");
-            if (supportsExplicitPresence(definition.type(), model)) { builder.append("optional "); }
+            if (definition.repeated()) {
+                builder.append("repeated ");
+            } else if (supportsExplicitPresence(definition.type(), model)) {
+                builder.append("optional ");
+            }
             builder.append(protoType).append(' ').append(field.protoName()).append(" = ").append(field.number()).append(";\n");
         }
         builder.append("}\n");

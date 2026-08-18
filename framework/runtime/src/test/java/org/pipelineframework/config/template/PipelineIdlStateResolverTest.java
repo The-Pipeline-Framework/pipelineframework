@@ -128,6 +128,27 @@ class PipelineIdlStateResolverTest {
     }
 
     @Test
+    void persistsOnlyRepeatedV3MultiplicityAndReadsOlderFieldsAsSingular() throws Exception {
+        PipelineIdlSnapshot olderState = PipelineJson.mapper().copy().findAndRegisterModules().readValue("""
+            {"version":3,"appName":"V3","basePackage":"com.example.v3","messages":{},"unions":{},
+             "types":{"Record":{"name":"Record","kind":"record","fields":[
+             {"number":1,"name":"id","protoName":"id","type":"string"}],"target":null,
+             "variants":[],"reservedNumbers":[],"reservedNames":[]}},"steps":[]}
+            """, PipelineIdlSnapshot.class);
+        assertEquals(false, olderState.types().get("Record").fields().getFirst().repeated());
+
+        PipelineIdlSnapshot snapshot = new PipelineIdlSnapshot(3, "V3", "com.example.v3", Map.of(), Map.of(), Map.of(
+            "Record", new PipelineIdlSnapshot.TypeSnapshot("Record", "record", List.of(
+                new PipelineIdlSnapshot.TypeFieldSnapshot(1, "id", "id", "string"),
+                new PipelineIdlSnapshot.TypeFieldSnapshot(2, "tags", "tags", "string", true)),
+                Optional.empty(), List.of())), List.of());
+        String serialized = PipelineJson.mapper().copy().findAndRegisterModules().writeValueAsString(snapshot);
+
+        assertEquals(false, serialized.contains("\"id\",\"protoName\":\"id\",\"type\":\"string\",\"repeated\""));
+        assertEquals(true, serialized.contains("\"tags\",\"protoName\":\"tags\",\"type\":\"string\",\"repeated\":true"));
+    }
+
+    @Test
     void persistsWrapperConstraintsAndTreatsMissingPriorStateAsEmpty() throws Exception {
         Path yaml = tempDir.resolve("constrained-wrapper.yaml");
         Files.writeString(yaml, """
