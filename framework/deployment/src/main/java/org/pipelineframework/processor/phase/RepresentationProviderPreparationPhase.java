@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -63,32 +64,90 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         }
         CanonicalType input = canonical(config, step.inputType());
         CanonicalType output = canonical(config, step.outputType());
+        Map<String, Object> boundaryConfiguration = boundaryConfiguration(config, input, output);
         BoundaryRequest request = new BoundaryRequest(step.name(), step.executionClass().canonicalName(), input, output,
             step.streamingShapeHint() == null ? "UNARY_UNARY" : step.streamingShapeHint().name(),
-            boundaryContracts(ctx, step.executionClass().canonicalName()), Map.of());
+            boundaryContracts(ctx, step.executionClass().canonicalName()), boundaryConfiguration);
         Optional<BoundaryClaim> claim = providers.resolveClaim(request);
         if (claim.isEmpty()) {
             return;
         }
-        RepresentationMapping mapping = config.typeModel().representationMapping(output.name(), claim.get().providerKey())
-            .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
-                + "' claimed boundary '" + step.name() + "' but canonical type '" + output.name()
-                + "' has no matching mapping (type/key)."));
-        ProviderConfiguration providerConfiguration = typeConfiguration(claim.get(), mapping);
-        List<ProviderDiagnostic> diagnostics = providers.validate(List.of(providerConfiguration));
+        String providerKey = claim.orElseThrow().providerKey();
+        List<MappingBinding> mappings = mappings(config, input, output, providerKey);
+        if (mappings.isEmpty()) {
+            throw new IllegalStateException("Representation provider '" + providerKey + "' claimed boundary '"
+                + step.name() + "' but neither canonical boundary type has a matching mapping (type/key).");
+        }
+        List<ProviderConfiguration> providerConfigurations = mappings.stream()
+            .map(binding -> typeConfiguration(claim.orElseThrow(), binding.mapping()))
+            .toList();
+        List<ProviderDiagnostic> diagnostics = providers.validate(providerConfigurations);
         reportDiagnostics(ctx, diagnostics);
         if (diagnostics.stream().anyMatch(diagnostic -> diagnostic.severity() == ProviderDiagnostic.Severity.ERROR)) {
-            throw new IllegalStateException("Representation provider '" + claim.get().providerKey()
+            throw new IllegalStateException("Representation provider '" + providerKey
                 + "' configuration is invalid for claimed boundary '" + step.name() + "'.");
         }
-        ResolvedRepresentation resolved = providers.resolve(new RepresentationMappingRequest(mapping.key(), output,
-            mapping.representationType(), mapping.mapperType(), mapping.options()))
-            .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
-                + "' did not resolve mapping for type/key '" + output.name() + "/" + mapping.key() + "'."));
-        validateClasses(ctx, resolved);
-        ctx.getResolvedRepresentationRegistry().register(resolved);
-        ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(request, claim.get(), List.of(resolved),
-            providerConfiguration.options()));
+        List<ResolvedRepresentation> resolved = mappings.stream().map(binding -> {
+            RepresentationMapping mapping = binding.mapping();
+            return providers.resolve(new RepresentationMappingRequest(mapping.key(), binding.type(),
+                    mapping.representationType(), mapping.mapperType(), mapping.options()))
+                .orElseThrow(() -> new IllegalStateException("Representation provider '" + providerKey
+                    + "' did not resolve mapping for type/key '" + binding.type().name() + "/" + mapping.key() + "'."));
+        }).distinct().toList();
+        resolved.forEach(representation -> {
+            validateClasses(ctx, representation);
+            ctx.getResolvedRepresentationRegistry().register(representation);
+        });
+        ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(request, claim.orElseThrow(), resolved,
+            generationConfiguration(mappings)));
+    }
+
+    private static List<MappingBinding> mappings(PipelineTemplateConfig config, CanonicalType input,
+                                                  CanonicalType output, String providerKey) {
+        List<MappingBinding> mappings = new ArrayList<>();
+        config.typeModel().representationMapping(input.name(), providerKey)
+            .ifPresent(mapping -> mappings.add(new MappingBinding("input", input, mapping)));
+        config.typeModel().representationMapping(output.name(), providerKey)
+            .ifPresent(mapping -> mappings.add(new MappingBinding("output", output, mapping)));
+        return List.copyOf(mappings);
+    }
+
+    private static Map<String, Object> generationConfiguration(List<MappingBinding> mappings) {
+        if (mappings.size() == 1 && "output".equals(mappings.getFirst().role())) {
+            return mappings.getFirst().mapping().options();
+        }
+        Map<String, Object> configuration = new LinkedHashMap<>();
+        mappings.forEach(binding -> configuration.put(binding.role(), binding.mapping().options()));
+        return Map.copyOf(configuration);
+    }
+
+    private static Map<String, Object> boundaryConfiguration(PipelineTemplateConfig config, CanonicalType input,
+                                                              CanonicalType output) {
+        Map<String, Object> configuration = new LinkedHashMap<>();
+        configuration.put("inputMappings", mappingKeys(config, input.name()));
+        configuration.put("outputMappings", mappingKeys(config, output.name()));
+        configuration.put("inputFields", recordFields(config, input.name()));
+        configuration.put("outputFields", recordFields(config, output.name()));
+        return Map.copyOf(configuration);
+    }
+
+    private static List<String> mappingKeys(PipelineTemplateConfig config, String typeName) {
+        return config.typeModel().representationMappings().getOrDefault(typeName, Map.of()).keySet().stream()
+            .sorted()
+            .toList();
+    }
+
+    private static Map<String, String> recordFields(PipelineTemplateConfig config, String typeName) {
+        return config.typeModel().definition(typeName)
+            .filter(PipelineTemplateTypeDefinition.RecordType.class::isInstance)
+            .map(PipelineTemplateTypeDefinition.RecordType.class::cast)
+            .map(record -> record.fields().stream().collect(java.util.stream.Collectors.toMap(
+                PipelineTemplateTypeDefinition.Field::name,
+                field -> field.type().name(),
+                (left, right) -> left,
+                LinkedHashMap::new)))
+            .map(Map::copyOf)
+            .orElse(Map.of());
     }
 
     private static List<ProviderConfiguration> globalConfigurations(PipelineTemplateConfig config) {
@@ -101,6 +160,9 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
     static ProviderConfiguration typeConfiguration(BoundaryClaim claim, RepresentationMapping mapping) {
         return new ProviderConfiguration(org.pipelineframework.representation.spi.RepresentationScope.TYPE,
             claim.providerKey(), mapping.options());
+    }
+
+    private record MappingBinding(String role, CanonicalType type, RepresentationMapping mapping) {
     }
 
     private static CanonicalType canonical(PipelineTemplateConfig config, ClassName javaType) {

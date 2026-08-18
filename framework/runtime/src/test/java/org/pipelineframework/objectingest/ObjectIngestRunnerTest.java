@@ -7,12 +7,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSelectionConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
@@ -144,6 +146,65 @@ class ObjectIngestRunnerTest {
     }
 
     @Test
+    void groupedSelectionAdmitsOneDeterministicallyOrderedInput() {
+        List<Object> inputs = new ArrayList<>();
+        ObjectIngestRunner runner = groupedRunner(List.of(item("b.txt"), item("a.txt")), inputs);
+
+        ObjectIngestRunner.PollResult result = runner.pollOnce();
+
+        assertEquals(2, result.listed());
+        assertEquals(1, result.submitted());
+        assertEquals(0, result.failed());
+        var selected = (TestObjectSelectionMapper.SelectedInput) inputs.getFirst();
+        assertEquals(List.of("a.txt", "b.txt"), selected.references().stream().map(reference -> reference.key()).toList());
+    }
+
+    @Test
+    void groupedSelectionUsesExistingLifecycleForSingletonSelection() {
+        List<Object> inputs = new ArrayList<>();
+        ObjectIngestRunner runner = groupedRunner(List.of(item("only.txt")), inputs);
+
+        ObjectIngestRunner.PollResult result = runner.pollOnce();
+
+        assertEquals(1, result.listed());
+        assertEquals(1, result.submitted());
+        assertEquals(0, result.failed());
+        assertEquals(1, ((TestObjectSelectionMapper.SelectedInput) inputs.getFirst()).references().size());
+    }
+
+    private ObjectIngestRunner groupedRunner(List<ObjectSourceItem> items, List<Object> inputs) {
+        PipelineObjectSourceConfig source = new PipelineObjectSourceConfig(
+            "documents", "object", "selection-test", Map.of(), null, null, null, null);
+        PipelineObjectSelectionConfig selection = new PipelineObjectSelectionConfig(
+            "together", Map.of(), Optional.of("references"));
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.pipelineframework.objectingest", "GRPC", "COMPUTE", List.of(),
+            Map.of("documents", source), List.of(),
+            new PipelineInputBoundaryConfig(null, new PipelineObjectInputConfig(
+                "documents", TestObjectSelectionMapper.SelectedInput.class.getName(), "SelectedInput", Optional.empty(),
+                Optional.of(selection))),
+            null);
+        return new ObjectIngestRunner(
+            config,
+            new ObjectSourceRegistry(List.of(new SelectionProvider(items))),
+            (input, tenantId, idempotencyKey) -> {
+                inputs.add(input);
+                return Uni.createFrom().item(new RunAsyncAcceptedDto("selection-execution", false,
+                    "/executions/selection-execution", 1L));
+            },
+            ObjectIngestTelemetry.NOOP);
+    }
+
+    private static ObjectSourceItem item(String key) {
+        return new ObjectSourceItem(
+            "selection-test", "bucket", key, "v1", "etag-" + key, 4L, 100L,
+            "text/plain", Map.of(),
+            new org.pipelineframework.repository.PayloadReference(
+                "test", "bucket", key, "text/plain", "raw", "sum", 4L, "v1", Map.of(), Optional.empty()),
+            null);
+    }
+
+    @Test
     void executionKeyEscapesSourceName() {
         ObjectSnapshot snapshot = new ObjectSnapshot(
             "documents",
@@ -259,6 +320,18 @@ class ObjectIngestRunnerTest {
         @Override
         public List<ObjectSourceItem> list(PipelineObjectSourceConfig source, int limit) {
             return List.of();
+        }
+    }
+
+    private record SelectionProvider(List<ObjectSourceItem> items) implements ObjectSourceProvider {
+        @Override
+        public String providerName() {
+            return "selection-test";
+        }
+
+        @Override
+        public List<ObjectSourceItem> list(PipelineObjectSourceConfig source, int limit) {
+            return items;
         }
     }
 }

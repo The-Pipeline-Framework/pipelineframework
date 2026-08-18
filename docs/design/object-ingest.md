@@ -11,10 +11,16 @@ Object publish is the output-side counterpart. It lets terminal pipeline values 
 Declare the source at top level, then bind it to the pipeline input.
 
 ```yaml
+connectors:
+  local-files:
+    provider: filesystem.objects
+    version: 1
+
 sources:
   csv-payment-files:
     kind: object
     provider: filesystem
+    binding: local-files
     location:
       root: ../input-csv-file-processing-svc/csv
       prefix: ""
@@ -38,6 +44,31 @@ input:
 ```
 
 The first pipeline step input must match `input.emits.type` or `input.emits.typeName`.
+
+### Grouped selection
+
+Object Ingest normally admits each listed object separately. Add `selection.mode: together` when one
+poll should admit the selected snapshots as one typed pipeline input. Explicit keys map canonical
+record fields to source object keys:
+
+```yaml
+input:
+  from: documents
+  selection:
+    mode: together
+    keys:
+      invoice: invoice.pdf
+      attachment: attachment.pdf
+  emits:
+    type: com.example.documents.DocumentSet
+    typeName: DocumentSet
+```
+
+For a homogeneous selection, `into` names the repeated `payload_ref` field that receives the ordered
+references. Source filtering still determines the candidate set, and the existing poll/admission
+lifecycle determines whether an empty, singleton, or larger set is available. A singleton is not a
+separate error condition. Without `selection`, the existing one-object-per-admission behavior is
+unchanged.
 
 ### Standard input
 
@@ -63,7 +94,7 @@ and multiple admissions from one stream are not supported by this endpoint.
 steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
-    cardinality: EXPANSION
+    cardinality: ONE_TO_MANY
     input: CsvPaymentsInputFile
 ```
 
@@ -96,6 +127,41 @@ bytes. It is repeatable while the referenced file and binding provenance remain 
 input remains single-consumption and cannot truthfully offer repeatable reference materialization
 without first transferring ownership to durable storage.
 
+## Ordinary File Services
+
+The `file` representation lets an ordinary business service work with `java.nio.file.Path` while the
+canonical pipeline contract remains a `payload_ref`. Both boundary records opt into the same mapping;
+no application `Mapper` or new step kind is involved:
+
+```yaml
+types:
+  SourceDocument:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options: { maxBytes: 52428800 }
+  RenderedDocument:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options:
+          target: rendered-documents
+          maxBytes: 52428800
+```
+
+The generated facade materializes bounded bytes into an invocation-scoped workspace, calls the
+authored `Path -> Path` service, publishes its result through the named Object Publish target, and
+returns the resulting `PayloadReference`. `ONE_TO_MANY` uses the same adapter with a `Path -> Multi<Path>`
+service. Output paths must resolve to regular files inside that workspace; cleanup runs on completion,
+failure, and cancellation.
+
+The publish target must declare the Connector binding that owns the returned reference. The source
+must likewise declare its binding when its reference will cross into another connector. The default
+v1 publication key is the output filename; `options.key` overrides it when a stable application key
+is required. Filename-derived keys are a default convention, not pipeline semantics.
+
 ## Publish DSL
 
 Declare the target at top level, then bind terminal pipeline output to it.
@@ -105,6 +171,7 @@ publish:
   csv-payment-output-files:
     kind: object
     provider: filesystem
+    binding: local-files
     location:
       root: ../input-csv-file-processing-svc/csv
     naming:

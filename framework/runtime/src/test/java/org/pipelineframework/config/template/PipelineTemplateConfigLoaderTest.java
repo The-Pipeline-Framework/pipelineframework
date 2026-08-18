@@ -27,6 +27,46 @@ class PipelineTemplateConfigLoaderTest {
     Path tempDir;
 
     @Test
+    void loadsV3GroupedObjectSelectionAndBindingProvenance() throws Exception {
+        Path configPath = tempDir.resolve("v3-object-selection.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Grouped ingest
+            basePackage: com.example.grouped
+            transport: LOCAL
+            contract: { input: DocumentSet, output: DocumentSet }
+            types:
+              DocumentSet:
+                fields:
+                  - [invoice, payload_ref]
+                  - [attachment, payload_ref]
+            sources:
+              documents:
+                kind: object
+                provider: filesystem
+                binding: local-documents
+            input:
+              from: documents
+              selection:
+                mode: together
+                keys:
+                  invoice: invoice.pdf
+                  attachment: attachment.pdf
+              emits:
+                type: com.example.grouped.domain.DocumentSet
+                typeName: DocumentSet
+            steps: []
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(java.util.Optional.of("local-documents"), config.sources().get("documents").binding());
+        assertTrue(config.input().object().mapper().isEmpty());
+        assertEquals(Map.of("invoice", "invoice.pdf", "attachment", "attachment.pdf"),
+            config.input().object().selection().orElseThrow().keys());
+    }
+
+    @Test
     void loadsV3LocalPipelineCatalogThroughTheOrdinaryStepGrammar() throws Exception {
         Path configPath = tempDir.resolve("v3-local-pipelines.yaml");
         Files.writeString(configPath, """

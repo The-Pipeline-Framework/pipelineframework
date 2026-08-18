@@ -11,8 +11,11 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.jboss.logging.Logger;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSelectionConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
@@ -31,11 +34,13 @@ public final class ObjectIngestRunner implements AutoCloseable {
     private final ObjectSourceRegistry registry;
     private final ObjectExecutionAdmission admission;
     private final ObjectIngestTelemetry telemetry;
+    private final Optional<ConnectorBindingRegistry> connectorBindings;
     private final ScheduledExecutorService executor;
     private final boolean ownsExecutor;
     private volatile ScheduledFuture<?> future;
     private volatile ObjectSnapshotMapper<Object> resolvedMapper;
     private volatile List<ObjectIngestInputAdapter<?, ?>> resolvedInputAdapters;
+    private volatile List<ObjectSelectionMapper<?>> resolvedSelectionMappers;
 
     public ObjectIngestRunner(
         PipelineYamlConfig config,
@@ -43,11 +48,27 @@ public final class ObjectIngestRunner implements AutoCloseable {
         ObjectExecutionAdmission admission,
         ObjectIngestTelemetry telemetry
     ) {
+        this(config, registry, admission, telemetry, Optional.empty(),
+            Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "tpf-object-ingest");
+                thread.setDaemon(true);
+                return thread;
+            }), true);
+    }
+
+    public ObjectIngestRunner(
+        PipelineYamlConfig config,
+        ObjectSourceRegistry registry,
+        ObjectExecutionAdmission admission,
+        ObjectIngestTelemetry telemetry,
+        ConnectorBindingRegistry connectorBindings
+    ) {
         this(
             config,
             registry,
             admission,
             telemetry,
+            Optional.of(Objects.requireNonNull(connectorBindings, "connectorBindings")),
             Executors.newSingleThreadScheduledExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "tpf-object-ingest");
                 thread.setDaemon(true);
@@ -64,10 +85,36 @@ public final class ObjectIngestRunner implements AutoCloseable {
         ScheduledExecutorService executor,
         boolean ownsExecutor
     ) {
+        this(config, registry, admission, telemetry, Optional.empty(), executor, ownsExecutor);
+    }
+
+    public ObjectIngestRunner(
+        PipelineYamlConfig config,
+        ObjectSourceRegistry registry,
+        ObjectExecutionAdmission admission,
+        ObjectIngestTelemetry telemetry,
+        ConnectorBindingRegistry connectorBindings,
+        ScheduledExecutorService executor,
+        boolean ownsExecutor
+    ) {
+        this(config, registry, admission, telemetry,
+            Optional.of(Objects.requireNonNull(connectorBindings, "connectorBindings")), executor, ownsExecutor);
+    }
+
+    private ObjectIngestRunner(
+        PipelineYamlConfig config,
+        ObjectSourceRegistry registry,
+        ObjectExecutionAdmission admission,
+        ObjectIngestTelemetry telemetry,
+        Optional<ConnectorBindingRegistry> connectorBindings,
+        ScheduledExecutorService executor,
+        boolean ownsExecutor
+    ) {
         this.config = Objects.requireNonNull(config, "config");
         this.registry = Objects.requireNonNull(registry, "registry");
         this.admission = Objects.requireNonNull(admission, "admission");
         this.telemetry = telemetry == null ? ObjectIngestTelemetry.NOOP : telemetry;
+        this.connectorBindings = Objects.requireNonNull(connectorBindings, "connectorBindings");
         this.executor = Objects.requireNonNull(executor, "executor");
         this.ownsExecutor = ownsExecutor;
     }
@@ -118,6 +165,9 @@ public final class ObjectIngestRunner implements AutoCloseable {
         ObjectSourceProvider provider = registry.require(source.provider());
         List<ObjectSourceItem> items = provider.list(source, source.poll().batchSize());
         telemetry.listed(source.name(), source.provider(), items.size());
+        if (objectInput().orElseThrow().selection().isPresent()) {
+            return pollSelection(source, provider, items, objectInput().orElseThrow().selection().orElseThrow());
+        }
         int submitted = 0;
         int failed = 0;
         java.util.ArrayList<String> executionIds = new java.util.ArrayList<>();
@@ -148,6 +198,46 @@ public final class ObjectIngestRunner implements AutoCloseable {
             }
         }
         return new PollResult(items.size(), submitted, failed, List.copyOf(executionIds));
+    }
+
+    private PollResult pollSelection(PipelineObjectSourceConfig source, ObjectSourceProvider provider,
+                                     List<ObjectSourceItem> listed, PipelineObjectSelectionConfig selection) {
+        if (listed.isEmpty()) {
+            return new PollResult(0, 0, 0, List.of());
+        }
+        List<ObjectSourceItem> selected = listed.stream()
+            .filter(item -> selection.keys().isEmpty() || selection.keys().containsValue(item.key()))
+            .sorted(java.util.Comparator.comparing(ObjectSourceItem::key))
+            .toList();
+        if (selected.isEmpty()) {
+            return new PollResult(listed.size(), 0, 0, List.of());
+        }
+        try {
+            List<ObjectSnapshot> snapshots = selected.stream()
+                .map(item -> snapshot(source, provider, item))
+                .toList();
+            Object domainInput = selectionMapper().map(snapshots);
+            Object pipelineInput = adaptForAdmission(domainInput);
+            String idempotencyKey = ObjectIdentity.executionKey(source.name(), snapshots, source.identity());
+            org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto accepted =
+                admission.submit(pipelineInput, DEFAULT_TENANT_ID, idempotencyKey).await().atMost(Duration.ofSeconds(30));
+            if (accepted == null) {
+                throw new IllegalStateException("Object execution admission returned null accepted response");
+            }
+            String selectionKey = selected.stream().map(ObjectSourceItem::key).collect(java.util.stream.Collectors.joining(","));
+            if (accepted.duplicate()) {
+                telemetry.duplicate(source.name(), source.provider(), selectionKey);
+            } else {
+                telemetry.submitted(source.name(), source.provider(), selectionKey);
+            }
+            List<String> executionIds = accepted.executionId() == null || accepted.executionId().isBlank()
+                ? List.of() : List.of(accepted.executionId());
+            return new PollResult(listed.size(), 1, 0, executionIds);
+        } catch (RuntimeException e) {
+            telemetry.failed(source.name(), source.provider(), "selection", e);
+            LOG.warnf(e, "Grouped Object Ingest failed for source=%s", source.name());
+            return new PollResult(listed.size(), 0, 1, List.of());
+        }
     }
 
     @Override
@@ -188,7 +278,18 @@ public final class ObjectIngestRunner implements AutoCloseable {
         Optional<String> text = "text".equalsIgnoreCase(payload.mode())
             ? provider.readText(source, item, payload.maxBytes())
             : Optional.empty();
-        return item.toSnapshot(source.name(), text.orElse(null));
+        ObjectSnapshot snapshot = item.toSnapshot(source.name(), text.orElse(null));
+        if (source.binding().isEmpty() || snapshot.contentRef() == null) {
+            return snapshot;
+        }
+        if (connectorBindings.isEmpty()) {
+            throw new IllegalStateException(
+                "object source '" + source.name() + "' declares binding '" + source.binding().orElseThrow()
+                    + "' but the connector binding registry is unavailable");
+        }
+        return snapshot.withContentRef(connectorBindings.orElseThrow().ownPayloadReference(
+            ConnectorBindingName.of(source.binding().orElseThrow()), provider.id(), provider.majorVersion(),
+            snapshot.contentRef()));
     }
 
     private ObjectSnapshotMapper<Object> mapper() {
@@ -205,6 +306,42 @@ public final class ObjectIngestRunner implements AutoCloseable {
             }
             resolvedMapper = createMapper(input);
             return resolvedMapper;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private ObjectSelectionMapper<Object> selectionMapper() {
+        PipelineObjectInputConfig input = objectInput()
+            .orElseThrow(() -> new IllegalStateException("pipeline input object binding is not configured"));
+        return (ObjectSelectionMapper<Object>) selectionMappers().stream()
+            .filter(mapper -> mapper.outputType().getName().equals(input.type())
+                || mapper.outputType().getSimpleName().equals(input.typeName()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No generated Object Selection mapper is available for " + input.type()));
+    }
+
+    @SuppressWarnings("rawtypes")
+    private List<ObjectSelectionMapper<?>> selectionMappers() {
+        List<ObjectSelectionMapper<?>> mappers = resolvedSelectionMappers;
+        if (mappers != null) {
+            return mappers;
+        }
+        synchronized (this) {
+            mappers = resolvedSelectionMappers;
+            if (mappers != null) {
+                return mappers;
+            }
+            ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            ServiceLoader<ObjectSelectionMapper> serviceLoader = loader == null
+                ? ServiceLoader.load(ObjectSelectionMapper.class)
+                : ServiceLoader.load(ObjectSelectionMapper.class, loader);
+            java.util.ArrayList<ObjectSelectionMapper<?>> loaded = new java.util.ArrayList<>();
+            for (ObjectSelectionMapper<?> mapper : serviceLoader) {
+                loaded.add(mapper);
+            }
+            resolvedSelectionMappers = List.copyOf(loaded);
+            return resolvedSelectionMappers;
         }
     }
 
@@ -250,7 +387,7 @@ public final class ObjectIngestRunner implements AutoCloseable {
 
     @SuppressWarnings("unchecked")
     private ObjectSnapshotMapper<Object> createMapper(PipelineObjectInputConfig input) {
-        String mapperClassName = ObjectText.normalize(input.mapper())
+        String mapperClassName = input.mapper().flatMap(ObjectText::normalize)
             .orElseThrow(() -> new IllegalStateException("Object input mapper must not be blank"));
         validateMapperClassName(mapperClassName);
         try {

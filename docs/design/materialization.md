@@ -76,6 +76,12 @@ references carry a `ConnectorPayloadOrigin` and resolve through the exact config
 the same reference value and neutral consumption seam while retaining different ownership and
 lifecycle paths.
 
+An ordinary step may opt both of its single-`payload_ref` record types into the `file`
+representation. Its generated facade uses this same `PayloadMaterializer`, stages the bytes in an
+invocation-scoped workspace, and publishes returned files through an existing Object Publish target.
+The canonical value before and after the step remains `PayloadReference`; `Path` exists only inside
+the authored service boundary.
+
 ### Portability and provenance
 
 A connector-owned reference is portable between steps, retries, runtime instances, and releases

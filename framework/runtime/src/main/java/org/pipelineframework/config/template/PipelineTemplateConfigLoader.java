@@ -1835,6 +1835,7 @@ public class PipelineTemplateConfigLoader {
                 name,
                 readRequiredString(sourceMap, "kind", "source '" + name + "'"),
                 readRequiredString(sourceMap, "provider", "source '" + name + "'"),
+                Optional.ofNullable(readString(sourceMap, "binding")),
                 readObjectMap(sourceMap, "location"),
                 readObjectFilter(sourceMap),
                 readObjectPoll(sourceMap),
@@ -1865,6 +1866,7 @@ public class PipelineTemplateConfigLoader {
                 name,
                 readRequiredString(targetMap, "kind", "publish target '" + name + "'"),
                 readRequiredString(targetMap, "provider", "publish target '" + name + "'"),
+                Optional.ofNullable(readString(targetMap, "binding")),
                 readObjectMap(targetMap, "location"),
                 readObjectNaming(targetMap),
                 readObjectPublishPayload(targetMap),
@@ -2191,7 +2193,35 @@ public class PipelineTemplateConfigLoader {
             resolvedSource,
             readRequiredString(emitsMap, "type", "input.object.emits"),
             readString(emitsMap, "typeName"),
-            readRequiredString(emitsMap, "mapper", "input.object.emits"));
+            Optional.ofNullable(readString(emitsMap, "mapper")),
+            readObjectSelection(inputMap));
+    }
+
+    private Optional<PipelineObjectSelectionConfig> readObjectSelection(Map<?, ?> inputMap) {
+        Object selectionObject = inputMap.get("selection");
+        if (selectionObject == null) {
+            return Optional.empty();
+        }
+        if (!(selectionObject instanceof Map<?, ?> selectionMap)) {
+            throw new IllegalArgumentException("input.object.selection must be declared as a YAML map");
+        }
+        Map<String, String> keys = new LinkedHashMap<>();
+        Object keysObject = selectionMap.get("keys");
+        if (keysObject != null) {
+            if (!(keysObject instanceof Map<?, ?> keyMap)) {
+                throw new IllegalArgumentException("input.object.selection.keys must be declared as a YAML map");
+            }
+            keyMap.forEach((field, key) -> {
+                if (!(field instanceof String fieldName) || !(key instanceof String objectKey)) {
+                    throw new IllegalArgumentException("input.object.selection.keys must map field names to object keys");
+                }
+                keys.put(fieldName, objectKey);
+            });
+        }
+        return Optional.of(new PipelineObjectSelectionConfig(
+            readRequiredString(selectionMap, "mode", "input.object.selection"),
+            keys,
+            Optional.ofNullable(readString(selectionMap, "into"))));
     }
 
     private void validateObjectInputSource(

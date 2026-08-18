@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineExecutionService;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
@@ -33,6 +34,9 @@ public class ObjectIngestBootstrap {
 
     @Inject
     Instance<ObjectIngestTelemetry> telemetry;
+
+    @Inject
+    ConnectorBindingRegistry connectorBindings;
 
     private volatile ObjectIngestRunner runner;
 
@@ -65,7 +69,8 @@ public class ObjectIngestBootstrap {
             config,
             registry,
             (input, tenantId, idempotencyKey) -> executionService.executePipelineAsync(input, tenantId, idempotencyKey),
-            telemetry.isResolvable() ? telemetry.get() : ObjectIngestTelemetry.NOOP);
+            telemetry.isResolvable() ? telemetry.get() : ObjectIngestTelemetry.NOOP,
+            connectorBindings);
         try {
             objectRunner.start();
             runner = objectRunner;

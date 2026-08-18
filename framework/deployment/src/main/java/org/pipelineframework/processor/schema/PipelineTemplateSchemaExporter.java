@@ -850,8 +850,35 @@ public final class PipelineTemplateSchemaExporter {
         }
       },
       "required": [
-        "type",
-        "mapper"
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "objectInputSelection": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "const": "together"
+        },
+        "keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minProperties": 1
+        },
+        "into": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "oneOf": [
+        { "required": ["keys"] },
+        { "required": ["into"] }
       ],
       "additionalProperties": false
     },
@@ -868,6 +895,9 @@ public final class PipelineTemplateSchemaExporter {
         },
         "emits": {
           "$ref": "#/$defs/objectInputEmit"
+        },
+        "selection": {
+          "$ref": "#/$defs/objectInputSelection"
         }
       },
       "required": [
@@ -1116,6 +1146,10 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "minLength": 1
         },
+        "binding": {
+          "type": "string",
+          "minLength": 1
+        },
         "location": {
           "type": "object",
           "additionalProperties": true
@@ -1187,6 +1221,10 @@ public final class PipelineTemplateSchemaExporter {
           "const": "object"
         },
         "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "binding": {
           "type": "string",
           "minLength": 1
         },
