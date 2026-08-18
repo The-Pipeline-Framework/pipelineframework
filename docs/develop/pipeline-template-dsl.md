@@ -115,6 +115,30 @@ materialized size. Output options name an Object Publish target, bound the publi
 override the v1 filename-derived object key. The generated facade preserves the step's normal
 `ONE_TO_ONE` or `ONE_TO_MANY` cardinality.
 
+At the service boundary, the mapping changes what the author implements:
+
+| Step cardinality | Authored service |
+| --- | --- |
+| `ONE_TO_ONE` | `ReactiveService<Path, Path>` returning `Uni<Path>` |
+| `ONE_TO_MANY` | `ReactiveStreamingService<Path, Path>` returning `Multi<Path>` |
+
+The YAML step still names the canonical input and output contracts:
+
+```yaml
+steps:
+  - name: Render pages
+    service: com.example.documents.RenderPagesService
+    cardinality: ONE_TO_MANY
+    input: SourceDocument
+    output: RenderedPage
+```
+
+For Object Ingest, `selection.mode: together` can construct one canonical input from several listed
+objects. Use `selection.keys` for differently named fields, or `selection.into` for one repeated
+`payload_ref` field. TPF generates the projection in both cases; the first authored service receives
+the canonical record directly. Complete configuration and Java examples are in
+[Object Ingest And Publish](../design/object-ingest.md#grouped-selection).
+
 ### Preview representation support
 
 Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step. The `file` consumer is the mapper-free payload-reference boundary for ordinary `Path` services.

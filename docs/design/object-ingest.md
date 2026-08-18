@@ -70,6 +70,110 @@ lifecycle determines whether an empty, singleton, or larger set is available. A 
 separate error condition. Without `selection`, the existing one-object-per-admission behavior is
 unchanged.
 
+#### Example: admit a named document bundle
+
+Use `keys` when the objects have different roles. Field names belong to the canonical contract; source
+keys remain boundary configuration:
+
+```yaml
+types:
+  DocumentSet:
+    fields:
+      - [invoice, payload_ref]
+      - [attachment, payload_ref]
+  DocumentManifest:
+    fields:
+      - [invoiceKey, string]
+      - [attachmentType, string]
+
+input:
+  from: incoming-documents
+  selection:
+    mode: together
+    keys:
+      invoice: invoice.pdf
+      attachment: terms.pdf
+  emits:
+    type: com.example.documents.DocumentSet
+    typeName: DocumentSet
+
+steps:
+  - name: Describe document bundle
+    service: com.example.documents.DescribeDocumentSetService
+    cardinality: ONE_TO_ONE
+    input: DocumentSet
+    output: DocumentManifest
+```
+
+TPF generates the selection mapper. The service receives the typed bundle, not `ObjectSnapshot` or a
+provider-specific filesystem/S3 location:
+
+```java
+@ApplicationScoped
+@PipelineStep
+public final class DescribeDocumentSetService
+        implements ReactiveService<DocumentSet, DocumentManifest> {
+
+    @Override
+    public Uni<DocumentManifest> process(DocumentSet input) {
+        return Uni.createFrom().item(new DocumentManifest(
+            input.invoice().key(),
+            input.attachment().contentType()));
+    }
+}
+```
+
+#### Example: admit a homogeneous batch
+
+Use `into` when every selected object has the same role. In the repeated-field form, the value of
+`repeated` is the element type:
+
+```yaml
+types:
+  DocumentBatch:
+    fields:
+      - name: documents
+        repeated: payload_ref
+  BatchIndex:
+    fields:
+      - [count, int32]
+      - name: keys
+        repeated: string
+
+input:
+  from: daily-scans
+  selection:
+    mode: together
+    into: documents
+  emits:
+    type: com.example.scans.DocumentBatch
+    typeName: DocumentBatch
+
+steps:
+  - name: Index scan batch
+    service: com.example.scans.IndexScanBatchService
+    cardinality: ONE_TO_ONE
+    input: DocumentBatch
+    output: BatchIndex
+```
+
+```java
+@ApplicationScoped
+@PipelineStep
+public final class IndexScanBatchService
+        implements ReactiveService<DocumentBatch, BatchIndex> {
+
+    @Override
+    public Uni<BatchIndex> process(DocumentBatch input) {
+        var keys = input.documents().stream().map(PayloadReference::key).toList();
+        return Uni.createFrom().item(new BatchIndex(keys.size(), keys));
+    }
+}
+```
+
+Filtering and polling decide which snapshots are present. The service needs no special branch for a
+one-element list.
+
 ### Standard input
 
 `stdio` is an endpoint variant of the object connector, not a separate console integration. It reads one
@@ -161,6 +265,117 @@ The publish target must declare the Connector binding that owns the returned ref
 must likewise declare its binding when its reference will cross into another connector. The default
 v1 publication key is the output filename; `options.key` overrides it when a stable application key
 is required. Filename-derived keys are a default convention, not pipeline semantics.
+
+### Example: normalize one file
+
+The pipeline contract remains records containing `payload_ref`, while the authored step sees only
+`Path`. The output target can be filesystem, S3, or another Object Publish provider:
+
+```yaml
+publish:
+  normalized-documents:
+    kind: object
+    provider: filesystem
+    binding: local-files
+    location: { root: ./out/normalized }
+
+types:
+  SourceDocument:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options: { maxBytes: 10485760 }
+  NormalizedDocument:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options:
+          target: normalized-documents
+          maxBytes: 10485760
+
+steps:
+  - name: Normalize document
+    service: com.example.documents.NormalizeDocumentService
+    cardinality: ONE_TO_ONE
+    input: SourceDocument
+    output: NormalizedDocument
+```
+
+```java
+@ApplicationScoped
+@PipelineStep
+public final class NormalizeDocumentService implements ReactiveService<Path, Path> {
+
+    @Override
+    public Uni<Path> process(Path input) {
+        return Uni.createFrom().item(() -> {
+            Path output = input.resolveSibling("normalized-" + input.getFileName());
+            Files.writeString(output, Files.readString(input).strip());
+            return output;
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+}
+```
+
+`normalized-...` becomes the default publication key because it is the returned filename. For a
+singleton destination such as `latest.txt`, set `options.key: latest.txt` on the output mapping.
+
+### Example: expand one archive into many files
+
+`ONE_TO_MANY` lets one materialized file produce several published objects. Each returned path is
+published independently, so meaningful output filenames make useful default keys:
+
+```yaml
+publish:
+  extracted-documents:
+    kind: object
+    provider: filesystem
+    binding: local-files
+    location: { root: ./out/extracted }
+
+types:
+  UploadedArchive:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options: { maxBytes: 104857600 }
+  ExtractedDocument:
+    fields: [[content, payload_ref]]
+    mappings:
+      file:
+        type: java.nio.file.Path
+        options:
+          target: extracted-documents
+          maxBytes: 20971520
+
+steps:
+  - name: Extract archive
+    service: com.example.archive.ExtractArchiveService
+    cardinality: ONE_TO_MANY
+    input: UploadedArchive
+    output: ExtractedDocument
+```
+
+```java
+@ApplicationScoped
+@PipelineStep
+public final class ExtractArchiveService implements ReactiveStreamingService<Path, Path> {
+
+    @Override
+    public Multi<Path> process(Path archive) {
+        return Multi.createFrom().deferred(() ->
+            Multi.createFrom().iterable(extractIntoSiblingFiles(archive)))
+            .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+}
+```
+
+The framework validates every returned path against the invocation workspace, publishes each bounded
+file, and cleans the workspace on completion, failure, or cancellation. These examples explicitly
+offload blocking file work; a reactive event-loop thread must not perform `Files` or archive I/O.
 
 ## Publish DSL
 
