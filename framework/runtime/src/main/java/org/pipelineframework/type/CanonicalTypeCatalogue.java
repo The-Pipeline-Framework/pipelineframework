@@ -16,7 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -37,6 +39,7 @@ import org.pipelineframework.orchestrator.release.PipelineContractDescriptorLoad
  * canonical metadata, so the projection does not become a second type system.</p>
  */
 public final class CanonicalTypeCatalogue {
+    private static final String DEFINITIONS_REFERENCE_PREFIX = "#/$defs/";
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private final Map<String, TypeBinding> types;
@@ -80,12 +83,40 @@ public final class CanonicalTypeCatalogue {
             throw new IllegalStateException("LLM tool argument contract must project as a JSON object: " + typeName);
         }
         ObjectNode definitions = root.putObject("$defs");
-        types.keySet().stream().sorted().forEach(name -> definitions.set(name, schemaDefinition(requireType(name))));
+        reachableDefinitions(root).forEach(name -> definitions.set(name, schemaDefinition(requireType(name))));
         try {
             return JSON.writeValueAsString(root);
         } catch (IOException failure) {
             throw new IllegalStateException("Failed to serialize canonical schema for '" + typeName + "'", failure);
         }
+    }
+
+    private Set<String> reachableDefinitions(JsonNode root) {
+        Set<String> reachable = new TreeSet<>();
+        TreeSet<String> pending = new TreeSet<>();
+        collectDefinitionReferences(root, pending);
+        while (!pending.isEmpty()) {
+            String name = pending.pollFirst();
+            if (reachable.add(name)) {
+                collectDefinitionReferences(schemaDefinition(requireType(name)), pending);
+            }
+        }
+        return reachable;
+    }
+
+    private void collectDefinitionReferences(JsonNode schema, Set<String> references) {
+        if (schema.isObject()) {
+            JsonNode reference = schema.get("$ref");
+            if (reference != null && reference.isTextual()) {
+                String value = reference.textValue();
+                if (!value.startsWith(DEFINITIONS_REFERENCE_PREFIX)
+                    || value.length() == DEFINITIONS_REFERENCE_PREFIX.length()) {
+                    throw new IllegalStateException("Unsupported canonical schema reference: " + value);
+                }
+                references.add(value.substring(DEFINITIONS_REFERENCE_PREFIX.length()));
+            }
+        }
+        schema.forEach(child -> collectDefinitionReferences(child, references));
     }
 
     private ObjectNode rootSchema(TypeBinding binding, List<String> aliases) {

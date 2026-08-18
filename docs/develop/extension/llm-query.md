@@ -88,7 +88,7 @@ steps:
 
 `using` and `operation` select the configured capability. The compiler verifies `kind`, `operationVersion`, and `input` against the selected operation's normalized type contract from Connector metadata; they are never trusted model output. Command callables that can be invoked also declare their ordinary command ID generator and may declare the existing duplicate and command policies.
 
-The compiler emits the canonical v3 catalogue into the release contract. At runtime the connector projects the selected input types into model-safe JSON Schema and validates returned arguments against the same canonical metadata. The schema is a projection for the model, not an alternative application schema language. Unknown aliases, missing or extra fields, malformed JSON, and type mismatches become `TerminalFailure("invalid-model-decision")`.
+The compiler emits the canonical v3 catalogue into the release contract. At runtime the connector projects the selected input types and only their transitively reachable definitions into model-safe JSON Schema, then validates returned arguments against the same canonical metadata. Unrelated pipeline types are not exposed to the model. The schema is a projection for the model, not an alternative application schema language. Unknown aliases, missing or extra fields, malformed JSON, and type mismatches become `TerminalFailure("invalid-model-decision")`.
 
 Model aliases are untrusted observations. TPF looks up the exact compiled alias and constructs `binding + operation` from the catalogue; it never copies a provider or operation identity supplied inside model arguments.
 

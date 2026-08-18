@@ -1,10 +1,16 @@
 package org.pipelineframework.connector.llm;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Set;
+import java.util.TreeSet;
+
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class CanonicalTypeCatalogueTest {
@@ -17,6 +23,17 @@ class CanonicalTypeCatalogueTest {
 
         assertTrue(schema.contains("\"type\":\"object\""));
         assertTrue(schema.contains("\"amount\""));
+    }
+
+    @Test
+    void projectsOnlyDefinitionsReachableFromTheRootType() throws Exception {
+        var schema = PipelineJson.mapper().readTree(catalogue.schema("ConstraintArguments"));
+        Set<String> definitions = new TreeSet<>();
+        schema.path("$defs").fieldNames().forEachRemaining(definitions::add);
+
+        assertEquals(Set.of("EmailAddress"), definitions);
+        assertFalse(schema.toString().contains("ReviewReady"));
+        assertFalse(schema.toString().contains("ToolArguments"));
     }
 
     @Test
