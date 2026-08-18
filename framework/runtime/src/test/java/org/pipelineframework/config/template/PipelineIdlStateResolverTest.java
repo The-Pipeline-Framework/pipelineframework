@@ -149,6 +149,39 @@ class PipelineIdlStateResolverTest {
     }
 
     @Test
+    void capturesRepeatedFieldMultiplicityFromV3ConfigSource() throws Exception {
+        Path yaml = tempDir.resolve("repeated-field.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: V3
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Record:
+                fields:
+                  - [id, string]
+                  - [tags, [string]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Record
+                output: Record
+            """);
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(yaml);
+
+        PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
+
+        List<PipelineIdlSnapshot.TypeFieldSnapshot> fields = snapshot.types().get("Record").fields();
+        assertEquals(2, fields.size());
+        PipelineIdlSnapshot.TypeFieldSnapshot idField = fields.stream()
+            .filter(f -> f.name().equals("id")).findFirst().orElseThrow();
+        PipelineIdlSnapshot.TypeFieldSnapshot tagsField = fields.stream()
+            .filter(f -> f.name().equals("tags")).findFirst().orElseThrow();
+        assertEquals(false, idField.repeated(), "id field should not be repeated");
+        assertEquals(true, tagsField.repeated(), "tags field should be repeated");
+    }
+
+    @Test
     void persistsWrapperConstraintsAndTreatsMissingPriorStateAsEmpty() throws Exception {
         Path yaml = tempDir.resolve("constrained-wrapper.yaml");
         Files.writeString(yaml, """

@@ -242,7 +242,7 @@ public record PipelineIdlSnapshot(
                     int number = allocator.allocate(unavailable);
                     unavailable.add(number);
                     fields.add(new TypeFieldSnapshot(number, field.name(),
-                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name()));
+                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name(), field.repeated()));
                 }
                 result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of(), List.of(), List.of(),
                     PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
