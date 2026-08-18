@@ -92,7 +92,7 @@ The compiler emits the canonical v3 catalogue into the release contract. At runt
 
 Model aliases are untrusted observations. TPF looks up the exact compiled alias and constructs `binding + operation` from the catalogue; it never copies a provider or operation identity supplied inside model arguments.
 
-`structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas fails before inference. `OPTIONAL` is an explicit best-effort mode for prompt-guided JSON; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
+`structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas for the compiled alternatives fails before inference. The LangChain4j/Ollama adapter uses Ollama's native JSON Schema response format for a single direct `complete` alternative; multi-alternative tool selection is not claimed as natively schema-enforced. `OPTIONAL` is an explicit best-effort mode for prompt-guided tool selection; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
 
 ## Invoke one proposal
 
