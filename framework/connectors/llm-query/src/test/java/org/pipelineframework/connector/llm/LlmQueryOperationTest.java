@@ -20,6 +20,7 @@ import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class LlmQueryOperationTest {
     private record InvoiceInput(PayloadReference payloadReference) { }
+    private record InvoiceBatchInput(java.util.List<PayloadReference> payloadReferences) { }
 
     private static final LlmTurnConfiguration CONFIGURATION = new LlmTurnConfiguration(
         "Choose one alternative.",
@@ -190,6 +191,44 @@ class LlmQueryOperationTest {
 
         assertEquals("llm-query-failed",
             assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(0, calls.get());
+    }
+
+    @Test
+    void combinedMaterializedPayloadsCannotExceedTheTotalBudget() {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger materializations = new AtomicInteger();
+        int payloadBytes = 11 * 1024 * 1024;
+        PayloadReference first = new PayloadReference(
+            "test", "invoices", "first.pdf", "application/pdf", null, "sha256:first", 1,
+            null, Map.of(), Optional.empty());
+        PayloadReference second = new PayloadReference(
+            "test", "invoices", "second.pdf", "application/pdf", null, "sha256:second", 1,
+            null, Map.of(), Optional.empty());
+        LlmTurnConfiguration completion = new LlmTurnConfiguration(
+            "Analyse once.", Map.of(), StructuredOutputSchemaMode.OPTIONAL);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class<Object> output = (Class) ReviewReady.class;
+        QueryInvocation<Object, LlmTurnConfiguration, Object> invocation = new QueryInvocation<>(
+            new InvoiceBatchInput(java.util.List.of(first, second)),
+            completion,
+            output,
+            ConnectorExecutionContext.empty(),
+            Optional.of((reference, maxBytes) -> {
+                materializations.incrementAndGet();
+                return CompletableFuture.completedFuture(new MaterializedPayload(
+                    reference, new byte[payloadBytes], reference.contentType(), null, reference.checksum()));
+            }));
+
+        QueryOutcome<Object> outcome = operation(request -> {
+            calls.incrementAndGet();
+            return CompletableFuture.completedFuture(
+                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+        }).query(invocation).toCompletableFuture().join();
+
+        assertEquals("llm-query-failed",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertEquals(2, materializations.get());
         assertEquals(0, calls.get());
     }
 

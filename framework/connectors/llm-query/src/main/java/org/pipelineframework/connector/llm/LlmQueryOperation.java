@@ -29,7 +29,13 @@ import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.type.CanonicalTypeCatalogue;
 import org.pipelineframework.repository.PayloadReference;
 
-/** Exactly-one-inference Query operation. Proposed calls remain inert typed data. */
+/**
+ * Exactly-one-inference Query operation. Proposed calls remain inert typed data.
+ *
+ * <p>A non-union output selects direct-completion mode: the model receives one required
+ * {@code complete} tool whose schema is the application-authored output type, and the callable
+ * catalogue must be empty. Union outputs retain the AgentCall-based callable/completion contract.</p>
+ */
 final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfiguration, Object> {
     private static final long MAX_PAYLOAD_BYTES = 20L * 1024L * 1024L;
     private static final ConnectorConfigSchema<LlmTurnConfiguration> CONFIGURATION_SCHEMA =
@@ -134,22 +140,30 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         }
         PayloadMaterializer materializer = invocation.payloadMaterializer().orElseThrow(() ->
             new IllegalStateException("LLM Query input contains payload references but no materializer is available"));
-        CompletionStage<List<MaterializedPayload>> stage = CompletableFuture.completedStage(List.of());
+        CompletionStage<MaterializationBatch> stage = CompletableFuture.completedStage(
+            new MaterializationBatch(List.of(), 0));
         for (PayloadReference reference : references) {
-            stage = stage.thenCompose(materialized -> {
+            stage = stage.thenCompose(batch -> {
                 if (reference.sizeBytes() > MAX_PAYLOAD_BYTES) {
                     return CompletableFuture.failedStage(new IllegalStateException(
                         "LLM Query payload exceeds the 20 MiB materialization limit"));
                 }
                 return materializer.materialize(reference, MAX_PAYLOAD_BYTES).thenApply(payload -> {
-                    List<MaterializedPayload> next = new ArrayList<>(materialized);
+                    long totalBytes = Math.addExact(batch.totalBytes(), payload.bytes().length);
+                    if (totalBytes > MAX_PAYLOAD_BYTES) {
+                        throw new IllegalStateException(
+                            "LLM Query payloads exceed the 20 MiB materialization limit");
+                    }
+                    List<MaterializedPayload> next = new ArrayList<>(batch.payloads());
                     next.add(payload);
-                    return List.copyOf(next);
+                    return new MaterializationBatch(List.copyOf(next), totalBytes);
                 });
             });
         }
-        return stage;
+        return stage.thenApply(MaterializationBatch::payloads);
     }
+
+    private record MaterializationBatch(List<MaterializedPayload> payloads, long totalBytes) { }
 
     private static List<PayloadReference> payloadReferences(Object input) {
         LinkedHashSet<PayloadReference> references = new LinkedHashSet<>();

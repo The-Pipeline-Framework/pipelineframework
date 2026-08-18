@@ -103,9 +103,11 @@ class LangChain4jOllamaQueryConnectorTest {
     @Test
     void mapsMaterializedPdfToLangChain4jMediaWithoutAnotherModelCall() {
         AtomicReference<ChatRequest> observed = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
         ChatModel model = new ChatModel() {
             @Override
             public ChatResponse doChat(ChatRequest request) {
+                calls.incrementAndGet();
                 observed.set(request);
                 return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
                     .name("complete").arguments("{}").build())).build();
@@ -132,14 +134,17 @@ class LangChain4jOllamaQueryConnectorTest {
         PdfFileContent pdf = assertInstanceOf(PdfFileContent.class, user.contents().get(1));
         assertEquals("AQIDBA==", pdf.pdfFile().base64Data());
         assertEquals("application/pdf", pdf.pdfFile().mimeType());
+        assertEquals(1, calls.get());
     }
 
     @Test
     void mapsMaterializedPngToLangChain4jVisionContent() {
         AtomicReference<ChatRequest> observed = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
         ChatModel model = new ChatModel() {
             @Override
             public ChatResponse doChat(ChatRequest request) {
+                calls.incrementAndGet();
                 observed.set(request);
                 return ChatResponse.builder().aiMessage(AiMessage.from(ToolExecutionRequest.builder()
                     .name("complete").arguments("{}").build())).build();
@@ -165,6 +170,7 @@ class LangChain4jOllamaQueryConnectorTest {
         ImageContent image = assertInstanceOf(ImageContent.class, user.contents().get(1));
         assertEquals("AQIDBA==", image.image().base64Data());
         assertEquals("image/png", image.image().mimeType());
+        assertEquals(1, calls.get());
     }
 
     private static org.pipelineframework.connector.llm.LlmToolProposal decide(AiMessage message) {

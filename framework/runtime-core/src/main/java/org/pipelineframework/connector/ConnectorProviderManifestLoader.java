@@ -26,6 +26,9 @@ public final class ConnectorProviderManifestLoader {
     public static ClassLoader metadataClassLoader(Class<?> anchor) {
         Objects.requireNonNull(anchor, "metadata class loader anchor must not be null");
         ClassLoader anchored = anchor.getClassLoader();
+        if (anchored == null) {
+            throw new IllegalArgumentException("metadata class loader anchor must not be bootstrap-loaded");
+        }
         ClassLoader context = Thread.currentThread().getContextClassLoader();
         if (context == null || context == anchored) {
             return anchored;
