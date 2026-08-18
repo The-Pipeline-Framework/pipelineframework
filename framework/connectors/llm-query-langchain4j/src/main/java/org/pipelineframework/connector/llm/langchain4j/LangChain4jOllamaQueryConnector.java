@@ -22,7 +22,10 @@ import dev.langchain4j.data.image.Image;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.ollama.OllamaChatModel;
+import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithDefault;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
@@ -38,17 +41,35 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private final OllamaModelFactory modelFactory;
+    private final OllamaRuntimeSettings runtimeSettings;
 
     public LangChain4jOllamaQueryConnector() {
-        this((baseUrl, modelName, timeout) -> OllamaChatModel.builder()
+        this(defaultModelFactory(), OllamaRuntimeSettings.defaults());
+    }
+
+    @Inject
+    LangChain4jOllamaQueryConnector(OllamaRuntimeConfiguration configuration) {
+        this(defaultModelFactory(), new OllamaRuntimeSettings(
+            configuration.requestTimeout(), configuration.thinking()));
+    }
+
+    private static OllamaModelFactory defaultModelFactory() {
+        return (baseUrl, modelName, timeout, thinking, maxRetries) -> OllamaChatModel.builder()
             .baseUrl(baseUrl)
             .modelName(modelName)
             .timeout(timeout)
-            .build());
+            .think(thinking)
+            .maxRetries(maxRetries)
+            .build();
     }
 
     LangChain4jOllamaQueryConnector(OllamaModelFactory modelFactory) {
+        this(modelFactory, OllamaRuntimeSettings.defaults());
+    }
+
+    LangChain4jOllamaQueryConnector(OllamaModelFactory modelFactory, OllamaRuntimeSettings runtimeSettings) {
         this.modelFactory = Objects.requireNonNull(modelFactory, "Ollama model factory must not be null");
+        this.runtimeSettings = Objects.requireNonNull(runtimeSettings, "Ollama runtime settings must not be null");
     }
 
     @Override
@@ -57,13 +78,42 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         ConnectorRuntimeContext context
     ) {
         ChatModel model = modelFactory.create(
-            configuration.baseUrl().orElse(DEFAULT_BASE_URL), configuration.model(), REQUEST_TIMEOUT);
+            configuration.baseUrl().orElse(DEFAULT_BASE_URL),
+            configuration.model(),
+            runtimeSettings.requestTimeout(),
+            runtimeSettings.thinking(),
+            0);
         return new LangChain4jDecisionClient(model, context.executor());
     }
 
     @FunctionalInterface
     interface OllamaModelFactory {
-        ChatModel create(String baseUrl, String modelName, Duration timeout);
+        ChatModel create(String baseUrl, String modelName, Duration timeout, boolean thinking, int maxRetries);
+    }
+
+    @ConfigMapping(prefix = "pipeline.llm.langchain4j.ollama")
+    interface OllamaRuntimeConfiguration {
+        /** Maximum wall-clock time for one Ollama HTTP request. */
+        @WithDefault("PT30S")
+        Duration requestTimeout();
+
+        /** Whether Ollama should enable model thinking/reasoning output. */
+        @WithDefault("true")
+        boolean thinking();
+    }
+
+    record OllamaRuntimeSettings(Duration requestTimeout, boolean thinking) {
+        OllamaRuntimeSettings {
+            Objects.requireNonNull(requestTimeout, "Ollama request timeout must not be null");
+            if (requestTimeout.isZero() || requestTimeout.isNegative()) {
+                throw new IllegalArgumentException("Ollama request timeout must be positive");
+            }
+        }
+
+        static OllamaRuntimeSettings defaults() {
+            return new OllamaRuntimeSettings(REQUEST_TIMEOUT, true);
+        }
+
     }
 
     static final class LangChain4jDecisionClient implements LlmDecisionClient {

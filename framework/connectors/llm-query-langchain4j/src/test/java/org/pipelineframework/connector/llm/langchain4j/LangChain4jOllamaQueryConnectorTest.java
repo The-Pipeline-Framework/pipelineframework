@@ -2,6 +2,7 @@ package org.pipelineframework.connector.llm.langchain4j;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
 import java.util.List;
@@ -27,17 +28,28 @@ import org.pipelineframework.repository.PayloadReference;
 
 class LangChain4jOllamaQueryConnectorTest {
     @Test
+    void rejectsNonPositiveRequestTimeouts() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(Duration.ZERO, false));
+    }
+
+    @Test
     void configuresTheOllamaModelWithAnExplicitBoundedTimeout() {
         AtomicReference<String> baseUrl = new AtomicReference<>();
         AtomicReference<String> modelName = new AtomicReference<>();
         AtomicReference<Duration> timeout = new AtomicReference<>();
+        AtomicReference<Boolean> thinking = new AtomicReference<>();
+        AtomicInteger maxRetries = new AtomicInteger(-1);
         ChatModel model = model(AiMessage.from("unused"));
-        var connector = new LangChain4jOllamaQueryConnector((configuredBaseUrl, configuredModel, configuredTimeout) -> {
+        var connector = new LangChain4jOllamaQueryConnector((configuredBaseUrl, configuredModel, configuredTimeout,
+                                                              configuredThinking, configuredMaxRetries) -> {
             baseUrl.set(configuredBaseUrl);
             modelName.set(configuredModel);
             timeout.set(configuredTimeout);
+            thinking.set(configuredThinking);
+            maxRetries.set(configuredMaxRetries);
             return model;
-        });
+        }, new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(Duration.ofSeconds(90), false));
 
         assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class,
             connector.createClient(
@@ -45,7 +57,30 @@ class LangChain4jOllamaQueryConnectorTest {
                 ConnectorRuntimeContext.empty()));
         assertEquals("http://ollama.internal:11434", baseUrl.get());
         assertEquals("qwen3", modelName.get());
+        assertEquals(Duration.ofSeconds(90), timeout.get());
+        assertEquals(false, thinking.get());
+        assertEquals(0, maxRetries.get());
+    }
+
+    @Test
+    void retainsCompatibleTimeoutAndThinkingDefaultsWithoutInternalRetries() {
+        AtomicReference<Duration> timeout = new AtomicReference<>();
+        AtomicReference<Boolean> thinking = new AtomicReference<>();
+        AtomicInteger maxRetries = new AtomicInteger(-1);
+        var connector = new LangChain4jOllamaQueryConnector((baseUrl, modelName, configuredTimeout,
+                                                              configuredThinking, configuredMaxRetries) -> {
+            timeout.set(configuredTimeout);
+            thinking.set(configuredThinking);
+            maxRetries.set(configuredMaxRetries);
+            return model(AiMessage.from("unused"));
+        });
+
+        connector.createClient(new LlmProviderConfiguration("qwen3", Optional.empty()),
+            ConnectorRuntimeContext.empty());
+
         assertEquals(Duration.ofSeconds(30), timeout.get());
+        assertEquals(true, thinking.get());
+        assertEquals(0, maxRetries.get());
     }
 
     @Test

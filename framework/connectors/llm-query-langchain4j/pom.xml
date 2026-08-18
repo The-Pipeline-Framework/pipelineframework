@@ -9,6 +9,7 @@
         <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j</artifactId><version>${langchain4j.version}</version></dependency>
         <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j-ollama</artifactId><version>${langchain4j.version}</version></dependency>
+        <dependency><groupId>io.smallrye.config</groupId><artifactId>smallrye-config-core</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
     </dependencies>
