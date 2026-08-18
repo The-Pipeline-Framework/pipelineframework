@@ -130,6 +130,19 @@ Add the LangChain4j adapter for Ollama:
 </dependency>
 ```
 
+LangChain4j/Ollama runtime tuning is configured through ordinary runtime
+properties rather than the portable connector binding:
+
+```properties
+pipeline.llm.langchain4j.ollama.request-timeout=PT30S
+pipeline.llm.langchain4j.ollama.thinking=true
+```
+
+The timeout must be a positive ISO-8601 duration. These properties retain the
+adapter's prior defaults when omitted. The adapter disables LangChain4j's
+internal retries so one TPF Query execution cannot silently become multiple
+model inferences; retry policy remains owned by the pipeline execution.
+
 The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
 
 Operational model/provider failures remain exceptional Query failures. A syntactically or structurally invalid model decision is instead a typed terminal Query outcome. Query capture records the successful application decision, not prompts, credentials, SDK objects, or hidden reasoning.
