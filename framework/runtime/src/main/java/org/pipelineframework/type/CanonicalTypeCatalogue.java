@@ -132,6 +132,10 @@ public final class CanonicalTypeCatalogue {
         return Collections.unmodifiableMap(variants);
     }
 
+    public boolean isUnion(String typeName) {
+        return "union".equals(text(requireType(typeName).definition(), "kind"));
+    }
+
     public Optional<String> contributedIdentity(String typeName) {
         return requireType(typeName).contributedIdentity();
     }

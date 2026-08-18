@@ -223,7 +223,8 @@ public class QueryStepSupport {
                         ? ConnectorConfigurationBinder.bind(
                             schema.orElseThrow(), configuration, "native query operation " + selector.operationIdentity())
                         : zeroConfiguration(selector, configuration);
-                    return invokeNative(descriptor, selector, operation, input, boundConfiguration, outputType);
+                    return invokeNative(
+                        descriptor, selector, operation, input, boundConfiguration, outputType, bindings);
                 } catch (RuntimeException failure) {
                     return Uni.createFrom().failure(failure);
                 }
@@ -249,12 +250,17 @@ public class QueryStepSupport {
         QueryOperation operation,
         I input,
         Object boundConfiguration,
-        Class<?> outputType
+        Class<?> outputType,
+        ConnectorBindingRegistry bindings
     ) {
         CompletionStage<QueryOutcome<Object>> stage;
         try {
             stage = operation.query(new QueryInvocation<>(
-                input, boundConfiguration, outputType, connectorExecutionContext(descriptor)));
+                input,
+                boundConfiguration,
+                outputType,
+                connectorExecutionContext(descriptor),
+                Optional.of(bindings::materialize)));
         } catch (Throwable failure) {
             return Uni.createFrom().failure(unwrapTransportFailure(failure));
         }

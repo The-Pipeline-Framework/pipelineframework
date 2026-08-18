@@ -168,7 +168,6 @@ public class PipelineTemplateConfigLoader {
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
-        rejectLegacyConnectors(rootMap);
         String inputContract = readLogicalContract(rootMap, "input", version);
         String outputContract = readLogicalContract(rootMap, "output", version);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
@@ -260,7 +259,6 @@ public class PipelineTemplateConfigLoader {
         if (!materialization.aspects().isEmpty()) {
             throw new IllegalStateException("Version: 3 does not support materialization declarations.");
         }
-        rejectLegacyConnectors(rootMap);
         String inputContract = readLogicalContract(rootMap, "input", version);
         String outputContract = readLogicalContract(rootMap, "output", version);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
@@ -2276,13 +2274,6 @@ public class PipelineTemplateConfigLoader {
     ) {
         if (output != null && output.object() != null && !publish.containsKey(output.object().target())) {
             throw new IllegalArgumentException("output.object publish target not found: " + output.object().target());
-        }
-    }
-
-    private void rejectLegacyConnectors(Map<?, ?> rootMap) {
-        if (rootMap.get("connectors") != null) {
-            throw new IllegalArgumentException(
-                "Top-level connectors are no longer supported; use input.subscription and output.checkpoint");
         }
     }
 

@@ -1,6 +1,8 @@
 package org.pipelineframework.connector.llm.langchain4j;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -10,7 +12,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.PdfFileContent;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.pdf.PdfFile;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.ollama.OllamaChatModel;
@@ -82,8 +90,7 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             ChatRequest chat = ChatRequest.builder()
                 .messages(
                     SystemMessage.from(request.instructions()),
-                    UserMessage.from("Application state:\n" + request.applicationStateJson()
-                        + "\nSelect exactly one available function. Do not execute it."))
+                    userMessage(request))
                 .toolSpecifications(tools)
                 .build();
             List<ToolExecutionRequest> proposals = model.chat(chat).aiMessage().toolExecutionRequests();
@@ -95,6 +102,33 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             String name = proposal.name() == null ? "" : proposal.name();
             String arguments = proposal.arguments() == null ? "{}" : proposal.arguments();
             return new LlmToolProposal(name, arguments);
+        }
+
+        private UserMessage userMessage(LlmTurnRequest request) {
+            List<Content> contents = new ArrayList<>();
+            contents.add(TextContent.from("Application state:\n" + request.applicationStateJson()
+                + "\nSelect exactly one available function. Do not execute it."));
+            request.media().forEach(payload -> {
+                String contentType = payload.contentType() == null ? "" : payload.contentType().toLowerCase(java.util.Locale.ROOT);
+                String base64 = Base64.getEncoder().encodeToString(payload.bytes());
+                if (contentType.startsWith("image/")) {
+                    contents.add(ImageContent.from(Image.builder()
+                        .base64Data(base64)
+                        .mimeType(payload.contentType())
+                        .build()));
+                    return;
+                }
+                if ("application/pdf".equals(contentType)) {
+                    contents.add(PdfFileContent.from(PdfFile.builder()
+                        .base64Data(base64)
+                        .mimeType(payload.contentType())
+                        .build()));
+                    return;
+                }
+                throw new IllegalArgumentException(
+                    "LangChain4j LLM Query does not support materialized media type: " + payload.contentType());
+            });
+            return UserMessage.from(contents);
         }
 
         private ToolSpecification tool(LlmToolDefinition definition) {

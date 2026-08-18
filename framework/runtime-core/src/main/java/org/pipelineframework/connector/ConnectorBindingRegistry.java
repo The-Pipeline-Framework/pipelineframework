@@ -319,6 +319,18 @@ public final class ConnectorBindingRegistry {
         return binding.registry().requireExecutionOperation(origin.operation(), ObjectSourceOperation.class);
     }
 
+    /** Attaches the configured source binding provenance to a provider-produced object reference. */
+    public PayloadReference ownPayloadReference(
+        ConnectorBindingName name,
+        String sourceOperationId,
+        int sourceOperationMajorVersion,
+        PayloadReference reference
+    ) {
+        Objects.requireNonNull(reference, "payload reference must not be null");
+        ConnectorPayloadOrigin origin = objectSourceOrigin(name, sourceOperationId, sourceOperationMajorVersion);
+        return reference.withConnectorOrigin(origin);
+    }
+
     /** Materializes a connector-owned reference without exposing provider-native location semantics. */
     public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
         Objects.requireNonNull(reference, "payload reference must not be null");

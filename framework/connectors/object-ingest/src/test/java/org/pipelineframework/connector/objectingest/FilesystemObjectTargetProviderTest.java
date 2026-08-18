@@ -40,7 +40,7 @@ class FilesystemObjectTargetProviderTest {
 
         assertEquals("id,amount\n1,10\n", Files.readString(tempDir.resolve("results/payments.csv")));
         assertEquals("filesystem", result.reference().provider());
-        assertEquals(tempDir.toString(), result.reference().container());
+        assertEquals(tempDir.toRealPath().toString(), result.reference().container());
         assertEquals("results/payments.csv", result.reference().key());
         assertEquals("text/csv", result.reference().contentType());
         assertEquals("checksum", result.checksum());
