@@ -257,6 +257,11 @@ public class PipelineOrderMetadataGenerator {
                     + stripTrailingService(model.generatedName()) + "QueryClientStep");
                 continue;
             }
+            if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+                ordered.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "DynamicOperationClientStep");
+                continue;
+            }
             ordered.add(model.serviceClassName().canonicalName());
         }
         return new ArrayList<>(ordered);
@@ -290,6 +295,11 @@ public class PipelineOrderMetadataGenerator {
                     + stripTrailingService(model.generatedName()) + "QueryClientStep");
                 continue;
             }
+            if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+                generated.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "DynamicOperationClientStep");
+                continue;
+            }
             if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {
                 continue;
             }
@@ -318,6 +328,9 @@ public class PipelineOrderMetadataGenerator {
         }
         if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
             return "QueryClientStep";
+        }
+        if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+            return "DynamicOperationClientStep";
         }
         return defaultSuffix;
     }

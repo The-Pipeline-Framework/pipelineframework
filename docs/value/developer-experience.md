@@ -35,7 +35,7 @@ This avoids custom side channels and keeps recovery logic explicit in step code.
 
 <div class="value-links">
 
-- [Quick Start](/design/pipeline-studio/)
+- [Pipeline Compilation](/develop/pipeline-compilation/)
 - [Functional Core, Imperative Shell](/design/fcis)
 - [Operators](/design/operators)
 - [Item Reject Sink](/develop/item-reject-sink)

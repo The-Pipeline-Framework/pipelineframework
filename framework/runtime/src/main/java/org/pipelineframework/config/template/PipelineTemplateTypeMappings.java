@@ -20,31 +20,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Shared normalization helpers for template field semantics across runtime loader and proto generation.
  */
 final class PipelineTemplateTypeMappings {
 
-    private static final Set<String> BUILTIN_TYPES = Set.of(
-        "string",
-        "bool",
-        "int32",
-        "int64",
-        "float32",
-        "float64",
-        "decimal",
-        "uuid",
-        "timestamp",
-        "datetime",
-        "date",
-        "duration",
-        "bytes",
-        "currency",
-        "uri",
-        "path",
-        "payload_ref",
-        "map");
+    private static final Set<String> BUILTIN_TYPES = Stream.concat(
+        PipelineTemplateScalarTypes.TYPES.stream(), Stream.of("map"))
+        .collect(Collectors.toUnmodifiableSet());
 
     private static final Map<String, String> JAVA_TYPES = Map.ofEntries(
         Map.entry("string", "String"),
@@ -103,7 +89,7 @@ final class PipelineTemplateTypeMappings {
 
     /** Returns whether the token is a scalar supported by the deliberately small v3 type language. */
     static boolean isV3ScalarType(String value) {
-        return isBuiltinType(value) && !"map".equalsIgnoreCase(value.trim());
+        return PipelineTemplateScalarTypes.isScalar(value);
     }
 
     /**

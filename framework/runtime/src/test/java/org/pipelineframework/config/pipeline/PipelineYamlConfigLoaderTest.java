@@ -9,9 +9,91 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.StringReader;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class PipelineYamlConfigLoaderTest {
+
+    @Test
+    void loadsReleasePinnedCallableCatalogueIntoQueryOperationConfiguration() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
+              payments: { provider: acme.payments, version: 1 }
+            steps:
+              - name: Decide
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: State
+                output: Decision
+                using: model
+                operation: decide
+                config: { instructions: Decide once. }
+                callables:
+                  charge:
+                    using: payments
+                    operation: charge.create
+                    operationVersion: 2
+                    kind: command
+                    input: ChargeArguments
+              - name: Invoke proposal
+                input: <tpf.llm.AgentCall>
+                output: <tpf.connector.OperationObservation>
+                operation:
+                  mode: dynamic
+                  from: Decide
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        PipelineYamlCallable callable = step.callables().get("charge");
+        assertEquals("payments", callable.using());
+        assertEquals("charge.create", callable.operation());
+        assertEquals(2, callable.operationVersion());
+        assertTrue(step.operationConfig().containsKey("callables"));
+        @SuppressWarnings("unchecked")
+        var compiled = (java.util.Map<String, java.util.Map<String, Object>>) step.operationConfig().get("callables");
+        assertEquals("command", compiled.get("charge").get("kind"));
+        PipelineYamlStep invocation = config.steps().get(1);
+        assertEquals("internal", invocation.kind());
+        assertEquals("Decide", invocation.dynamicOperation().orElseThrow().from());
+    }
+
+    @Test
+    void retainsDynamicOperationBindingInsideLocalPipelineDefinition() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            connectors:
+              model: { provider: llm.query, version: 1, config: { model: qwen3 } }
+              payments: { provider: acme.payments, version: 1 }
+            pipelines:
+              invoice-agent:
+                steps:
+                  - name: Decide
+                    kind: query
+                    input: State
+                    output: Decision
+                    using: model
+                    operation: decide
+                    callables:
+                      charge:
+                        using: payments
+                        operation: charge.create
+                        operationVersion: 2
+                        kind: command
+                        input: ChargeArguments
+                  - name: Invoke proposal
+                    input: <tpf.llm.AgentCall>
+                    output: <tpf.connector.OperationObservation>
+                    operation: { mode: dynamic, from: Decide }
+            steps: []
+            """));
+
+        List<PipelineYamlStep> local = config.localPipelines().get("invoice-agent");
+        assertEquals(2, local.size());
+        assertEquals("Decide", local.get(1).dynamicOperation().orElseThrow().from());
+        assertEquals(local, config.stepDefinitions().get("invoice-agent"));
+    }
 
     @Test
     void trimsConnectorBindingKeysAndRejectsBlankOnes() {
@@ -110,6 +192,7 @@ class PipelineYamlConfigLoaderTest {
               documents:
                 kind: object
                 provider: filesystem
+                binding: local-documents
                 location:
                   root: "/tmp/incoming"
                 filter:
@@ -136,6 +219,7 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals(1, config.sources().size());
         assertEquals("filesystem", config.sources().get("documents").provider());
+        assertEquals(Optional.of("local-documents"), config.sources().get("documents").binding());
         assertEquals("/tmp/incoming", config.sources().get("documents").location().get("root"));
         assertEquals(List.of("*.csv"), config.sources().get("documents").filter().include());
         assertEquals(10, config.sources().get("documents").poll().batchSize());
@@ -143,7 +227,7 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("documents", config.input().object().source());
         assertEquals("com.example.DocumentInput", config.input().object().type());
         assertEquals("DocumentInput", config.input().object().typeName());
-        assertEquals("com.example.DocumentObjectMapper", config.input().object().mapper());
+        assertEquals(Optional.of("com.example.DocumentObjectMapper"), config.input().object().mapper());
     }
 
     @Test
@@ -156,6 +240,7 @@ class PipelineYamlConfigLoaderTest {
               results:
                 kind: object
                 provider: filesystem
+                binding: local-results
                 location:
                   root: "/tmp/outgoing"
                 naming:
@@ -178,6 +263,7 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals(1, config.publish().size());
         assertEquals("filesystem", config.publish().get("results").provider());
+        assertEquals(Optional.of("local-results"), config.publish().get("results").binding());
         assertEquals("/tmp/outgoing", config.publish().get("results").location().get("root"));
         assertEquals("{groupKey}.out", config.publish().get("results").naming().keyTemplate());
         assertEquals("text/csv", config.publish().get("results").payload().contentType());
@@ -187,6 +273,58 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("com.example.DocumentOutput", config.output().object().type());
         assertEquals("DocumentOutput", config.output().object().typeName());
         assertEquals("com.example.DocumentOutputPublishMapper", config.output().object().mapper());
+    }
+
+    @Test
+    void loadsGroupedObjectSelectionWithoutApplicationMapper() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            transport: GRPC
+            sources:
+              documents:
+                kind: object
+                provider: filesystem
+            input:
+              from: documents
+              selection:
+                mode: together
+                into: documents
+              emits:
+                type: com.example.DocumentBatch
+                typeName: DocumentBatch
+            steps: []
+            """));
+
+        assertEquals(Optional.empty(), config.input().object().mapper());
+        assertEquals("together", config.input().object().selection().orElseThrow().mode());
+        assertEquals(Optional.of("documents"), config.input().object().selection().orElseThrow().into());
+    }
+
+    @Test
+    void rejectsObjectInputWithBothMapperAndSelection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                transport: GRPC
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                input:
+                  from: documents
+                  emits:
+                    type: com.example.DocumentInput
+                    typeName: DocumentInput
+                    mapper: com.example.DocumentObjectMapper
+                  selection:
+                    mode: together
+                    keys:
+                      invoice: invoice.pdf
+                      attachment: attachment.pdf
+                steps: []
+                """)));
+
+        assertEquals("input.object.emits.mapper and input.object.selection are mutually exclusive", exception.getMessage());
     }
 
     @Test

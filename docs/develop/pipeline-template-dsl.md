@@ -55,9 +55,27 @@ Every entry in `types` declares exactly one kind of type.
 | `alias` | A transparent name for another type. |
 | `variants` | A closed sum type: this value is one declared alternative. |
 
+### Contributed protocol types
+
+Version 3 can reference framework- or extension-owned protocol vocabulary without copying its declaration into the application:
+
+```yaml
+types:
+  Decision:
+    variants:
+      call: <acme.tools.ProtocolCall>
+      complete: Recommendation
+```
+
+`<namespace.TypeName>` is a build-time type reference. The compiler resolves it from the framework catalog or static Connector Provider artifact metadata, imports that immutable definition into the normalized v3 type model, and then applies the same union, assignability, generation, adapter, serialization, and release-contract rules as an application-authored type. It is not a generic type expression or a dynamic payload escape.
+
+A short reference such as `<ProtocolCall>` is accepted only when exactly one registered contribution has that type name. Use the qualified identity in durable source when multiple providers publish the same short name. Unknown references, ambiguous short names, duplicate identities, and collisions with application-authored names fail compilation.
+
+Only referenced contributions and their dependencies enter the application contract. Installing an unused provider does not change generated domain types or release identity. Provider metadata encodes the same record, wrapper, alias, and union shapes documented on this page; it is not an external schema-import language. Provider construction, configuration, connections, credentials, and execution are not involved in type resolution.
+
 ### Product types
 
-Use `fields` for a named business record. A compact field is a YAML tuple in the exact form `[name, type]`; the object form is `{ name, type }`.
+Use `fields` for a named business record. A compact singular field is a YAML tuple in the exact form `[name, type]`; the singular object form is `{ name, type }`. Use `{ name, repeated: type }` for an ordered, finite, zero-or-more field that preserves duplicates.
 
 ```yaml
 types:
@@ -66,10 +84,27 @@ types:
       - [orderId, OrderId]
       - [amount, decimal]
       - name: lineItems
-        type: PaymentLineItem
+        repeated: PaymentLineItem
 ```
 
-Field names are unique within a product type. A field can reference a semantic scalar or another named type.
+Field names are unique within a product type. A singular or repeated field can reference a semantic scalar or another named type. `type` and `repeated` are mutually exclusive; `repeated: true` is not valid v3 syntax.
+
+`repeated` describes multiplicity inside one domain value. Generated Java records expose it as an immutable, non-null `List<T>`; generated protobuf uses a `repeated` field; and generated JSON Schema uses an array whose missing value normalizes to an empty array. Order and duplicates are preserved. Adding a repeated field is therefore compatible with an older pinned IDL snapshot and with protobuf/JSON readers: old payloads observe the field as empty. Changing an existing field between singular and repeated is incompatible.
+
+Repeated fields do not imply reactive cardinality. Expanding a `List<T>` into a `Multi<T>` or collecting a `Multi<T>` into a list is application logic and must be explicit in the step implementation, for example:
+
+```java
+public Multi<PaymentLineItem> process(PaymentRequest request) {
+    return Multi.createFrom().iterable(request.lineItems());
+}
+
+public Uni<PaymentRequest> process(Multi<PaymentLineItem> items) {
+    return items.collect().asList()
+        .map(collected -> new PaymentRequest(orderId, amount, collected));
+}
+```
+
+The corresponding steps declare `ONE_TO_MANY` and `MANY_TO_ONE`. TPF does not insert a collection-to-stream or stream-to-collection conversion.
 
 ### External representations
 
@@ -91,9 +126,39 @@ types:
 
 The mapper's `toExternal` direction is used only when writing the persistence representation. Its `fromExternal` direction remains part of the same generic mapper contract for readers and later boundaries; a persistence write does not round-trip the saved entity back into the pipeline.
 
+The `file` representation is mapper-free. It applies to a record containing one `payload_ref` field
+and declares `type: java.nio.file.Path` on both sides of an ordinary step. Input options bound the
+materialized size. Output options name an Object Publish target, bound the published size, and may
+override the v1 filename-derived object key. The generated facade preserves the step's normal
+`ONE_TO_ONE` or `ONE_TO_MANY` cardinality.
+
+At the service boundary, the mapping changes what the author implements:
+
+| Step cardinality | Authored service |
+| --- | --- |
+| `ONE_TO_ONE` | `ReactiveService<Path, Path>` returning `Uni<Path>` |
+| `ONE_TO_MANY` | `ReactiveStreamingService<Path, Path>` returning `Multi<Path>` |
+
+The YAML step still names the canonical input and output contracts:
+
+```yaml
+steps:
+  - name: Render pages
+    service: com.example.documents.RenderPagesService
+    cardinality: ONE_TO_MANY
+    input: SourceDocument
+    output: RenderedPage
+```
+
+For Object Ingest, `selection.mode: together` can construct one canonical input from several listed
+objects. Use `selection.keys` for differently named fields, or `selection.into` for one repeated
+`payload_ref` field. TPF generates the projection in both cases; the first authored service receives
+the canonical record directly. Complete configuration and Java examples are in
+[Object Ingest And Publish](../design/object-ingest.md#grouped-selection).
+
 ### Preview representation support
 
-Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step.
+Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step. The `file` consumer is the mapper-free payload-reference boundary for ordinary `Path` services.
 
 JSON, REST, checkpoint, object-publish, and broker boundaries retain their current application-owned or transport-owned conversion paths. They do not yet infer or generate a `json` representation from `mappings`. A declared mapping is therefore not a user-selectable conversion mode and does not promise support from every component.
 
@@ -161,7 +226,7 @@ types:
       requiresReview: PaymentRequiresReview
 ```
 
-A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
+A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types, including contributed `<Type>` references; inline payload records and payload-less variants are intentionally outside this DSL.
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 
@@ -223,7 +288,7 @@ Generated Java sources live under `<basePackage>.domain`. A record field keeps i
 
 The generated `PipelineDomainProtoAdapters` class converts generated records, wrappers, and unions to and from the generated protobuf types. It is public application-facing generated code, but its exact class and method shape remains provisional while the Java target continues to evolve.
 
-Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
+Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. Repeated components are different: their generated compact constructor normalizes `null` to `List.of()` and defensively copies supplied values with `List.copyOf(...)`. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
 
 Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
 
@@ -336,7 +401,7 @@ A Java binding identifies a domain type. A mapper performs a representation conv
 
 | Boundary | Required declaration |
 | --- | --- |
-| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline/domain conversion |
+| Object ingest into the first business step | `input.emits.mapper` for non-grouped object ingest; grouped `selection.mode: together` drives `selection`-based projection and does not need an `emits.mapper` |
 | Service outside the compiling module | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated client crosses representations |
 | Object publish from the terminal business step | terminal `outboundMapper` and `output.consumes.mapper` |
 

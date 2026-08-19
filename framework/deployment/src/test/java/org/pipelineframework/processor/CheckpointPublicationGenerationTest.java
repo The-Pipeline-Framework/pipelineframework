@@ -99,7 +99,7 @@ class CheckpointPublicationGenerationTest {
     }
 
     @Test
-    void failsWhenLegacyConnectorsBlockIsDeclared() throws IOException {
+    void failsWhenConnectorBindingsAreNotAMap() throws IOException {
         Path generatedSourcesDir = tempDir.resolve("bad/target/generated-sources/pipeline");
         Path configRoot = tempDir.resolve("bad");
         Files.createDirectories(generatedSourcesDir);
@@ -137,8 +137,7 @@ class CheckpointPublicationGenerationTest {
                 mapperStub("ReadyOrderMapper", "ReadyOrder", "ReadyOrderDto"));
 
         assertThat(compilation).failed();
-        assertThat(compilation).hadErrorContaining(
-            "Top-level connectors are no longer supported; use input.subscription and output.checkpoint");
+        assertThat(compilation).hadErrorContaining("connectors must be defined as a map");
     }
 
     private JavaFileObject pipelineStepStub() {

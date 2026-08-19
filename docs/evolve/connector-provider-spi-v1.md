@@ -186,6 +186,11 @@ M1 does **not** define:
 - durable agent audit model;
 - whether agents orchestrate/query/command other connector operations.
 
+The current LLM Query connector contributes the portable, inert `AgentCall` data type for
+application-authored decision unions. That proposal payload is not an `AgentOperation`, does not execute
+anything, and does not change this SPI's decision to keep Agent execution semantics out of the universal
+provider mechanics.
+
 No generated Agent step or runtime execution path is added in M1/M2 unless a later pinned design explicitly introduces one.
 
 ## Provider identity, discovery and lifecycle
@@ -198,8 +203,12 @@ no-argument packaging constructor; Quarkus creates non-contextual CDI instances 
 bean so injection, post-construction and destruction remain container-owned.
 
 Native provider packaging derives descriptors from executable provider instances and emits direct
-service registration plus `META-INF/pipeline/connector-providers.json`. The consuming compiler reads
-that metadata without instantiating providers or resolving connections/secrets.
+service registration plus `META-INF/pipeline/connector-providers.json`. Manifest schema v2 may also
+bundle immutable protocol type descriptors under the provider's own namespace. Those descriptors
+encode exactly the canonical v3 record, wrapper, alias, and union shapes; they are compile-time
+vocabulary, not operations or an alternative external schema language. The consuming compiler reads
+and validates the metadata without instantiating providers or resolving connections/secrets. Schema v1
+manifests remain valid and contribute no protocol types.
 
 Quarkus/CDI integration is an adapter. The public SPI never calls `CDI.current()` and provider authors must not need Quarkus build-step knowledge.
 

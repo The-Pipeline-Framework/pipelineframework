@@ -228,10 +228,10 @@ final class CheckpointBoundaryValidator {
         if (processingEnv == null) {
             return;
         }
-        String mapperClass = objectInput.mapper();
-        if (mapperClass == null || mapperClass.isBlank()) {
+        if (objectInput.mapper().isEmpty()) {
             return;
         }
+        String mapperClass = objectInput.mapper().orElseThrow();
         TypeElement mapperElement = processingEnv.getElementUtils().getTypeElement(mapperClass);
         if (mapperElement == null) {
             throw new IllegalStateException("Object input mapper type not found: " + mapperClass);

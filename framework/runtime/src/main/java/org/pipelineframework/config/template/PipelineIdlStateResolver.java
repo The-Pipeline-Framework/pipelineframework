@@ -106,15 +106,18 @@ public final class PipelineIdlStateResolver {
                     if (protoName.isBlank() || !protoNames.add(protoName)) {
                         throw new IllegalStateException("Type '" + name + "' has colliding protobuf field name '" + protoName + "'.");
                     }
-                    fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(number, field.name(), protoName, field.type().name()));
+                    fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(
+                        number, field.name(), protoName, field.type().name(), field.repeated()));
                 }
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
-                    reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList()));
+                    reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList(),
+                    PipelineTemplateWrapperConstraints.empty(), contributedIdentity(config, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of(),
-                    List.of(), List.of(), wrapper.constraints()));
+                    List.of(), List.of(), wrapper.constraints(), contributedIdentity(config, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of(),
+                    List.of(), List.of(), PipelineTemplateWrapperConstraints.empty(), contributedIdentity(config, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
                 Map<String, Integer> priorNumbers = previous == null ? Map.of() : previous.variants().stream()
                     .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeVariantSnapshot::discriminator,
@@ -165,12 +168,17 @@ public final class PipelineIdlStateResolver {
                     variants.add(new PipelineIdlSnapshot.TypeVariantSnapshot(variant.discriminator(), variant.payload().name(), protoName, number));
                 }
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "union", List.of(), Optional.empty(), variants,
-                    reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList()));
+                    reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList(),
+                    PipelineTemplateWrapperConstraints.empty(), contributedIdentity(config, name)));
             }
         }
         List<PipelineIdlSnapshot.StepSnapshot> steps = config.steps().stream()
             .map(step -> new PipelineIdlSnapshot.StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName())).toList();
         return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), Map.of(), Map.of(), types, steps);
+    }
+
+    private static Optional<String> contributedIdentity(PipelineTemplateConfig config, String name) {
+        return config.typeModel().contributedTypeIdentity(name).map(identity -> identity.qualifiedName());
     }
 
     static String toProtoFieldName(String input) {

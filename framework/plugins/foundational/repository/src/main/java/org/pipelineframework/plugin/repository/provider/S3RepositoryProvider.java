@@ -118,7 +118,8 @@ public class S3RepositoryProvider implements RepositoryProvider {
                 request.checksum(),
                 request.payload().length,
                 request.version(),
-                request.metadata());
+                request.metadata(),
+                Optional.empty());
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 

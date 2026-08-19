@@ -18,6 +18,8 @@ package org.pipelineframework.config.template;
 
 import java.util.*;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * Normalized IDL snapshot used for compatibility checking and build metadata emission.
  *
@@ -240,14 +242,16 @@ public record PipelineIdlSnapshot(
                     int number = allocator.allocate(unavailable);
                     unavailable.add(number);
                     fields.add(new TypeFieldSnapshot(number, field.name(),
-                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name()));
+                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name(), field.repeated()));
                 }
-                result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of()));
+                result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of(), List.of(), List.of(),
+                    PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
                 result.put(name, new TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of(),
-                    List.of(), List.of(), wrapper.constraints()));
+                    List.of(), List.of(), wrapper.constraints(), contributedIdentity(typeModel, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
-                result.put(name, new TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
+                result.put(name, new TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of(),
+                    List.of(), List.of(), PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
                 List<TypeVariantSnapshot> variants = new ArrayList<>();
                 Set<Integer> unavailable = new HashSet<>();
@@ -258,10 +262,15 @@ public record PipelineIdlSnapshot(
                     variants.add(new TypeVariantSnapshot(variant.discriminator(), variant.payload().name(),
                         PipelineIdlStateResolver.toProtoFieldName(variant.discriminator()), number));
                 }
-                result.put(name, new TypeSnapshot(name, "union", List.of(), Optional.empty(), variants));
+                result.put(name, new TypeSnapshot(name, "union", List.of(), Optional.empty(), variants, List.of(), List.of(),
+                    PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
             }
         });
         return result;
+    }
+
+    private static Optional<String> contributedIdentity(PipelineTemplateTypeModel typeModel, String name) {
+        return typeModel.contributedTypeIdentity(name).map(identity -> identity.qualifiedName());
     }
 
     public record MessageSnapshot(
@@ -317,7 +326,8 @@ public record PipelineIdlSnapshot(
         List<TypeVariantSnapshot> variants,
         List<Integer> reservedNumbers,
         List<String> reservedNames,
-        PipelineTemplateWrapperConstraints constraints
+        PipelineTemplateWrapperConstraints constraints,
+        Optional<String> contributedIdentity
     ) {
         public TypeSnapshot {
             fields = fields == null ? List.of() : List.copyOf(fields);
@@ -326,22 +336,41 @@ public record PipelineIdlSnapshot(
             reservedNumbers = reservedNumbers == null ? List.of() : List.copyOf(reservedNumbers);
             reservedNames = reservedNames == null ? List.of() : List.copyOf(reservedNames);
             constraints = constraints == null ? PipelineTemplateWrapperConstraints.empty() : constraints;
+            contributedIdentity = contributedIdentity == null ? Optional.empty() : contributedIdentity;
         }
 
         public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
                             List<TypeVariantSnapshot> variants) {
-            this(name, kind, fields, target, variants, List.of(), List.of(), PipelineTemplateWrapperConstraints.empty());
+            this(name, kind, fields, target, variants, List.of(), List.of(), PipelineTemplateWrapperConstraints.empty(),
+                Optional.empty());
         }
 
         public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
                             List<TypeVariantSnapshot> variants, List<Integer> reservedNumbers, List<String> reservedNames) {
-            this(name, kind, fields, target, variants, reservedNumbers, reservedNames, PipelineTemplateWrapperConstraints.empty());
+            this(name, kind, fields, target, variants, reservedNumbers, reservedNames,
+                PipelineTemplateWrapperConstraints.empty(), Optional.empty());
+        }
+
+        public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
+                            List<TypeVariantSnapshot> variants, List<Integer> reservedNumbers, List<String> reservedNames,
+                            PipelineTemplateWrapperConstraints constraints) {
+            this(name, kind, fields, target, variants, reservedNumbers, reservedNames, constraints, Optional.empty());
         }
     }
 
-    public record TypeFieldSnapshot(int number, String name, String protoName, String type) {
+    public record TypeFieldSnapshot(
+        int number,
+        String name,
+        String protoName,
+        String type,
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated
+    ) {
+        public TypeFieldSnapshot(int number, String name, String protoName, String type) {
+            this(number, name, protoName, type, false);
+        }
+
         public TypeFieldSnapshot(int number, String name, String type) {
-            this(number, name, name, type);
+            this(number, name, name, type, false);
         }
     }
 

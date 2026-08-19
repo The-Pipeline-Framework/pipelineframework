@@ -50,7 +50,8 @@ public record PipelineYamlConfig(
     List<PipelineYamlAspect> aspects,
     PipelineInputBoundaryConfig input,
     PipelineOutputBoundaryConfig output,
-    Map<String, PipelineYamlConnectorBinding> connectors
+    Map<String, PipelineYamlConnectorBinding> connectors,
+    Map<String, List<PipelineYamlStep>> localPipelines
 ) {
     /**
      * Creates a validated pipeline configuration.
@@ -73,6 +74,7 @@ public record PipelineYamlConfig(
         validateMap(queries, "queries");
         validateMap(publish, "publish");
         validateMap(connectors, "connectors");
+        validateMap(localPipelines, "local pipelines");
         if (connectors != null) {
             connectors.forEach((name, binding) -> {
                 if (!name.equals(binding.name())) {
@@ -85,6 +87,33 @@ public record PipelineYamlConfig(
         queries = queries == null ? Map.of() : Map.copyOf(queries);
         publish = publish == null ? Map.of() : Map.copyOf(publish);
         connectors = connectors == null ? Map.of() : Map.copyOf(connectors);
+        if (localPipelines == null || localPipelines.isEmpty()) {
+            localPipelines = Map.of();
+        } else {
+            java.util.LinkedHashMap<String, List<PipelineYamlStep>> copied = new java.util.LinkedHashMap<>();
+            localPipelines.forEach((key, value) -> copied.put(key, List.copyOf(value)));
+            localPipelines = java.util.Collections.unmodifiableMap(copied);
+        }
+    }
+
+    /** Backward-compatible canonical constructor shape before local pipeline steps were retained. */
+    public PipelineYamlConfig(
+        String basePackage, String transport, String platform, List<PipelineYamlStep> steps,
+        Map<String, PipelineObjectSourceConfig> sources, Map<String, PipelineYamlQuery> queries,
+        Map<String, PipelineObjectPublishConfig> publish, List<PipelineYamlAspect> aspects,
+        PipelineInputBoundaryConfig input, PipelineOutputBoundaryConfig output,
+        Map<String, PipelineYamlConnectorBinding> connectors
+    ) {
+        this(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output,
+            connectors, Map.of());
+    }
+
+    /** All definition-local step lists, including the root definition. */
+    public Map<String, List<PipelineYamlStep>> stepDefinitions() {
+        java.util.LinkedHashMap<String, List<PipelineYamlStep>> definitions = new java.util.LinkedHashMap<>();
+        definitions.put("$root", steps);
+        definitions.putAll(localPipelines);
+        return java.util.Collections.unmodifiableMap(definitions);
     }
 
     public PipelineYamlConfig(
@@ -199,7 +228,8 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated transport
      */
     public PipelineYamlConfig withTransport(String transport) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output, connectors);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output,
+            connectors, localPipelines);
     }
 
     /**
@@ -209,6 +239,7 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated platform
      */
     public PipelineYamlConfig withPlatform(String platform) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output, connectors);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output,
+            connectors, localPipelines);
     }
 }

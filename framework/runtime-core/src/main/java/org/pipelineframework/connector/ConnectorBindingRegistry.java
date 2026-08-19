@@ -8,9 +8,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
+import org.pipelineframework.repository.PayloadReference;
 
 /**
  * Deterministic registry and lifecycle owner for named configured provider instances.
@@ -281,6 +283,82 @@ public final class ConnectorBindingRegistry {
             new ConnectorOperationIdentity(
                 binding.lease().provider().id(), operationId, ConnectorOperationKind.QUERY, operationMajorVersion),
             QueryOperation.class);
+    }
+
+    /** Returns the durable identity of one configured object-source operation. */
+    public ConnectorPayloadOrigin objectSourceOrigin(
+        ConnectorBindingName name,
+        String operationId,
+        int operationMajorVersion
+    ) {
+        BindingSlot slot = requireSlot(name);
+        ConnectorProvider<?> provider = slot.prototype();
+        ConnectorOperationIdentity operation = new ConnectorOperationIdentity(
+            provider.id(), operationId, ConnectorOperationKind.OBJECT_SOURCE, operationMajorVersion);
+        new ConnectorRegistry(List.of(provider)).requireExecutionOperation(operation, ObjectSourceOperation.class);
+        Optional<ConnectorConfigurationSnapshot> configuration = provider.configurationSchema()
+            .map(schema -> ConnectorConfigurationSnapshot.from(schema, slot.definition().configuration(), true));
+        return new ConnectorPayloadOrigin(
+            name, operation, slot.definition().providerMajorVersion(), configuration);
+    }
+
+    /** Resolves only when the current binding has the exact origin captured in the reference. */
+    public synchronized ObjectSourceOperation requireObjectSourceOperation(ConnectorPayloadOrigin origin) {
+        Objects.requireNonNull(origin, "connector payload origin must not be null");
+        ConnectorPayloadOrigin current = objectSourceOrigin(
+            origin.bindingName(), origin.operation().operationId(), origin.operation().majorVersion());
+        if (!current.equals(origin)) {
+            throw new IllegalStateException(
+                "connector payload binding provenance changed for '" + origin.bindingName().value() + "'");
+        }
+        if (origin.providerMajorVersion() != requireSlot(origin.bindingName()).definition().providerMajorVersion()) {
+            throw new IllegalStateException(
+                "connector payload provider major version changed for '" + origin.bindingName().value() + "'");
+        }
+        Binding binding = requireActiveBinding(origin.bindingName());
+        return binding.registry().requireExecutionOperation(origin.operation(), ObjectSourceOperation.class);
+    }
+
+    /** Attaches the configured source binding provenance to a provider-produced object reference. */
+    public PayloadReference ownPayloadReference(
+        ConnectorBindingName name,
+        String sourceOperationId,
+        int sourceOperationMajorVersion,
+        PayloadReference reference
+    ) {
+        Objects.requireNonNull(reference, "payload reference must not be null");
+        ConnectorPayloadOrigin origin = objectSourceOrigin(name, sourceOperationId, sourceOperationMajorVersion);
+        return reference.withConnectorOrigin(origin);
+    }
+
+    /** Materializes a connector-owned reference without exposing provider-native location semantics. */
+    public CompletionStage<MaterializedPayload> materialize(PayloadReference reference, long maxBytes) {
+        Objects.requireNonNull(reference, "payload reference must not be null");
+        if (maxBytes < 1) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("maxBytes must be positive"));
+        }
+        if (reference.sizeBytes() > maxBytes) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                "payload reference exceeds maxBytes: " + reference.sizeBytes() + " > " + maxBytes));
+        }
+        ConnectorPayloadOrigin origin = reference.connectorOrigin().orElseThrow(() ->
+            new IllegalArgumentException("payload reference is not connector-owned"));
+        final ObjectSourceOperation operation;
+        try {
+            operation = requireObjectSourceOperation(origin);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+        return operation.materialize(reference, maxBytes).thenApply(payload -> {
+            if (!reference.equals(payload.reference())) {
+                throw new IllegalStateException("object source materialized a different payload reference");
+            }
+            if (payload.bytes().length > maxBytes) {
+                throw new IllegalStateException(
+                    "materialized payload exceeds maxBytes: " + payload.bytes().length + " > " + maxBytes);
+            }
+            return payload;
+        });
     }
 
     private BindingSlot requireSlot(ConnectorBindingName name) {

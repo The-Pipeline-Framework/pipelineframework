@@ -2,6 +2,7 @@ package org.pipelineframework.processor.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -97,6 +98,74 @@ class ConnectorBindingMetadataGeneratorTest {
             .get("operation").getAsString());
         assertFalse(json.contains("work-connection"), json);
         assertFalse(json.contains("secret-reference"), json);
+    }
+
+    @Test
+    void validatesAndEmitsCallableTargetsAgainstExactBindingOperationMetadata() throws Exception {
+        Path metadataRoot = tempDir.resolve("callable-provider-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":2,"providers":[
+              {"id":"llm.query","version":{"major":1,"minor":0},"operations":[
+                {"id":"decide","kind":"tpf:query","majorVersion":1,"queryCapabilities":{"cacheability":"LIVE_ONLY"}}]},
+              {"id":"acme.payments","version":{"major":1,"minor":0},"operations":[
+                {"id":"charge.create","kind":"tpf:command","majorVersion":2,
+                 "typeContract":{"input":"ChargeArguments","output":"ChargeResult"}}]}
+            ]}
+            """);
+        Path pipeline = tempDir.resolve("llm-pipeline.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              model: { provider: llm.query, version: 1 }
+              payments: { provider: acme.payments, version: 1 }
+            steps:
+              - name: Decide
+                kind: query
+                operation: decide
+                using: model
+                input: State
+                output: Decision
+                callables:
+                  charge: { using: payments, operation: charge.create, operationVersion: 2, kind: command, input: ChargeArguments }
+            """);
+        Path classOutput = tempDir.resolve("callable-class-output");
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipeline.toString()));
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        context.setModuleDir(tempDir);
+
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            new ConnectorBindingMetadataGenerator(processingEnv).writeMetadata(context);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
+
+        JsonObject root = JsonParser.parseString(Files.readString(
+            classOutput.resolve(ConnectorBindingMetadataGenerator.RESOURCE_PATH))).getAsJsonObject();
+        assertEquals(2, root.get("schemaVersion").getAsInt());
+        JsonObject payments = root.getAsJsonArray("bindings").asList().stream()
+            .map(value -> value.getAsJsonObject())
+            .filter(value -> value.get("name").getAsString().equals("payments"))
+            .findFirst().orElseThrow();
+        JsonObject callable = payments.getAsJsonArray("callables").get(0).getAsJsonObject();
+        assertEquals("charge", callable.get("alias").getAsString());
+        assertEquals("charge.create", callable.get("operation").getAsString());
+        assertEquals("ChargeArguments", callable.get("input").getAsString());
+
+        Files.writeString(pipeline, Files.readString(pipeline).replace("operationVersion: 2", "operationVersion: 3"));
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            assertThrows(IllegalArgumentException.class,
+                () -> new ConnectorBindingMetadataGenerator(processingEnv).writeMetadata(context));
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
     }
 
     private static final class PathResourceFiler implements Filer {

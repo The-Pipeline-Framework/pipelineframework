@@ -122,10 +122,26 @@ final class PipelineJavaDomainRenderer {
         builder.append("public record ").append(record.name()).append("(\n");
         for (int i = 0; i < record.fields().size(); i++) {
             PipelineTemplateTypeDefinition.Field field = record.fields().get(i);
-            builder.append("    ").append(resolveJavaType(field.type(), plan.typeModel())).append(' ').append(field.name());
+            builder.append("    ");
+            if (field.repeated()) {
+                builder.append("java.util.List<");
+            }
+            builder.append(resolveJavaType(field.type(), plan.typeModel()));
+            if (field.repeated()) {
+                builder.append('>');
+            }
+            builder.append(' ').append(field.name());
             builder.append(i + 1 == record.fields().size() ? "\n" : ",\n");
         }
-        return builder.append(") {\n}\n").toString();
+        builder.append(") {\n");
+        if (record.fields().stream().anyMatch(field -> field.repeated())) {
+            builder.append("    public ").append(record.name()).append(" {\n");
+            record.fields().stream().filter(field -> field.repeated()).forEach(field -> builder
+                .append("        ").append(field.name()).append(" = ").append(field.name())
+                .append(" == null ? java.util.List.of() : java.util.List.copyOf(").append(field.name()).append(");\n"));
+            builder.append("    }\n");
+        }
+        return builder.append("}\n").toString();
     }
 
     private String renderWrapper(
@@ -219,9 +235,15 @@ final class PipelineJavaDomainRenderer {
         for (PipelineTemplateTypeDefinition.Field field : record.fields()) {
             PipelineIdlSnapshot.TypeFieldSnapshot fieldState = requiredFieldState(record.name(), field.name(), state);
             String accessor = "value." + field.name() + "()";
-            builder.append("        if (").append(accessor).append(" != null) { builder.")
-                .append("set").append(javaSetter(fieldState.protoName())).append('(')
-                .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append("); }\n");
+            if (field.repeated()) {
+                builder.append("        builder.addAll").append(javaSetter(fieldState.protoName())).append('(')
+                    .append(accessor).append(".stream().map(item -> ")
+                    .append(toProtoExpression(field.type(), "item", plan.typeModel())).append(").toList());\n");
+            } else {
+                builder.append("        if (").append(accessor).append(" != null) { builder.")
+                    .append("set").append(javaSetter(fieldState.protoName())).append('(')
+                    .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append("); }\n");
+            }
         }
         builder.append("        return builder.build();\n    }\n\n");
 
@@ -232,10 +254,18 @@ final class PipelineJavaDomainRenderer {
         for (int i = 0; i < record.fields().size(); i++) {
             PipelineTemplateTypeDefinition.Field field = record.fields().get(i);
             PipelineIdlSnapshot.TypeFieldSnapshot fieldState = requiredFieldState(record.name(), field.name(), state);
-            String getter = "value.get" + javaSetter(fieldState.protoName()) + "()";
-            builder.append("            value.has").append(javaSetter(fieldState.protoName())).append("() ? ")
-                .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(" : null")
-                .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            String setter = javaSetter(fieldState.protoName());
+            if (field.repeated()) {
+                builder.append("            value.get").append(setter)
+                    .append("List().stream().map(item -> ")
+                    .append(fromProtoExpression(field.type(), "item", plan.typeModel())).append(").toList()")
+                    .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            } else {
+                String getter = "value.get" + setter + "()";
+                builder.append("            value.has").append(setter).append("() ? ")
+                    .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(" : null")
+                    .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            }
         }
         builder.append("        );\n    }\n\n");
     }
@@ -398,16 +428,54 @@ final class PipelineJavaDomainRenderer {
         builder.append("    private static ").append(protoTypes).append(".PayloadReference toProtoPayloadReference(")
             .append(PAYLOAD_REFERENCE).append(" value) {\n")
             .append("        if (value == null) { return null; }\n")
-            .append("        return ").append(protoTypes).append(".PayloadReference.newBuilder()\n")
-            .append("            .setProvider(value.provider()).setContainer(value.container()).setKey(value.key())\n")
-            .append("            .setContentType(value.contentType()).setCodec(value.codec()).setChecksum(value.checksum())\n")
-            .append("            .setSizeBytes(value.sizeBytes()).setVersion(value.version()).putAllMetadata(value.metadata()).build();\n")
+            .append("        var reference = ").append(protoTypes).append(".PayloadReference.newBuilder()\n")
+            .append("            .setKey(value.key()).setSizeBytes(value.sizeBytes()).putAllMetadata(value.metadata());\n")
+            .append("        if (value.provider() != null) { reference.setProvider(value.provider()); }\n")
+            .append("        if (value.container() != null) { reference.setContainer(value.container()); }\n")
+            .append("        if (value.contentType() != null) { reference.setContentType(value.contentType()); }\n")
+            .append("        if (value.codec() != null) { reference.setCodec(value.codec()); }\n")
+            .append("        if (value.checksum() != null) { reference.setChecksum(value.checksum()); }\n")
+            .append("        if (value.version() != null) { reference.setVersion(value.version()); }\n")
+            .append("        value.connectorOrigin().ifPresent(origin -> {\n")
+            .append("            var encoded = ").append(protoTypes).append(".ConnectorPayloadOrigin.newBuilder()\n")
+            .append("                .setBindingName(origin.bindingName().value())\n")
+            .append("                .setProviderId(origin.operation().providerId().value())\n")
+            .append("                .setOperationId(origin.operation().operationId())\n")
+            .append("                .setOperationKind(origin.operation().kind().value())\n")
+            .append("                .setOperationMajorVersion(origin.operation().majorVersion())\n")
+            .append("                .setProviderMajorVersion(origin.providerMajorVersion());\n")
+            .append("            origin.configuration().ifPresent(configuration -> encoded.setHasConfiguration(true)\n")
+            .append("                .setConfigurationSchemaId(configuration.schemaId())\n")
+            .append("                .setConfigurationSchemaVersion(configuration.schemaVersion())\n")
+            .append("                .setConfigurationDigest(configuration.digest())\n")
+            .append("                .addAllConnectionReferences(configuration.connectionReferences().stream()\n")
+            .append("                    .map(org.pipelineframework.connector.ConnectionRef::value).toList()));\n")
+            .append("            reference.setConnectorOrigin(encoded);\n")
+            .append("        });\n")
+            .append("        return reference.build();\n")
             .append("    }\n\n")
             .append("    private static ").append(PAYLOAD_REFERENCE).append(" fromProtoPayloadReference(")
             .append(protoTypes).append(".PayloadReference value) {\n")
+            .append("        java.util.Optional<org.pipelineframework.connector.ConnectorPayloadOrigin> origin = value.hasConnectorOrigin()\n")
+            .append("            ? java.util.Optional.of(fromProtoConnectorPayloadOrigin(value.getConnectorOrigin()))\n")
+            .append("            : java.util.Optional.empty();\n")
             .append("        return new ").append(PAYLOAD_REFERENCE).append("(value.getProvider(), value.getContainer(), value.getKey(),\n")
             .append("            value.getContentType(), value.getCodec(), value.getChecksum(), value.getSizeBytes(), value.getVersion(),\n")
-            .append("            value.getMetadataMap());\n    }\n\n");
+            .append("            value.getMetadataMap(), origin);\n    }\n\n")
+            .append("    private static org.pipelineframework.connector.ConnectorPayloadOrigin fromProtoConnectorPayloadOrigin(")
+            .append(protoTypes).append(".ConnectorPayloadOrigin value) {\n")
+            .append("        java.util.Optional<org.pipelineframework.connector.ConnectorConfigurationSnapshot> configuration =\n")
+            .append("            value.getHasConfiguration() ? java.util.Optional.of(new org.pipelineframework.connector.ConnectorConfigurationSnapshot(\n")
+            .append("                value.getConfigurationSchemaId(), value.getConfigurationSchemaVersion(), value.getConfigurationDigest(),\n")
+            .append("                value.getConnectionReferencesList().stream().map(org.pipelineframework.connector.ConnectionRef::new).toList()))\n")
+            .append("            : java.util.Optional.empty();\n")
+            .append("        return new org.pipelineframework.connector.ConnectorPayloadOrigin(\n")
+            .append("            org.pipelineframework.connector.ConnectorBindingName.of(value.getBindingName()),\n")
+            .append("            new org.pipelineframework.connector.ConnectorOperationIdentity(\n")
+            .append("                org.pipelineframework.connector.ConnectorProviderId.of(value.getProviderId()), value.getOperationId(),\n")
+            .append("                org.pipelineframework.connector.ConnectorOperationKind.of(value.getOperationKind()), value.getOperationMajorVersion()),\n")
+            .append("            value.getProviderMajorVersion(), configuration);\n")
+            .append("    }\n\n");
     }
 
     private boolean usesPayloadReference(PipelineGenerationPlan plan) {

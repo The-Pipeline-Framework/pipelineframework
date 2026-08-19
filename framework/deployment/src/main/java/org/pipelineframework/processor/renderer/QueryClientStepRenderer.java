@@ -115,6 +115,50 @@ public class QueryClientStepRenderer {
             .writeTo(ctx.outputDir());
     }
 
+    /** Renders an adapter that invokes one operation from a compiler-pinned callable catalogue. */
+    public void renderDynamicOperation(PipelineStepModel model, GenerationContext ctx) throws IOException {
+        String baseName = model.generatedName().endsWith("Service")
+            ? model.generatedName().substring(0, model.generatedName().length() - "Service".length())
+            : model.generatedName();
+        String className = baseName + "DynamicOperationClientStep";
+        PipelineConfigHints configHints = resolveConfigHints(ctx);
+        TypeName inputType = clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage());
+        TypeName outputType = clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage());
+        FieldSpec support = FieldSpec.builder(
+                ClassName.get("org.pipelineframework.dispatch", "OperationDispatchSupport"), "support")
+            .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build();
+        FieldSpec descriptorFactory = FieldSpec.builder(
+                ClassName.get("org.pipelineframework.dispatch", "OperationDispatchDescriptorFactory"), "descriptorFactory")
+            .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build();
+        MethodSpec apply = MethodSpec.methodBuilder("applyOneToOne")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
+            .addParameter(inputType, "input")
+            .addStatement("return support.dispatch(descriptorFactory.descriptor($S), input.binding(), input.operation(), input.argumentsJson(), $T.class)",
+                model.serviceName(), outputType)
+            .build();
+        TypeSpec type = TypeSpec.classBuilder(className)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.enterprise.context", "Dependent")).build())
+            .addAnnotation(AnnotationSpec.builder(ClassName.get(Unremovable.class)).build())
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
+                .addMember("value", "$T.$L", ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
+                    ctx.role().name()).build())
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "ParallelismHint"))
+                .addMember("ordering", "$T.$L", ClassName.get(OrderingRequirement.class), OrderingRequirement.RELAXED.name())
+                .addMember("threadSafety", "$T.$L", ClassName.get(ThreadSafety.class), ThreadSafety.SAFE.name()).build())
+            .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
+            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
+            .addField(support)
+            .addField(descriptorFactory)
+            .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
+            .addMethod(apply)
+            .build();
+        JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
+            .build().writeTo(ctx.outputDir());
+    }
+
     private MethodSpec queryCacheRequirementsMethod(NativeCacheRequirements requirements) {
         QueryCapabilities capabilities = requirements.capabilities();
         CodeBlock maximumCacheAge = capabilities.maximumCacheAge()
@@ -194,8 +238,7 @@ public class QueryClientStepRenderer {
     }
 
     private static ClassLoader metadataClassLoader() {
-        ClassLoader context = Thread.currentThread().getContextClassLoader();
-        return context == null ? QueryClientStepRenderer.class.getClassLoader() : context;
+        return ConnectorProviderManifestLoader.metadataClassLoader(QueryClientStepRenderer.class);
     }
 
     private static boolean matchesServiceName(String generatedServiceName, String stepName) {

@@ -18,6 +18,8 @@ package org.pipelineframework.config.template;
 
 import java.util.*;
 
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
+
 /**
  * Immutable semantic type graph shared by v3 consumers.
  *
@@ -28,6 +30,7 @@ public final class PipelineTemplateTypeModel {
     private final Map<String, PipelineTemplateTypeDefinition> definitions;
     private final Map<String, Map<String, RepresentationMapping>> representationMappings;
     private final Map<String, Map<String, Object>> representationProviderConfigurations;
+    private final Map<String, ProtocolTypeIdentity> contributedTypeIdentities;
 
     public PipelineTemplateTypeModel(Map<String, PipelineTemplateTypeDefinition> definitions) {
         this(definitions, Map.of());
@@ -37,7 +40,7 @@ public final class PipelineTemplateTypeModel {
         Map<String, PipelineTemplateTypeDefinition> definitions,
         Map<String, Map<String, RepresentationMapping>> representationMappings
     ) {
-        this(definitions, representationMappings, Map.of());
+        this(definitions, representationMappings, Map.of(), Map.of());
     }
 
     public PipelineTemplateTypeModel(
@@ -45,12 +48,22 @@ public final class PipelineTemplateTypeModel {
         Map<String, Map<String, RepresentationMapping>> representationMappings,
         Map<String, Map<String, Object>> representationProviderConfigurations
     ) {
+        this(definitions, representationMappings, representationProviderConfigurations, Map.of());
+    }
+
+    public PipelineTemplateTypeModel(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings,
+        Map<String, Map<String, Object>> representationProviderConfigurations,
+        Map<String, ProtocolTypeIdentity> contributedTypeIdentities
+    ) {
         Map<String, PipelineTemplateTypeDefinition> copy = definitions == null
             ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
         validate(copy);
         this.definitions = copy;
         this.representationMappings = normalizeRepresentationMappings(copy, representationMappings);
         this.representationProviderConfigurations = normalizeProviderConfigurations(representationProviderConfigurations);
+        this.contributedTypeIdentities = normalizeContributedIdentities(copy, contributedTypeIdentities);
     }
 
     public static PipelineTemplateTypeModel empty() {
@@ -65,7 +78,8 @@ public final class PipelineTemplateTypeModel {
         if (messages != null) {
             messages.forEach((name, message) -> definitions.put(name,
                 new PipelineTemplateTypeDefinition.RecordType(name, message.fields().stream()
-                    .map(field -> new PipelineTemplateTypeDefinition.Field(field.name(), legacyReference(field)))
+                    .map(field -> new PipelineTemplateTypeDefinition.Field(
+                        field.name(), legacyReference(field), field.repeated()))
                     .toList())));
         }
         if (unions != null) {
@@ -128,6 +142,32 @@ public final class PipelineTemplateTypeModel {
 
     public Optional<Map<String, Object>> representationProviderConfiguration(String key) {
         return Optional.ofNullable(representationProviderConfigurations.get(key));
+    }
+
+    /** Canonical contribution identity by normalized local type name. */
+    public Map<String, ProtocolTypeIdentity> contributedTypeIdentities() {
+        return contributedTypeIdentities;
+    }
+
+    public Optional<ProtocolTypeIdentity> contributedTypeIdentity(String localTypeName) {
+        return Optional.ofNullable(contributedTypeIdentities.get(localTypeName));
+    }
+
+    private static Map<String, ProtocolTypeIdentity> normalizeContributedIdentities(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, ProtocolTypeIdentity> identities
+    ) {
+        if (identities == null || identities.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ProtocolTypeIdentity> normalized = new LinkedHashMap<>();
+        identities.forEach((localName, identity) -> {
+            if (!definitions.containsKey(localName) || identity == null || !localName.equals(identity.typeName())) {
+                throw new IllegalStateException("Invalid contributed protocol type provenance for '" + localName + "'");
+            }
+            normalized.put(localName, identity);
+        });
+        return Collections.unmodifiableMap(normalized);
     }
 
     public PipelineTemplateTypeReference resolveAliases(PipelineTemplateTypeReference reference) {
@@ -270,6 +310,10 @@ public final class PipelineTemplateTypeModel {
         }
         if (reference instanceof PipelineTemplateTypeReference.Named named && !definitions.containsKey(named.name())) {
             throw new IllegalStateException("Type '" + owner + "' references unknown type '" + named.name() + "'");
+        }
+        if (reference instanceof PipelineTemplateTypeReference.Contributed contributed) {
+            throw new IllegalStateException("Type '" + owner + "' contains unresolved contributed type '<"
+                + contributed.name() + ">'" );
         }
         if (reference instanceof PipelineTemplateTypeReference.MapType map) {
             validateReference(owner + " map value", map.valueType(), definitions);

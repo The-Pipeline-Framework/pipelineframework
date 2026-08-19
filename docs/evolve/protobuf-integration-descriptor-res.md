@@ -19,7 +19,7 @@ annotation processor.
 
 When `pipeline-config.yaml` is present, you can generate step and orchestrator `.proto` files at build time
 before compilation. The default template output wires the `PipelineProtoGenerator` into the `common` module's
-`generate-sources` phase so protobuf definitions stay in sync with the pipeline template used by Canvas.
+`generate-sources` phase so protobuf definitions stay in sync with the pipeline template.
 Generated protos land under `target/generated-sources/proto`, and Quarkus gRPC codegen is configured to
 include that directory.
 

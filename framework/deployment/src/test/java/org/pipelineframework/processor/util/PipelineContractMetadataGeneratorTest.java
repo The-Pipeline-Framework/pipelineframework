@@ -5,9 +5,9 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import javax.annotation.processing.Filer;
@@ -26,17 +26,18 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateMaterialization;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
-import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -48,10 +49,9 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -137,6 +137,32 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void repeatedFieldSemanticsAreDeterministicAndAffectTheReleaseHash() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path singularOutput = tempDir.resolve("v3-singular");
+        Path repeatedOutput = tempDir.resolve("v3-repeated");
+        Path repeatedReorderedOutput = tempDir.resolve("v3-repeated-reordered");
+
+        writeV3Metadata(pipelineYaml, singularOutput, v3TypeModel(false));
+        writeV3Metadata(pipelineYaml, repeatedOutput, repeatedTypeModel(false));
+        writeV3Metadata(pipelineYaml, repeatedReorderedOutput, repeatedTypeModel(true));
+
+        JsonObject singular = readContract(singularOutput);
+        JsonObject repeated = readContract(repeatedOutput);
+        JsonObject repeatedReordered = readContract(repeatedReorderedOutput);
+        JsonObject repeatedField = repeated.getAsJsonObject("canonicalTypes").getAsJsonObject("Zeta")
+            .getAsJsonObject("definition").getAsJsonArray("fields").get(1).getAsJsonObject();
+
+        assertTrue(repeatedField.get("repeated").getAsBoolean());
+        assertNotEquals(singular.get("canonicalCatalogFingerprint").getAsString(),
+            repeated.get("canonicalCatalogFingerprint").getAsString());
+        assertNotEquals(singular.get("contractHash").getAsString(), repeated.get("contractHash").getAsString());
+        assertEquals(repeated.get("canonicalCatalogFingerprint").getAsString(),
+            repeatedReordered.get("canonicalCatalogFingerprint").getAsString());
+        assertEquals(repeated.get("contractHash").getAsString(), repeatedReordered.get("contractHash").getAsString());
+    }
+
+    @Test
     void embedsTheResolvedCompositionInTheExistingHashedContract() throws IOException {
         Path output = tempDir.resolve("composition");
         ProcessingEnvironment processingEnv = processingEnv(output, Map.of());
@@ -169,6 +195,23 @@ class PipelineContractMetadataGeneratorTest {
             .orElseThrow();
         assertEquals("ROOT_TERMINAL", projectedOuter.getAsJsonArray("continuations")
             .get(2).getAsJsonObject().get("kind").getAsString());
+    }
+
+    @Test
+    void includesContributedIdentityInReleaseContractAndHash() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path firstOutput = tempDir.resolve("contributed-first");
+        Path secondOutput = tempDir.resolve("contributed-second");
+
+        writeV3Metadata(pipelineYaml, firstOutput, contributedModel("tpf.alpha"));
+        writeV3Metadata(pipelineYaml, secondOutput, contributedModel("tpf.beta"));
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        assertEquals(3, first.get("schemaVersion").getAsInt());
+        assertEquals("tpf.alpha.Alpha", first.getAsJsonObject("canonicalTypes")
+            .getAsJsonObject("Alpha").get("contributedIdentity").getAsString());
+        assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
     }
 
     @Test
@@ -264,6 +307,30 @@ class PipelineContractMetadataGeneratorTest {
             new PipelineTemplateTypeDefinition.Field("attributes", new PipelineTemplateTypeReference.MapType(
                 new PipelineTemplateTypeReference.Scalar("string"), new PipelineTemplateTypeReference.Named("Alpha"))),
             new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"))));
+        if (reverseDefinitionOrder) {
+            definitions.put("Zeta", zeta);
+            definitions.put("Alpha", alpha);
+        } else {
+            definitions.put("Alpha", alpha);
+            definitions.put("Zeta", zeta);
+        }
+        return new PipelineTemplateTypeModel(definitions);
+    }
+
+    private static PipelineTemplateTypeModel contributedModel(String namespace) {
+        PipelineTemplateTypeModel base = v3TypeModel(false);
+        return new PipelineTemplateTypeModel(base.definitions(), Map.of(), Map.of(), Map.of(
+            "Alpha", new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "Alpha")));
+    }
+
+    private static PipelineTemplateTypeModel repeatedTypeModel(boolean reverseDefinitionOrder) {
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        PipelineTemplateTypeDefinition alpha = new PipelineTemplateTypeDefinition.RecordType("Alpha", List.of(
+            new PipelineTemplateTypeDefinition.Field("code", new PipelineTemplateTypeReference.Scalar("string"))));
+        PipelineTemplateTypeDefinition zeta = new PipelineTemplateTypeDefinition.RecordType("Zeta", List.of(
+            new PipelineTemplateTypeDefinition.Field("attributes", new PipelineTemplateTypeReference.MapType(
+                new PipelineTemplateTypeReference.Scalar("string"), new PipelineTemplateTypeReference.Named("Alpha"))),
+            new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"), true)));
         if (reverseDefinitionOrder) {
             definitions.put("Zeta", zeta);
             definitions.put("Alpha", alpha);

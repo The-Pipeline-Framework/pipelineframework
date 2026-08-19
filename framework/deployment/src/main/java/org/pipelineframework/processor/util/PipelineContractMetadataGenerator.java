@@ -5,14 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
@@ -20,11 +13,7 @@ import javax.tools.StandardLocation;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.squareup.javapoet.TypeName;
-import org.pipelineframework.config.pipeline.PipelineYamlAwaitTransport;
-import org.pipelineframework.config.pipeline.PipelineYamlConfig;
-import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
-import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
-import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.pipeline.*;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
@@ -34,8 +23,8 @@ import org.pipelineframework.processor.composition.PipelineCompositionContractPr
 import org.pipelineframework.orchestrator.composition.PipelineCompositionDescriptor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
@@ -80,7 +69,9 @@ public class PipelineContractMetadataGenerator {
         PipelineCompositionDescriptor composition = ctx.getResolvedPipelineDefinitionGraph()
             .map(graph -> new PipelineCompositionContractProjector().project(graph))
             .orElseGet(PipelineCompositionDescriptor::empty);
-        int schemaVersion = composition.present() ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
+        boolean hasContributedTypes = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            && !config.typeModel().contributedTypeIdentities().isEmpty();
+        int schemaVersion = composition.present() || hasContributedTypes ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
@@ -139,6 +130,8 @@ public class PipelineContractMetadataGenerator {
             binding.put("definition", definition);
             binding.put("definitionFingerprint", fingerprint);
             binding.put("runtimeClass", config.basePackage() + ".domain." + entry.getKey());
+            model.contributedTypeIdentity(entry.getKey())
+                .ifPresent(identity -> binding.put("contributedIdentity", identity.qualifiedName()));
             types.put(entry.getKey(), immutableSortedMap(binding));
         }
         return immutableSortedMap(types);
@@ -151,12 +144,21 @@ public class PipelineContractMetadataGenerator {
             encoded.put("kind", "record");
             List<Map<String, Object>> fields = record.fields().stream()
                 .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Field::name))
-                .map(field -> immutableSortedMap(Map.of("name", field.name(), "type", typeExpression(field.type()))))
+                .map(this::fieldDefinition)
                 .toList();
             encoded.put("fields", fields);
         } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
             encoded.put("kind", "wrapper");
             encoded.put("wraps", typeExpression(wrapper.wraps()));
+            var constraints = wrapper.constraints();
+            constraints.minLength().ifPresent(value -> encoded.put("minLength", value));
+            constraints.maxLength().ifPresent(value -> encoded.put("maxLength", value));
+            constraints.pattern().ifPresent(value -> encoded.put("pattern", value));
+            constraints.format().ifPresent(value -> encoded.put("format", value.name().toLowerCase(java.util.Locale.ROOT)));
+            constraints.minimum().ifPresent(value -> encoded.put("minimum", value));
+            constraints.minimumExclusive().ifPresent(value -> encoded.put("minimumExclusive", value));
+            constraints.maximum().ifPresent(value -> encoded.put("maximum", value));
+            constraints.maximumExclusive().ifPresent(value -> encoded.put("maximumExclusive", value));
         } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
             encoded.put("kind", "alias");
             encoded.put("target", typeExpression(alias.target()));
@@ -168,6 +170,16 @@ public class PipelineContractMetadataGenerator {
                     "discriminator", variant.discriminator(), "payload", typeExpression(variant.payload()))))
                 .toList();
             encoded.put("variants", variants);
+        }
+        return immutableSortedMap(encoded);
+    }
+
+    private Map<String, Object> fieldDefinition(PipelineTemplateTypeDefinition.Field field) {
+        Map<String, Object> encoded = new LinkedHashMap<>();
+        encoded.put("name", field.name());
+        encoded.put("type", typeExpression(field.type()));
+        if (field.repeated()) {
+            encoded.put("repeated", true);
         }
         return immutableSortedMap(encoded);
     }

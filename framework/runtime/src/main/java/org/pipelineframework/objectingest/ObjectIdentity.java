@@ -25,6 +25,18 @@ public final class ObjectIdentity {
         return "object:" + escape(sourceName) + ":" + String.join(":", values);
     }
 
+    public static String executionKey(String sourceName, List<ObjectSnapshot> snapshots,
+                                      PipelineObjectIdentityConfig config) {
+        Objects.requireNonNull(snapshots, "snapshots");
+        if (snapshots.isEmpty()) {
+            throw new IllegalArgumentException("grouped object identity requires at least one snapshot");
+        }
+        return "objects:" + escape(sourceName) + ":" + snapshots.stream()
+            .map(snapshot -> executionKey(sourceName, snapshot, config))
+            .map(ObjectIdentity::escape)
+            .collect(java.util.stream.Collectors.joining(":"));
+    }
+
     private static String valueFor(String sourceName, ObjectSnapshot snapshot, String field) {
         String value = switch (field) {
             case "source", "sourceName" -> sourceName;

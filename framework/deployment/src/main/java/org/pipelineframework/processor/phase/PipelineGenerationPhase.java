@@ -115,6 +115,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new CheckpointSubscriptionHandlerRenderer();
         ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
         ObjectIngestInputAdapterRenderer objectIngestInputAdapterRenderer = new ObjectIngestInputAdapterRenderer();
+        ObjectSelectionMapperRenderer objectSelectionMapperRenderer = new ObjectSelectionMapperRenderer();
         TerminalOutputAdapterRenderer terminalOutputAdapterRenderer = new TerminalOutputAdapterRenderer();
 
         // Initialize role metadata generator
@@ -126,6 +127,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx).orElse(null);
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
+        generateObjectSelectionMapper(
+            ctx,
+            objectSelectionMapperRenderer,
+            roleMetadataGenerator,
+            cacheKeyGenerator,
+            descriptorSet);
         generateCheckpointBoundaryArtifacts(
             ctx,
             checkpointPublicationDescriptorRenderer,
@@ -477,6 +484,53 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Ingest input adapter: " + e.getMessage();
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+            }
+            throw new RuntimeException(message, e);
+        }
+    }
+
+    private void generateObjectSelectionMapper(
+        PipelineCompilationContext ctx,
+        ObjectSelectionMapperRenderer renderer,
+        RoleMetadataGenerator roleMetadataGenerator,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet
+    ) {
+        if (!(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig template)
+                || template.version() != 3 || template.input() == null || template.input().object() == null
+                || template.input().object().selection().isEmpty() || ctx.isPluginHost()) {
+            return;
+        }
+        var objectInput = template.input().object();
+        String localTypeName = objectInput.typeName() == null
+            ? ClassName.bestGuess(objectInput.type()).simpleName() : objectInput.typeName();
+        var record = template.typeModel().definition(localTypeName)
+            .filter(org.pipelineframework.config.template.PipelineTemplateTypeDefinition.RecordType.class::isInstance)
+            .map(org.pipelineframework.config.template.PipelineTemplateTypeDefinition.RecordType.class::cast)
+            .orElseThrow(() -> new IllegalStateException("Grouped Object Ingest type '" + localTypeName
+                + "' must be a v3 record"));
+        DeploymentRole adapterRole = firstBusinessStepWithDeploymentRole(ctx)
+            .map(model -> resolveClientRole(model.deploymentRole()))
+            .orElse(DeploymentRole.PIPELINE_SERVER);
+        GenerationContext generationContext = new GenerationContext(
+            ctx.getProcessingEnv(),
+            generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
+            adapterRole,
+            Set.of(),
+            cacheKeyGenerator,
+            descriptorSet,
+            ctx.getTransportMode(),
+            template.basePackage(),
+            null,
+            true);
+        try {
+            ClassName generatedClass = renderer.render(template.basePackage(), ClassName.bestGuess(objectInput.type()),
+                record, objectInput.selection().orElseThrow(), generationContext);
+            roleMetadataGenerator.recordClassWithRole(generatedClass.canonicalName(), adapterRole.name());
+        } catch (IOException | RuntimeException e) {
+            String message = "Failed to generate Object Selection mapper: " + e.getMessage();
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
             }

@@ -19,7 +19,7 @@ package org.pipelineframework.config.template;
 import java.util.List;
 import java.util.Map;
 
-/** Normalized semantic v3 type declarations. Wire metadata is intentionally absent. */
+/** Host-neutral normalized semantic v3 type declarations. Wire metadata is intentionally absent. */
 public sealed interface PipelineTemplateTypeDefinition
     permits PipelineTemplateTypeDefinition.RecordType, PipelineTemplateTypeDefinition.WrapperType,
     PipelineTemplateTypeDefinition.AliasType, PipelineTemplateTypeDefinition.UnionType {
@@ -55,7 +55,10 @@ public sealed interface PipelineTemplateTypeDefinition
         }
     }
 
-    record Field(String name, PipelineTemplateTypeReference type) {
+    record Field(String name, PipelineTemplateTypeReference type, boolean repeated) {
+        public Field(String name, PipelineTemplateTypeReference type) {
+            this(name, type, false);
+        }
     }
 
     record Variant(String discriminator, PipelineTemplateTypeReference payload) {

@@ -1008,6 +1008,28 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesDynamicOperationBindingWithExactPortableProtocolContracts() throws IOException {
+        List<StepDefinition> steps = parse("""
+            version: 3
+            basePackage: com.example
+            steps:
+              - name: Invoke proposal
+                input: <tpf.llm.AgentCall>
+                output: <tpf.connector.OperationObservation>
+                java:
+                  input: com.example.AgentCall
+                  output: com.example.OperationObservation
+                operation:
+                  mode: dynamic
+                  from: Decide invoice
+            """);
+
+        assertEquals(1, steps.size());
+        assertEquals(StepKind.INTERNAL, steps.getFirst().kind());
+        assertEquals("Decide invoice", steps.getFirst().dynamicOperationSource().orElseThrow());
+    }
+
+    @Test
     void rejectsUnknownNativeCommandPolicyFields() throws IOException {
         assertNativeCommandPolicyRejected("unsupportedGuarantee: true", "unsupported field 'unsupportedGuarantee'");
     }

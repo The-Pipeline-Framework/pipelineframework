@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 3,
+  "pipelineId": "llm-query-test",
+  "contractVersion": "sha256:test",
+  "contractHash": "test",
+  "steps": [],
+  "canonicalCatalogFingerprint": "sha256:test",
+  "canonicalTypes": {
+    "AgentCall": {
+      "contributedIdentity": "tpf.llm.AgentCall",
+      "definition": {
+        "id": "AgentCall",
+        "kind": "record",
+        "fields": [
+          {"name":"argumentsJson","type":{"kind":"scalar","id":"string"}},
+          {"name":"binding","type":{"kind":"scalar","id":"string"}},
+          {"name":"operation","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
+    "CompleteResult": {
+      "definition": {
+        "id": "CompleteResult",
+        "kind": "record",
+        "fields": [{"name":"status","type":{"kind":"scalar","id":"string"}}]
+      }
+    },
+    "Decision": {
+      "definition": {
+        "id": "Decision",
+        "kind": "union",
+        "variants": [
+          {"discriminator":"call","payload":{"kind":"named","id":"AgentCall"}},
+          {"discriminator":"complete","payload":{"kind":"named","id":"CompleteResult"}}
+        ]
+      }
+    },
+    "ReviewReady": {
+      "definition": {
+        "id": "ReviewReady",
+        "kind": "record",
+        "fields": [
+          {"name":"supplier","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
+    "ToolArguments": {
+      "definition": {
+        "id": "ToolArguments",
+        "kind": "record",
+        "fields": [
+          {"name":"amount","type":{"kind":"scalar","id":"int32"}},
+          {"name":"note","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
+    "ToolArgumentsAlias": {
+      "definition": {
+        "id": "ToolArgumentsAlias",
+        "kind": "alias",
+        "target": {"kind":"named","id":"ToolArguments"}
+      }
+    },
+    "EmailAddress": {
+      "definition": {
+        "id": "EmailAddress",
+        "kind": "wrapper",
+        "wraps": {"kind":"scalar","id":"string"},
+        "format": "email"
+      }
+    },
+    "UnsupportedFormat": {
+      "definition": {
+        "id": "UnsupportedFormat",
+        "kind": "wrapper",
+        "wraps": {"kind":"scalar","id":"string"},
+        "format": "hostname"
+      }
+    },
+    "PatternedText": {
+      "definition": {
+        "id": "PatternedText",
+        "kind": "wrapper",
+        "wraps": {"kind":"scalar","id":"string"},
+        "maxLength": 5000,
+        "pattern": "[a-z]+"
+      }
+    },
+    "ConstraintArguments": {
+      "definition": {
+        "id": "ConstraintArguments",
+        "kind": "record",
+        "fields": [
+          {"name":"email","type":{"kind":"named","id":"EmailAddress"}},
+          {"name":"large","type":{"kind":"scalar","id":"int64"}},
+          {"name":"small","type":{"kind":"scalar","id":"int32"}}
+        ]
+      }
+    },
+    "UnsupportedFormatArguments": {
+      "definition": {
+        "id": "UnsupportedFormatArguments",
+        "kind": "record",
+        "fields": [{"name":"value","type":{"kind":"named","id":"UnsupportedFormat"}}]
+      }
+    },
+    "PatternArguments": {
+      "definition": {
+        "id": "PatternArguments",
+        "kind": "record",
+        "fields": [{"name":"value","type":{"kind":"named","id":"PatternedText"}}]
+      }
+    }
+  }
+}

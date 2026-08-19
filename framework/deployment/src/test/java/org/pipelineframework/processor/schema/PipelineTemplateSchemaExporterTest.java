@@ -53,6 +53,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("v2UnionDefinition"));
         assertTrue(definitions.has("v3TypeDefinition"));
         assertTrue(definitions.has("v3RecordField"));
+        assertTrue(definitions.has("v3TypeReference"));
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
@@ -62,6 +63,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("jpaQueryDefinition"));
         assertTrue(definitions.has("queryCapture"));
         assertTrue(definitions.has("queryTemplateStep"));
+        assertTrue(definitions.has("dynamicOperationTemplateStep"));
+        assertTrue(definitions.has("llmCallable"));
         assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
@@ -80,6 +83,10 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals(bindingNamePattern, definitions.getAsJsonObject("queryTemplateStep")
             .getAsJsonObject("properties").getAsJsonObject("using").get("pattern").getAsString());
         assertContains(definitions.getAsJsonObject("queryTemplateStep").getAsJsonArray("required"), "cardinality");
+        JsonObject dynamicOperation = definitions.getAsJsonObject("dynamicOperationTemplateStep")
+            .getAsJsonObject("properties").getAsJsonObject("operation");
+        assertEquals("dynamic", dynamicOperation.getAsJsonObject("properties")
+            .getAsJsonObject("mode").get("const").getAsString());
 
         JsonObject properties = schema.getAsJsonObject("properties");
         assertTrue(properties.has("types"));
@@ -141,6 +148,16 @@ class PipelineTemplateSchemaExporterTest {
     void versionThreeSchemaRequiresNonEmptyUnionsAndCanonicalStepContracts() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         JsonObject definitions = schema.getAsJsonObject("$defs");
+        JsonArray v3RecordFields = definitions.getAsJsonObject("v3RecordField").getAsJsonArray("oneOf");
+        assertEquals(3, v3RecordFields.size());
+        JsonObject repeatedField = v3RecordFields.asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(field -> field.has("properties") && field.getAsJsonObject("properties").has("repeated"))
+            .findFirst().orElseThrow();
+        assertContains(repeatedField.getAsJsonArray("required"), "name");
+        assertContains(repeatedField.getAsJsonArray("required"), "repeated");
+        assertFalse(repeatedField.get("additionalProperties").getAsBoolean());
+        JsonObject logicalReference = definitions.getAsJsonObject("logicalContractReference");
+        assertEquals(3, logicalReference.getAsJsonArray("oneOf").size());
         JsonObject unionDefinition = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
             .map(JsonElement::getAsJsonObject)
             .filter(definition -> definition.getAsJsonObject("properties").has("variants"))
@@ -242,15 +259,41 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
-    void objectInputBoundaryRequiresSourceReference() {
+    void objectInputBoundarySupportsGroupedSelectionAndBindingProvenance() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
         JsonObject objectInput = definitions.getAsJsonObject("objectInputBoundary");
 
         assertContains(objectInput.getAsJsonArray("required"), "emits");
+        JsonArray allOf = objectInput.getAsJsonArray("allOf");
+        assertEquals(1, allOf.size());
+        JsonArray selectionOrMapper = allOf.get(0).getAsJsonObject().getAsJsonArray("oneOf");
+        assertEquals(2, selectionOrMapper.size());
+        JsonObject emitMapperRequired = selectionOrMapper.get(0).getAsJsonObject();
+        assertContains(emitMapperRequired.getAsJsonArray("required"), "emits");
+        assertContains(emitMapperRequired.getAsJsonObject("properties").getAsJsonObject("emits").getAsJsonArray("required"),
+            "mapper");
+        assertContains(selectionOrMapper.get(1).getAsJsonObject().getAsJsonArray("required"), "selection");
         JsonArray oneOf = objectInput.getAsJsonArray("oneOf");
         assertEquals(2, oneOf.size());
         assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");
         assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "from");
+        assertEquals("#/$defs/objectInputSelection",
+            objectInput.getAsJsonObject("properties").getAsJsonObject("selection").get("$ref").getAsString());
+
+        JsonObject emits = definitions.getAsJsonObject("objectInputEmit");
+        assertContains(emits.getAsJsonArray("required"), "type");
+        assertFalse(emits.getAsJsonArray("required").contains(new com.google.gson.JsonPrimitive("mapper")));
+
+        JsonObject selection = definitions.getAsJsonObject("objectInputSelection");
+        assertEquals("together", selection.getAsJsonObject("properties")
+            .getAsJsonObject("mode").get("const").getAsString());
+        JsonArray selectionShapes = selection.getAsJsonArray("oneOf");
+        assertEquals(2, selectionShapes.size());
+        assertContains(selectionShapes.get(0).getAsJsonObject().getAsJsonArray("required"), "keys");
+        assertContains(selectionShapes.get(1).getAsJsonObject().getAsJsonArray("required"), "into");
+
+        assertTrue(definitions.getAsJsonObject("objectSource").getAsJsonObject("properties").has("binding"));
+        assertTrue(definitions.getAsJsonObject("objectPublishTarget").getAsJsonObject("properties").has("binding"));
     }
 
     @Test
@@ -371,7 +414,8 @@ class PipelineTemplateSchemaExporterTest {
 
         JsonObject accepts = internalProperties.getAsJsonObject("accepts");
         assertEquals("array", accepts.get("type").getAsString());
-        assertEquals("^[A-Z][A-Za-z0-9_]*$", accepts.getAsJsonObject("items").get("pattern").getAsString());
+        assertEquals("#/$defs/logicalContractReference",
+            accepts.getAsJsonObject("items").get("$ref").getAsString());
 
         assertTrue(definitions.getAsJsonObject("awaitTemplateStep").getAsJsonObject("properties").has("accepts"));
         assertTrue(definitions.getAsJsonObject("commandTemplateStep").getAsJsonObject("properties").has("terminal"));

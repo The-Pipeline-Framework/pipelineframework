@@ -42,7 +42,7 @@ class FilesystemObjectSourceProviderTest {
         assertEquals("filesystem", item.provider());
         assertNotNull(item.etag());
         assertNotNull(item.contentRef());
-        assertEquals(tempDir.toString(), item.contentRef().container());
+        assertEquals(tempDir.toRealPath().toString(), item.contentRef().container());
     }
 
     @Test
