@@ -103,12 +103,13 @@ public final class FileRepresentationRuntime {
         if (bytes.length > maxBytes) {
             throw new IllegalStateException("materialized payload exceeds maxBytes: " + bytes.length + " > " + maxBytes);
         }
+        String safeName = safeFilename(requested.key());
         Path root = null;
         try {
             root = Files.createTempDirectory("tpf-file-").toRealPath();
             Path inputDirectory = Files.createDirectory(root.resolve("input"));
             Files.createDirectory(root.resolve("output"));
-            Path input = inputDirectory.resolve(safeFilename(requested.key())).normalize();
+            Path input = inputDirectory.resolve(safeName).normalize();
             Files.write(input, bytes);
             return new Workspace(root, input);
         } catch (IOException e) {
@@ -120,6 +121,15 @@ public final class FileRepresentationRuntime {
                 }
             }
             throw new IllegalStateException("failed to stage materialized payload", e);
+        } catch (RuntimeException e) {
+            if (root != null) {
+                try {
+                    deleteRecursively(root);
+                } catch (IOException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+            }
+            throw e;
         }
     }
 

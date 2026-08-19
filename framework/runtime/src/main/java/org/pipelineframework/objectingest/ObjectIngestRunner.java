@@ -31,6 +31,7 @@ public final class ObjectIngestRunner implements AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(ObjectIngestRunner.class);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(30);
     private static final String DEFAULT_TENANT_ID = null;
 
     private final PipelineYamlConfig config;
@@ -295,15 +296,19 @@ public final class ObjectIngestRunner implements AutoCloseable {
     }
 
     private void pollSafely() {
+        String sourceName = source().name();
         if (!pollInProgress.compareAndSet(false, true)) {
-            LOG.debugf("Object ingest poll still active for source=%s", source().name());
+            LOG.debugf("Object ingest poll still active for source=%s", sourceName);
             return;
         }
-        pollOnce().subscribe().with(
+        pollOnce()
+            .ifNoItem().after(POLL_TIMEOUT).failWith(() ->
+                new IllegalStateException("Object ingest poll timed out for source=" + sourceName))
+            .subscribe().with(
             ignored -> pollInProgress.set(false),
             failure -> {
                 pollInProgress.set(false);
-                LOG.warnf(failure, "Object ingest poll failed for source=%s", source().name());
+                LOG.warnf(failure, "Object ingest poll failed for source=%s", sourceName);
             });
     }
 
