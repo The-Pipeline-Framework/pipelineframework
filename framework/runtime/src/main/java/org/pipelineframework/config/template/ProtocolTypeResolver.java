@@ -82,7 +82,8 @@ final class ProtocolTypeResolver {
     private PipelineTemplateTypeDefinition normalizeDefinition(PipelineTemplateTypeDefinition definition) {
         if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
             return new PipelineTemplateTypeDefinition.RecordType(record.name(), record.fields().stream()
-                .map(field -> new PipelineTemplateTypeDefinition.Field(field.name(), normalizeReference(field.type())))
+                .map(field -> new PipelineTemplateTypeDefinition.Field(
+                    field.name(), normalizeReference(field.type()), field.repeated()))
                 .toList());
         }
         if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {

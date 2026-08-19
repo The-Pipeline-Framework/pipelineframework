@@ -122,10 +122,26 @@ final class PipelineJavaDomainRenderer {
         builder.append("public record ").append(record.name()).append("(\n");
         for (int i = 0; i < record.fields().size(); i++) {
             PipelineTemplateTypeDefinition.Field field = record.fields().get(i);
-            builder.append("    ").append(resolveJavaType(field.type(), plan.typeModel())).append(' ').append(field.name());
+            builder.append("    ");
+            if (field.repeated()) {
+                builder.append("java.util.List<");
+            }
+            builder.append(resolveJavaType(field.type(), plan.typeModel()));
+            if (field.repeated()) {
+                builder.append('>');
+            }
+            builder.append(' ').append(field.name());
             builder.append(i + 1 == record.fields().size() ? "\n" : ",\n");
         }
-        return builder.append(") {\n}\n").toString();
+        builder.append(") {\n");
+        if (record.fields().stream().anyMatch(PipelineTemplateTypeDefinition.Field::repeated)) {
+            builder.append("    public ").append(record.name()).append(" {\n");
+            record.fields().stream().filter(PipelineTemplateTypeDefinition.Field::repeated).forEach(field -> builder
+                .append("        ").append(field.name()).append(" = ").append(field.name())
+                .append(" == null ? java.util.List.of() : java.util.List.copyOf(").append(field.name()).append(");\n"));
+            builder.append("    }\n");
+        }
+        return builder.append("}\n").toString();
     }
 
     private String renderWrapper(
@@ -219,9 +235,15 @@ final class PipelineJavaDomainRenderer {
         for (PipelineTemplateTypeDefinition.Field field : record.fields()) {
             PipelineIdlSnapshot.TypeFieldSnapshot fieldState = requiredFieldState(record.name(), field.name(), state);
             String accessor = "value." + field.name() + "()";
-            builder.append("        if (").append(accessor).append(" != null) { builder.")
-                .append("set").append(javaSetter(fieldState.protoName())).append('(')
-                .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append("); }\n");
+            if (field.repeated()) {
+                builder.append("        builder.addAll").append(javaSetter(fieldState.protoName())).append('(')
+                    .append(accessor).append(".stream().map(item -> ")
+                    .append(toProtoExpression(field.type(), "item", plan.typeModel())).append(").toList());\n");
+            } else {
+                builder.append("        if (").append(accessor).append(" != null) { builder.")
+                    .append("set").append(javaSetter(fieldState.protoName())).append('(')
+                    .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append("); }\n");
+            }
         }
         builder.append("        return builder.build();\n    }\n\n");
 
@@ -232,10 +254,18 @@ final class PipelineJavaDomainRenderer {
         for (int i = 0; i < record.fields().size(); i++) {
             PipelineTemplateTypeDefinition.Field field = record.fields().get(i);
             PipelineIdlSnapshot.TypeFieldSnapshot fieldState = requiredFieldState(record.name(), field.name(), state);
-            String getter = "value.get" + javaSetter(fieldState.protoName()) + "()";
-            builder.append("            value.has").append(javaSetter(fieldState.protoName())).append("() ? ")
-                .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(" : null")
-                .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            String setter = javaSetter(fieldState.protoName());
+            if (field.repeated()) {
+                builder.append("            value.get").append(setter)
+                    .append("List().stream().map(item -> ")
+                    .append(fromProtoExpression(field.type(), "item", plan.typeModel())).append(").toList()")
+                    .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            } else {
+                String getter = "value.get" + setter + "()";
+                builder.append("            value.has").append(setter).append("() ? ")
+                    .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(" : null")
+                    .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+            }
         }
         builder.append("        );\n    }\n\n");
     }

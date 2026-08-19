@@ -612,6 +612,7 @@ public class PipelineTemplateConfigLoader {
         for (Object fieldObj : fields) {
             String fieldName;
             String fieldType;
+            boolean repeated = false;
             if (fieldObj instanceof List<?> tuple) {
                 if (tuple.size() != 2) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
@@ -622,16 +623,26 @@ public class PipelineTemplateConfigLoader {
                 if (fieldMap.containsKey("number") || fieldMap.containsKey("optional") || fieldMap.containsKey("reserved")) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " cannot declare protobuf wire metadata in version: 3.");
                 }
-                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index, "name", "type");
+                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index, "name", "type", "repeated");
                 fieldName = stringify(fieldMap.get("name"));
-                fieldType = stringify(fieldMap.get("type"));
+                boolean hasType = fieldMap.containsKey("type");
+                boolean hasRepeated = fieldMap.containsKey("repeated");
+                if (hasType == hasRepeated) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index
+                        + " must declare exactly one of 'type' or 'repeated'.");
+                }
+                repeated = hasRepeated;
+                fieldType = stringify(fieldMap.get(repeated ? "repeated" : "type"));
             } else {
                 throw new IllegalStateException("Type '" + owner + "' field " + index + " must be an object or [name, type] tuple.");
             }
             if (fieldName == null || fieldName.isBlank() || fieldType == null || fieldType.isBlank()) {
                 throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
             }
-            result.add(new PipelineTemplateTypeDefinition.Field(fieldName, readV3Reference(fieldType, owner + "." + fieldName)));
+            result.add(new PipelineTemplateTypeDefinition.Field(
+                fieldName,
+                readV3Reference(fieldType, owner + "." + fieldName),
+                repeated));
             index++;
         }
         return List.copyOf(result);
