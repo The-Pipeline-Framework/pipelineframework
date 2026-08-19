@@ -160,7 +160,8 @@ class PipelineIdlStateResolverTest {
               Record:
                 fields:
                   - [id, string]
-                  - [tags, [string]]
+                  - name: tags
+                    repeated: string
             steps:
               - name: process
                 cardinality: ONE_TO_ONE
