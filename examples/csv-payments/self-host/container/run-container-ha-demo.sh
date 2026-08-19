@@ -113,6 +113,10 @@ if [[ "${TPF_CSV_ADMISSION_PROFILE}" != "burst" && -n "${TPF_CSV_BURST_PERFORMAN
   echo "ERROR: TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS applies only to the burst profile." >&2
   exit 1
 fi
+if ! [[ "${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE}" =~ ^(P[0-9]+D(T(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S)))?|PT(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S))|[0-9]+(\.[0-9]+)?(ms|s|m|h|d|us|ns|S|M|H))$ ]]; then
+  echo "ERROR: TPF_CSV_TRANSITION_TRANSPORT_DEADLINE must be in ISO-8601 duration format (e.g., PT10S, PT1M30S, P1D) or Quarkus shorthand duration format (e.g., 10s, 1500ms, 1M, 2h, 5m)." >&2
+  exit 1
+fi
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" && -n "${TPF_CSV_ADMISSION_PROFILE}" ]]; then
   # The admission profiles deliberately bound outstanding awaits. Give the Kafka request and
