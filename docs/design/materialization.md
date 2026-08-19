@@ -76,6 +76,21 @@ references carry a `ConnectorPayloadOrigin` and resolve through the exact config
 the same reference value and neutral consumption seam while retaining different ownership and
 lifecycle paths.
 
+An ordinary step may opt both of its single-`payload_ref` record types into the `file`
+representation. Its generated facade uses this same `PayloadMaterializer`, stages the bytes in an
+invocation-scoped workspace, and publishes returned files through an existing Object Publish target.
+The canonical value before and after the step remains `PayloadReference`; `Path` exists only inside
+the authored service boundary.
+
+For example, an image optimizer can be authored as `ReactiveService<Path, Path>`. A page renderer
+that returns several files can be authored as `ReactiveStreamingService<Path, Path>` and return a
+`Multi<Path>`. YAML `file` mappings select the representation, bound input and output sizes, and name
+the Object Publish target. Application code never parses provider, container, key, binding
+provenance, or connector configuration; the generated facade owns those imperative-shell concerns.
+
+See [Ordinary File Services](./object-ingest.md#ordinary-file-services) for complete YAML and Java
+examples, including one-file-to-one-file and one-file-to-many-files steps.
+
 ### Portability and provenance
 
 A connector-owned reference is portable between steps, retries, runtime instances, and releases

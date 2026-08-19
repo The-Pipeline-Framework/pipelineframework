@@ -126,9 +126,39 @@ types:
 
 The mapper's `toExternal` direction is used only when writing the persistence representation. Its `fromExternal` direction remains part of the same generic mapper contract for readers and later boundaries; a persistence write does not round-trip the saved entity back into the pipeline.
 
+The `file` representation is mapper-free. It applies to a record containing one `payload_ref` field
+and declares `type: java.nio.file.Path` on both sides of an ordinary step. Input options bound the
+materialized size. Output options name an Object Publish target, bound the published size, and may
+override the v1 filename-derived object key. The generated facade preserves the step's normal
+`ONE_TO_ONE` or `ONE_TO_MANY` cardinality.
+
+At the service boundary, the mapping changes what the author implements:
+
+| Step cardinality | Authored service |
+| --- | --- |
+| `ONE_TO_ONE` | `ReactiveService<Path, Path>` returning `Uni<Path>` |
+| `ONE_TO_MANY` | `ReactiveStreamingService<Path, Path>` returning `Multi<Path>` |
+
+The YAML step still names the canonical input and output contracts:
+
+```yaml
+steps:
+  - name: Render pages
+    service: com.example.documents.RenderPagesService
+    cardinality: ONE_TO_MANY
+    input: SourceDocument
+    output: RenderedPage
+```
+
+For Object Ingest, `selection.mode: together` can construct one canonical input from several listed
+objects. Use `selection.keys` for differently named fields, or `selection.into` for one repeated
+`payload_ref` field. TPF generates the projection in both cases; the first authored service receives
+the canonical record directly. Complete configuration and Java examples are in
+[Object Ingest And Publish](../design/object-ingest.md#grouped-selection).
+
 ### Preview representation support
 
-Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step.
+Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step. The `file` consumer is the mapper-free payload-reference boundary for ordinary `Path` services.
 
 JSON, REST, checkpoint, object-publish, and broker boundaries retain their current application-owned or transport-owned conversion paths. They do not yet infer or generate a `json` representation from `mappings`. A declared mapping is therefore not a user-selectable conversion mode and does not promise support from every component.
 
@@ -371,7 +401,7 @@ A Java binding identifies a domain type. A mapper performs a representation conv
 
 | Boundary | Required declaration |
 | --- | --- |
-| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline/domain conversion |
+| Object ingest into the first business step | `input.emits.mapper` for non-grouped object ingest; grouped `selection.mode: together` drives `selection`-based projection and does not need an `emits.mapper` |
 | Service outside the compiling module | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated client crosses representations |
 | Object publish from the terminal business step | terminal `outboundMapper` and `output.consumes.mapper` |
 

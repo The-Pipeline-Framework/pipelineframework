@@ -85,6 +85,7 @@
         <module>runtime</module>
         <module>representation-provider-fixture</module>
         <module>representation-provider-opencsv</module>
+        <module>representation-provider-file</module>
         <module>deployment</module>
         <module>connectors</module>
         <module>plugins</module>

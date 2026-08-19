@@ -75,4 +75,9 @@ public record ObjectSnapshot(
         }
         return Map.copyOf(metadata);
     }
+
+    public ObjectSnapshot withContentRef(PayloadReference reference) {
+        return new ObjectSnapshot(sourceName, provider, container, key, versionId, etag, sizeBytes,
+            lastModifiedEpochMs, contentType, metadata, reference, textContent, localPath);
+    }
 }

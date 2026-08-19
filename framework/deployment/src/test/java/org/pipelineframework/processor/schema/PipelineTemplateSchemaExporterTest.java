@@ -259,15 +259,41 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
-    void objectInputBoundaryRequiresSourceReference() {
+    void objectInputBoundarySupportsGroupedSelectionAndBindingProvenance() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
         JsonObject objectInput = definitions.getAsJsonObject("objectInputBoundary");
 
         assertContains(objectInput.getAsJsonArray("required"), "emits");
+        JsonArray allOf = objectInput.getAsJsonArray("allOf");
+        assertEquals(1, allOf.size());
+        JsonArray selectionOrMapper = allOf.get(0).getAsJsonObject().getAsJsonArray("oneOf");
+        assertEquals(2, selectionOrMapper.size());
+        JsonObject emitMapperRequired = selectionOrMapper.get(0).getAsJsonObject();
+        assertContains(emitMapperRequired.getAsJsonArray("required"), "emits");
+        assertContains(emitMapperRequired.getAsJsonObject("properties").getAsJsonObject("emits").getAsJsonArray("required"),
+            "mapper");
+        assertContains(selectionOrMapper.get(1).getAsJsonObject().getAsJsonArray("required"), "selection");
         JsonArray oneOf = objectInput.getAsJsonArray("oneOf");
         assertEquals(2, oneOf.size());
         assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");
         assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "from");
+        assertEquals("#/$defs/objectInputSelection",
+            objectInput.getAsJsonObject("properties").getAsJsonObject("selection").get("$ref").getAsString());
+
+        JsonObject emits = definitions.getAsJsonObject("objectInputEmit");
+        assertContains(emits.getAsJsonArray("required"), "type");
+        assertFalse(emits.getAsJsonArray("required").contains(new com.google.gson.JsonPrimitive("mapper")));
+
+        JsonObject selection = definitions.getAsJsonObject("objectInputSelection");
+        assertEquals("together", selection.getAsJsonObject("properties")
+            .getAsJsonObject("mode").get("const").getAsString());
+        JsonArray selectionShapes = selection.getAsJsonArray("oneOf");
+        assertEquals(2, selectionShapes.size());
+        assertContains(selectionShapes.get(0).getAsJsonObject().getAsJsonArray("required"), "keys");
+        assertContains(selectionShapes.get(1).getAsJsonObject().getAsJsonArray("required"), "into");
+
+        assertTrue(definitions.getAsJsonObject("objectSource").getAsJsonObject("properties").has("binding"));
+        assertTrue(definitions.getAsJsonObject("objectPublishTarget").getAsJsonObject("properties").has("binding"));
     }
 
     @Test

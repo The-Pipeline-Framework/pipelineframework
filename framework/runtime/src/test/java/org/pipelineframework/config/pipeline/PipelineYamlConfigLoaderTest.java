@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.StringReader;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class PipelineYamlConfigLoaderTest {
@@ -191,6 +192,7 @@ class PipelineYamlConfigLoaderTest {
               documents:
                 kind: object
                 provider: filesystem
+                binding: local-documents
                 location:
                   root: "/tmp/incoming"
                 filter:
@@ -217,6 +219,7 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals(1, config.sources().size());
         assertEquals("filesystem", config.sources().get("documents").provider());
+        assertEquals(Optional.of("local-documents"), config.sources().get("documents").binding());
         assertEquals("/tmp/incoming", config.sources().get("documents").location().get("root"));
         assertEquals(List.of("*.csv"), config.sources().get("documents").filter().include());
         assertEquals(10, config.sources().get("documents").poll().batchSize());
@@ -224,7 +227,7 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("documents", config.input().object().source());
         assertEquals("com.example.DocumentInput", config.input().object().type());
         assertEquals("DocumentInput", config.input().object().typeName());
-        assertEquals("com.example.DocumentObjectMapper", config.input().object().mapper());
+        assertEquals(Optional.of("com.example.DocumentObjectMapper"), config.input().object().mapper());
     }
 
     @Test
@@ -237,6 +240,7 @@ class PipelineYamlConfigLoaderTest {
               results:
                 kind: object
                 provider: filesystem
+                binding: local-results
                 location:
                   root: "/tmp/outgoing"
                 naming:
@@ -259,6 +263,7 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals(1, config.publish().size());
         assertEquals("filesystem", config.publish().get("results").provider());
+        assertEquals(Optional.of("local-results"), config.publish().get("results").binding());
         assertEquals("/tmp/outgoing", config.publish().get("results").location().get("root"));
         assertEquals("{groupKey}.out", config.publish().get("results").naming().keyTemplate());
         assertEquals("text/csv", config.publish().get("results").payload().contentType());
@@ -268,6 +273,58 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("com.example.DocumentOutput", config.output().object().type());
         assertEquals("DocumentOutput", config.output().object().typeName());
         assertEquals("com.example.DocumentOutputPublishMapper", config.output().object().mapper());
+    }
+
+    @Test
+    void loadsGroupedObjectSelectionWithoutApplicationMapper() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: com.example
+            transport: GRPC
+            sources:
+              documents:
+                kind: object
+                provider: filesystem
+            input:
+              from: documents
+              selection:
+                mode: together
+                into: documents
+              emits:
+                type: com.example.DocumentBatch
+                typeName: DocumentBatch
+            steps: []
+            """));
+
+        assertEquals(Optional.empty(), config.input().object().mapper());
+        assertEquals("together", config.input().object().selection().orElseThrow().mode());
+        assertEquals(Optional.of("documents"), config.input().object().selection().orElseThrow().into());
+    }
+
+    @Test
+    void rejectsObjectInputWithBothMapperAndSelection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                transport: GRPC
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                input:
+                  from: documents
+                  emits:
+                    type: com.example.DocumentInput
+                    typeName: DocumentInput
+                    mapper: com.example.DocumentObjectMapper
+                  selection:
+                    mode: together
+                    keys:
+                      invoice: invoice.pdf
+                      attachment: attachment.pdf
+                steps: []
+                """)));
+
+        assertEquals("input.object.emits.mapper and input.object.selection are mutually exclusive", exception.getMessage());
     }
 
     @Test

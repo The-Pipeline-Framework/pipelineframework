@@ -77,7 +77,7 @@ class ObjectIngestMetricsTest {
                     : new RunAsyncAcceptedDto("execution-1", false, "/executions/execution-1", 1L)),
             new ObjectIngestReplayTelemetry(TelemetryRuntimes.global()));
 
-        runner.pollOnce();
+        runner.pollOnce().await().indefinitely();
 
         var metrics = metricReader.collectAllMetrics();
         assertTrue(hasMetric(metrics, "tpf.object_ingest.list.total"));
@@ -96,7 +96,7 @@ class ObjectIngestMetricsTest {
             (input, tenantId, idempotencyKey) -> Uni.createFrom().failure(new IllegalStateException("admission failed")),
             new ObjectIngestReplayTelemetry(TelemetryRuntimes.global()));
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(2, result.failed());
         assertTrue(hasMetric(metricReader.collectAllMetrics(), "tpf.object_ingest.failed.total"));

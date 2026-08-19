@@ -320,7 +320,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     return $T.ExitCode.USAGE;
                 }
                 try ($T runner = maybeRunner.get()) {
-                    $T.PollResult poll = runner.pollOnce();
+                    $T.PollResult poll = runner.pollOnce().await().atMost(java.time.Duration.ofSeconds(30));
                     if (poll.failed() > 0) {
                         System.err.println("Object Ingest failed for " + poll.failed() + " object(s).");
                         return $T.ExitCode.SOFTWARE;
