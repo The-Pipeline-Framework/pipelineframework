@@ -106,7 +106,8 @@ public final class PipelineIdlStateResolver {
                     if (protoName.isBlank() || !protoNames.add(protoName)) {
                         throw new IllegalStateException("Type '" + name + "' has colliding protobuf field name '" + protoName + "'.");
                     }
-                    fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(number, field.name(), protoName, field.type().name()));
+                    fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(
+                        number, field.name(), protoName, field.type().name(), field.repeated()));
                 }
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList(),

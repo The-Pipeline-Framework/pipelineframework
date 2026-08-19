@@ -99,7 +99,8 @@ public final class PipelineIdlCompatibilityChecker {
             }
             if (baselineField.number() != currentField.number()
                 || !Objects.equals(baselineField.protoName(), currentField.protoName())
-                || !Objects.equals(baselineField.type(), currentField.type())) {
+                || !Objects.equals(baselineField.type(), currentField.type())
+                || baselineField.repeated() != currentField.repeated()) {
                 errors.add("Type '" + typeName + "' changed field '" + baselineField.name()
                     + "' protobuf identity or type");
             }

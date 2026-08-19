@@ -281,7 +281,8 @@ class PipelineIdlCompatibilityCheckerTest {
         PipelineIdlSnapshot.TypeSnapshot additiveRecord = new PipelineIdlSnapshot.TypeSnapshot(
             "Payment", "record", List.of(
                 new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid"),
-                new PipelineIdlSnapshot.TypeFieldSnapshot(2, "status", "status", "string")), Optional.empty(), List.of());
+                new PipelineIdlSnapshot.TypeFieldSnapshot(2, "lineItems", "line_items", "LineItem", true)),
+            Optional.empty(), List.of());
 
         assertTrue(new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(additiveRecord)).isEmpty());
 
@@ -291,6 +292,22 @@ class PipelineIdlCompatibilityCheckerTest {
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(renamedProtoField));
 
         assertTrue(errors.stream().anyMatch(error -> error.contains("protobuf identity or type")));
+    }
+
+    @Test
+    void changingV3FieldMultiplicityIsIncompatible() {
+        PipelineIdlSnapshot.TypeSnapshot singular = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record",
+            List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "lineItems", "line_items", "LineItem")),
+            Optional.empty(), List.of());
+        PipelineIdlSnapshot.TypeSnapshot repeated = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record",
+            List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "lineItems", "line_items", "LineItem", true)),
+            Optional.empty(), List.of());
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(singular), v3Snapshot(repeated));
+
+        assertTrue(errors.stream().anyMatch(error -> error.contains("protobuf identity or type")), errors.toString());
     }
 
     @Test
