@@ -224,6 +224,9 @@ public final class FileRepresentationProvider implements RepresentationProvider 
         if (value == null) {
             resolved = defaultValue;
         } else if (value instanceof Number number) {
+            if ((number instanceof Float || number instanceof Double) && number.doubleValue() % 1 != 0.0D) {
+                throw new IllegalStateException("File mapping option '" + name + "' must be a positive integer.");
+            }
             resolved = number.longValue();
         } else {
             try {

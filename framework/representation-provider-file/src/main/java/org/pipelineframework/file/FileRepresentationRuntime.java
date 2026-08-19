@@ -66,25 +66,26 @@ public final class FileRepresentationRuntime {
                                           String targetName, long outputMaxBytes, Optional<String> objectKey,
                                           Function<Path, Uni<Path>> delegate) {
         Objects.requireNonNull(delegate, "delegate");
-        return prepare(input, inputMaxBytes).chain(workspace -> {
-            Uni<Path> result = Objects.requireNonNull(delegate.apply(workspace.input()),
-                "file service returned a null Uni");
-            return result.chain(path -> publish(workspace, path, targetName, outputMaxBytes, objectKey))
-                .eventually(() -> cleanup(workspace));
-        });
+        return prepare(input, inputMaxBytes).chain(workspace ->
+            Uni.createFrom().deferred(() -> {
+                Uni<Path> result = Objects.requireNonNull(delegate.apply(workspace.input()),
+                    "file service returned a null Uni");
+                return result.chain(path -> publish(workspace, path, targetName, outputMaxBytes, objectKey));
+            }).eventually(() -> cleanup(workspace)));
     }
 
     public Multi<PayloadReference> oneToMany(PayloadReference input, long inputMaxBytes,
                                              String targetName, long outputMaxBytes, Optional<String> objectKey,
                                              Function<Path, Multi<Path>> delegate) {
         Objects.requireNonNull(delegate, "delegate");
-        return prepare(input, inputMaxBytes).onItem().transformToMulti(workspace -> {
-            Multi<Path> results = Objects.requireNonNull(delegate.apply(workspace.input()),
-                "file service returned a null Multi");
-            return results.onItem()
-                .transformToUniAndConcatenate(path -> publish(workspace, path, targetName, outputMaxBytes, objectKey))
-                .onTermination().call(() -> cleanup(workspace));
-        });
+        return prepare(input, inputMaxBytes).onItem().transformToMulti(workspace ->
+            Multi.createFrom().deferred(() -> {
+                Multi<Path> results = Objects.requireNonNull(delegate.apply(workspace.input()),
+                    "file service returned a null Multi");
+                return results.onItem()
+                    .transformToUniAndConcatenate(path -> publish(workspace, path, targetName, outputMaxBytes, objectKey))
+                    .onTermination().call(() -> cleanup(workspace));
+            }));
     }
 
     private Uni<Workspace> prepare(PayloadReference reference, long maxBytes) {
@@ -162,13 +163,40 @@ public final class FileRepresentationRuntime {
                 throw new IllegalStateException("file service output exceeds maxBytes: " + size + " > " + maxBytes);
             }
             String key = configuredKey.filter(value -> !value.isBlank()).orElseGet(() -> real.getFileName().toString());
-            byte[] bytes = Files.readAllBytes(real);
+            byte[] bytes = readOutputBytes(real, maxBytes);
             if (bytes.length > maxBytes) {
                 throw new IllegalStateException("file service output exceeds maxBytes: " + bytes.length + " > " + maxBytes);
             }
             return new StagedOutput(key, bytes);
         } catch (IOException e) {
             throw new IllegalStateException("failed to read file service output", e);
+        }
+    }
+
+    private static byte[] readOutputBytes(Path output, long maxBytes) throws IOException {
+        if (maxBytes <= 0) {
+            throw new IllegalArgumentException("maxBytes must be > 0");
+        }
+        if (maxBytes >= Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("output maxBytes must be smaller than " + Integer.MAX_VALUE);
+        }
+        int maxRead = Math.toIntExact(maxBytes + 1L);
+        try (var stream = Files.newInputStream(output)) {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int remaining = maxRead;
+            while (remaining > 0) {
+                int read = stream.read(buffer, 0, Math.min(buffer.length, remaining));
+                if (read < 0) {
+                    break;
+                }
+                bytes.write(buffer, 0, read);
+                remaining -= read;
+            }
+            if (remaining == 0 && stream.read() != -1) {
+                throw new IllegalStateException("file service output exceeds maxBytes: " + (maxBytes + 1) + " > " + maxBytes);
+            }
+            return bytes.toByteArray();
         }
     }
 

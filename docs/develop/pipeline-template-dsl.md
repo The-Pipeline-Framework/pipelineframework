@@ -401,7 +401,7 @@ A Java binding identifies a domain type. A mapper performs a representation conv
 
 | Boundary | Required declaration |
 | --- | --- |
-| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline/domain conversion |
+| Object ingest into the first business step | `input.emits.mapper` for non-grouped object ingest; grouped `selection.mode: together` drives `selection`-based projection and does not need an `emits.mapper` |
 | Service outside the compiling module | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated client crosses representations |
 | Object publish from the terminal business step | terminal `outboundMapper` and `output.consumes.mapper` |
 

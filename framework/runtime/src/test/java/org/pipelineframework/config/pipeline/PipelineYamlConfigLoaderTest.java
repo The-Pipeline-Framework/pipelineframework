@@ -301,6 +301,33 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsObjectInputWithBothMapperAndSelection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                transport: GRPC
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                input:
+                  from: documents
+                  emits:
+                    type: com.example.DocumentInput
+                    typeName: DocumentInput
+                    mapper: com.example.DocumentObjectMapper
+                  selection:
+                    mode: together
+                    keys:
+                      invoice: invoice.pdf
+                      attachment: attachment.pdf
+                steps: []
+                """)));
+
+        assertEquals("input.object.emits.mapper and input.object.selection are mutually exclusive", exception.getMessage());
+    }
+
+    @Test
     void rejectsSubscriptionAndObjectInputTogether() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

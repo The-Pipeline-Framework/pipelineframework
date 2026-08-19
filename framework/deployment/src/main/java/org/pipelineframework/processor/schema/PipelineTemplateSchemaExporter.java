@@ -903,6 +903,23 @@ public final class PipelineTemplateSchemaExporter {
       "required": [
         "emits"
       ],
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "emits": {
+                  "required": ["mapper"]
+                }
+              },
+              "required": ["emits"]
+            },
+            {
+              "required": ["selection"]
+            }
+          ]
+        }
+      ],
       "oneOf": [
         {
           "required": [

@@ -264,6 +264,15 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject objectInput = definitions.getAsJsonObject("objectInputBoundary");
 
         assertContains(objectInput.getAsJsonArray("required"), "emits");
+        JsonArray allOf = objectInput.getAsJsonArray("allOf");
+        assertEquals(1, allOf.size());
+        JsonArray selectionOrMapper = allOf.get(0).getAsJsonObject().getAsJsonArray("oneOf");
+        assertEquals(2, selectionOrMapper.size());
+        JsonObject emitMapperRequired = selectionOrMapper.get(0).getAsJsonObject();
+        assertContains(emitMapperRequired.getAsJsonArray("required"), "emits");
+        assertContains(emitMapperRequired.getAsJsonObject("properties").getAsJsonObject("emits").getAsJsonArray("required"),
+            "mapper");
+        assertContains(selectionOrMapper.get(1).getAsJsonObject().getAsJsonArray("required"), "selection");
         JsonArray oneOf = objectInput.getAsJsonArray("oneOf");
         assertEquals(2, oneOf.size());
         assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");

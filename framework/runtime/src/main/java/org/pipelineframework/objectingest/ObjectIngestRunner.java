@@ -224,6 +224,12 @@ public final class ObjectIngestRunner implements AutoCloseable {
         if (listed.isEmpty()) {
             return Uni.createFrom().item(new PollResult(0, 0, 0, List.of()));
         }
+        if (!selection.keys().isEmpty()) {
+            java.util.Set<String> listedKeys = listed.stream().map(ObjectSourceItem::key).collect(java.util.stream.Collectors.toSet());
+            if (!listedKeys.containsAll(selection.keys().keySet())) {
+                return Uni.createFrom().item(new PollResult(listed.size(), 0, 0, List.of()));
+            }
+        }
         List<ObjectSourceItem> selected = listed.stream()
             .filter(item -> selection.keys().isEmpty() || selection.keys().containsValue(item.key()))
             .sorted(java.util.Comparator.comparing(ObjectSourceItem::key))

@@ -39,6 +39,10 @@ public record PipelineObjectInputConfig(
         if (type == null) {
             throw new IllegalArgumentException("input.object.emits.type must not be blank");
         }
+        if (!mapper.isEmpty() && !selection.isEmpty()) {
+            throw new IllegalArgumentException(
+                "input.object.emits.mapper and input.object.selection are mutually exclusive");
+        }
         if (mapper.isEmpty() && selection.isEmpty()) {
             throw new IllegalArgumentException("input.object.emits.mapper must not be blank");
         }

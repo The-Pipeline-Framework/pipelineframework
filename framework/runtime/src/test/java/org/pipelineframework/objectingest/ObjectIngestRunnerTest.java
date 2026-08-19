@@ -56,7 +56,7 @@ class ObjectIngestRunnerTest {
             },
             ObjectIngestTelemetry.NOOP);
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(1, result.listed());
         assertEquals(1, result.submitted());
@@ -100,7 +100,7 @@ class ObjectIngestRunnerTest {
             },
             ObjectIngestTelemetry.NOOP);
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(1, result.listed());
         assertEquals(0, result.submitted());
@@ -138,7 +138,7 @@ class ObjectIngestRunnerTest {
             (input, tenantId, idempotencyKey) -> Uni.createFrom().nullItem(),
             ObjectIngestTelemetry.NOOP);
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(1, result.listed());
         assertEquals(0, result.submitted());
@@ -150,7 +150,7 @@ class ObjectIngestRunnerTest {
         List<Object> inputs = new ArrayList<>();
         ObjectIngestRunner runner = groupedRunner(List.of(item("b.txt"), item("a.txt")), inputs);
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(2, result.listed());
         assertEquals(1, result.submitted());
@@ -164,7 +164,7 @@ class ObjectIngestRunnerTest {
         List<Object> inputs = new ArrayList<>();
         ObjectIngestRunner runner = groupedRunner(List.of(item("only.txt")), inputs);
 
-        ObjectIngestRunner.PollResult result = runner.pollOnce();
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
 
         assertEquals(1, result.listed());
         assertEquals(1, result.submitted());
@@ -172,11 +172,30 @@ class ObjectIngestRunnerTest {
         assertEquals(1, ((TestObjectSelectionMapper.SelectedInput) inputs.getFirst()).references().size());
     }
 
+    @Test
+    void groupedSelectionSkipsAdmissionWhenRequiredKeyIsMissing() {
+        List<Object> inputs = new ArrayList<>();
+        PipelineObjectSelectionConfig selection = new PipelineObjectSelectionConfig(
+            "together", Map.of("first", "first.txt", "second", "second.txt"), Optional.empty());
+        ObjectIngestRunner runner = groupedRunner(List.of(item("first.txt")), inputs, selection);
+
+        ObjectIngestRunner.PollResult result = runner.pollOnce().await().indefinitely();
+
+        assertEquals(1, result.listed());
+        assertEquals(0, result.submitted());
+        assertEquals(0, result.failed());
+        assertEquals(List.of(), inputs);
+    }
+
     private ObjectIngestRunner groupedRunner(List<ObjectSourceItem> items, List<Object> inputs) {
+        return groupedRunner(items, inputs, new PipelineObjectSelectionConfig(
+            "together", Map.of(), Optional.of("references")));
+    }
+
+    private ObjectIngestRunner groupedRunner(List<ObjectSourceItem> items, List<Object> inputs,
+                                            PipelineObjectSelectionConfig selection) {
         PipelineObjectSourceConfig source = new PipelineObjectSourceConfig(
             "documents", "object", "selection-test", Map.of(), null, null, null, null);
-        PipelineObjectSelectionConfig selection = new PipelineObjectSelectionConfig(
-            "together", Map.of(), Optional.of("references"));
         PipelineYamlConfig config = new PipelineYamlConfig(
             "org.pipelineframework.objectingest", "GRPC", "COMPUTE", List.of(),
             Map.of("documents", source), List.of(),

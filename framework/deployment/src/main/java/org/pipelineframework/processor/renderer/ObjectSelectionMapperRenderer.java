@@ -125,7 +125,9 @@ public final class ObjectSelectionMapperRenderer {
         }
         List<String> fields = record.fields().stream().map(PipelineTemplateTypeDefinition.Field::name).toList();
         if (selection.into().isPresent()) {
-            if (fields.size() != 1 || !fields.getFirst().equals(selection.into().orElseThrow())) {
+            if (record.fields().size() != 1
+                || !record.fields().getFirst().repeated()
+                || !fields.getFirst().equals(selection.into().orElseThrow())) {
                 throw new IllegalStateException("input.object.selection.into must name the sole repeated payload_ref field of '"
                     + record.name() + "'");
             }

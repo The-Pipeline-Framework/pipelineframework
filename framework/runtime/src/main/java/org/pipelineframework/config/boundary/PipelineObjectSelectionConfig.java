@@ -23,6 +23,9 @@ public record PipelineObjectSelectionConfig(
                 if (normalizedField == null || normalizedKey == null) {
                     throw new IllegalArgumentException("input.object.selection.keys must not contain blank fields or keys");
                 }
+                if (copied.containsKey(normalizedField)) {
+                    throw new IllegalArgumentException("input.object.selection.keys contains duplicate field '" + normalizedField + "'");
+                }
                 copied.put(normalizedField, normalizedKey);
             });
         }

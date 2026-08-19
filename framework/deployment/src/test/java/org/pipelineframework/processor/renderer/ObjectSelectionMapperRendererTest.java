@@ -1,5 +1,6 @@
 package org.pipelineframework.processor.renderer;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -45,7 +46,7 @@ class ObjectSelectionMapperRendererTest {
 
     @Test
     void rendersHomogeneousRepeatedProjectionWithoutDefiningSingletonFailure() throws Exception {
-        var record = new PipelineTemplateTypeDefinition.RecordType("Documents", List.of(field("documents")));
+        var record = new PipelineTemplateTypeDefinition.RecordType("Documents", List.of(field("documents", true)));
         var selection = new PipelineObjectSelectionConfig(
             "together", Map.of(), Optional.of("documents"));
 
@@ -61,8 +62,27 @@ class ObjectSelectionMapperRendererTest {
         assertTrue(source.contains("snapshots.stream().map(snapshot -> reference(snapshot, snapshot.key())).toList()"));
     }
 
+    @Test
+    void rejectsIntoSelectionForScalarPayloadRefField() {
+        var record = new PipelineTemplateTypeDefinition.RecordType("Documents", List.of(field("documents", false)));
+        var selection = new PipelineObjectSelectionConfig("together", Map.of(), Optional.of("documents"));
+
+        assertThrows(IllegalStateException.class, () ->
+            new ObjectSelectionMapperRenderer().render(
+                "com.example",
+                ClassName.get("com.example.domain", "Documents"),
+                record,
+                selection,
+                new GenerationContext(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null)));
+    }
+
     private static PipelineTemplateTypeDefinition.Field field(String name) {
         return new PipelineTemplateTypeDefinition.Field(
-            name, new PipelineTemplateTypeReference.Scalar("payload_ref"));
+            name, new PipelineTemplateTypeReference.Scalar("payload_ref"), false);
+    }
+
+    private static PipelineTemplateTypeDefinition.Field field(String name, boolean repeated) {
+        return new PipelineTemplateTypeDefinition.Field(
+            name, new PipelineTemplateTypeReference.Scalar("payload_ref"), repeated);
     }
 }
