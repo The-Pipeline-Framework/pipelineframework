@@ -1718,7 +1718,7 @@ class PipelineTemplateConfigLoaderTest {
             config.typeModel().definitions().get("Payment");
 
         assertEquals(List.of(false, true, true), payment.fields().stream()
-            .map(PipelineTemplateTypeDefinition.Field::repeated).toList());
+            .map(field -> field.repeated()).toList());
         assertEquals(List.of("uuid", "string", "LineItem"), payment.fields().stream()
             .map(field -> field.type().name()).toList());
     }

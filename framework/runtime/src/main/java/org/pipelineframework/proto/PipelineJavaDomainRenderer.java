@@ -134,9 +134,9 @@ final class PipelineJavaDomainRenderer {
             builder.append(i + 1 == record.fields().size() ? "\n" : ",\n");
         }
         builder.append(") {\n");
-        if (record.fields().stream().anyMatch(PipelineTemplateTypeDefinition.Field::repeated)) {
+        if (record.fields().stream().anyMatch(field -> field.repeated())) {
             builder.append("    public ").append(record.name()).append(" {\n");
-            record.fields().stream().filter(PipelineTemplateTypeDefinition.Field::repeated).forEach(field -> builder
+            record.fields().stream().filter(field -> field.repeated()).forEach(field -> builder
                 .append("        ").append(field.name()).append(" = ").append(field.name())
                 .append(" == null ? java.util.List.of() : java.util.List.copyOf(").append(field.name()).append(");\n"));
             builder.append("    }\n");
