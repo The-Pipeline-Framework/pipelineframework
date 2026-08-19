@@ -55,7 +55,10 @@ public sealed interface PipelineTemplateTypeDefinition
         }
     }
 
-    record Field(String name, PipelineTemplateTypeReference type) {
+    record Field(String name, PipelineTemplateTypeReference type, boolean repeated) {
+        public Field(String name, PipelineTemplateTypeReference type) {
+            this(name, type, false);
+        }
     }
 
     record Variant(String discriminator, PipelineTemplateTypeReference payload) {

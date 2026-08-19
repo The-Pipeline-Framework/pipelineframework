@@ -137,6 +137,32 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void repeatedFieldSemanticsAreDeterministicAndAffectTheReleaseHash() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path singularOutput = tempDir.resolve("v3-singular");
+        Path repeatedOutput = tempDir.resolve("v3-repeated");
+        Path repeatedReorderedOutput = tempDir.resolve("v3-repeated-reordered");
+
+        writeV3Metadata(pipelineYaml, singularOutput, v3TypeModel(false));
+        writeV3Metadata(pipelineYaml, repeatedOutput, repeatedTypeModel(false));
+        writeV3Metadata(pipelineYaml, repeatedReorderedOutput, repeatedTypeModel(true));
+
+        JsonObject singular = readContract(singularOutput);
+        JsonObject repeated = readContract(repeatedOutput);
+        JsonObject repeatedReordered = readContract(repeatedReorderedOutput);
+        JsonObject repeatedField = repeated.getAsJsonObject("canonicalTypes").getAsJsonObject("Zeta")
+            .getAsJsonObject("definition").getAsJsonArray("fields").get(1).getAsJsonObject();
+
+        assertTrue(repeatedField.get("repeated").getAsBoolean());
+        assertNotEquals(singular.get("canonicalCatalogFingerprint").getAsString(),
+            repeated.get("canonicalCatalogFingerprint").getAsString());
+        assertNotEquals(singular.get("contractHash").getAsString(), repeated.get("contractHash").getAsString());
+        assertEquals(repeated.get("canonicalCatalogFingerprint").getAsString(),
+            repeatedReordered.get("canonicalCatalogFingerprint").getAsString());
+        assertEquals(repeated.get("contractHash").getAsString(), repeatedReordered.get("contractHash").getAsString());
+    }
+
+    @Test
     void embedsTheResolvedCompositionInTheExistingHashedContract() throws IOException {
         Path output = tempDir.resolve("composition");
         ProcessingEnvironment processingEnv = processingEnv(output, Map.of());
@@ -295,6 +321,24 @@ class PipelineContractMetadataGeneratorTest {
         PipelineTemplateTypeModel base = v3TypeModel(false);
         return new PipelineTemplateTypeModel(base.definitions(), Map.of(), Map.of(), Map.of(
             "Alpha", new ProtocolTypeIdentity(ConnectorProviderId.of(namespace), "Alpha")));
+    }
+
+    private static PipelineTemplateTypeModel repeatedTypeModel(boolean reverseDefinitionOrder) {
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        PipelineTemplateTypeDefinition alpha = new PipelineTemplateTypeDefinition.RecordType("Alpha", List.of(
+            new PipelineTemplateTypeDefinition.Field("code", new PipelineTemplateTypeReference.Scalar("string"))));
+        PipelineTemplateTypeDefinition zeta = new PipelineTemplateTypeDefinition.RecordType("Zeta", List.of(
+            new PipelineTemplateTypeDefinition.Field("attributes", new PipelineTemplateTypeReference.MapType(
+                new PipelineTemplateTypeReference.Scalar("string"), new PipelineTemplateTypeReference.Named("Alpha"))),
+            new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"), true)));
+        if (reverseDefinitionOrder) {
+            definitions.put("Zeta", zeta);
+            definitions.put("Alpha", alpha);
+        } else {
+            definitions.put("Alpha", alpha);
+            definitions.put("Zeta", zeta);
+        }
+        return new PipelineTemplateTypeModel(definitions);
     }
 
     private PipelineStepModel step(

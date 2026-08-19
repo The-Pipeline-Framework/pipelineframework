@@ -257,6 +257,117 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void generatedV3RepeatedFieldsAreImmutableOrderedListsAndRoundTripThroughProtobuf() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-repeated.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-repeated");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Repeated fields"
+            basePackage: "com.example.repeated"
+            transport: "GRPC"
+            types:
+              LineItem:
+                fields: [[sku, string]]
+              Batch:
+                fields:
+                  - name: lineItems
+                    repeated: LineItem
+                  - name: labels
+                    repeated: string
+            steps:
+              - name: Process Batch
+                cardinality: ONE_TO_ONE
+                input: Batch
+                output: Batch
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        String proto = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        String batchSource = Files.readString(outputDir.resolve("com/example/repeated/domain/Batch.java"));
+        assertTrue(proto.contains("repeated LineItem line_items ="));
+        assertTrue(proto.contains("repeated string labels ="));
+        assertFalse(proto.contains("optional LineItem line_items"));
+        assertTrue(batchSource.contains("java.util.List<LineItem> lineItems"));
+        assertTrue(batchSource.contains("lineItems == null ? java.util.List.of() : java.util.List.copyOf(lineItems)"));
+
+        Path stub = outputDir.resolve("com/example/repeated/grpc/PipelineTypes.java");
+        Files.createDirectories(stub.getParent());
+        Files.writeString(stub, """
+            package com.example.repeated.grpc;
+            public final class PipelineTypes {
+              public static final class LineItem {
+                private final String sku;
+                private LineItem(String sku) { this.sku = sku; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasSku() { return sku != null; }
+                public String getSku() { return sku; }
+                public static final class Builder {
+                  private String sku;
+                  public Builder setSku(String sku) { this.sku = sku; return this; }
+                  public LineItem build() { return new LineItem(sku); }
+                }
+              }
+              public static final class Batch {
+                private final java.util.List<LineItem> lineItems;
+                private final java.util.List<String> labels;
+                private Batch(java.util.List<LineItem> lineItems, java.util.List<String> labels) {
+                  this.lineItems = java.util.List.copyOf(lineItems);
+                  this.labels = java.util.List.copyOf(labels);
+                }
+                public static Builder newBuilder() { return new Builder(); }
+                public java.util.List<LineItem> getLineItemsList() { return lineItems; }
+                public java.util.List<String> getLabelsList() { return labels; }
+                public static final class Builder {
+                  private final java.util.List<LineItem> lineItems = new java.util.ArrayList<>();
+                  private final java.util.List<String> labels = new java.util.ArrayList<>();
+                  public Builder addAllLineItems(Iterable<LineItem> values) { values.forEach(lineItems::add); return this; }
+                  public Builder addAllLabels(Iterable<String> values) { values.forEach(labels::add); return this; }
+                  public Batch build() { return new Batch(lineItems, labels); }
+                }
+              }
+            }
+            """);
+
+        Path classes = tempDir.resolve("compiled-repeated-domain");
+        List<String> sources;
+        try (var files = Files.walk(outputDir)) {
+            sources = files.filter(path -> path.toString().endsWith(".java")).map(Path::toString).toList();
+        }
+        List<String> compilerArguments = new ArrayList<>();
+        compilerArguments.add("-d");
+        compilerArguments.add(classes.toString());
+        compilerArguments.addAll(sources);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+            compilerArguments.toArray(String[]::new)));
+
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> lineItem = loader.loadClass("com.example.repeated.domain.LineItem");
+            Class<?> batch = loader.loadClass("com.example.repeated.domain.Batch");
+            Class<?> adapters = loader.loadClass("com.example.repeated.domain.PipelineDomainProtoAdapters");
+            Object item = lineItem.getConstructor(String.class).newInstance("sku-1");
+            List<Object> authoredItems = new ArrayList<>(List.of(item, item));
+            Object input = batch.getConstructor(List.class, List.class)
+                .newInstance(authoredItems, List.of("priority", "priority"));
+            authoredItems.clear();
+
+            List<?> storedItems = (List<?>) batch.getMethod("lineItems").invoke(input);
+            assertEquals(List.of(item, item), storedItems, "Repeated values must preserve order and duplicates");
+            assertThrows(UnsupportedOperationException.class, storedItems::clear);
+
+            Object encoded = adapters.getMethod("toProto", batch).invoke(null, input);
+            Object roundTripped = adapters.getMethod("fromProto", encoded.getClass()).invoke(null, encoded);
+            assertEquals(input, roundTripped);
+        }
+    }
+
+    @Test
     void generatedPayloadReferenceAdapterRoundTripsAbsentOptionalFieldsAndConnectorOrigin() throws Exception {
         Path configPath = tempDir.resolve("pipeline-payload-reference.yaml");
         Files.writeString(configPath, """

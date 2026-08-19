@@ -148,6 +148,14 @@ class PipelineTemplateSchemaExporterTest {
     void versionThreeSchemaRequiresNonEmptyUnionsAndCanonicalStepContracts() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         JsonObject definitions = schema.getAsJsonObject("$defs");
+        JsonArray v3RecordFields = definitions.getAsJsonObject("v3RecordField").getAsJsonArray("oneOf");
+        assertEquals(3, v3RecordFields.size());
+        JsonObject repeatedField = v3RecordFields.asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(field -> field.has("properties") && field.getAsJsonObject("properties").has("repeated"))
+            .findFirst().orElseThrow();
+        assertContains(repeatedField.getAsJsonArray("required"), "name");
+        assertContains(repeatedField.getAsJsonArray("required"), "repeated");
+        assertFalse(repeatedField.get("additionalProperties").getAsBoolean());
         JsonObject logicalReference = definitions.getAsJsonObject("logicalContractReference");
         assertEquals(3, logicalReference.getAsJsonArray("oneOf").size());
         JsonObject unionDefinition = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()

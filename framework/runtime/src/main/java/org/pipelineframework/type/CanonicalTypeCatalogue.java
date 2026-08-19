@@ -191,11 +191,25 @@ public final class CanonicalTypeCatalogue {
         definition.path("fields").forEach(fields::add);
         fields.stream().sorted(Comparator.comparing(field -> text(field, "name"))).forEach(field -> {
             String name = text(field, "name");
-            properties.set(name, referenceSchema(field.path("type")));
-            required.add(name);
+            properties.set(name, fieldSchema(field));
+            if (!field.path("repeated").asBoolean(false)) {
+                required.add(name);
+            }
         });
         schema.put("additionalProperties", false);
         return schema;
+    }
+
+    private ObjectNode fieldSchema(JsonNode field) {
+        ObjectNode element = referenceSchema(field.path("type"));
+        if (!field.path("repeated").asBoolean(false)) {
+            return element;
+        }
+        ObjectNode array = JSON.createObjectNode();
+        array.put("type", "array");
+        array.set("items", element);
+        array.putArray("default");
+        return array;
     }
 
     private ObjectNode wrapperSchema(JsonNode definition) {
@@ -283,7 +297,7 @@ public final class CanonicalTypeCatalogue {
             throw invalid(path, "expected object");
         }
         Map<String, JsonNode> fields = new TreeMap<>();
-        definition.path("fields").forEach(field -> fields.put(text(field, "name"), field.path("type")));
+        definition.path("fields").forEach(field -> fields.put(text(field, "name"), field));
         Iterator<String> names = value.fieldNames();
         while (names.hasNext()) {
             String name = names.next();
@@ -291,13 +305,30 @@ public final class CanonicalTypeCatalogue {
                 throw invalid(path + "." + name, "unknown field");
             }
         }
-        fields.forEach((name, expression) -> {
+        fields.forEach((name, definitionField) -> {
             JsonNode field = value.get(name);
             if (field == null || field.isNull()) {
+                if (definitionField.path("repeated").asBoolean(false)) {
+                    ((ObjectNode) value).putArray(name);
+                    return;
+                }
                 throw invalid(path + "." + name, "missing required field");
             }
-            validateReference(expression, field, path + "." + name, stack);
+            validateField(definitionField, field, path + "." + name, stack);
         });
+    }
+
+    private void validateField(JsonNode definition, JsonNode value, String path, List<String> stack) {
+        if (!definition.path("repeated").asBoolean(false)) {
+            validateReference(definition.path("type"), value, path, stack);
+            return;
+        }
+        if (!value.isArray()) {
+            throw invalid(path, "expected array");
+        }
+        for (int index = 0; index < value.size(); index++) {
+            validateReference(definition.path("type"), value.get(index), path + "[" + index + "]", stack);
+        }
     }
 
     private void validateUnion(JsonNode definition, JsonNode value, String path, List<String> stack) {

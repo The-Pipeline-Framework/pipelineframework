@@ -357,6 +357,62 @@ class PipelineCompositionProductizationTest {
     }
 
     @Test
+    void repeatedFieldsCrossStreamingBoundariesOnlyThroughExplicitApplicationLogic() throws Exception {
+        String yaml = repeatedCardinalityYaml();
+        Map<String, String> sources = repeatedCardinalitySources();
+        Fixture fixture = compile("repeated-cardinality", yaml, sources);
+        String expandName = invocationName("Expand");
+        String collectName = invocationName("Collect");
+
+        assertThat(fixture.compilation()).succeeded();
+        assertTrue(Files.readString(fixture.generatedClass(expandName))
+            .contains("PipelineInvocationSteps.<Batch, Item>oneToMany"));
+        assertTrue(Files.readString(fixture.generatedClass(collectName))
+            .contains("PipelineInvocationSteps.<Item, Batch>manyToOne"));
+
+        Path classes = compileGeneratedFixture(fixture, sources,
+            List.of(expandName, collectName, "ProcessSplitLocalClientStep", "ProcessJoinLocalClientStep"));
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()}, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            Class<?> itemType = loader.loadClass("com.example.repeatedcardinality.Item");
+            Class<?> batchType = loader.loadClass("com.example.repeatedcardinality.Batch");
+            Object first = itemType.getConstructor(String.class).newInstance("first");
+            Object second = itemType.getConstructor(String.class).newInstance("second");
+            Object batch = batchType.getConstructor(String.class, List.class)
+                .newInstance("original", List.of(first, second, first));
+
+            PipelineRunnerTestHarness.Harness harness = PipelineRunnerTestHarness.createHarness();
+            Object expand = instantiateGeneratedInvocation(loader, harness.runner(),
+                "com.example.repeatedcardinality.pipeline." + expandName,
+                List.of("com.example.repeatedcardinality.pipeline.ProcessSplitLocalClientStep"),
+                List.of("com.example.repeatedcardinality.SplitService"));
+            Object collect = instantiateGeneratedInvocation(loader, harness.runner(),
+                "com.example.repeatedcardinality.pipeline." + collectName,
+                List.of("com.example.repeatedcardinality.pipeline.ProcessJoinLocalClientStep"),
+                List.of("com.example.repeatedcardinality.JoinService"));
+            AtomicInteger rootSubscriptions = new AtomicInteger();
+            Uni<?> input = Uni.createFrom().deferred(() -> {
+                rootSubscriptions.incrementAndGet();
+                return Uni.createFrom().item(batch);
+            });
+
+            Object result = ((Uni<?>) harness.runner().runWithContext(input, List.of(expand, collect)).result())
+                .await().indefinitely();
+
+            assertEquals("Batch[id=recollected, lineItems=[Item[sku=first], Item[sku=second], Item[sku=first]]]",
+                result.toString());
+            assertEquals(1, rootSubscriptions.get());
+            assertEquals(1, loader.loadClass("com.example.repeatedcardinality.SplitService")
+                .getField("calls").getInt(null));
+            assertEquals(1, loader.loadClass("com.example.repeatedcardinality.JoinService")
+                .getField("calls").getInt(null));
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void rejectsUnknownPipelineReferenceWithCallsiteDiagnostic() throws Exception {
         Compilation compilation = compile("unknown-reference", diagnosticYaml("{}", """
             - { name: Call missing, pipeline: missing, cardinality: ONE_TO_ONE, input: A, output: A, java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A } }
@@ -616,6 +672,47 @@ class PipelineCompositionProductizationTest {
             "com.example.cardinality.SplitService", "package com.example.cardinality; public class SplitService implements org.pipelineframework.service.ReactiveStreamingService<Value, Value> { public io.smallrye.mutiny.Multi<Value> process(Value input) { return io.smallrye.mutiny.Multi.createFrom().items(input, input); } }",
             "com.example.cardinality.JoinService", "package com.example.cardinality; public class JoinService implements org.pipelineframework.service.ReactiveStreamingClientService<Value, Value> { public static int calls; public io.smallrye.mutiny.Uni<Value> process(io.smallrye.mutiny.Multi<Value> input) { calls++; return input.collect().first(); } }",
             "com.example.cardinality.TransformService", "package com.example.cardinality; public class TransformService implements org.pipelineframework.service.ReactiveBidirectionalStreamingService<Value, Value> { public static int calls; public io.smallrye.mutiny.Multi<Value> process(io.smallrye.mutiny.Multi<Value> input) { calls++; return input; } }"
+        );
+    }
+
+    private String repeatedCardinalityYaml() {
+        return """
+            version: 3
+            appName: Repeated cardinality
+            basePackage: com.example.repeatedcardinality
+            transport: LOCAL
+            contract: { input: Batch, output: Batch }
+            types:
+              Item: { fields: [[sku, string]] }
+              Batch:
+                fields:
+                  - [id, string]
+                  - { name: lineItems, repeated: Item }
+            pipelines:
+              expand:
+                input: Batch
+                output: Item
+                steps: [{ name: Split, service: com.example.repeatedcardinality.SplitService, cardinality: ONE_TO_MANY, input: Batch, output: Item, java: { input: com.example.repeatedcardinality.Batch, output: com.example.repeatedcardinality.Item } }]
+              collect:
+                input: Item
+                output: Batch
+                steps: [{ name: Join, service: com.example.repeatedcardinality.JoinService, cardinality: MANY_TO_ONE, input: Item, output: Batch, java: { input: com.example.repeatedcardinality.Item, output: com.example.repeatedcardinality.Batch } }]
+            steps:
+              - { name: Expand, pipeline: expand, cardinality: ONE_TO_MANY, input: Batch, output: Item, java: { input: com.example.repeatedcardinality.Batch, output: com.example.repeatedcardinality.Item } }
+              - { name: Collect, pipeline: collect, cardinality: MANY_TO_ONE, input: Item, output: Batch, java: { input: com.example.repeatedcardinality.Item, output: com.example.repeatedcardinality.Batch } }
+            """;
+    }
+
+    private Map<String, String> repeatedCardinalitySources() {
+        return Map.of(
+            "com.example.repeatedcardinality.Item",
+            "package com.example.repeatedcardinality; public record Item(String sku) { }",
+            "com.example.repeatedcardinality.Batch",
+            "package com.example.repeatedcardinality; public record Batch(String id, java.util.List<Item> lineItems) { public Batch { lineItems = java.util.List.copyOf(lineItems); } }",
+            "com.example.repeatedcardinality.SplitService",
+            "package com.example.repeatedcardinality; public class SplitService implements org.pipelineframework.service.ReactiveStreamingService<Batch, Item> { public static int calls; public io.smallrye.mutiny.Multi<Item> process(Batch input) { calls++; return io.smallrye.mutiny.Multi.createFrom().iterable(input.lineItems()); } }",
+            "com.example.repeatedcardinality.JoinService",
+            "package com.example.repeatedcardinality; public class JoinService implements org.pipelineframework.service.ReactiveStreamingClientService<Item, Batch> { public static int calls; public io.smallrye.mutiny.Uni<Batch> process(io.smallrye.mutiny.Multi<Item> input) { calls++; return input.collect().asList().map(items -> new Batch(\"recollected\", items)); } }"
         );
     }
 

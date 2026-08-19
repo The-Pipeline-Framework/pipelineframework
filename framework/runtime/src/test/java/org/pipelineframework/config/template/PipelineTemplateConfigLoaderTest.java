@@ -1693,6 +1693,68 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsV3RepeatedFieldsAsOrderedValueMultiplicity() throws Exception {
+        Path configPath = tempDir.resolve("v3-repeated-fields.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Repeated Fields
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              LineItem:
+                fields: [[sku, string]]
+              Payment:
+                fields:
+                  - [paymentId, uuid]
+                  - name: tags
+                    repeated: string
+                  - name: lineItems
+                    repeated: LineItem
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.RecordType payment = (PipelineTemplateTypeDefinition.RecordType)
+            config.typeModel().definitions().get("Payment");
+
+        assertEquals(List.of(false, true, true), payment.fields().stream()
+            .map(PipelineTemplateTypeDefinition.Field::repeated).toList());
+        assertEquals(List.of("uuid", "string", "LineItem"), payment.fields().stream()
+            .map(field -> field.type().name()).toList());
+    }
+
+    @Test
+    void rejectsAmbiguousAndLegacyV3RepeatedFieldForms() throws Exception {
+        Path both = tempDir.resolve("v3-repeated-both.yaml");
+        Files.writeString(both, repeatedFieldTemplate("type: LineItem\nrepeated: LineItem"));
+        IllegalStateException bothError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(both));
+        assertTrue(bothError.getMessage().contains("exactly one of 'type' or 'repeated'"), bothError.getMessage());
+
+        Path legacyBoolean = tempDir.resolve("v3-repeated-boolean.yaml");
+        Files.writeString(legacyBoolean, repeatedFieldTemplate("repeated: true"));
+        IllegalStateException booleanError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(legacyBoolean));
+        assertTrue(booleanError.getMessage().contains("supported scalar or named type"), booleanError.getMessage());
+    }
+
+    private String repeatedFieldTemplate(String fieldDeclaration) {
+        return """
+            version: 3
+            appName: Invalid Repeated Field
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              LineItem: { fields: [[sku, string]] }
+              Payment:
+                fields:
+                  - name: lineItems
+            """ + fieldDeclaration.indent(8) + """
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """;
+    }
+
+    @Test
     void loadsOptionalV3RepresentationMappingsOutsideWireIdentity() throws Exception {
         Path configPath = tempDir.resolve("v3-representation-mappings.yaml");
         Files.writeString(configPath, """
