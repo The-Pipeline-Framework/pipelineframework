@@ -250,6 +250,13 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                 Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
                 metadata.putAll(closeRequest.metadata());
                 metadata.put("target", request.targetName());
+                metadata.put(
+                    S3ObjectSourceProvider.CHECKSUM_KIND_METADATA,
+                    S3ObjectSourceProvider.CHECKSUM_KIND_SHA256);
+                Object region = request.target().location().get("region");
+                if (region != null && !region.toString().isBlank()) {
+                    metadata.put(S3ObjectSourceProvider.REGION_METADATA, region.toString().trim());
+                }
                 PayloadReference reference = new PayloadReference(
                     "s3",
                     bucket,

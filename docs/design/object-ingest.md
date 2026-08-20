@@ -220,16 +220,22 @@ public final class CsvPaymentFileObjectMapper
 The `localPath` projection above is retained for existing filesystem applications, but it is not a
 portable content contract. A neutral downstream connector consumes `snapshot.reference()` through
 `PayloadMaterializer`; only the binding-owned object-source operation interprets `container`,
-`key`, or other provider location metadata. The filesystem object source supports this bounded
-materialization path. S3 and standard input reject reference materialization; an unsupported source
-fails explicitly rather than
-leaking its location into application mapper code.
+`key`, or other provider location metadata. The filesystem and S3 object sources support this bounded
+materialization path. Standard input rejects reference materialization; an unsupported source fails
+explicitly rather than leaking its location into application mapper code.
 
 Filesystem materialization reopens the referenced file, enforces `maxBytes` before and during the
 read, verifies its SHA-256 checksum, closes the input before completion, and returns immutable
 bytes. It is repeatable while the referenced file and binding provenance remain unchanged. Standard
 input remains single-consumption and cannot truthfully offer repeatable reference materialization
 without first transferring ownership to durable storage.
+
+S3 materialization uses the canonical bucket, key, optional version ID, size, and ETag captured in the
+reference. It enforces `maxBytes` against the captured size, current object metadata, and returned bytes.
+Ingested references use the S3 ETag as their immutable object fingerprint; Object Publish references use
+TPF's SHA-256 content checksum. A mismatch fails instead of silently materializing a different object.
+The bytes are staged into the same invocation-scoped local workspace as any other provider, so authored
+file services remain storage neutral.
 
 ## Ordinary File Services
 
@@ -265,6 +271,68 @@ The publish target must declare the Connector binding that owns the returned ref
 must likewise declare its binding when its reference will cross into another connector. The default
 v1 publication key is the output filename; `options.key` overrides it when a stable application key
 is required. Filename-derived keys are a default convention, not pipeline semantics.
+
+### Materialize several named inputs for a typed service
+
+A grouped record may map several `payload_ref` fields to one ordinary Java record of `Path` values.
+This is an input-only representation: the authored service returns an ordinary typed pipeline value,
+so no files are republished on its output boundary.
+
+```yaml
+types:
+  InvoiceFiles:
+    fields:
+      - [documentId, uuid]
+      - [originalFilename, string]
+      - [invoice, payload_ref]
+      - [catalogue, payload_ref]
+    mappings:
+      file:
+        type: com.example.invoice.MaterializedInvoiceFiles
+        options:
+          fields: [documentId, originalFilename, invoice, catalogue]
+          # Optional when the record also carries a reference unchanged for downstream use.
+          # materializeFields: [invoice, catalogue]
+          maxBytes: 52428800
+  InvoiceAnalysisRequest:
+    fields:
+      - [documentId, uuid]
+      - [invoiceText, string]
+
+steps:
+  - name: Prepare invoice analysis
+    service: com.example.invoice.PrepareInvoiceAnalysisService
+    cardinality: ONE_TO_ONE
+    input: InvoiceFiles
+    output: InvoiceAnalysisRequest
+```
+
+```java
+public record MaterializedInvoiceFiles(
+    UUID documentId,
+    String originalFilename,
+    Path invoice,
+    Path catalogue
+) {}
+
+@ApplicationScoped
+@PipelineStep
+public final class PrepareInvoiceAnalysisService
+        implements ReactiveService<MaterializedInvoiceFiles, InvoiceAnalysisRequest> {
+
+    @Override
+    public Uni<InvoiceAnalysisRequest> process(MaterializedInvoiceFiles files) {
+        return Uni.createFrom().item(() -> prepare(files.invoice(), files.catalogue()));
+    }
+}
+```
+
+`options.fields` is ordered and must name every field in the canonical record in the representation
+record's constructor order. `payload_ref` fields become `Path` values; ordinary scalar fields pass
+through unchanged. The generated facade materializes all references into one invocation workspace,
+applies `maxBytes` to their combined materialized size, invokes the service, and removes the workspace
+on completion, failure, or cancellation. The authored service receives no connector registry,
+materializer, provider location, or storage-specific object.
 
 ### Example: normalize one file
 

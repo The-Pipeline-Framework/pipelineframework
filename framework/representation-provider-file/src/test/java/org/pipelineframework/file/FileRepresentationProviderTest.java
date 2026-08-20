@@ -1,6 +1,7 @@
 package org.pipelineframework.file;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -43,16 +44,89 @@ class FileRepresentationProviderTest {
     }
 
     @Test
-    void doesNotClaimOnlyOneMappedSide() {
+    void claimsStructuredInputOnlyBoundaryAndGeneratesTypedFacade() {
+        CanonicalType invoiceFiles = new CanonicalType(
+            "InvoiceFiles", "example.InvoiceFiles", CanonicalTypeShape.RECORD);
+        CanonicalType analysis = new CanonicalType(
+            "InvoiceAnalysisRequest", "example.InvoiceAnalysisRequest", CanonicalTypeShape.RECORD);
         BoundaryRequest boundary = new BoundaryRequest(
-            "Render", "example.RenderService", input, output, "UNARY_UNARY", Set.of(),
+            "Prepare invoice analysis", "example.PrepareInvoiceAnalysis", invoiceFiles, analysis,
+            "UNARY_UNARY", Set.of(),
             Map.of(
                 "inputMappings", List.of("file"),
                 "outputMappings", List.of(),
-                "inputFields", Map.of("content", "payload_ref"),
-                "outputFields", Map.of("content", "payload_ref")));
+                "inputFields", Map.of(
+                    "documentId", "uuid",
+                    "originalFilename", "string",
+                    "invoice", "payload_ref",
+                    "catalogue", "payload_ref"),
+                "outputFields", Map.of("documentId", "uuid")));
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", invoiceFiles, Optional.of("example.MaterializedInvoiceFiles"), Optional.empty(),
+            Map.of("fields", List.of("documentId", "originalFilename", "invoice", "catalogue")))).orElseThrow();
+        var claim = provider.claim(boundary).orElseThrow();
 
-        assertTrue(provider.claim(boundary).isEmpty());
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(
+            boundary, claim, List.of(mapping), Map.of("input", Map.of(
+                "fields", List.of("documentId", "originalFilename", "invoice", "catalogue"),
+                "maxBytes", 4096))))
+            .getFirst().content();
+
+        assertTrue(source.contains("files.withMaterialized("));
+        assertTrue(source.contains("java.util.Map.entry(\"invoice\", input.invoice())"));
+        assertTrue(source.contains("java.util.Map.entry(\"catalogue\", input.catalogue())"));
+        assertTrue(source.contains("new example.MaterializedInvoiceFiles(input.documentId(), input.originalFilename(), paths.get(\"invoice\"), paths.get(\"catalogue\"))"));
+        assertTrue(source.contains("paths -> delegate.process("));
+    }
+
+    @Test
+    void rejectsStructuredInputWithoutAPayloadReference() {
+        CanonicalType metadata = new CanonicalType(
+            "Metadata", "example.Metadata", CanonicalTypeShape.RECORD);
+        BoundaryRequest boundary = new BoundaryRequest(
+            "Prepare metadata", "example.PrepareMetadata", metadata, output,
+            "UNARY_UNARY", Set.of(),
+            Map.of(
+                "inputMappings", List.of("file"),
+                "outputMappings", List.of(),
+                "inputFields", Map.of("documentId", "uuid"),
+                "outputFields", Map.of("content", "payload_ref")));
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", metadata, Optional.of("example.MaterializedMetadata"), Optional.empty(),
+            Map.of("fields", List.of("documentId")))).orElseThrow();
+        var claim = provider.claim(boundary).orElseThrow();
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+            provider.describeArtifacts(new ProviderGenerationRequest(
+                boundary, claim, List.of(mapping),
+                Map.of("input", Map.of("fields", List.of("documentId"))))));
+
+        assertTrue(failure.getMessage().contains("at least one payload_ref"));
+    }
+
+    @Test
+    void rejectsPathShortcutForStructuredInputWithSeveralFields() {
+        CanonicalType invoiceFiles = new CanonicalType(
+            "InvoiceFiles", "example.InvoiceFiles", CanonicalTypeShape.RECORD);
+        BoundaryRequest boundary = new BoundaryRequest(
+            "Prepare invoice analysis", "example.PrepareInvoiceAnalysis", invoiceFiles, output,
+            "UNARY_UNARY", Set.of(),
+            Map.of(
+                "inputMappings", List.of("file"),
+                "outputMappings", List.of(),
+                "inputFields", Map.of("invoice", "payload_ref", "catalogue", "payload_ref"),
+                "outputFields", Map.of("content", "payload_ref")));
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", invoiceFiles, Optional.of("java.nio.file.Path"), Optional.empty(),
+            Map.of("fields", List.of("invoice", "catalogue")))).orElseThrow();
+        var claim = provider.claim(boundary).orElseThrow();
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+            provider.describeArtifacts(new ProviderGenerationRequest(
+                boundary, claim, List.of(mapping),
+                Map.of("input", Map.of("fields", List.of("invoice", "catalogue"))))));
+
+        assertTrue(failure.getMessage().contains("Path only when options.fields contains exactly one field"));
     }
 
     private BoundaryRequest boundary(String cardinality) {

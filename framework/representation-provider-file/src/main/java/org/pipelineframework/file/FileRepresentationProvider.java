@@ -47,9 +47,12 @@ public final class FileRepresentationProvider implements RepresentationProvider 
             throw new IllegalStateException("File representation mapping for canonical type '"
                 + mapping.domainType().name() + "' supports records only (key=file).");
         }
-        if (!Optional.of(PATH).equals(mapping.representationType()) || mapping.mapperType().isPresent()) {
+        boolean structuredInput = mapping.options().containsKey("fields");
+        if ((!structuredInput && !Optional.of(PATH).equals(mapping.representationType()))
+                || mapping.representationType().isEmpty() || mapping.mapperType().isPresent()) {
             throw new IllegalStateException("File representation mapping for canonical type '"
-                + mapping.domainType().name() + "' requires type java.nio.file.Path and no mapper (key=file).");
+                + mapping.domainType().name()
+                + "' requires java.nio.file.Path, or a structured input type with options.fields, and no mapper (key=file).");
         }
         return Optional.of(new ResolvedRepresentation(KEY, mapping.domainType(), mapping.representationType(),
             Optional.empty()));
@@ -57,9 +60,14 @@ public final class FileRepresentationProvider implements RepresentationProvider 
 
     @Override
     public Optional<BoundaryClaim> claim(BoundaryRequest boundary) {
-        if (!mappingKeys(boundary, "inputMappings").contains(KEY)
-                || !mappingKeys(boundary, "outputMappings").contains(KEY)) {
+        boolean inputMapped = mappingKeys(boundary, "inputMappings").contains(KEY);
+        boolean outputMapped = mappingKeys(boundary, "outputMappings").contains(KEY);
+        if (!inputMapped) {
             return Optional.empty();
+        }
+        if (!outputMapped && !"UNARY_UNARY".equals(boundary.cardinality())) {
+            throw new IllegalStateException("Input-only file representation boundary '" + boundary.stepName()
+                + "' supports ONE_TO_ONE only.");
         }
         if (!"UNARY_UNARY".equals(boundary.cardinality()) && !"UNARY_STREAMING".equals(boundary.cardinality())) {
             throw new IllegalStateException("File representation boundary '" + boundary.stepName()
@@ -72,27 +80,101 @@ public final class FileRepresentationProvider implements RepresentationProvider 
 
     @Override
     public List<ArtifactDescription> describeArtifacts(ProviderGenerationRequest request) {
-        requireRepresentation(request, request.boundary().inputType().name());
-        requireRepresentation(request, request.boundary().outputType().name());
+        ResolvedRepresentation inputRepresentation = requireRepresentation(
+            request, request.boundary().inputType().name());
         Map<String, Object> inputOptions = options(request, "input");
-        Map<String, Object> outputOptions = options(request, "output");
-        String inputField = payloadField(request.boundary(), "inputFields", inputOptions);
-        String outputField = payloadField(request.boundary(), "outputFields", outputOptions);
-        String target = requiredText(outputOptions, "target");
-        long inputMaxBytes = positiveLong(inputOptions, "maxBytes", DEFAULT_MAX_BYTES);
-        long outputMaxBytes = positiveLong(outputOptions, "maxBytes", DEFAULT_MAX_BYTES);
-        Optional<String> key = optionalText(outputOptions, "key");
-        String source = facadeSource(request, inputField, target, inputMaxBytes, outputMaxBytes, key);
+        boolean outputMapped = mappingKeys(request.boundary(), "outputMappings").contains(KEY);
+        String source;
+        if (!outputMapped) {
+            List<String> inputFields = structuredFields(request.boundary(), "inputFields", inputOptions);
+            List<String> materializedFields = materializedFields(
+                request.boundary(), "inputFields", inputOptions, inputFields);
+            if (Optional.of(PATH).equals(inputRepresentation.representationType()) && inputFields.size() != 1) {
+                throw new IllegalStateException("Structured file input boundary '"
+                    + request.boundary().stepName()
+                    + "' may use java.nio.file.Path only when options.fields contains exactly one field.");
+            }
+            long inputMaxBytes = positiveLong(inputOptions, "maxBytes", DEFAULT_MAX_BYTES);
+            source = inputOnlyFacadeSource(
+                request, inputRepresentation, inputFields, materializedFields, inputMaxBytes);
+        } else {
+            ResolvedRepresentation outputRepresentation = requireRepresentation(
+                request, request.boundary().outputType().name());
+            if (!Optional.of(PATH).equals(inputRepresentation.representationType())
+                    || !Optional.of(PATH).equals(outputRepresentation.representationType())) {
+                throw new IllegalStateException("File-to-file boundary '" + request.boundary().stepName()
+                    + "' requires java.nio.file.Path on both sides.");
+            }
+            source = fileOutputFacadeSource(request, inputOptions);
+        }
         String logicalPath = request.claim().generatedFacadeTypeName().replace('.', '/') + ".java";
         return List.of(new ArtifactDescription(KEY, ArtifactPhase.PRE_MODEL, ArtifactKind.JAVA_SOURCE,
             logicalPath, source, 0));
     }
 
+    private static String fileOutputFacadeSource(ProviderGenerationRequest request, Map<String, Object> inputOptions) {
+        Map<String, Object> outputOptions = options(request, "output");
+        String inputField = payloadField(request.boundary(), "inputFields", inputOptions);
+        payloadField(request.boundary(), "outputFields", outputOptions);
+        String target = requiredText(outputOptions, "target");
+        long inputMaxBytes = positiveLong(inputOptions, "maxBytes", DEFAULT_MAX_BYTES);
+        long outputMaxBytes = positiveLong(outputOptions, "maxBytes", DEFAULT_MAX_BYTES);
+        Optional<String> key = optionalText(outputOptions, "key");
+        return facadeSource(request, inputField, target, inputMaxBytes, outputMaxBytes, key);
+    }
+
     @Override
     public ProviderSchemaFragment schema() {
         return new ProviderSchemaFragment(KEY, Optional.empty(), Optional.of("""
-            {"type":"object","properties":{"type":{"const":"java.nio.file.Path"},"options":{"type":"object","properties":{"field":{"type":"string"},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
-            """.trim()), Optional.of("File mappings adapt a single payload_ref field to Path; output mappings declare a publish target."));
+            {"type":"object","properties":{"type":{"type":"string","minLength":1},"options":{"type":"object","properties":{"field":{"type":"string"},"fields":{"type":"array","minItems":1,"items":{"type":"string"}},"materializeFields":{"type":"array","minItems":1,"items":{"type":"string"}},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
+            """.trim()), Optional.of("File mappings adapt payload_ref fields to Path values; output mappings declare a publish target."));
+    }
+
+    private static String inputOnlyFacadeSource(ProviderGenerationRequest request,
+                                                 ResolvedRepresentation inputRepresentation,
+                                                 List<String> inputFields,
+                                                 List<String> materializedFields,
+                                                 long inputMaxBytes) {
+        String canonicalInput = request.boundary().inputType().targetTypeName();
+        String canonicalOutput = request.boundary().outputType().targetTypeName();
+        String materializedInput = inputRepresentation.representationType().orElseThrow();
+        String facade = request.claim().generatedFacadeTypeName();
+        int separator = facade.lastIndexOf('.');
+        String packageName = facade.substring(0, separator);
+        String simpleName = facade.substring(separator + 1);
+        Map<String, String> fieldTypes = stringMap(request.boundary().configuration().get("inputFields"));
+        java.util.Set<String> materialized = java.util.Set.copyOf(materializedFields);
+        String references = materializedFields.stream()
+            .map(field -> "java.util.Map.entry(\"" + javaString(field) + "\", input." + field + "())")
+            .collect(java.util.stream.Collectors.joining(", "));
+        String arguments = inputFields.stream()
+            .map(field -> materialized.contains(field)
+                ? "paths.get(\"" + javaString(field) + "\")"
+                : "input." + field + "()")
+            .collect(java.util.stream.Collectors.joining(", "));
+        String adaptedInput = PATH.equals(materializedInput)
+            ? arguments
+            : "new " + materializedInput + "(" + arguments + ")";
+        return """
+            package %s;
+
+            @jakarta.enterprise.context.ApplicationScoped
+            @org.pipelineframework.annotation.PipelineStep
+            public final class %s implements org.pipelineframework.service.ReactiveService<%s, %s> {
+                @jakarta.inject.Inject %s delegate;
+                @jakarta.inject.Inject org.pipelineframework.file.FileRepresentationRuntime files;
+
+                @Override
+                public io.smallrye.mutiny.Uni<%s> process(%s input) {
+                    return files.withMaterialized(
+                        java.util.Map.ofEntries(%s),
+                        %dL,
+                        paths -> delegate.process(%s));
+                }
+            }
+            """.formatted(packageName, simpleName, canonicalInput, canonicalOutput,
+                request.boundary().serviceTypeName(), canonicalOutput, canonicalInput,
+                references, inputMaxBytes, adaptedInput);
     }
 
     private static String facadeSource(ProviderGenerationRequest request, String inputField,
@@ -145,8 +227,8 @@ public final class FileRepresentationProvider implements RepresentationProvider 
                 inputMaxBytes, javaString(target), outputMaxBytes, optionalKey, canonicalOutput);
     }
 
-    private static void requireRepresentation(ProviderGenerationRequest request, String typeName) {
-        request.representations().stream()
+    private static ResolvedRepresentation requireRepresentation(ProviderGenerationRequest request, String typeName) {
+        return request.representations().stream()
             .filter(candidate -> KEY.equals(candidate.providerKey()) && typeName.equals(candidate.domainType().name()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("File boundary '" + request.boundary().stepName()
@@ -187,6 +269,57 @@ public final class FileRepresentationProvider implements RepresentationProvider 
                 + "' requires its mapped record to contain exactly one payload_ref field.");
         }
         return field;
+    }
+
+    private static List<String> structuredFields(BoundaryRequest boundary, String configurationKey,
+                                                 Map<String, Object> options) {
+        Map<String, String> fields = stringMap(boundary.configuration().get(configurationKey));
+        Object configured = options.get("fields");
+        if (!(configured instanceof List<?> values) || values.isEmpty()
+                || values.stream().anyMatch(value -> !(value instanceof String text) || text.isBlank())) {
+            throw new IllegalStateException("Structured file input mapping requires a non-empty string list option 'fields'.");
+        }
+        List<String> selected = values.stream().map(String.class::cast).map(String::trim).toList();
+        if (selected.stream().distinct().count() != selected.size()) {
+            throw new IllegalStateException("Structured file input mapping fields must be unique.");
+        }
+        if (fields.size() != selected.size() || selected.stream().anyMatch(field -> !fields.containsKey(field))) {
+            throw new IllegalStateException("Structured file input boundary '" + boundary.stepName()
+                + "' requires options.fields to name every field of its mapped record in representation constructor order.");
+        }
+        if (selected.stream().noneMatch(field -> "payload_ref".equals(fields.get(field)))) {
+            throw new IllegalStateException("Structured file input boundary '" + boundary.stepName()
+                + "' requires at least one payload_ref field.");
+        }
+        return selected;
+    }
+
+    private static List<String> materializedFields(
+        BoundaryRequest boundary,
+        String configurationKey,
+        Map<String, Object> options,
+        List<String> inputFields
+    ) {
+        Map<String, String> fields = stringMap(boundary.configuration().get(configurationKey));
+        List<String> payloadFields = inputFields.stream()
+            .filter(field -> "payload_ref".equals(fields.get(field)))
+            .toList();
+        Object configured = options.get("materializeFields");
+        if (configured == null) {
+            return payloadFields;
+        }
+        if (!(configured instanceof List<?> values) || values.isEmpty()
+                || values.stream().anyMatch(value -> !(value instanceof String text) || text.isBlank())) {
+            throw new IllegalStateException(
+                "Structured file input mapping requires materializeFields to be a non-empty string list.");
+        }
+        List<String> selected = values.stream().map(String.class::cast).map(String::trim).toList();
+        if (selected.stream().distinct().count() != selected.size()
+                || selected.stream().anyMatch(field -> !payloadFields.contains(field))) {
+            throw new IllegalStateException(
+                "Structured file input materializeFields must uniquely name payload_ref fields from options.fields.");
+        }
+        return selected;
     }
 
     private static Map<String, String> stringMap(Object value) {

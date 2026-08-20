@@ -1,18 +1,22 @@
 package org.pipelineframework.file;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
@@ -47,6 +51,110 @@ import org.pipelineframework.connector.objectingest.FilesystemObjectTargetProvid
 import org.pipelineframework.repository.PayloadReference;
 
 class FileRepresentationRuntimeTest {
+    @Test
+    void materializesNamedInputsForTypedServiceAndCleansSharedWorkspace() throws Exception {
+        PayloadReference invoice = reference("incoming/invoice.pdf", 7);
+        PayloadReference catalogue = reference("settings/config.yaml", 9);
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<Path> workspace = new AtomicReference<>();
+        TestTarget target = new TestTarget(new AtomicReference<>());
+        FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+            (reference, maxBytes) -> {
+                calls.incrementAndGet();
+                byte[] bytes = reference.equals(invoice) ? "invoice".getBytes() : "catalogue".getBytes();
+                return CompletableFuture.completedFuture(new MaterializedPayload(
+                    reference, bytes, reference.contentType(), reference.codec(), "checksum"));
+            }, bindings(target), new PipelineYamlConfig(
+                "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of(),
+                List.of(), null, null, Map.of()), new ObjectTargetRegistry(List.of(target)));
+
+        String result = runtime.withMaterialized(
+            Map.of("invoice", invoice, "catalogue", catalogue), 32,
+            paths -> {
+                workspace.set(paths.get("invoice").getParent().getParent().getParent());
+                try {
+                    return Uni.createFrom().item(
+                        Files.readString(paths.get("invoice")) + ":" + Files.readString(paths.get("catalogue")));
+                } catch (java.io.IOException e) {
+                    return Uni.createFrom().failure(e);
+                }
+            }).await().indefinitely();
+
+        assertEquals("invoice:catalogue", result);
+        assertEquals(2, calls.get());
+        assertFalse(Files.exists(workspace.get()));
+    }
+
+    @Test
+    void enforcesOneByteBudgetAcrossAllNamedInputs() {
+        PayloadReference invoice = reference("invoice.pdf", 6);
+        PayloadReference catalogue = reference("config.yaml", 6);
+        TestTarget target = new TestTarget(new AtomicReference<>());
+        FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+            (reference, maxBytes) -> CompletableFuture.completedFuture(new MaterializedPayload(
+                reference, "123456".getBytes(), reference.contentType(), reference.codec(), "checksum")),
+            bindings(target), new PipelineYamlConfig(
+                "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of(),
+                List.of(), null, null, Map.of()), new ObjectTargetRegistry(List.of(target)));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> runtime.withMaterialized(
+            Map.of("invoice", invoice, "catalogue", catalogue), 10,
+            paths -> Uni.createFrom().item("unused")).await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("exceed maxBytes"));
+    }
+
+    @Test
+    void materializesTrailingEmptyInputAfterBudgetIsConsumed() {
+        PayloadReference invoice = reference("invoice.pdf", 3);
+        PayloadReference emptyAttachment = reference("empty.txt", 0);
+        AtomicReference<Long> emptyBudget = new AtomicReference<>();
+        TestTarget target = new TestTarget(new AtomicReference<>());
+        FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+            (reference, maxBytes) -> {
+                byte[] bytes = reference.equals(invoice) ? "123".getBytes() : new byte[0];
+                if (reference.equals(emptyAttachment)) {
+                    emptyBudget.set(maxBytes);
+                }
+                return CompletableFuture.completedFuture(new MaterializedPayload(
+                    reference, bytes, reference.contentType(), reference.codec(), "checksum"));
+            }, bindings(target), new PipelineYamlConfig(
+                "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of(),
+                List.of(), null, null, Map.of()), new ObjectTargetRegistry(List.of(target)));
+        Map<String, PayloadReference> inputs = new LinkedHashMap<>();
+        inputs.put("invoice", invoice);
+        inputs.put("attachment", emptyAttachment);
+
+        String result = runtime.withMaterialized(inputs, 3,
+            paths -> Uni.createFrom().item("materialized")).await().indefinitely();
+
+        assertEquals("materialized", result);
+        assertEquals(1L, emptyBudget.get());
+    }
+
+    @Test
+    void cleansSharedWorkspaceWhenTypedServiceThrowsSynchronously() {
+        PayloadReference invoice = reference("invoice.pdf", 7);
+        AtomicReference<Path> workspace = new AtomicReference<>();
+        TestTarget target = new TestTarget(new AtomicReference<>());
+        FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+            (reference, maxBytes) -> CompletableFuture.completedFuture(new MaterializedPayload(
+                reference, "invoice".getBytes(), reference.contentType(), reference.codec(), "checksum")),
+            bindings(target), new PipelineYamlConfig(
+                "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of(),
+                List.of(), null, null, Map.of()), new ObjectTargetRegistry(List.of(target)));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> runtime.withMaterialized(
+            Map.of("invoice", invoice), 32,
+            paths -> {
+                workspace.set(paths.get("invoice").getParent().getParent().getParent());
+                throw new IllegalStateException("service failed");
+            }).await().indefinitely());
+
+        assertEquals("service failed", failure.getMessage());
+        assertFalse(Files.exists(workspace.get()));
+    }
+
     @Test
     void composesTheExistingFilesystemConnectorThroughPortableReferences() throws Exception {
         Path inputRoot = Files.createTempDirectory("file-representation-input-");

@@ -4,6 +4,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectorOperation;
+import org.pipelineframework.connector.ConnectorConcurrencyScope;
+import org.pipelineframework.connector.ConnectorExecutionStyle;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.ObjectSourceOperation;
 import org.pipelineframework.connector.ObjectTargetOperation;
 
@@ -17,7 +20,16 @@ class ObjectConnectorPackagingTest {
         assertOperations(new FilesystemObjectConnector(), "filesystem.objects", "filesystem");
         assertOperations(new StdioObjectConnector(new StandardStreams(
             new java.io.ByteArrayInputStream(new byte[0]), new java.io.ByteArrayOutputStream())), "stdio.objects", "stdio");
-        assertOperations(new S3ObjectConnector(), "s3.objects", "s3");
+        S3ObjectConnector s3 = new S3ObjectConnector();
+        try {
+            assertOperations(s3, "s3.objects", "s3");
+            assertEquals(ConnectorExecutionStyle.PROVIDER_MANAGED,
+                s3.executionCapabilities().executionStyle());
+            assertEquals(ConnectorConcurrencyScope.PROVIDER_MANAGED,
+                s3.executionCapabilities().concurrencyScope());
+        } finally {
+            s3.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
+        }
     }
 
     private static void assertOperations(
