@@ -72,10 +72,10 @@ class S3ObjectSourceProviderTest {
     void rejectsOversizedReferenceBeforeContactingS3() {
         S3Client client = mock(S3Client.class);
 
-        assertThrows(CompletionException.class, () -> new S3ObjectSourceProvider(client)
-            .materialize(reference("invoice.pdf", "abc123", 100L), 10L)
-            .toCompletableFuture()
-            .join());
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            assertThrows(CompletionException.class, () -> provider
+                .materialize(reference("invoice.pdf", "abc123", 100L), 10L).toCompletableFuture().join());
+        }
 
         verify(client, never()).headObject(any(software.amazon.awssdk.services.s3.model.HeadObjectRequest.class));
         verify(client, never()).getObjectAsBytes(any(GetObjectRequest.class));
@@ -90,10 +90,10 @@ class S3ObjectSourceProviderTest {
                 .eTag("\"different\"")
                 .build());
 
-        assertThrows(CompletionException.class, () -> new S3ObjectSourceProvider(client)
-            .materialize(reference("invoice.pdf", "abc123", 3L), 10L)
-            .toCompletableFuture()
-            .join());
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            assertThrows(CompletionException.class, () -> provider
+                .materialize(reference("invoice.pdf", "abc123", 3L), 10L).toCompletableFuture().join());
+        }
 
         verify(client, never()).getObjectAsBytes(any(GetObjectRequest.class));
     }
@@ -111,10 +111,10 @@ class S3ObjectSourceProviderTest {
                 GetObjectResponse.builder().eTag("\"abc123\"").build(),
                 new byte[] {1, 2, 3, 4}));
 
-        assertThrows(CompletionException.class, () -> new S3ObjectSourceProvider(client)
-            .materialize(reference("invoice.pdf", "abc123", 3L), 3L)
-            .toCompletableFuture()
-            .join());
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            assertThrows(CompletionException.class, () -> provider
+                .materialize(reference("invoice.pdf", "abc123", 3L), 3L).toCompletableFuture().join());
+        }
     }
 
     @Test
@@ -139,13 +139,16 @@ class S3ObjectSourceProviderTest {
             checksum,
             bytes.length,
             null,
-            Map.of("target", "published-documents"),
+            Map.of(
+                "target", "published-documents",
+                S3ObjectSourceProvider.CHECKSUM_KIND_METADATA,
+                S3ObjectSourceProvider.CHECKSUM_KIND_SHA256),
             Optional.empty());
 
-        MaterializedPayload materialized = new S3ObjectSourceProvider(client)
-            .materialize(published, 100L)
-            .toCompletableFuture()
-            .join();
+        MaterializedPayload materialized;
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            materialized = provider.materialize(published, 100L).toCompletableFuture().join();
+        }
 
         assertArrayEquals(bytes, materialized.bytes());
         assertEquals(checksum, materialized.checksum());
@@ -173,7 +176,10 @@ class S3ObjectSourceProviderTest {
             null,
             null);
 
-        List<ObjectSourceItem> items = new S3ObjectSourceProvider(client).list(source, 10);
+        List<ObjectSourceItem> items;
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            items = provider.list(source, 10);
+        }
 
         assertEquals(1, items.size());
         ObjectSourceItem item = items.getFirst();
@@ -212,7 +218,10 @@ class S3ObjectSourceProviderTest {
             null,
             null);
 
-        List<ObjectSourceItem> items = new S3ObjectSourceProvider(client).list(source, 1);
+        List<ObjectSourceItem> items;
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            items = provider.list(source, 1);
+        }
 
         assertEquals(1, items.size());
         assertEquals("raw/doc.txt", items.getFirst().key());
@@ -233,8 +242,10 @@ class S3ObjectSourceProviderTest {
             null,
             null);
 
-        assertThrows(IllegalStateException.class,
-            () -> new S3ObjectSourceProvider(client).readText(source, item("raw/doc.txt"), 10L));
+        try (S3ObjectSourceProvider provider = new S3ObjectSourceProvider(client)) {
+            assertThrows(IllegalStateException.class,
+                () -> provider.readText(source, item("raw/doc.txt"), 10L));
+        }
         verify(client, never()).getObjectAsBytes(any(GetObjectRequest.class));
     }
 

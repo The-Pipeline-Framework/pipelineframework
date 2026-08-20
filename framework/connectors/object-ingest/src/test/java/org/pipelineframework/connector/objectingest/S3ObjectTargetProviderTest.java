@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
 
@@ -40,10 +42,11 @@ class S3ObjectTargetProviderTest {
         S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024);
         ObjectWriteSession session = provider.open(openRequest()).toCompletableFuture().join();
 
-        session.write(ByteBuffer.wrap(new byte[5 * 1024 * 1024])).toCompletableFuture().join();
+        byte[] payload = new byte[5 * 1024 * 1024];
+        session.write(ByteBuffer.wrap(payload)).toCompletableFuture().join();
         ObjectWriteResult result = session.close(new ObjectWriteCloseRequest(
-            5 * 1024 * 1024,
-            "checksum",
+            payload.length,
+            sha256(payload),
             Map.of("recordCount", "1"))).toCompletableFuture().join();
 
         ArgumentCaptor<CreateMultipartUploadRequest> createCaptor =
@@ -60,6 +63,36 @@ class S3ObjectTargetProviderTest {
         assertEquals(
             S3ObjectSourceProvider.CHECKSUM_KIND_SHA256,
             result.reference().metadata().get(S3ObjectSourceProvider.CHECKSUM_KIND_METADATA));
+        assertEquals(sha256(payload), result.reference().checksum());
+    }
+
+    @Test
+    void rejectsCallerChecksumThatDoesNotMatchWrittenBytes() {
+        S3Client client = mock(S3Client.class);
+        when(client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+            .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-1").build());
+        S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024);
+        ObjectWriteSession session = provider.open(openRequest()).toCompletableFuture().join();
+        session.write(ByteBuffer.wrap(new byte[] {1, 2, 3})).toCompletableFuture().join();
+
+        CompletionException failure = assertThrows(CompletionException.class, () -> session.close(
+            new ObjectWriteCloseRequest(3, "not-the-digest", Map.of())).toCompletableFuture().join());
+
+        assertEquals("S3 written payload checksum mismatch", failure.getCause().getMessage());
+    }
+
+    @Test
+    void trimsConfiguredRegionInPublishedReferenceMetadata() {
+        S3Client client = mock(S3Client.class);
+        when(client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+            .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-1").build());
+        S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024);
+        ObjectWriteSession session = provider.open(openRequest("  eu-west-1  ")).toCompletableFuture().join();
+
+        ObjectWriteResult result = session.close(new ObjectWriteCloseRequest(0, sha256(new byte[0]), Map.of()))
+            .toCompletableFuture().join();
+
+        assertEquals("eu-west-1", result.reference().metadata().get(S3ObjectSourceProvider.REGION_METADATA));
     }
 
     @Test
@@ -87,11 +120,21 @@ class S3ObjectTargetProviderTest {
     }
 
     private ObjectWriteOpenRequest openRequest() {
+        return openRequest(null);
+    }
+
+    private ObjectWriteOpenRequest openRequest(String region) {
+        Map<String, Object> location = new java.util.LinkedHashMap<>();
+        location.put("bucket", "payments");
+        location.put("prefix", "out");
+        if (region != null) {
+            location.put("region", region);
+        }
         PipelineObjectPublishConfig target = new PipelineObjectPublishConfig(
             "results",
             "object",
             "s3",
-            Map.of("bucket", "payments", "prefix", "out"),
+            Map.copyOf(location),
             null,
             null);
         return new ObjectWriteOpenRequest(
@@ -101,5 +144,13 @@ class S3ObjectTargetProviderTest {
             "text/csv",
             Map.of("groupKey", "payments.csv"),
             "idempotency");
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException failure) {
+            throw new IllegalStateException(failure);
+        }
     }
 }

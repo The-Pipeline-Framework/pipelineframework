@@ -38,6 +38,7 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderVersion;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.MaterializedPayload;
+import org.pipelineframework.connector.PayloadMaterializer;
 import org.pipelineframework.connector.ObjectSourceOperation;
 import org.pipelineframework.objectpublish.ObjectTargetProvider;
 import org.pipelineframework.objectpublish.ObjectTargetRegistry;
@@ -86,7 +87,7 @@ class FileRepresentationRuntimeTest {
     }
 
     @Test
-    void enforcesOneByteBudgetAcrossAllNamedInputs() {
+    void enforcesOneSharedByteBudgetAcrossAllNamedInputs() {
         PayloadReference invoice = reference("invoice.pdf", 6);
         PayloadReference catalogue = reference("config.yaml", 6);
         TestTarget target = new TestTarget(new AtomicReference<>());
@@ -102,6 +103,42 @@ class FileRepresentationRuntimeTest {
             paths -> Uni.createFrom().item("unused")).await().indefinitely());
 
         assertTrue(failure.getMessage().contains("exceed maxBytes"));
+    }
+
+    @Test
+    void rejectsInvalidNamedInputsAndMismatchedMaterializedReference() {
+        FileRepresentationRuntime runtime = testRuntime((reference, maxBytes) ->
+            CompletableFuture.completedFuture(new MaterializedPayload(
+                reference("different.pdf", 1), new byte[] {1}, "text/plain", "raw", "checksum")));
+
+        IllegalArgumentException empty = assertThrows(IllegalArgumentException.class, () -> runtime
+            .withMaterialized(Map.of(), 10, paths -> Uni.createFrom().item("unused")).await().indefinitely());
+        assertEquals("file inputs must not be empty", empty.getMessage());
+        Map<String, PayloadReference> blank = new LinkedHashMap<>();
+        blank.put(" ", reference("invoice.pdf", 1));
+        IllegalArgumentException blankName = assertThrows(IllegalArgumentException.class, () -> runtime
+            .withMaterialized(blank, 10, paths -> Uni.createFrom().item("unused")));
+        assertEquals("file input field names must not be blank", blankName.getMessage());
+
+        IllegalStateException mismatch = assertThrows(IllegalStateException.class, () -> runtime
+            .withMaterialized(Map.of("invoice", reference("invoice.pdf", 1)), 10,
+                paths -> Uni.createFrom().item("unused")).await().indefinitely());
+        assertTrue(mismatch.getMessage().contains("different payload reference"));
+    }
+
+    @Test
+    void stagesFieldsWithCollidingSanitizedNamesInDistinctDirectories() {
+        FileRepresentationRuntime runtime = testRuntime((reference, maxBytes) ->
+            CompletableFuture.completedFuture(new MaterializedPayload(
+                reference, new byte[] {1}, reference.contentType(), reference.codec(), "checksum")));
+        Map<String, PayloadReference> inputs = new LinkedHashMap<>();
+        inputs.put("a/b", reference("one.txt", 1));
+        inputs.put("a?b", reference("two.txt", 1));
+
+        boolean distinct = runtime.withMaterialized(inputs, 10, paths -> Uni.createFrom().item(
+            !paths.get("a/b").getParent().equals(paths.get("a?b").getParent()))).await().indefinitely();
+
+        assertTrue(distinct);
     }
 
     @Test
@@ -276,6 +313,13 @@ class FileRepresentationRuntimeTest {
             List.of(new ConnectorBindingDefinition(
                 ConnectorBindingName.of("documents"), provider.id(), 1, new ConnectorConfigurationDocument(Map.of()))),
             List.of(provider));
+    }
+
+    private static FileRepresentationRuntime testRuntime(PayloadMaterializer materializer) {
+        TestTarget target = new TestTarget(new AtomicReference<>());
+        return new FileRepresentationRuntime(materializer, bindings(target), new PipelineYamlConfig(
+            "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of(),
+            List.of(), null, null, Map.of()), new ObjectTargetRegistry(List.of(target)));
     }
 
     private static PayloadReference reference(String key, long size) {

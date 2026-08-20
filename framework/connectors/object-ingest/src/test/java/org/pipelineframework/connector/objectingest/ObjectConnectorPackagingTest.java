@@ -1,6 +1,9 @@
 package org.pipelineframework.connector.objectingest;
 
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectorOperation;
@@ -13,6 +16,10 @@ import org.pipelineframework.connector.ObjectTargetOperation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import software.amazon.awssdk.services.s3.S3Client;
 
 class ObjectConnectorPackagingTest {
     @Test
@@ -30,6 +37,29 @@ class ObjectConnectorPackagingTest {
         } finally {
             s3.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
         }
+    }
+
+    @Test
+    void s3ConnectorStopCompletesAfterOwnedSourceExecutorTerminates() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        executor.submit(() -> {
+            running.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(running.await(5, TimeUnit.SECONDS));
+        S3Client client = mock(S3Client.class);
+        S3ObjectConnector connector = new S3ObjectConnector(
+            new S3ObjectSourceProvider(client, executor, true),
+            new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024));
+
+        var stopped = connector.stop(ConnectorRuntimeContext.empty()).toCompletableFuture();
+        assertFalse(stopped.isDone());
+        release.countDown();
+        stopped.get(5, TimeUnit.SECONDS);
+        assertTrue(executor.isTerminated());
     }
 
     private static void assertOperations(

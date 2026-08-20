@@ -2,11 +2,14 @@ package org.pipelineframework.connector.objectingest;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -17,6 +20,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 import org.pipelineframework.objectpublish.ObjectTargetProvider;
 import org.pipelineframework.objectpublish.ObjectWriteCloseRequest;
 import org.pipelineframework.objectpublish.ObjectWriteOpenRequest;
@@ -170,7 +174,11 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
     }
 
     private Optional<String> optional(ObjectWriteOpenRequest request, String key) {
-        Object value = request.target().location().get(key);
+        return location(request.target(), key);
+    }
+
+    private static Optional<String> location(PipelineObjectPublishConfig target, String key) {
+        Object value = target.location().get(key);
         return value == null || value.toString().isBlank()
             ? Optional.empty()
             : Optional.of(value.toString().trim());
@@ -189,6 +197,8 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         private final int partSizeBytes;
         private final List<CompletedPart> parts = new ArrayList<>();
         private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final MessageDigest digest = sha256Digest();
+        private long writtenBytes;
         private int nextPartNumber = 1;
         private boolean completed;
 
@@ -214,6 +224,8 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         public CompletionStage<Void> write(ByteBuffer chunk) {
             byte[] bytes = copy(chunk);
             return CompletableFuture.runAsync(() -> {
+                digest.update(bytes);
+                writtenBytes += bytes.length;
                 buffer.writeBytes(bytes);
                 while (buffer.size() >= partSizeBytes) {
                     uploadBufferedPart(partSizeBytes);
@@ -224,6 +236,15 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {
+                String actualChecksum = HexFormat.of().formatHex(digest.digest());
+                if (closeRequest.bytes() != writtenBytes) {
+                    throw new IllegalStateException("S3 written byte count mismatch: expected "
+                        + closeRequest.bytes() + " but wrote " + writtenBytes);
+                }
+                if (closeRequest.checksum() != null
+                        && !closeRequest.checksum().equalsIgnoreCase(actualChecksum)) {
+                    throw new IllegalStateException("S3 written payload checksum mismatch");
+                }
                 if (buffer.size() > 0) {
                     uploadBufferedPart(buffer.size());
                 }
@@ -253,22 +274,20 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                 metadata.put(
                     S3ObjectSourceProvider.CHECKSUM_KIND_METADATA,
                     S3ObjectSourceProvider.CHECKSUM_KIND_SHA256);
-                Object region = request.target().location().get("region");
-                if (region != null && !region.toString().isBlank()) {
-                    metadata.put(S3ObjectSourceProvider.REGION_METADATA, region.toString().trim());
-                }
+                location(request.target(), "region")
+                    .ifPresent(region -> metadata.put(S3ObjectSourceProvider.REGION_METADATA, region));
                 PayloadReference reference = new PayloadReference(
                     "s3",
                     bucket,
                     key,
                     request.contentType(),
                     "raw",
-                    closeRequest.checksum(),
-                    closeRequest.bytes(),
+                    actualChecksum,
+                    writtenBytes,
                     null,
                     metadata,
                     Optional.empty());
-                return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
+                return new ObjectWriteResult(reference, writtenBytes, actualChecksum, Instant.now());
             }, executor);
         }
 
@@ -318,6 +337,14 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
             byte[] bytes = new byte[duplicate.remaining()];
             duplicate.get(bytes);
             return bytes;
+        }
+
+        private static MessageDigest sha256Digest() {
+            try {
+                return MessageDigest.getInstance("SHA-256");
+            } catch (NoSuchAlgorithmException failure) {
+                throw new IllegalStateException("SHA-256 is unavailable", failure);
+            }
         }
     }
 }

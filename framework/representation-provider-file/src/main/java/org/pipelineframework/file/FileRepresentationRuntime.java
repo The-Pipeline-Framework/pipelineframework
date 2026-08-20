@@ -126,10 +126,6 @@ public final class FileRepresentationRuntime {
         if (index == inputs.size()) {
             return Uni.createFrom().item(Map.copyOf(materialized));
         }
-        if (remainingBytes < 0) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "materialized file inputs exceed maxBytes"));
-        }
         Map.Entry<String, PayloadReference> input = inputs.get(index);
         PayloadReference requested = input.getValue();
         long requestBudget = Math.max(remainingBytes, 1L);
@@ -165,72 +161,59 @@ public final class FileRepresentationRuntime {
             throw new IllegalStateException("materialized payload exceeds maxBytes: " + bytes.length + " > " + maxBytes);
         }
         String safeName = safeFilename(requested.key());
-        Path root = null;
-        try {
-            root = Files.createTempDirectory("tpf-file-").toRealPath();
-            Path inputDirectory = Files.createDirectory(root.resolve("input"));
-            Files.createDirectory(root.resolve("output"));
+        return withWorkspace("tpf-file-", "failed to stage materialized payload", workspace -> {
+            Path inputDirectory = workspace.input();
             Path input = inputDirectory.resolve(safeName).normalize();
             Files.write(input, bytes);
-            return new Workspace(root, input);
-        } catch (IOException e) {
-            if (root != null) {
-                try {
-                    deleteRecursively(root);
-                } catch (IOException cleanupFailure) {
-                    e.addSuppressed(cleanupFailure);
-                }
-            }
-            throw new IllegalStateException("failed to stage materialized payload", e);
-        } catch (RuntimeException e) {
-            if (root != null) {
-                try {
-                    deleteRecursively(root);
-                } catch (IOException cleanupFailure) {
-                    e.addSuppressed(cleanupFailure);
-                }
-            }
-            throw e;
-        }
+            return new Workspace(workspace.root(), input);
+        });
     }
 
     private StructuredWorkspace stage(Map<String, MaterializedInput> materialized, long maxBytes) {
-        long actualBytes = materialized.values().stream().mapToLong(value -> value.bytes().length).sum();
+        long actualBytes = materialized.values().stream().mapToLong(MaterializedInput::length).sum();
         if (actualBytes > maxBytes) {
             throw new IllegalStateException("materialized file inputs exceed maxBytes: "
                 + actualBytes + " > " + maxBytes);
         }
-        Path root = null;
-        try {
-            root = Files.createTempDirectory("tpf-files-").toRealPath();
-            Path inputDirectory = Files.createDirectory(root.resolve("input"));
-            Files.createDirectory(root.resolve("output"));
+        return withWorkspace("tpf-files-", "failed to stage materialized file inputs", workspace -> {
             LinkedHashMap<String, Path> inputs = new LinkedHashMap<>();
+            int fieldIndex = 0;
             for (Map.Entry<String, MaterializedInput> entry : materialized.entrySet()) {
-                Path fieldDirectory = Files.createDirectory(inputDirectory.resolve(safeFieldName(entry.getKey())));
+                String directoryName = fieldIndex++ + "-" + safeFieldName(entry.getKey());
+                Path fieldDirectory = Files.createDirectory(workspace.input().resolve(directoryName));
                 Path input = fieldDirectory.resolve(safeFilename(entry.getValue().reference().key())).normalize();
-                Files.write(input, entry.getValue().bytes());
+                byte[] bytes = entry.getValue().bytes();
+                Files.write(input, bytes);
                 inputs.put(entry.getKey(), input);
             }
-            return new StructuredWorkspace(root, Map.copyOf(inputs));
+            return new StructuredWorkspace(workspace.root(), Map.copyOf(inputs));
+        });
+    }
+
+    private static <T> T withWorkspace(String prefix, String failureMessage, WorkspaceBody<T> body) {
+        Path root = null;
+        try {
+            root = Files.createTempDirectory(prefix).toRealPath();
+            Path input = Files.createDirectory(root.resolve("input"));
+            Path output = Files.createDirectory(root.resolve("output"));
+            return body.apply(new WorkspaceDirectories(root, input, output));
         } catch (IOException e) {
-            if (root != null) {
-                try {
-                    deleteRecursively(root);
-                } catch (IOException cleanupFailure) {
-                    e.addSuppressed(cleanupFailure);
-                }
-            }
-            throw new IllegalStateException("failed to stage materialized file inputs", e);
+            cleanupAfterFailure(root, e);
+            throw new IllegalStateException(failureMessage, e);
         } catch (RuntimeException e) {
-            if (root != null) {
-                try {
-                    deleteRecursively(root);
-                } catch (IOException cleanupFailure) {
-                    e.addSuppressed(cleanupFailure);
-                }
-            }
+            cleanupAfterFailure(root, e);
             throw e;
+        }
+    }
+
+    private static void cleanupAfterFailure(Path root, Exception failure) {
+        if (root == null) {
+            return;
+        }
+        try {
+            deleteRecursively(root);
+        } catch (IOException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
         }
     }
 
@@ -417,6 +400,14 @@ public final class FileRepresentationRuntime {
     private record Workspace(Path root, Path input) {
     }
 
+    private record WorkspaceDirectories(Path root, Path input, Path output) {
+    }
+
+    @FunctionalInterface
+    private interface WorkspaceBody<T> {
+        T apply(WorkspaceDirectories workspace) throws IOException;
+    }
+
     private record StructuredWorkspace(Path root, Map<String, Path> inputs) {
         private StructuredWorkspace {
             inputs = Map.copyOf(inputs);
@@ -432,6 +423,10 @@ public final class FileRepresentationRuntime {
         @Override
         public byte[] bytes() {
             return bytes.clone();
+        }
+
+        private int length() {
+            return bytes.length;
         }
     }
 

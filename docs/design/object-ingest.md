@@ -328,9 +328,10 @@ public final class PrepareInvoiceAnalysisService
 ```
 
 `options.fields` is ordered and must name every field in the canonical record in the representation
-record's constructor order. `payload_ref` fields become `Path` values; ordinary scalar fields pass
-through unchanged. The generated facade materializes all references into one invocation workspace,
-applies `maxBytes` to their combined materialized size, invokes the service, and removes the workspace
+record's constructor order. By default every `payload_ref` field becomes a `Path`; `materializeFields`
+may select a subset, leaving unselected `payload_ref` fields reference-typed in the representation
+record. Ordinary scalar fields pass through unchanged. The generated facade materializes the selected
+references into one invocation workspace, applies `maxBytes` to their combined materialized size, invokes the service, and removes the workspace
 on completion, failure, or cancellation. The authored service receives no connector registry,
 materializer, provider location, or storage-specific object.
 

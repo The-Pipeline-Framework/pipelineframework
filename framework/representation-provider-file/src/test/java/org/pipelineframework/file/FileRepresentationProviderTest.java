@@ -129,6 +129,62 @@ class FileRepresentationProviderTest {
         assertTrue(failure.getMessage().contains("Path only when options.fields contains exactly one field"));
     }
 
+    @Test
+    void materializesOnlyTheExplicitPayloadSubset() {
+        CanonicalType files = new CanonicalType("Files", "example.Files", CanonicalTypeShape.RECORD);
+        BoundaryRequest boundary = structuredBoundary(files, "UNARY_UNARY");
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", files, Optional.of("example.MaterializedFiles"), Optional.empty(),
+            Map.of("fields", List.of("invoice", "catalogue"), "materializeFields", List.of("invoice"))))
+            .orElseThrow();
+
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(boundary,
+            provider.claim(boundary).orElseThrow(), List.of(mapping), Map.of("input", Map.of(
+                "fields", List.of("invoice", "catalogue"), "materializeFields", List.of("invoice")))))
+            .getFirst().content();
+
+        assertTrue(source.contains("paths.get(\"invoice\")"));
+        assertTrue(source.contains("input.catalogue()"));
+        assertTrue(!source.contains("Map.entry(\"catalogue\""));
+    }
+
+    @Test
+    void rejectsInvalidMaterializeFieldsAndJavaFieldNames() {
+        CanonicalType files = new CanonicalType("Files", "example.Files", CanonicalTypeShape.RECORD);
+        BoundaryRequest boundary = structuredBoundary(files, "UNARY_UNARY");
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", files, Optional.of("example.MaterializedFiles"), Optional.empty(),
+            Map.of("fields", List.of("invoice", "catalogue")))).orElseThrow();
+        var claim = provider.claim(boundary).orElseThrow();
+
+        IllegalStateException nonList = assertThrows(IllegalStateException.class, () -> provider.describeArtifacts(
+            new ProviderGenerationRequest(boundary, claim, List.of(mapping), Map.of("input", Map.of(
+                "fields", List.of("invoice", "catalogue"), "materializeFields", "invoice")))));
+        assertTrue(nonList.getMessage().contains("non-empty string list"));
+        IllegalStateException nonPayload = assertThrows(IllegalStateException.class, () -> provider.describeArtifacts(
+            new ProviderGenerationRequest(boundary, claim, List.of(mapping), Map.of("input", Map.of(
+                "fields", List.of("invoice", "catalogue"), "materializeFields", List.of("missing"))))));
+        assertTrue(nonPayload.getMessage().contains("payload_ref fields"));
+
+        BoundaryRequest keywordBoundary = new BoundaryRequest("Prepare", "example.Prepare", files, output,
+            "UNARY_UNARY", Set.of(), Map.of("inputMappings", List.of("file"), "outputMappings", List.of(),
+                "inputFields", Map.of("class", "payload_ref"), "outputFields", Map.of("content", "payload_ref")));
+        var keywordMapping = provider.resolve(new RepresentationMappingRequest("file", files,
+            Optional.of("java.nio.file.Path"), Optional.empty(), Map.of("fields", List.of("class")))).orElseThrow();
+        IllegalStateException keyword = assertThrows(IllegalStateException.class, () -> provider.describeArtifacts(
+            new ProviderGenerationRequest(keywordBoundary, provider.claim(keywordBoundary).orElseThrow(),
+                List.of(keywordMapping), Map.of("input", Map.of("fields", List.of("class"))))));
+        assertTrue(keyword.getMessage().contains("valid Java identifier"));
+    }
+
+    @Test
+    void rejectsInputOnlyOneToManyBoundary() {
+        CanonicalType files = new CanonicalType("Files", "example.Files", CanonicalTypeShape.RECORD);
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> provider.claim(structuredBoundary(files, "UNARY_STREAMING")));
+        assertTrue(failure.getMessage().contains("supports ONE_TO_ONE only"));
+    }
+
     private BoundaryRequest boundary(String cardinality) {
         return new BoundaryRequest(
             "Render", "example.RenderService", input, output, cardinality, Set.of(),
@@ -142,5 +198,12 @@ class FileRepresentationProviderTest {
     private RepresentationMappingRequest mapping(CanonicalType type) {
         return new RepresentationMappingRequest(
             "file", type, Optional.of("java.nio.file.Path"), Optional.empty(), Map.of());
+    }
+
+    private BoundaryRequest structuredBoundary(CanonicalType files, String cardinality) {
+        return new BoundaryRequest("Prepare", "example.Prepare", files, output, cardinality, Set.of(), Map.of(
+            "inputMappings", List.of("file"), "outputMappings", List.of(),
+            "inputFields", Map.of("invoice", "payload_ref", "catalogue", "payload_ref"),
+            "outputFields", Map.of("content", "payload_ref")));
     }
 }

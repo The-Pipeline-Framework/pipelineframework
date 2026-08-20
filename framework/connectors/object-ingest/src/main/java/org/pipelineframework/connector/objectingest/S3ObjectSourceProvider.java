@@ -52,6 +52,7 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
     private final ConcurrentMap<String, S3Client> resolvedClients = new ConcurrentHashMap<>();
     private final Object lifecycleLock = new Object();
     private boolean closed;
+    private CompletionStage<Void> stopStage;
 
     public S3ObjectSourceProvider() {
         this(Optional.empty(), true, Executors.newVirtualThreadPerTaskExecutor(), true);
@@ -64,6 +65,10 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     S3ObjectSourceProvider(S3Client client, Executor executor) {
         this(Optional.of(Objects.requireNonNull(client, "client")), false, executor, false);
+    }
+
+    S3ObjectSourceProvider(S3Client client, Executor executor, boolean ownsExecutor) {
+        this(Optional.of(Objects.requireNonNull(client, "client")), false, executor, ownsExecutor);
     }
 
     private S3ObjectSourceProvider(
@@ -178,18 +183,39 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     @Override
     public void close() {
+        stop().toCompletableFuture().join();
+    }
+
+    CompletionStage<Void> stop() {
         synchronized (lifecycleLock) {
-            if (closed) {
-                return;
+            if (stopStage != null) {
+                return stopStage;
             }
             closed = true;
-            if (ownsClient) {
-                resolvedClients.values().forEach(S3Client::close);
-                resolvedClients.clear();
+            if (ownsExecutor && executor instanceof ExecutorService executorService) {
+                CompletableFuture<Void> stopped = new CompletableFuture<>();
+                stopStage = stopped;
+                Thread.ofVirtual().name("tpf-s3-source-stop").start(() -> {
+                    try {
+                        executorService.close();
+                        closeOwnedClients();
+                        stopped.complete(null);
+                    } catch (Throwable failure) {
+                        stopped.completeExceptionally(failure);
+                    }
+                });
+                return stopped;
             }
+            closeOwnedClients();
+            stopStage = CompletableFuture.completedStage(null);
+            return stopStage;
         }
-        if (ownsExecutor && executor instanceof ExecutorService executorService) {
-            executorService.close();
+    }
+
+    private void closeOwnedClients() {
+        if (ownsClient) {
+            resolvedClients.values().forEach(S3Client::close);
+            resolvedClients.clear();
         }
     }
 
@@ -282,20 +308,20 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
     }
 
     private void verifyEtag(PayloadReference reference, String actualEtag) {
-        String expected = expectedEtag(reference);
-        if (expected == null) {
+        Optional<String> expected = expectedEtag(reference);
+        if (expected.isEmpty()) {
             return;
         }
         String normalized = normalizeEtag(actualEtag);
-        if (!expected.equalsIgnoreCase(normalized)) {
+        if (!expected.orElseThrow().equalsIgnoreCase(normalized)) {
             throw new IllegalStateException("S3 payload ETag mismatch: " + reference.key());
         }
     }
 
-    private String expectedEtag(PayloadReference reference) {
+    private Optional<String> expectedEtag(PayloadReference reference) {
         return CHECKSUM_KIND_ETAG.equalsIgnoreCase(checksumKind(reference))
-            ? reference.checksum()
-            : null;
+            ? Optional.ofNullable(reference.checksum())
+            : Optional.empty();
     }
 
     private void verifyUnchangedDuringRead(String key, String headEtag, String responseEtag) {
@@ -330,7 +356,7 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
         if (explicit != null) {
             return explicit;
         }
-        return reference.metadata().containsKey("target") ? CHECKSUM_KIND_SHA256 : CHECKSUM_KIND_ETAG;
+        return CHECKSUM_KIND_ETAG;
     }
 
     private String quoteEtag(String etag) {
