@@ -2,9 +2,12 @@ package org.pipelineframework.connector.objectingest;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.pipelineframework.connector.ConnectorCompletionStages;
+import org.pipelineframework.connector.ConnectorConcurrencyScope;
+import org.pipelineframework.connector.ConnectorExecutionCapabilities;
+import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperation;
 import org.pipelineframework.connector.ConnectorProvider;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -14,8 +17,17 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
 /** Provider packaging and lifecycle for S3 object source and target operations. */
 @ApplicationScoped
 public final class S3ObjectConnector implements ConnectorProvider<Void> {
-    private final S3ObjectSourceProvider source = new S3ObjectSourceProvider();
-    private final S3ObjectTargetProvider target = new S3ObjectTargetProvider();
+    private final S3ObjectSourceProvider source;
+    private final S3ObjectTargetProvider target;
+
+    public S3ObjectConnector() {
+        this(new S3ObjectSourceProvider(), new S3ObjectTargetProvider());
+    }
+
+    S3ObjectConnector(S3ObjectSourceProvider source, S3ObjectTargetProvider target) {
+        this.source = source;
+        this.target = target;
+    }
 
     @Override
     public ConnectorProviderId id() {
@@ -28,14 +40,29 @@ public final class S3ObjectConnector implements ConnectorProvider<Void> {
     }
 
     @Override
+    public ConnectorExecutionCapabilities executionCapabilities() {
+        return new ConnectorExecutionCapabilities(
+            ConnectorExecutionStyle.PROVIDER_MANAGED, ConnectorConcurrencyScope.PROVIDER_MANAGED);
+    }
+
+    @Override
     public Collection<? extends ConnectorOperation> operations() {
         return List.of(source, target);
     }
 
     @Override
     public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-        source.close();
-        target.close();
-        return ConnectorCompletionStages.completed();
+        return source.stop().thenCompose(ignored -> {
+            CompletableFuture<Void> stopped = new CompletableFuture<>();
+            Thread.ofVirtual().name("tpf-s3-target-stop").start(() -> {
+                try {
+                    target.close();
+                    stopped.complete(null);
+                } catch (Throwable failure) {
+                    stopped.completeExceptionally(failure);
+                }
+            });
+            return stopped;
+        });
     }
 }
