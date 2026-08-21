@@ -3,6 +3,7 @@ package org.pipelineframework.connector.objectingest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -15,6 +16,9 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -121,6 +125,85 @@ class S3ObjectTargetProviderTest {
     }
 
     @Test
+    void serializesOverlappingWritesBeforeCloseAndRejectsLaterWrites() throws Exception {
+        S3Client client = mock(S3Client.class);
+        when(client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+            .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-1").build());
+        CountDownLatch uploadStarted = new CountDownLatch(1);
+        CountDownLatch releaseUpload = new CountDownLatch(1);
+        when(client.uploadPart(any(UploadPartRequest.class), any(RequestBody.class))).thenAnswer(ignored -> {
+            uploadStarted.countDown();
+            releaseUpload.await();
+            return UploadPartResponse.builder().eTag("etag-1").build();
+        });
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, executor, 5 * 1024 * 1024);
+            ObjectWriteSession session = provider.open(openRequest()).toCompletableFuture().join();
+            byte[] first = new byte[5 * 1024 * 1024];
+            byte[] second = new byte[] {7};
+
+            var firstWrite = session.write(ByteBuffer.wrap(first));
+            assertTrue(uploadStarted.await(5, TimeUnit.SECONDS));
+            var secondWrite = session.write(ByteBuffer.wrap(second));
+            var close = session.close(new ObjectWriteCloseRequest(
+                first.length + second.length, sha256(first, second), Map.of()));
+            CompletionException lateWrite = assertThrows(CompletionException.class, () ->
+                session.write(ByteBuffer.wrap(new byte[] {9})).toCompletableFuture().join());
+            assertEquals("S3 write session is closing or closed", lateWrite.getCause().getMessage());
+
+            releaseUpload.countDown();
+            firstWrite.toCompletableFuture().join();
+            secondWrite.toCompletableFuture().join();
+            ObjectWriteResult result = close.toCompletableFuture().join();
+
+            assertEquals(first.length + second.length, result.bytes());
+            assertEquals(sha256(first, second), result.checksum());
+            verify(client).completeMultipartUpload(any(CompleteMultipartUploadRequest.class));
+        } finally {
+            releaseUpload.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void serializesAbortAfterOverlappingWriteAndRejectsLaterWrites() throws Exception {
+        S3Client client = mock(S3Client.class);
+        when(client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+            .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-1").build());
+        CountDownLatch uploadStarted = new CountDownLatch(1);
+        CountDownLatch releaseUpload = new CountDownLatch(1);
+        when(client.uploadPart(any(UploadPartRequest.class), any(RequestBody.class))).thenAnswer(ignored -> {
+            uploadStarted.countDown();
+            releaseUpload.await();
+            return UploadPartResponse.builder().eTag("etag-1").build();
+        });
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, executor, 5 * 1024 * 1024);
+            ObjectWriteSession session = provider.open(openRequest()).toCompletableFuture().join();
+            var write = session.write(ByteBuffer.wrap(new byte[5 * 1024 * 1024]));
+            assertTrue(uploadStarted.await(5, TimeUnit.SECONDS));
+
+            var abort = session.abort(new RuntimeException("cancelled"));
+            CompletionException lateWrite = assertThrows(CompletionException.class, () ->
+                session.write(ByteBuffer.wrap(new byte[] {9})).toCompletableFuture().join());
+            assertEquals("S3 write session is closing or closed", lateWrite.getCause().getMessage());
+
+            releaseUpload.countDown();
+            write.toCompletableFuture().join();
+            abort.toCompletableFuture().join();
+            verify(client).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+            verify(client, never()).completeMultipartUpload(any(CompleteMultipartUploadRequest.class));
+        } finally {
+            releaseUpload.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void rejectsClientResolutionAfterClose() {
         S3ObjectTargetProvider provider = new S3ObjectTargetProvider(mock(S3Client.class), Runnable::run, 5 * 1024 * 1024);
         provider.close();
@@ -158,9 +241,13 @@ class S3ObjectTargetProviderTest {
             "idempotency");
     }
 
-    private static String sha256(byte[] bytes) {
+    private static String sha256(byte[]... payloads) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (byte[] payload : payloads) {
+                digest.update(payload);
+            }
+            return HexFormat.of().formatHex(digest.digest());
         } catch (java.security.NoSuchAlgorithmException failure) {
             throw new IllegalStateException(failure);
         }

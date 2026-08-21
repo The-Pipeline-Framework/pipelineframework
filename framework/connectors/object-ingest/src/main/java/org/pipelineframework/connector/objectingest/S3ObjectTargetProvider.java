@@ -198,8 +198,10 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         private final List<CompletedPart> parts = new ArrayList<>();
         private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         private final MessageDigest digest = sha256Digest();
+        private CompletionStage<Void> operationTail = CompletableFuture.completedStage(null);
         private long writtenBytes;
         private int nextPartNumber = 1;
+        private boolean terminalScheduled;
         private boolean completed;
 
         private S3WriteSession(
@@ -221,9 +223,13 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         }
 
         @Override
-        public CompletionStage<Void> write(ByteBuffer chunk) {
+        public synchronized CompletionStage<Void> write(ByteBuffer chunk) {
+            if (terminalScheduled) {
+                return CompletableFuture.failedStage(
+                    new IllegalStateException("S3 write session is closing or closed"));
+            }
             byte[] bytes = copy(chunk);
-            return CompletableFuture.runAsync(() -> {
+            CompletionStage<Void> write = operationTail.thenRunAsync(() -> {
                 digest.update(bytes);
                 writtenBytes += bytes.length;
                 buffer.writeBytes(bytes);
@@ -231,11 +237,18 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                     uploadBufferedPart(partSizeBytes);
                 }
             }, executor);
+            operationTail = write;
+            return write;
         }
 
         @Override
-        public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
-            return CompletableFuture.supplyAsync(() -> {
+        public synchronized CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
+            if (terminalScheduled) {
+                return CompletableFuture.failedStage(
+                    new IllegalStateException("S3 write session is closing or closed"));
+            }
+            terminalScheduled = true;
+            CompletionStage<ObjectWriteResult> close = operationTail.thenApplyAsync(ignored -> {
                 String actualChecksum = HexFormat.of().formatHex(digest.digest());
                 validateClose(closeRequest, actualChecksum);
                 if (buffer.size() > 0) {
@@ -282,6 +295,8 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                     Optional.empty());
                 return new ObjectWriteResult(reference, writtenBytes, actualChecksum, Instant.now());
             }, executor);
+            operationTail = close.thenApply(ignored -> null);
+            return close;
         }
 
         private void validateClose(ObjectWriteCloseRequest closeRequest, String actualChecksum) {
@@ -307,13 +322,16 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         }
 
         @Override
-        public CompletionStage<Void> abort(Throwable cause) {
-            return CompletableFuture.runAsync(() -> {
+        public synchronized CompletionStage<Void> abort(Throwable cause) {
+            terminalScheduled = true;
+            CompletionStage<Void> abort = operationTail.handle((ignored, failure) -> null).thenRunAsync(() -> {
                 if (!completed) {
                     client.abortMultipartUpload(abortRequest());
                     completed = true;
                 }
             }, executor);
+            operationTail = abort;
+            return abort;
         }
 
         private void uploadBufferedPart(int size) {

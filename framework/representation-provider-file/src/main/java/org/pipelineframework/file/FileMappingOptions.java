@@ -1,5 +1,6 @@
 package org.pipelineframework.file;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,8 +84,11 @@ final class FileMappingOptions {
         Object value = options.get("maxBytes"); long result;
         if (value == null) result = DEFAULT_MAX_BYTES;
         else if (value instanceof Number number) {
-            if ((number instanceof Float || number instanceof Double) && number.doubleValue() % 1 != 0.0D) throw invalidMax();
-            result = number.longValue();
+            try {
+                result = new BigDecimal(number.toString()).longValueExact();
+            } catch (NumberFormatException | ArithmeticException failure) {
+                throw invalidMax();
+            }
         } else try { result = Long.parseLong(value.toString()); }
         catch (NumberFormatException e) { throw new IllegalStateException("File mapping option 'maxBytes' must be a positive integer.", e); }
         if (result <= 0) throw invalidMax(); return result;

@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.representation.spi.BoundaryRequest;
@@ -224,6 +226,26 @@ class FileRepresentationProviderTest {
         IllegalStateException failure = assertThrows(IllegalStateException.class,
             () -> provider.claim(structuredBoundary(files, "UNARY_STREAMING")));
         assertTrue(failure.getMessage().contains("supports ONE_TO_ONE only"));
+    }
+
+    @Test
+    void rejectsFractionalNonFiniteAndOverflowingNumericMaxBytes() {
+        BoundaryRequest boundary = boundary("UNARY_UNARY");
+        var claim = provider.claim(boundary).orElseThrow();
+        var inputMapping = provider.resolve(mapping(input)).orElseThrow();
+        var outputMapping = provider.resolve(mapping(output)).orElseThrow();
+
+        for (Number invalid : List.of(
+            new BigDecimal("1.5"),
+            new BigInteger("9223372036854775808"),
+            Double.NaN,
+            Double.POSITIVE_INFINITY)) {
+            IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+                provider.describeArtifacts(new ProviderGenerationRequest(
+                    boundary, claim, List.of(inputMapping, outputMapping),
+                    Map.of("input", Map.of("maxBytes", invalid), "output", Map.of("target", "rendered")))));
+            assertEquals("File mapping option 'maxBytes' must be a positive integer.", failure.getMessage());
+        }
     }
 
     private BoundaryRequest boundary(String cardinality) {
