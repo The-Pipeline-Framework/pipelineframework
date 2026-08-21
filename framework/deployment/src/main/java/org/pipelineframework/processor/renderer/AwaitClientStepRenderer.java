@@ -98,6 +98,7 @@ public class AwaitClientStepRenderer {
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
             .addSuperinterface(stepInterface)
             .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
+            .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"))
             .addField(support)
             .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())

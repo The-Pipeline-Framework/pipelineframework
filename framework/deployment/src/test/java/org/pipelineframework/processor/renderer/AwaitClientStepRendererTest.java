@@ -55,6 +55,7 @@ class AwaitClientStepRendererTest {
 
         assertTrue(source.contains("implements StepOneToOne<FraudCheckRequest, FraudCheckDecision>"));
         assertTrue(source.contains("AwaitStreamOneToOneStep<FraudCheckRequest, FraudCheckDecision>"));
+        assertTrue(source.contains("CacheReadBypass"));
         assertTrue(source.contains("AwaitStepSupport support"));
         assertTrue(source.contains("AwaitStepDescriptorFactory descriptorFactory"));
         assertTrue(source.contains("support.awaitOneToOne(descriptorFactory.descriptor(\"FraudCheck\", "
