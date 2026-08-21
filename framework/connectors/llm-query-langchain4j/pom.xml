@@ -4,11 +4,12 @@
     <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>27.7.2-SNAPSHOT</version><relativePath>../../pom.xml</relativePath></parent>
     <artifactId>llm-query-langchain4j-connector</artifactId>
     <name>The Pipeline Framework - LangChain4j LLM Query Adapter</name>
-    <description>Low-level LangChain4j/Ollama adapter for the portable one-turn LLM Query contract.</description>
+    <description>Low-level LangChain4j adapter for the portable one-turn LLM Query contract.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j</artifactId><version>${langchain4j.version}</version></dependency>
         <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j-ollama</artifactId><version>${langchain4j.version}</version></dependency>
+        <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j-open-ai</artifactId><version>${langchain4j.version}</version></dependency>
         <dependency><groupId>io.smallrye.config</groupId><artifactId>smallrye-config-core</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
