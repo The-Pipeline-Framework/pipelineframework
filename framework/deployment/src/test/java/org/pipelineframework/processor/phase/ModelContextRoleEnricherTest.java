@@ -43,6 +43,31 @@ class ModelContextRoleEnricherTest {
     }
 
     @Test
+    void enrichesConfiguredLocalOrchestratorBeforeItsGeneratedTypeEntersTheRound() {
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setAspectModels(List.of(new PipelineAspectModel(
+            "persistence",
+            AspectScope.GLOBAL,
+            AspectPosition.AFTER_STEP,
+            Map.of(
+                "pluginImplementationClass", "com.example.PersistencePlugin",
+                "enabledTargets", List.of("LOCAL_CLIENT_STEP")))));
+
+        List<PipelineStepModel> result = enricher.enrich(
+            ctx,
+            List.of(step("ProcessAnalyseInvoiceQueryClientStep", false).toBuilder()
+                .inputMapping(new TypeMapping(ClassName.get("com.example", "AnalysisRequest"), null, false))
+                .outputMapping(new TypeMapping(ClassName.get("com.example", "ReviewReady"), null, false))
+                .build()));
+
+        assertTrue(result.stream().anyMatch(model -> model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER));
+        assertTrue(result.stream().anyMatch(model -> model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT));
+    }
+
+    @Test
     void enrichProducesPluginAndClientModelsForColocatedPluginHost() {
         PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
         ctx.setPluginHost(true);

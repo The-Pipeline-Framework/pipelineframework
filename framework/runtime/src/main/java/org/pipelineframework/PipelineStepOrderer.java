@@ -66,7 +66,7 @@ class PipelineStepOrderer {
         // A partial generated order is unreliable: if any runtime step class is missing from the
         // metadata, preserve the original list to avoid applying an incomplete order to the pipeline.
         boolean hasUnconfiguredSteps = steps.stream()
-            .map(step -> step != null ? step.getClass().getName() : null)
+            .map(PipelineStepOrderer::runtimeStepClassName)
             .anyMatch(name -> name != null && !configuredNames.contains(name));
         if (hasUnconfiguredSteps) {
             logger.debug("Pipeline order configured, but step list contains unconfigured entries; preserving existing order.");
@@ -78,7 +78,7 @@ class PipelineStepOrderer {
             if (step == null) {
                 continue;
             }
-            stepMap.computeIfAbsent(step.getClass().getName(), ignored -> new ArrayList<>()).add(step);
+            stepMap.computeIfAbsent(runtimeStepClassName(step), ignored -> new ArrayList<>()).add(step);
         }
 
         List<Object> orderedSteps = new ArrayList<>();
@@ -102,5 +102,22 @@ class PipelineStepOrderer {
         }
 
         return orderedSteps;
+    }
+
+    private static String runtimeStepClassName(Object step) {
+        if (step == null) {
+            return null;
+        }
+        Class<?> stepClass = step.getClass();
+        while (isProxyClassName(stepClass.getName())
+            && stepClass.getSuperclass() != null
+            && stepClass.getSuperclass() != Object.class) {
+            stepClass = stepClass.getSuperclass();
+        }
+        return stepClass.getName();
+    }
+
+    private static boolean isProxyClassName(String name) {
+        return name.contains("_Subclass") || name.contains("$$") || name.contains("_ClientProxy");
     }
 }

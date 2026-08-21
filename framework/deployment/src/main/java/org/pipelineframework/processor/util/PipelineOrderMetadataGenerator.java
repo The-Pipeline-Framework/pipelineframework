@@ -80,7 +80,10 @@ public class PipelineOrderMetadataGenerator {
             return;
         }
 
-        List<String> expanded = PipelineOrderExpander.expand(ordered, config, null);
+        List<String> expanded = weaveGeneratedSideEffects(ctx, ordered);
+        if (expanded.isEmpty()) {
+            expanded = PipelineOrderExpander.expand(ordered, config, null);
+        }
         if (expanded == null || expanded.isEmpty()) {
             return;
         }
@@ -102,6 +105,35 @@ public class PipelineOrderMetadataGenerator {
                 writer.write(gson.toJson(metadata));
             }
         }
+    }
+
+    private List<String> weaveGeneratedSideEffects(
+            PipelineCompilationContext ctx, List<String> orderedFunctionalSteps) {
+        List<PipelineStepModel> clientModels = ctx.getStepModels().stream()
+            .filter(model -> model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT)
+            .toList();
+        if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)) {
+            return List.of();
+        }
+        List<String> expanded = new ArrayList<>();
+        int functionalIndex = 0;
+        for (PipelineStepModel model : clientModels) {
+            if (model.sideEffect()) {
+                expanded.add(ClientStepClassNames.className(model, ctx.getTransportMode()));
+            } else {
+                if (functionalIndex >= orderedFunctionalSteps.size()) {
+                    throw new IllegalStateException(
+                        "Generated aspect order contains more functional models than the authored pipeline order");
+                }
+                expanded.add(orderedFunctionalSteps.get(functionalIndex++));
+            }
+        }
+        if (functionalIndex != orderedFunctionalSteps.size()) {
+            throw new IllegalStateException(
+                "Generated aspect order contains " + functionalIndex + " functional models but the authored order contains "
+                    + orderedFunctionalSteps.size());
+        }
+        return List.copyOf(new LinkedHashSet<>(expanded));
     }
 
     /**

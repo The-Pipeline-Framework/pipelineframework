@@ -171,6 +171,29 @@ class AspectExpansionProcessorTest {
 
     @SneakyThrows
     @Test
+    void configuredTargetsMakeAspectsAroundProviderBackedStepsLoadableLocally() {
+        ResolvedStep step = resolvedStepWithoutBinding("ProcessAnalyseInvoiceQueryClientStep");
+        PipelineStepModel providerBacked = step.model().toBuilder()
+            .enabledTargets(Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .build();
+        Map<String, Object> config = aspectConfig("org.pipelineframework.plugin.persistence.PersistenceService");
+        config.put("enabledTargets", List.of("LOCAL_CLIENT_STEP"));
+
+        List<ResolvedStep> expanded = new AspectExpansionProcessor().expandAspects(
+            List.of(new ResolvedStep(providerBacked, step.grpcBinding(), step.restBinding())),
+            List.of(new PipelineAspectModel(
+                "persistence", AspectScope.GLOBAL, AspectPosition.AFTER_STEP, config)));
+
+        PipelineStepModel synthetic = expanded.stream()
+            .map(ResolvedStep::model)
+            .filter(PipelineStepModel::sideEffect)
+            .findFirst()
+            .orElseThrow();
+        assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), synthetic.enabledTargets());
+    }
+
+    @SneakyThrows
+    @Test
     void syntheticStepsReuseGrpcBinding() {
         ResolvedStep step = resolvedStep("ProcessFolderService");
 

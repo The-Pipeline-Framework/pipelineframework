@@ -90,6 +90,36 @@ class PipelineStepOrdererTest {
         assertEquals(List.of(first, second), ordered);
     }
 
+    @Test
+    void appliesConfiguredOrderToCdiClientProxySubclasses() {
+        ConfiguredStep first = new ConfiguredStep_ClientProxy();
+        OtherConfiguredStep second = new OtherConfiguredStep_ClientProxy();
+
+        List<Object> ordered = orderer.applyConfiguredOrder(
+            List.of(second, first),
+            List.of(ConfiguredStep.class.getName(), OtherConfiguredStep.class.getName()));
+
+        assertEquals(List.of(first, second), ordered);
+    }
+
+    private static class ConfiguredStep {
+    }
+
+    private static class ConfiguredStep_Subclass extends ConfiguredStep {
+    }
+
+    private static final class ConfiguredStep_ClientProxy extends ConfiguredStep_Subclass {
+    }
+
+    private static class OtherConfiguredStep {
+    }
+
+    private static class OtherConfiguredStep_Subclass extends OtherConfiguredStep {
+    }
+
+    private static final class OtherConfiguredStep_ClientProxy extends OtherConfiguredStep_Subclass {
+    }
+
     private static <T> T withContextClassLoader(Path root, java.util.concurrent.Callable<T> callable) {
         try (URLClassLoader classLoader = new URLClassLoader(
             new URL[] {root.toUri().toURL()},
