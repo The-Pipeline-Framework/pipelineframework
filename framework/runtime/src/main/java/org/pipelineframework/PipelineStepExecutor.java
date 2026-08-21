@@ -17,6 +17,8 @@
 package org.pipelineframework;
 
 import java.text.MessageFormat;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -208,7 +210,30 @@ class PipelineStepExecutor {
         if (service instanceof CacheKeyTarget cacheKeyTarget) {
             return new CacheKeyTargetReactiveServiceStepAdapter(service, cacheKeyTarget.cacheKeyTargetType());
         }
-        return new ReactiveServiceStepAdapter(service);
+        Optional<Class<?>> inferredOutput = reactiveServiceOutputType(service.getClass());
+        return inferredOutput
+            .<StepOneToOne<Object, Object>>map(target -> new CacheKeyTargetReactiveServiceStepAdapter(service, target))
+            .orElseGet(() -> new CacheReadBypassReactiveServiceStepAdapter(service));
+    }
+
+    private static Optional<Class<?>> reactiveServiceOutputType(Class<?> serviceType) {
+        if (serviceType == null || serviceType == Object.class) {
+            return Optional.empty();
+        }
+        for (Type implemented : serviceType.getGenericInterfaces()) {
+            if (implemented instanceof ParameterizedType parameterized
+                && parameterized.getRawType() == ReactiveService.class
+                && parameterized.getActualTypeArguments()[1] instanceof Class<?> outputType) {
+                return Optional.of(outputType);
+            }
+            if (implemented instanceof Class<?> implementedClass) {
+                Optional<Class<?>> inherited = reactiveServiceOutputType(implementedClass);
+                if (inherited.isPresent()) {
+                    return inherited;
+                }
+            }
+        }
+        return reactiveServiceOutputType(serviceType.getSuperclass());
     }
 
     private static class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {

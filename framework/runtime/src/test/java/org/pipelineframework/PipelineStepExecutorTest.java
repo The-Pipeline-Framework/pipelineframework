@@ -197,6 +197,40 @@ class PipelineStepExecutorTest {
         assertEquals(1, cacheReads.get());
     }
 
+    @Test
+    void reactiveServiceDerivedOutputTargetRejectsInputKeyFallback() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        AtomicInteger serviceCalls = new AtomicInteger();
+        CacheKeyStrategy inputOnly = new CacheKeyStrategy() {
+            @Override
+            public Optional<String> resolveKey(Object item, PipelineContext context) {
+                return item instanceof String ? Optional.of("input-key") : Optional.empty();
+            }
+
+            @Override
+            public boolean supportsTarget(Class<?> targetType) {
+                return String.class.equals(targetType);
+            }
+        };
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "wrong-input-value"), List.of(inputOnly), "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            new IntegerReactiveService(serviceCalls),
+            Uni.createFrom().item("abcd"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals(4, ((Uni<Integer>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, cacheReads.get());
+        assertEquals(1, serviceCalls.get());
+    }
+
     private static PipelineCacheReader cacheReader(AtomicInteger reads, String value) {
         return new PipelineCacheReader() {
             @Override
@@ -231,6 +265,15 @@ class PipelineStepExecutorTest {
         @Override
         public Class<?> cacheKeyTargetType() {
             return String.class;
+        }
+    }
+
+    private record IntegerReactiveService(AtomicInteger calls)
+            implements ReactiveService<String, Integer> {
+        @Override
+        public Uni<Integer> process(String input) {
+            calls.incrementAndGet();
+            return Uni.createFrom().item(input.length());
         }
     }
 

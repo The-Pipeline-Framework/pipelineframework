@@ -125,8 +125,8 @@ class PipelineRunnerCacheReadTest {
     void preferCacheHitIsPipelineReplayAndSkipsCommandRuntime() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-command-output")),
-            List.of(new FixedKeyStrategy()),
+            new FixedReader(Map.of("v1:target", "cached-command-output")),
+            List.of(new TargetedKeyStrategy()),
             "prefer-cache");
 
         String value = run(step, support, new PipelineContext("v1", null, "prefer-cache"));
@@ -139,8 +139,8 @@ class PipelineRunnerCacheReadTest {
     void preferCacheVersionChangeFallsThroughToCommandRuntime() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-command-output")),
-            List.of(new FixedKeyStrategy()),
+            new FixedReader(Map.of("v1:target", "cached-command-output")),
+            List.of(new TargetedKeyStrategy()),
             "prefer-cache");
 
         String value = run(step, support, new PipelineContext("v2", null, "prefer-cache"));
