@@ -297,6 +297,47 @@ class FileRepresentationRuntimeTest {
         assertArrayEquals("output".getBytes(java.nio.charset.StandardCharsets.UTF_8), written.get().bytes());
     }
 
+    @Test
+    void transformsStructuredContextPublishesFileFieldAndCleansWorkspace() throws Exception {
+        byte[] inputBytes = "pdf".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        PayloadReference input = reference("incoming/invoice.pdf", inputBytes.length);
+        AtomicReference<ObjectWriteRequest> written = new AtomicReference<>();
+        AtomicReference<Path> workspace = new AtomicReference<>();
+        TestTarget targetProvider = new TestTarget(written);
+        ConnectorBindingRegistry bindings = bindings(targetProvider);
+        PipelineObjectPublishConfig target = new PipelineObjectPublishConfig(
+            "analysis-media", "object", "filesystem", Optional.of("documents"), Map.of(),
+            PipelineObjectNamingConfig.defaults(), PipelineObjectPublishPayloadConfig.defaults(),
+            PipelineObjectPublishGroupingConfig.defaults());
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "example", "LOCAL", "COMPUTE", List.of(), Map.of(), Map.of(), Map.of("analysis-media", target),
+            List.of(), null, null, Map.of());
+        FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+            (reference, maxBytes) -> CompletableFuture.completedFuture(new MaterializedPayload(
+                reference, inputBytes, "application/pdf", "raw", "input-checksum")),
+            bindings, config, new ObjectTargetRegistry(List.of(targetProvider)));
+
+        String result = runtime.transformStructured(
+            FileRepresentationRuntime.orderedInputs(Map.entry("invoice", input)),
+            1024, "analysis-media", 1024,
+            paths -> {
+                workspace.set(paths.get("invoice").getParent().getParent().getParent());
+                try {
+                    Path image = Files.writeString(workspace.get().resolve("output/invoice.png"), "png");
+                    return Uni.createFrom().item(Map.entry("document-1", image));
+                } catch (java.io.IOException e) {
+                    return Uni.createFrom().failure(e);
+                }
+            },
+            transformed -> FileRepresentationRuntime.orderedOutputs(Map.entry("image", transformed.getValue())),
+            (transformed, references) -> transformed.getKey() + ":" + references.get("image").key())
+            .await().indefinitely();
+
+        assertEquals("document-1:invoice.png", result);
+        assertArrayEquals("png".getBytes(java.nio.charset.StandardCharsets.UTF_8), written.get().bytes());
+        assertFalse(Files.exists(workspace.get()));
+    }
+
     private static ConnectorBindingRegistry bindings(TestTarget target) {
         ConnectorProvider<Void> provider = new ConnectorProvider<>() {
             private final ObjectSourceOperation source = new ObjectSourceOperation() {

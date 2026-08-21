@@ -73,11 +73,23 @@ public final class FileRepresentationProvider implements RepresentationProvider 
         String source;
         if (outputMapped) {
             ResolvedRepresentation output = requireRepresentation(request, request.boundary().outputType().name());
-            if (!Optional.of(PATH).equals(input.representationType()) || !Optional.of(PATH).equals(output.representationType())) {
+            FileMappingOptions outputOptions = FileMappingOptions.output(request);
+            if (inputOptions.structured() || outputOptions.structured()) {
+                if (!inputOptions.structured() || !outputOptions.structured()
+                        || Optional.of(PATH).equals(input.representationType())
+                        || Optional.of(PATH).equals(output.representationType())
+                        || !"UNARY_UNARY".equals(request.boundary().cardinality())) {
+                    throw new IllegalStateException("Structured file-to-file boundary '" + request.boundary().stepName()
+                        + "' requires structured record mappings on both sides and ONE_TO_ONE cardinality.");
+                }
+                source = StructuredFileTransformFacadeGenerator.generate(
+                    request, input, inputOptions, output, outputOptions);
+            } else if (!Optional.of(PATH).equals(input.representationType()) || !Optional.of(PATH).equals(output.representationType())) {
                 throw new IllegalStateException("File-to-file boundary '" + request.boundary().stepName()
                     + "' requires java.nio.file.Path on both sides.");
+            } else {
+                source = FileOutputFacadeGenerator.generate(request, inputOptions, outputOptions);
             }
-            source = FileOutputFacadeGenerator.generate(request, inputOptions, FileMappingOptions.output(request));
         } else {
             source = InputOnlyFileFacadeGenerator.generate(request, input, inputOptions);
         }
@@ -87,7 +99,7 @@ public final class FileRepresentationProvider implements RepresentationProvider 
 
     @Override public ProviderSchemaFragment schema() {
         return new ProviderSchemaFragment(KEY, Optional.empty(), Optional.of("""
-            {"type":"object","properties":{"type":{"type":"string","minLength":1},"options":{"type":"object","properties":{"field":{"type":"string"},"fields":{"type":"array","minItems":1,"items":{"type":"string"}},"materializeFields":{"type":"array","minItems":1,"items":{"type":"string"}},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
+            {"type":"object","properties":{"type":{"type":"string","minLength":1},"options":{"type":"object","properties":{"field":{"type":"string"},"fields":{"type":"array","minItems":1,"items":{"type":"string"}},"materializeFields":{"type":"array","minItems":1,"items":{"type":"string"}},"publishFields":{"type":"array","minItems":1,"items":{"type":"string"}},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
             """.trim()), Optional.of("File mappings adapt payload_ref fields to Path values; output mappings declare a publish target."));
     }
 

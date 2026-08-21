@@ -66,6 +66,21 @@ final class FileMappingOptions {
         return selected;
     }
 
+    List<String> publishedFields(List<String> outputFields) {
+        Map<String, String> fields = fields();
+        List<String> payloads = outputFields.stream().filter(f -> "payload_ref".equals(fields.get(f))).toList();
+        Object configured = options.get("publishFields");
+        if (configured == null) return payloads;
+        if (!(configured instanceof List<?> values) || values.isEmpty()
+                || values.stream().anyMatch(v -> !(v instanceof String text) || text.isBlank()))
+            throw new IllegalStateException("Structured file output requires publishFields to be a non-empty string list.");
+        List<String> selected = values.stream().map(String.class::cast).map(String::trim).toList();
+        selected.forEach(this::validateIdentifier);
+        if (selected.stream().distinct().count() != selected.size() || selected.stream().anyMatch(f -> !payloads.contains(f)))
+            throw new IllegalStateException("Structured file output publishFields must uniquely name payload_ref fields from options.fields.");
+        return selected;
+    }
+
     String payloadField() {
         Map<String, String> fields = fields();
         String field = optionalText("field").orElseGet(() -> fields.entrySet().stream()
