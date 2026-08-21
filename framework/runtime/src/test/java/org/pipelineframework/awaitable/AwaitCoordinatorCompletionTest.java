@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -634,6 +635,112 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void requestAwareCompletionProjectsCanonicalRequestAndActorPayloadBeforePersistence() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "ConfirmedSelection",
+            PendingSelection.class.getName(),
+            ConfirmedSelection.class.getName(),
+            "ONE_TO_ONE",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("documentId"),
+            PendingSelection.class.getName(),
+            SelectionChoice.class.getName(),
+            java.util.function.Function.identity(),
+            java.util.function.Function.identity(),
+            (request, completion, metadata) -> {
+                PendingSelection pending = (PendingSelection) request;
+                SelectionChoice choice = (SelectionChoice) completion;
+                return new ConfirmedSelection(
+                    pending.documentId(),
+                    pending.recommendedPropertyId(),
+                    choice.propertyId(),
+                    metadata.completedAt());
+            },
+            true);
+        coordinator.descriptorFactory.register(descriptor);
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            new PendingSelection("invoice-1", "property-a"),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            Map.of("propertyId", "property-b"),
+            "alice",
+            11_000L)).await().indefinitely();
+
+        ConfirmedSelection expected = new ConfirmedSelection(
+            "invoice-1", "property-a", "property-b", java.time.Instant.ofEpochMilli(11_000L));
+        assertEquals(expected, completed.record().responsePayload());
+        assertEquals(expected, coordinator.resumePayload(completed.record()));
+        assertEquals(new PendingSelection("invoice-1", "property-a"), completed.record().requestPayload());
+    }
+
+    @Test
+    void requestAwareProjectionFailureLeavesInteractionWaiting() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "RejectedSelection",
+            PendingSelection.class.getName(),
+            ConfirmedSelection.class.getName(),
+            "ONE_TO_ONE",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("documentId"),
+            PendingSelection.class.getName(),
+            SelectionChoice.class.getName(),
+            java.util.function.Function.identity(),
+            java.util.function.Function.identity(),
+            (request, completion, metadata) -> {
+                throw new IllegalArgumentException("selection is no longer valid");
+            },
+            true);
+        coordinator.descriptorFactory.register(descriptor);
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            new PendingSelection("invoice-1", "property-a"),
+            null,
+            null).await().indefinitely();
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> coordinator.complete(
+            new AwaitCompletionCommand(
+                "tenant-1",
+                created.record().interactionId(),
+                null,
+                "completion-1",
+                Map.of("propertyId", "property-b"),
+                "alice",
+                11_000L)).await().indefinitely());
+
+        assertEquals("selection is no longer valid", failure.getMessage());
+        AwaitInteractionRecord stored = store.get("tenant-1", created.record().interactionId())
+            .await().indefinitely().orElseThrow();
+        assertEquals(AwaitInteractionStatus.WAITING, stored.status());
+        assertNull(stored.responsePayload());
+    }
+
+    @Test
     void acceptsLegacyV2NestedProtobufSourceTypeIdentity() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
@@ -847,6 +954,20 @@ class AwaitCoordinatorCompletionTest {
     }
 
     private record CanonicalDecision(String status) {
+    }
+
+    private record PendingSelection(String documentId, String recommendedPropertyId) {
+    }
+
+    private record SelectionChoice(String propertyId) {
+    }
+
+    private record ConfirmedSelection(
+        String documentId,
+        String recommendedPropertyId,
+        String confirmedPropertyId,
+        java.time.Instant confirmedAt
+    ) {
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {

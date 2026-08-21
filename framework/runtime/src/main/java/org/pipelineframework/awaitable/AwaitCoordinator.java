@@ -1019,7 +1019,11 @@ public class AwaitCoordinator {
             if (canonicalOutputType.isInstance(record.responsePayload())) {
                 return record.responsePayload();
             }
-            return canonicalCompletionPayload(record, descriptor, record.responsePayload());
+            return canonicalCompletionPayload(
+                record,
+                descriptor,
+                record.responsePayload(),
+                completionMetadata(record));
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
                 "Failed resolving await canonical output type " + record.outputType()
@@ -1034,9 +1038,17 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object completionPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
+        Object completionPayload = !descriptor.requestAwareCompletion()
+            && sameTypeIdentity(record.outputType(), record.transportOutputType())
             ? command.responsePayload()
-            : canonicalCompletionPayload(record, descriptor, command.responsePayload());
+            : canonicalCompletionPayload(
+                record,
+                descriptor,
+                command.responsePayload(),
+                new AwaitCompletionMetadata(
+                    record.interactionId(),
+                    command.actor(),
+                    Instant.ofEpochMilli(command.nowEpochMs())));
         return new ValidatedCompletion(record, withResponsePayload(command, completionPayload), descriptor);
     }
 
@@ -1048,11 +1060,28 @@ public class AwaitCoordinator {
     private Object canonicalCompletionPayload(
         AwaitInteractionRecord record,
         AwaitStepDescriptor descriptor,
-        Object payload
+        Object payload,
+        AwaitCompletionMetadata metadata
     ) {
         Object transportPayload = coerceTransportPayload(record, payload);
-        Object canonicalPayload = descriptor.outputFromTransport().apply(transportPayload);
+        Object canonicalPayload;
+        if (descriptor.requestAwareCompletion()) {
+            Object canonicalRequest = restoreCanonicalRequestPayload(descriptor, record.requestPayload());
+            canonicalPayload = descriptor.completionProjector().project(canonicalRequest, transportPayload, metadata);
+        } else {
+            canonicalPayload = descriptor.outputFromTransport().apply(transportPayload);
+        }
         return coerceCanonicalPayload(record, canonicalPayload);
+    }
+
+    private static AwaitCompletionMetadata completionMetadata(AwaitInteractionRecord record) {
+        long completedAtEpochMs = record.updatedAtEpochMs() > 0
+            ? record.updatedAtEpochMs()
+            : record.createdAtEpochMs();
+        return new AwaitCompletionMetadata(
+            record.interactionId(),
+            record.actor(),
+            Instant.ofEpochMilli(completedAtEpochMs));
     }
 
     private Object coerceTransportPayload(AwaitInteractionRecord record, Object payload) {

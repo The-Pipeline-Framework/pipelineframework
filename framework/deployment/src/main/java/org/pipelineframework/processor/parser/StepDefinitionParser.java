@@ -1777,6 +1777,18 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        Object completionObj = awaitMap.get("completion");
+        if (completionObj != null) {
+            if (!(completionObj instanceof Map<?, ?> completionMap)
+                || isBlank(stringValue(completionMap.get("type")))
+                || isBlank(stringValue(completionMap.get("projector")))) {
+                String message = "Skipping step '" + stepName
+                    + "': await.completion must declare non-blank type and projector";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+        }
         Object transportObj = awaitMap.get("transport");
         if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {
             String message = "Skipping step '" + stepName + "': await.transport.type must be declared";

@@ -847,7 +847,22 @@ public class PipelineYamlConfigLoader {
         }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(correlation, transport);
+        PipelineYamlAwaitCompletion completion = readAwaitCompletion(awaitMap, stepName);
+        return new PipelineYamlAwaitConfig(correlation, transport, completion);
+    }
+
+    private PipelineYamlAwaitCompletion readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
+        Object completionObj = awaitMap.get("completion");
+        if (completionObj == null) {
+            return null;
+        }
+        if (!(completionObj instanceof Map<?, ?> completionMap)) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion must be defined as a map");
+        }
+        String type = readString(completionMap, "type");
+        String projector = readString(completionMap, "projector");
+        return new PipelineYamlAwaitCompletion(type, projector);
     }
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {

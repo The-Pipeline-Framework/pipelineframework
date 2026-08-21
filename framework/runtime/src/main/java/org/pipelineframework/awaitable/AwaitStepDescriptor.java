@@ -21,6 +21,8 @@ import java.util.function.Function;
  * @param transportOutputType serialization representation used at completion
  * @param inputToTransport generated conversion applied immediately before dispatch
  * @param outputFromTransport generated conversion applied immediately after transport decoding
+ * @param completionProjector optional pure request-plus-completion projection
+ * @param requestAwareCompletion whether completionProjector owns canonical output construction
  */
 public record AwaitStepDescriptor(
     String stepId,
@@ -35,8 +37,30 @@ public record AwaitStepDescriptor(
     String transportInputType,
     String transportOutputType,
     Function<Object, Object> inputToTransport,
-    Function<Object, Object> outputFromTransport
+    Function<Object, Object> outputFromTransport,
+    AwaitCompletionProjector<Object, Object, Object> completionProjector,
+    boolean requestAwareCompletion
 ) {
+    public AwaitStepDescriptor(
+        String stepId,
+        String inputType,
+        String outputType,
+        String cardinality,
+        Duration timeout,
+        String correlationStrategy,
+        String transportType,
+        Map<String, Object> transportConfig,
+        List<String> idempotencyKeyFields,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
+        this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType,
+            transportConfig, idempotencyKeyFields, transportInputType, transportOutputType,
+            inputToTransport, outputFromTransport, null, false);
+    }
+
     public AwaitStepDescriptor(
         String stepId,
         String inputType,
@@ -132,6 +156,11 @@ public record AwaitStepDescriptor(
         transportInputType = transportInputType == null || transportInputType.isBlank() ? inputType : transportInputType;
         transportOutputType = transportOutputType == null || transportOutputType.isBlank() ? outputType : transportOutputType;
         inputToTransport = inputToTransport == null ? Function.identity() : inputToTransport;
-        outputFromTransport = outputFromTransport == null ? Function.identity() : outputFromTransport;
+        Function<Object, Object> normalizedOutputFromTransport =
+            outputFromTransport == null ? Function.identity() : outputFromTransport;
+        outputFromTransport = normalizedOutputFromTransport;
+        completionProjector = completionProjector == null
+            ? (request, completion, metadata) -> normalizedOutputFromTransport.apply(completion)
+            : completionProjector;
     }
 }

@@ -534,6 +534,9 @@ class PipelineYamlConfigLoaderTest {
                 await:
                   correlation:
                     strategy: "interactionId"
+                  completion:
+                    type: "com.example.FraudCheckAnswer"
+                    projector: "com.example.FraudCheckProjector"
                   transport:
                     type: "webhook"
                     request:
@@ -549,6 +552,8 @@ class PipelineYamlConfigLoaderTest {
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertNotNull(step.awaitConfig());
         assertEquals("interactionId", step.awaitConfig().correlation().strategy());
+        assertEquals("com.example.FraudCheckAnswer", step.awaitConfig().completion().type());
+        assertEquals("com.example.FraudCheckProjector", step.awaitConfig().completion().projector());
         assertEquals("webhook", step.awaitConfig().transport().type());
         assertNotNull(step.awaitConfig().transport().config().get("request"));
         assertNotNull(step.awaitConfig().transport().config().get("completion"));

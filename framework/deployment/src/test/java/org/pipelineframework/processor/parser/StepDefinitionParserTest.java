@@ -452,6 +452,9 @@ class StepDefinitionParserTest {
                 await:
                   correlation:
                     strategy: "interactionId"
+                  completion:
+                    type: "com.example.FraudCheckAnswer"
+                    projector: "com.example.FraudCheckProjector"
                   transport:
                     type: "webhook"
                     request:
@@ -468,6 +471,10 @@ class StepDefinitionParserTest {
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
         assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
+        assertEquals("com.example.FraudCheckAnswer",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("type"));
+        assertEquals("com.example.FraudCheckProjector",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("projector"));
         assertEquals("https://partner.example/check",
             ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));

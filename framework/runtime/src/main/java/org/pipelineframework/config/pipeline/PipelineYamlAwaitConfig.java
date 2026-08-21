@@ -21,11 +21,20 @@ package org.pipelineframework.config.pipeline;
  *
  * @param correlation correlation configuration
  * @param transport transport adapter configuration
+ * @param completion optional request-aware completion projection
  */
 public record PipelineYamlAwaitConfig(
     PipelineYamlAwaitCorrelation correlation,
-    PipelineYamlAwaitTransport transport
+    PipelineYamlAwaitTransport transport,
+    PipelineYamlAwaitCompletion completion
 ) {
+    public PipelineYamlAwaitConfig(
+        PipelineYamlAwaitCorrelation correlation,
+        PipelineYamlAwaitTransport transport
+    ) {
+        this(correlation, transport, null);
+    }
+
     public PipelineYamlAwaitConfig {
         correlation = correlation == null ? new PipelineYamlAwaitCorrelation("interactionId") : correlation;
         if (transport == null) {
