@@ -237,14 +237,7 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {
                 String actualChecksum = HexFormat.of().formatHex(digest.digest());
-                if (closeRequest.bytes() != writtenBytes) {
-                    throw new IllegalStateException("S3 written byte count mismatch: expected "
-                        + closeRequest.bytes() + " but wrote " + writtenBytes);
-                }
-                if (closeRequest.checksum() != null
-                        && !closeRequest.checksum().equalsIgnoreCase(actualChecksum)) {
-                    throw new IllegalStateException("S3 written payload checksum mismatch");
-                }
+                validateClose(closeRequest, actualChecksum);
                 if (buffer.size() > 0) {
                     uploadBufferedPart(buffer.size());
                 }
@@ -289,6 +282,28 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
                     Optional.empty());
                 return new ObjectWriteResult(reference, writtenBytes, actualChecksum, Instant.now());
             }, executor);
+        }
+
+        private void validateClose(ObjectWriteCloseRequest closeRequest, String actualChecksum) {
+            RuntimeException validationFailure = null;
+            if (closeRequest.bytes() != writtenBytes) {
+                validationFailure = new IllegalStateException("S3 written byte count mismatch: expected "
+                    + closeRequest.bytes() + " but wrote " + writtenBytes);
+            } else if (closeRequest.checksum() != null
+                    && !closeRequest.checksum().equalsIgnoreCase(actualChecksum)) {
+                validationFailure = new IllegalStateException("S3 written payload checksum mismatch");
+            }
+            if (validationFailure == null) {
+                return;
+            }
+            try {
+                client.abortMultipartUpload(abortRequest());
+            } catch (RuntimeException abortFailure) {
+                validationFailure.addSuppressed(abortFailure);
+            } finally {
+                completed = true;
+            }
+            throw validationFailure;
         }
 
         @Override

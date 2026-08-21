@@ -29,6 +29,8 @@ final class FileMappingOptions {
     static FileMappingOptions input(ProviderGenerationRequest request) { return new FileMappingOptions(request, "input"); }
     static FileMappingOptions output(ProviderGenerationRequest request) { return new FileMappingOptions(request, "output"); }
 
+    boolean structured() { return options.containsKey("fields"); }
+
     List<String> structuredFields() {
         Map<String, String> fields = fields(); Object configured = options.get("fields");
         if (!(configured instanceof List<?> values) || values.isEmpty()

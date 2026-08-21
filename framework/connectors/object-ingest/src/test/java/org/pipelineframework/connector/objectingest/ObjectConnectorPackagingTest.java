@@ -44,22 +44,28 @@ class ObjectConnectorPackagingTest {
         var executor = Executors.newSingleThreadExecutor();
         CountDownLatch running = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        executor.submit(() -> {
-            running.countDown();
-            release.await();
-            return null;
-        });
-        assertTrue(running.await(5, TimeUnit.SECONDS));
-        S3Client client = mock(S3Client.class);
-        S3ObjectConnector connector = new S3ObjectConnector(
-            new S3ObjectSourceProvider(client, executor, true),
-            new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024));
+        try {
+            executor.submit(() -> {
+                running.countDown();
+                release.await();
+                return null;
+            });
+            assertTrue(running.await(5, TimeUnit.SECONDS));
+            S3Client client = mock(S3Client.class);
+            S3ObjectConnector connector = new S3ObjectConnector(
+                new S3ObjectSourceProvider(client, executor, true),
+                new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024));
 
-        var stopped = connector.stop(ConnectorRuntimeContext.empty()).toCompletableFuture();
-        assertFalse(stopped.isDone());
-        release.countDown();
-        stopped.get(5, TimeUnit.SECONDS);
-        assertTrue(executor.isTerminated());
+            var stopped = connector.stop(ConnectorRuntimeContext.empty()).toCompletableFuture();
+            assertFalse(stopped.isDone());
+            release.countDown();
+            stopped.get(5, TimeUnit.SECONDS);
+            assertTrue(executor.isTerminated());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
     }
 
     private static void assertOperations(

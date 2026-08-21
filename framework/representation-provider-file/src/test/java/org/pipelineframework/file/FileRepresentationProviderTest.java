@@ -80,6 +80,47 @@ class FileRepresentationProviderTest {
     }
 
     @Test
+    void claimsBarePathInputOnlyBoundaryAndGeneratesSinglePayloadFacade() {
+        BoundaryRequest boundary = new BoundaryRequest(
+            "Read document", "example.ReadDocument", input, output, "UNARY_UNARY", Set.of(),
+            Map.of(
+                "inputMappings", List.of("file"),
+                "outputMappings", List.of(),
+                "inputFields", Map.of("content", "payload_ref"),
+                "outputFields", Map.of("content", "payload_ref")));
+        var mapping = provider.resolve(mapping(input)).orElseThrow();
+
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(
+            boundary, provider.claim(boundary).orElseThrow(), List.of(mapping), Map.of("input", Map.of())))
+            .getFirst().content();
+
+        assertTrue(source.contains("orderedInputs(java.util.Map.entry(\"content\", input.content()))"));
+        assertTrue(source.contains("paths -> delegate.process(paths.get(\"content\"))"));
+    }
+
+    @Test
+    void escapesC0ControlsInGeneratedFileOutputLiterals() {
+        BoundaryRequest boundary = boundary("UNARY_UNARY");
+        var inputMapping = provider.resolve(mapping(input)).orElseThrow();
+        var outputMapping = provider.resolve(mapping(output)).orElseThrow();
+        String controls = "line\nreturn\rtab\tback\bform\fnull\0vertical\013end";
+
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(
+            boundary, provider.claim(boundary).orElseThrow(), List.of(inputMapping, outputMapping),
+            Map.of("input", Map.of(), "output", Map.of("target", controls, "key", controls))))
+            .getFirst().content();
+
+        assertTrue(source.contains("line\\nreturn\\rtab\\tback\\bform\\fnull\\000vertical\\013end"));
+        assertTrue(!source.contains("\"line\nreturn"));
+        assertTrue(!source.contains("\r"));
+        assertTrue(!source.contains("\t"));
+        assertTrue(!source.contains("\b"));
+        assertTrue(!source.contains("\f"));
+        assertTrue(!source.contains("\0"));
+        assertTrue(!source.contains(String.valueOf((char) 0x0b)));
+    }
+
+    @Test
     void rejectsStructuredInputWithoutAPayloadReference() {
         CanonicalType metadata = new CanonicalType(
             "Metadata", "example.Metadata", CanonicalTypeShape.RECORD);

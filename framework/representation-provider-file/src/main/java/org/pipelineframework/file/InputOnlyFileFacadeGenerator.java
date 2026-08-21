@@ -12,7 +12,9 @@ final class InputOnlyFileFacadeGenerator {
 
     static String generate(ProviderGenerationRequest request, ResolvedRepresentation representation,
                            FileMappingOptions options) {
-        List<String> fields = options.structuredFields();
+        List<String> fields = options.structured()
+            ? options.structuredFields()
+            : List.of(options.payloadField());
         List<String> materializedFields = options.materializedFields(fields);
         if (Optional.of(FileRepresentationProvider.PATH).equals(representation.representationType()) && fields.size() != 1) {
             throw new IllegalStateException("Structured file input boundary '" + request.boundary().stepName()
@@ -43,7 +45,8 @@ final class InputOnlyFileFacadeGenerator {
 
                 @Override
                 public io.smallrye.mutiny.Uni<%s> process(%s input) {
-                    return files.withMaterialized(java.util.Map.ofEntries(%s), %dL,
+                    return files.withMaterialized(
+                        org.pipelineframework.file.FileRepresentationRuntime.orderedInputs(%s), %dL,
                         paths -> delegate.process(%s));
                 }
             }

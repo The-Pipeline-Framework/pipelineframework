@@ -1,9 +1,12 @@
 package org.pipelineframework.connector.objectingest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,18 +70,27 @@ class S3ObjectTargetProviderTest {
     }
 
     @Test
-    void rejectsCallerChecksumThatDoesNotMatchWrittenBytes() {
+    void abortsMultipartUploadWhenCallerChecksumDoesNotMatchWrittenBytes() {
         S3Client client = mock(S3Client.class);
         when(client.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
             .thenReturn(CreateMultipartUploadResponse.builder().uploadId("upload-1").build());
+        when(client.uploadPart(any(UploadPartRequest.class), any(RequestBody.class)))
+            .thenReturn(UploadPartResponse.builder().eTag("etag-1").build());
+        RuntimeException abortFailure = new RuntimeException("abort failed");
+        doThrow(abortFailure).when(client).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
         S3ObjectTargetProvider provider = new S3ObjectTargetProvider(client, Runnable::run, 5 * 1024 * 1024);
         ObjectWriteSession session = provider.open(openRequest()).toCompletableFuture().join();
-        session.write(ByteBuffer.wrap(new byte[] {1, 2, 3})).toCompletableFuture().join();
+        byte[] payload = new byte[5 * 1024 * 1024];
+        session.write(ByteBuffer.wrap(payload)).toCompletableFuture().join();
 
         CompletionException failure = assertThrows(CompletionException.class, () -> session.close(
-            new ObjectWriteCloseRequest(3, "not-the-digest", Map.of())).toCompletableFuture().join());
+            new ObjectWriteCloseRequest(payload.length, "not-the-digest", Map.of())).toCompletableFuture().join());
 
         assertEquals("S3 written payload checksum mismatch", failure.getCause().getMessage());
+        assertSame(abortFailure, failure.getCause().getSuppressed()[0]);
+        verify(client).uploadPart(any(UploadPartRequest.class), any(RequestBody.class));
+        verify(client).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+        verify(client, never()).completeMultipartUpload(any(CompleteMultipartUploadRequest.class));
     }
 
     @Test

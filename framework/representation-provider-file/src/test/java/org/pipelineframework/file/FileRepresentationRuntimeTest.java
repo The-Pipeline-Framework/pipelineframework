@@ -142,6 +142,23 @@ class FileRepresentationRuntimeTest {
     }
 
     @Test
+    void preservesNamedInputOrderInStagedDirectoryIndexes() {
+        FileRepresentationRuntime runtime = testRuntime((reference, maxBytes) ->
+            CompletableFuture.completedFuture(new MaterializedPayload(
+                reference, new byte[] {1}, reference.contentType(), reference.codec(), "checksum")));
+        Map<String, PayloadReference> inputs = FileRepresentationRuntime.orderedInputs(
+            Map.entry("zeta", reference("zeta.txt", 1)),
+            Map.entry("alpha", reference("alpha.txt", 1)));
+
+        List<String> directories = runtime.withMaterialized(inputs, 10, paths -> Uni.createFrom().item(List.of(
+            paths.get("zeta").getParent().getFileName().toString(),
+            paths.get("alpha").getParent().getFileName().toString()))).await().indefinitely();
+
+        assertTrue(directories.get(0).startsWith("0-zeta"));
+        assertTrue(directories.get(1).startsWith("1-alpha"));
+    }
+
+    @Test
     void materializesTrailingEmptyInputAfterBudgetIsConsumed() {
         PayloadReference invoice = reference("invoice.pdf", 3);
         PayloadReference emptyAttachment = reference("empty.txt", 0);

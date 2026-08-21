@@ -10,6 +10,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -117,6 +118,17 @@ public final class FileRepresentationRuntime {
                 .eventually(() -> cleanup(workspace.root())));
     }
 
+    @SafeVarargs
+    public static Map<String, PayloadReference> orderedInputs(
+        Map.Entry<String, PayloadReference>... inputs
+    ) {
+        LinkedHashMap<String, PayloadReference> ordered = new LinkedHashMap<>();
+        for (Map.Entry<String, PayloadReference> input : inputs) {
+            ordered.put(input.getKey(), input.getValue());
+        }
+        return Collections.unmodifiableMap(ordered);
+    }
+
     private Uni<Map<String, MaterializedInput>> materialize(
         List<Map.Entry<String, PayloadReference>> inputs,
         int index,
@@ -124,7 +136,7 @@ public final class FileRepresentationRuntime {
         LinkedHashMap<String, MaterializedInput> materialized
     ) {
         if (index == inputs.size()) {
-            return Uni.createFrom().item(Map.copyOf(materialized));
+            return Uni.createFrom().item(Collections.unmodifiableMap(new LinkedHashMap<>(materialized)));
         }
         Map.Entry<String, PayloadReference> input = inputs.get(index);
         PayloadReference requested = input.getValue();
@@ -186,7 +198,7 @@ public final class FileRepresentationRuntime {
                 Files.write(input, bytes);
                 inputs.put(entry.getKey(), input);
             }
-            return new StructuredWorkspace(workspace.root(), Map.copyOf(inputs));
+            return new StructuredWorkspace(workspace.root(), inputs);
         });
     }
 
@@ -410,7 +422,7 @@ public final class FileRepresentationRuntime {
 
     private record StructuredWorkspace(Path root, Map<String, Path> inputs) {
         private StructuredWorkspace {
-            inputs = Map.copyOf(inputs);
+            inputs = Collections.unmodifiableMap(new LinkedHashMap<>(inputs));
         }
     }
 
