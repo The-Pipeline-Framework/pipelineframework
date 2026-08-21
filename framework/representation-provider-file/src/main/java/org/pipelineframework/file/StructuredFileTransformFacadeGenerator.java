@@ -21,12 +21,17 @@ final class StructuredFileTransformFacadeGenerator {
         List<String> materializedFields = input.materializedFields(inputFields);
         List<String> outputFields = output.structuredFields();
         List<String> publishedFields = output.publishedFields(outputFields);
+        List<String> carriedFields = output.carriedFields(outputFields);
         if (publishedFields.isEmpty()) {
             throw new IllegalStateException("Structured file output boundary '" + request.boundary().stepName()
                 + "' requires at least one payload_ref field to publish.");
         }
         Set<String> materialized = Set.copyOf(materializedFields);
         Set<String> published = Set.copyOf(publishedFields);
+        Set<String> carried = Set.copyOf(carriedFields);
+        if (published.stream().anyMatch(carried::contains)) {
+            throw new IllegalStateException("Structured file output fields cannot be both published and carried.");
+        }
         String references = materializedFields.stream()
             .map(field -> "java.util.Map.entry(\"" + javaString(field) + "\", input." + field + "())")
             .collect(Collectors.joining(", "));
@@ -36,8 +41,9 @@ final class StructuredFileTransformFacadeGenerator {
         String outputPaths = publishedFields.stream()
             .map(field -> "java.util.Map.entry(\"" + javaString(field) + "\", result." + field + "())")
             .collect(Collectors.joining(", "));
-        String canonicalArguments = outputFields.stream().map(field -> published.contains(field)
-            ? "references.get(\"" + javaString(field) + "\")" : "result." + field + "()")
+        String canonicalArguments = outputFields.stream().map(field -> carried.contains(field)
+            ? "input." + field + "()"
+            : published.contains(field) ? "references.get(\"" + javaString(field) + "\")" : "result." + field + "()")
             .collect(Collectors.joining(", "));
         String canonicalInput = request.boundary().inputType().targetTypeName();
         String canonicalOutput = request.boundary().outputType().targetTypeName();

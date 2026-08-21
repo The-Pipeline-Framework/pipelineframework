@@ -99,7 +99,7 @@ public final class FileRepresentationProvider implements RepresentationProvider 
 
     @Override public ProviderSchemaFragment schema() {
         return new ProviderSchemaFragment(KEY, Optional.empty(), Optional.of("""
-            {"type":"object","properties":{"type":{"type":"string","minLength":1},"options":{"type":"object","properties":{"field":{"type":"string"},"fields":{"type":"array","minItems":1,"items":{"type":"string"}},"materializeFields":{"type":"array","minItems":1,"items":{"type":"string"}},"publishFields":{"type":"array","minItems":1,"items":{"type":"string"}},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
+            {"type":"object","properties":{"type":{"type":"string","minLength":1},"options":{"type":"object","properties":{"field":{"type":"string"},"fields":{"type":"array","minItems":1,"items":{"type":"string"}},"materializeFields":{"type":"array","minItems":1,"items":{"type":"string"}},"publishFields":{"type":"array","minItems":1,"items":{"type":"string"}},"carryFields":{"type":"array","minItems":1,"items":{"type":"string"}},"target":{"type":"string"},"key":{"type":"string"},"maxBytes":{"type":"integer","minimum":1}}}},"required":["type"]}
             """.trim()), Optional.of("File mappings adapt payload_ref fields to Path values; output mappings declare a publish target."));
     }
 

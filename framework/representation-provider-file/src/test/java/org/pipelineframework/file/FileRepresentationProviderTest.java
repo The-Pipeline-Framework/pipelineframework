@@ -105,6 +105,7 @@ class FileRepresentationProviderTest {
             "fields", inputFields, "materializeFields", List.of("invoice"), "maxBytes", 4096);
         Map<String, Object> outputOptions = Map.of(
             "fields", outputFields, "publishFields", List.of("image"),
+            "carryFields", List.of("documentId", "invoice", "catalogueHash"),
             "target", "analysis-media", "maxBytes", 8192);
         var inputMapping = provider.resolve(new RepresentationMappingRequest(
             "file", request, Optional.of("example.MaterializedVisionRequest"), Optional.empty(), inputOptions))
@@ -120,7 +121,7 @@ class FileRepresentationProviderTest {
         assertTrue(source.contains("files.transformStructured("));
         assertTrue(source.contains("new example.MaterializedVisionRequest(input.documentId(), paths.get(\"invoice\"), input.catalogueHash())"));
         assertTrue(source.contains("java.util.Map.entry(\"image\", result.image())"));
-        assertTrue(source.contains("new example.VisionResult(result.documentId(), result.invoice(), references.get(\"image\"), result.catalogueHash())"));
+        assertTrue(source.contains("new example.VisionResult(input.documentId(), input.invoice(), references.get(\"image\"), input.catalogueHash())"));
         assertTrue(source.contains("\"analysis-media\", 8192L"));
     }
 
