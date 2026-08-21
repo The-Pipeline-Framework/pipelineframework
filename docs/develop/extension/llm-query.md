@@ -45,6 +45,33 @@ types:
 
 `AgentCall` contains only `binding`, `operation`, and canonical `argumentsJson`. It has no provider identity, credentials, runtime handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
 
+For a one-turn application completion with no tool selection, use an ordinary non-union output and
+omit `callables`. TPF exposes one required `complete` alternative whose schema is that authored output
+type. Configuring `callables` for this mode is rejected.
+
+When trusted input context must accompany a smaller model-authored value, the output may instead be a
+record envelope and `config.completion` may name the model-authored field plus input paths to carry:
+
+```yaml
+    output: ReviewReady
+    config:
+      modelInputExcludes:
+        documentId: documentId
+        invoice: invoice
+      completion:
+        field: review
+        documentId: documentId
+        invoice: invoice
+      instructions: Analyse the evidence and return InvoiceReview.
+```
+
+Here the model schema is only `ReviewReady.review`; `documentId` and `invoice` are copied from the
+typed Query input after schema validation. `modelInputExcludes` also keeps those paths out of the
+model-state JSON and prevents excluded `payload_ref` values from being materialized as media. Every
+other envelope field must have an explicit mapping, and dotted paths address nested record fields.
+This projection does not perform another inference or allow model output to overwrite trusted
+application context.
+
 ## Configure the Query
 
 The named LLM binding owns model configuration. The Query step owns its instructions and explicitly exposed callable catalogue:

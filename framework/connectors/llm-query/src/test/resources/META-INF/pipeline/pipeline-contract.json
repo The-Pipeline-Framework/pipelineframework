@@ -44,6 +44,16 @@
         ]
       }
     },
+    "ReviewEnvelope": {
+      "definition": {
+        "id": "ReviewEnvelope",
+        "kind": "record",
+        "fields": [
+          {"name":"invoiceId","type":{"kind":"scalar","id":"string"}},
+          {"name":"review","type":{"kind":"named","id":"ReviewReady"}}
+        ]
+      }
+    },
     "ToolArguments": {
       "definition": {
         "id": "ToolArguments",
