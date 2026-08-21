@@ -252,6 +252,7 @@ class PipelineBranchingMetadataGeneratorTest {
             "com.example.common.domain.ArchiveResult",
             aspect.getAsJsonArray("acceptedRuntimeClasses").get(0).getAsString());
         assertFalse(aspect.get("terminal").getAsBoolean());
+        assertTrue(aspect.get("afterStepObserver").getAsBoolean());
     }
 
     private static PipelineStepModel stepModel(

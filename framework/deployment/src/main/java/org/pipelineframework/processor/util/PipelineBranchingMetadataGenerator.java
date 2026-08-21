@@ -183,7 +183,8 @@ public final class PipelineBranchingMetadataGenerator {
                 List.of(),
                 List.of(),
                 List.of(),
-                false));
+                false,
+                model.aspectPosition() == org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP));
         }
     }
 
@@ -246,7 +247,8 @@ public final class PipelineBranchingMetadataGenerator {
             variants(step.inputVariants()),
             variants(step.acceptedVariants()),
             variants(step.producedVariants()),
-            step.terminal());
+            step.terminal(),
+            false);
     }
 
     private List<String> invocationRuntimeClasses(
@@ -548,7 +550,8 @@ public final class PipelineBranchingMetadataGenerator {
         List<VariantMetadata> inputVariants,
         List<VariantMetadata> acceptedVariants,
         List<VariantMetadata> producedVariants,
-        boolean terminal
+        boolean terminal,
+        boolean afterStepObserver
     ) {
     }
 

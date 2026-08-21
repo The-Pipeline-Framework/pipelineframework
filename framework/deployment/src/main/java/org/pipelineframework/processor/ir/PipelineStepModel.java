@@ -57,14 +57,15 @@ public record PipelineStepModel(
         MapperFallbackMode mapperFallbackMode,
         PipelineTemplateStepExecution remoteExecution,
         ServiceApiKind serviceApiKind,
-        ReactiveReturnKind reactiveReturnKind
+        ReactiveReturnKind reactiveReturnKind,
+        AspectPosition aspectPosition
 ) {
     /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
     public PipelineStepModel withServiceClassName(ClassName replacement) {
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, serviceApiKind, reactiveReturnKind);
+            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition);
     }
 
     /**
@@ -88,6 +89,35 @@ public record PipelineStepModel(
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      * @deprecated prefer {@link Builder} for construction.
      */
+    @SuppressWarnings("ConstantValue")
+    @Deprecated
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            Optional<String> delegateMethodName,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind) {
+        this(serviceName, generatedName, servicePackage, serviceClassName, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
+            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, null);
+    }
+
     @SuppressWarnings("ConstantValue")
     @Deprecated
     public PipelineStepModel(String serviceName,
@@ -155,7 +185,8 @@ public record PipelineStepModel(
             MapperFallbackMode mapperFallbackMode,
             PipelineTemplateStepExecution remoteExecution,
             ServiceApiKind serviceApiKind,
-            ReactiveReturnKind reactiveReturnKind) {
+            ReactiveReturnKind reactiveReturnKind,
+            AspectPosition aspectPosition) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -195,6 +226,7 @@ public record PipelineStepModel(
         this.remoteExecution = remoteExecution;
         this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
         this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
+        this.aspectPosition = aspectPosition;
     }
 
     /**
@@ -443,6 +475,7 @@ public record PipelineStepModel(
         private PipelineTemplateStepExecution remoteExecution;
         private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
         private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
+        private AspectPosition aspectPosition;
 
         /**
          * Sets the service name.
@@ -573,6 +606,12 @@ public record PipelineStepModel(
          */
         public Builder sideEffect(boolean sideEffect) {
             this.sideEffect = sideEffect;
+            return this;
+        }
+
+        /** Records whether a synthetic observer runs before or after its authored parent. */
+        public Builder aspectPosition(AspectPosition aspectPosition) {
+            this.aspectPosition = aspectPosition;
             return this;
         }
 
@@ -743,7 +782,8 @@ public record PipelineStepModel(
                 mapperFallbackMode,
                 remoteExecution,
                 serviceApiKind,
-                reactiveReturnKind);
+                reactiveReturnKind,
+                aspectPosition);
         }
     }
     
@@ -775,7 +815,8 @@ public record PipelineStepModel(
             mapperFallbackMode,
             remoteExecution,
             serviceApiKind,
-            reactiveReturnKind
+            reactiveReturnKind,
+            aspectPosition
         );
     }
 

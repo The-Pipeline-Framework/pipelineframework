@@ -35,6 +35,7 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.branching.PipelineBranchRoutingException;
 import org.pipelineframework.branching.PipelineBranchingRegistry;
+import org.pipelineframework.branching.BranchExecutionTracker;
 import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.cache.CacheKeyTarget;
 import org.pipelineframework.cache.CachePolicy;
@@ -145,6 +146,25 @@ class PipelineStepExecutor {
         String definitionId,
         int definitionTerminalStepIndex,
         java.util.Optional<PipelineInvocationContext> invocationContext) {
+        return applyStep(step, current, parallelismPolicy, maxConcurrency, stepTelemetry, cacheReadSupport,
+            contextSnapshot, awaitContextSnapshot, definitionId, definitionTerminalStepIndex,
+            invocationContext, new BranchExecutionTracker());
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        java.util.Optional<PipelineInvocationContext> invocationContext,
+        BranchExecutionTracker branchExecutionTracker) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
@@ -167,7 +187,8 @@ class PipelineStepExecutor {
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOne(stepOneToOne, current, parallel, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext,
+                branchExecutionTracker);
         } else if (resolvedStep instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
@@ -190,7 +211,8 @@ class PipelineStepExecutor {
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
             var adapter = adaptReactiveService((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOne(adapter, current, false, maxConcurrency, stepTelemetry, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext,
+                branchExecutionTracker);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
             var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
             return applyOneToMany(adapter, current, false, maxConcurrency, stepTelemetry,
@@ -465,7 +487,8 @@ class PipelineStepExecutor {
             contextSnapshot,
             awaitContextSnapshot,
             branchingDescriptor,
-            java.util.Optional.empty());
+            java.util.Optional.empty(),
+            new BranchExecutionTracker());
     }
 
     @SuppressWarnings({"unchecked"})
@@ -480,7 +503,8 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         StepBranchingDescriptor branchingDescriptor,
-        java.util.Optional<PipelineInvocationContext> invocationContext) {
+        java.util.Optional<PipelineInvocationContext> invocationContext,
+        BranchExecutionTracker branchExecutionTracker) {
         return applyOneToOne(
             step,
             current,
@@ -491,7 +515,8 @@ class PipelineStepExecutor {
             contextSnapshot,
             awaitContextSnapshot,
             branchingDescriptor,
-            invocationContext);
+            invocationContext,
+            branchExecutionTracker);
     }
 
     @SuppressWarnings({"unchecked"})
@@ -505,14 +530,20 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         StepBranchingDescriptor branchingDescriptor,
-        java.util.Optional<PipelineInvocationContext> invocationContext) {
+        java.util.Optional<PipelineInvocationContext> invocationContext,
+        BranchExecutionTracker branchExecutionTracker) {
         if (current instanceof Uni<?>) {
             Uni<I> input = telemetry.consume(step.getClass(), (Uni<I>) current);
             Uni<O> result = input
                 .onItem()
                 .transformToUni(item -> {
+                    if (skipAfterObserver(branchingDescriptor, item, branchExecutionTracker)) {
+                        branchExecutionTracker.recordSkipped(item);
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
+                    }
                     I applicable = applicableInput(branchingDescriptor, item);
                     if (applicable == null) {
+                        branchExecutionTracker.recordSkipped(item);
                         return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
                     }
                     var replayScope = telemetry.beginReplayStep(step.getClass(), false, applicable);
@@ -526,7 +557,10 @@ class PipelineStepExecutor {
                         replayScope,
                         invocationContext)
                         .onItem().transformToUni(enforced -> applyCachePolicy(step, enforced, contextSnapshot))
-                        .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
+                        .onItem().invoke(output -> {
+                            branchExecutionTracker.recordExecuted(output);
+                            telemetry.recordOutput(replayScope, output);
+                        });
                     return telemetry.instrument(step.getClass(), scoped, false, replayScope);
                 })
                 ;
@@ -538,8 +572,13 @@ class PipelineStepExecutor {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
+                    if (skipAfterObserver(branchingDescriptor, item, branchExecutionTracker)) {
+                        branchExecutionTracker.recordSkipped(item);
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
+                    }
                     I applicable = applicableInput(branchingDescriptor, item);
                     if (applicable == null) {
+                        branchExecutionTracker.recordSkipped(item);
                         return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
                     }
                     var replayScope = telemetry.beginReplayStep(step.getClass(), true, applicable);
@@ -554,7 +593,10 @@ class PipelineStepExecutor {
                             invocationContext)
                             .onItem().transformToUni(enforced ->
                                 applyCachePolicy(step, enforced, contextSnapshot))
-                            .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
+                            .onItem().invoke(output -> {
+                                branchExecutionTracker.recordExecuted(output);
+                                telemetry.recordOutput(replayScope, output);
+                            });
                         return telemetry.instrument(
                             step.getClass(), telemetry.produce(step.getClass(), result), true, replayScope);
                     })
@@ -564,8 +606,13 @@ class PipelineStepExecutor {
             return multi
                 .onItem()
                 .transformToUni(item -> {
+                    if (skipAfterObserver(branchingDescriptor, item, branchExecutionTracker)) {
+                        branchExecutionTracker.recordSkipped(item);
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
+                    }
                     I applicable = applicableInput(branchingDescriptor, item);
                     if (applicable == null) {
+                        branchExecutionTracker.recordSkipped(item);
                         return skippedUni(step.getClass(), item, branchingDescriptor, telemetry);
                     }
                     var replayScope = telemetry.beginReplayStep(step.getClass(), true, applicable);
@@ -580,7 +627,10 @@ class PipelineStepExecutor {
                         invocationContext)
                         .onItem().transformToUni(enforced ->
                             applyCachePolicy(step, enforced, contextSnapshot))
-                        .onItem().invoke(output -> telemetry.recordOutput(replayScope, output));
+                        .onItem().invoke(output -> {
+                            branchExecutionTracker.recordExecuted(output);
+                            telemetry.recordOutput(replayScope, output);
+                        });
                     return telemetry.instrument(
                         step.getClass(), telemetry.produce(step.getClass(), result), true, replayScope);
                 })
@@ -1063,6 +1113,16 @@ class PipelineStepExecutor {
 
     private static boolean accepts(StepBranchingDescriptor branchingDescriptor, Object item) {
         return branchingDescriptor == null || branchingDescriptor.accepts(item);
+    }
+
+    private static boolean skipAfterObserver(
+        StepBranchingDescriptor branchingDescriptor,
+        Object item,
+        BranchExecutionTracker branchExecutionTracker
+    ) {
+        return branchingDescriptor != null
+            && branchingDescriptor.afterStepObserver()
+            && branchExecutionTracker.wasLastStepSkipped(item);
     }
 
     @SuppressWarnings("unchecked")

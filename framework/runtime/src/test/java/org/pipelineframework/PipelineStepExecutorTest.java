@@ -38,6 +38,7 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.BranchExecutionTracker;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.cache.CacheKeyStrategy;
@@ -459,6 +460,59 @@ class PipelineStepExecutorTest {
         assertTrue(output instanceof DigitalOrder);
         assertEquals("o-1", ((DigitalOrder) output).id());
         assertEquals(0, step.invocations());
+    }
+
+    @Test
+    void afterStepObserverSkipsAnItemWhenItsParentWasSkipped() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        ReserveStockStep parent = new ReserveStockStep();
+        DigitalOrder input = new DigitalOrder("o-branch");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(), PhysicalOrder.class,
+            List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()), List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null, null,
+            parentDescriptor, java.util.Optional.empty(), tracker);
+        Object skippedParentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        CountingIdentityStep<DigitalOrder> observer = new CountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Reserve Stock", observer.getClass().getName(), DigitalOrder.class.getName(),
+            DigitalOrder.class, List.of("DigitalOrder"), List.of(DigitalOrder.class.getName()),
+            List.of(DigitalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneUnchecked(
+            observer, Uni.createFrom().item(skippedParentOutput), false, 16, null, null, null, null, null,
+            observerDescriptor, java.util.Optional.empty(), tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, observer.invocations());
+    }
+
+    @Test
+    void afterStepObserverRunsWhenItsParentExecuted() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        ReserveStockStep parent = new ReserveStockStep();
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(), PhysicalOrder.class,
+            List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()), List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneUnchecked(
+            parent, Uni.createFrom().item(new PhysicalOrder("o-stock")), false, 16, null, null, null, null, null,
+            parentDescriptor, java.util.Optional.empty(), tracker);
+        Object parentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        CountingIdentityStep<StockReserved> observer = new CountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Reserve Stock", observer.getClass().getName(), StockReserved.class.getName(),
+            StockReserved.class, List.of("StockReserved"), List.of(StockReserved.class.getName()),
+            List.of(StockReserved.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneUnchecked(
+            observer, Uni.createFrom().item(parentOutput), false, 16, null, null, null, null, null,
+            observerDescriptor, java.util.Optional.empty(), tracker);
+
+        assertEquals(parentOutput, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, observer.invocations());
     }
 
     @Test
@@ -1385,6 +1439,20 @@ class PipelineStepExecutorTest {
         public Uni<StockReserved> applyOneToOne(PhysicalOrder in) {
             invocations.incrementAndGet();
             return Uni.createFrom().item(new StockReserved(in.id()));
+        }
+
+        int invocations() {
+            return invocations.get();
+        }
+    }
+
+    static final class CountingIdentityStep<T> extends ConfigurableStep implements StepOneToOne<T, T> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<T> applyOneToOne(T input) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item(input);
         }
 
         int invocations() {

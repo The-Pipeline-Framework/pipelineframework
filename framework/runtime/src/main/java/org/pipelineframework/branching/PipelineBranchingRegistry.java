@@ -92,7 +92,8 @@ public class PipelineBranchingRegistry {
                 step.inputVariants(),
                 step.acceptedVariants(),
                 step.producedVariants(),
-                step.terminal());
+                step.terminal(),
+                step.afterStepObserver());
             DescriptorKey key = new DescriptorKey(
                 step.definitionId(), step.definitionTerminalStepIndex(), runtimeStepClass);
             StepBranchingDescriptor existing = descriptors.put(key, descriptor);
