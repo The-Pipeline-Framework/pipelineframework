@@ -135,17 +135,36 @@ class LangChain4jOllamaQueryConnectorTest {
                 assertEquals(ResponseFormatType.JSON, request.responseFormat().type());
                 JsonObjectSchema schema = assertInstanceOf(
                     JsonObjectSchema.class, request.responseFormat().jsonSchema().rootElement());
-                assertTrue(schema.properties().containsKey("review"));
-                assertTrue(schema.definitions().containsKey("InvoiceReview"));
-                return ChatResponse.builder().aiMessage(AiMessage.from("{\"review\":{}}")).build();
+                assertEquals(List.of("facts", "recommendation", "note"), schema.required());
+                JsonObjectSchema facts = assertInstanceOf(
+                    JsonObjectSchema.class, schema.definitions().get("InvoiceFacts"));
+                assertEquals(List.of("supplier", "invoiceNumber", "totalAmount", "diagnostic"), facts.required());
+                JsonObjectSchema recommendation = assertInstanceOf(
+                    JsonObjectSchema.class, schema.definitions().get("PropertyRecommendation"));
+                assertEquals(List.of("propertyId", "explanation"), recommendation.required());
+                return ChatResponse.builder().aiMessage(AiMessage.from("""
+                    {"facts":{"supplier":"Acme","invoiceNumber":"INV-1","totalAmount":12.34,
+                    "diagnostic":"Header text."},"recommendation":{"propertyId":"home",
+                    "explanation":"Address match."},"note":"Friday callout."}
+                    """)).build();
             }
         };
         var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
         LlmToolDefinition completion = new LlmToolDefinition("complete", "Complete", """
-            {"type":"object","properties":{"review":{"$ref":"#/$defs/InvoiceReview"}},
-             "required":["review"],"additionalProperties":false,
-             "$defs":{"InvoiceReview":{"type":"object","properties":{},
-             "required":[],"additionalProperties":false}}}
+            {"type":"object","properties":{
+              "facts":{"$ref":"#/$defs/InvoiceFacts"},
+              "recommendation":{"$ref":"#/$defs/PropertyRecommendation"},
+              "note":{"type":"string"}},
+             "required":["facts","recommendation","note"],"additionalProperties":false,
+             "$defs":{
+               "InvoiceFacts":{"type":"object","properties":{
+                 "supplier":{"type":"string"},"invoiceNumber":{"type":"string"},
+                 "totalAmount":{"type":"number"},"diagnostic":{"type":"string"}},
+                 "required":["supplier","invoiceNumber","totalAmount","diagnostic"],
+                 "additionalProperties":false},
+               "PropertyRecommendation":{"type":"object","properties":{
+                 "propertyId":{"type":"string"},"explanation":{"type":"string"}},
+                 "required":["propertyId","explanation"],"additionalProperties":false}}}
             """);
 
         assertTrue(client.supportsNativeStructuredOutput(List.of(completion)));
@@ -155,7 +174,7 @@ class LangChain4jOllamaQueryConnectorTest {
             .toCompletableFuture().join();
 
         assertEquals("complete", proposal.alias());
-        assertEquals("{\"review\":{}}", proposal.argumentsJson());
+        assertTrue(proposal.argumentsJson().contains("\"facts\""));
         assertEquals(1, calls.get());
     }
 
