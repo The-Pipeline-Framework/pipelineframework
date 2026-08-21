@@ -29,10 +29,13 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.AspectPosition;
+import org.pipelineframework.processor.ir.AspectScope;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -190,6 +193,65 @@ class PipelineBranchingMetadataGeneratorTest {
         assertEquals(
             "com.example.order.query.pipeline.LookupOrderQueryClientStep",
             metadata.getAsJsonArray("steps").get(1).getAsJsonObject().get("runtimeStepClass").getAsString());
+    }
+
+    @Test
+    void writesApplicabilityMetadataForConcreteAspectObservers() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-aspects");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(true);
+        PipelineStepModel authored = stepModel(
+            "ArchiveInvoice", "com.example.order.archive", "ArchiveAttempt", "ArchiveResult");
+        ctx.setStepModels(List.of(authored));
+        ctx.setAspectModels(List.of(
+            new PipelineAspectModel(
+                "persistence",
+                AspectScope.GLOBAL,
+                AspectPosition.AFTER_STEP,
+                0,
+                Map.of(
+                    "pluginImplementationClass", "org.pipelineframework.plugin.persistence.PersistenceService",
+                    "enabledTargets", List.of("LOCAL_CLIENT_STEP"))),
+            new PipelineAspectModel(
+                "remote-step-observer",
+                AspectScope.STEPS,
+                AspectPosition.AFTER_STEP,
+                0,
+                Map.of(
+                    "pluginImplementationClass", "com.example.RemoteObserver",
+                    "targetSteps", List.of("StepOwnedByAnotherDefinition")))));
+        ctx.setBranchingPlan(new PipelineBranchingPlan(
+            true,
+            0,
+            List.of(new PipelineBranchingPlan.BranchStep(
+                0,
+                "Archive Invoice",
+                "AfterBuildArchive",
+                "ArchiveResult",
+                List.of("ArchiveAttempt"),
+                List.of("ArchiveResult"),
+                List.of(ClassName.get("com.example.common.domain", "ArchiveAttempt")),
+                true))));
+
+        new PipelineBranchingMetadataGenerator(processingEnv).writeBranchingMetadata(ctx);
+
+        JsonObject metadata = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/branching.json")), JsonObject.class);
+        assertEquals(2, metadata.getAsJsonArray("steps").size());
+        JsonObject aspect = metadata.getAsJsonArray("steps").get(1).getAsJsonObject();
+        assertEquals("PersistenceArchiveResultSideEffect", aspect.get("step").getAsString());
+        assertEquals(
+            "com.example.order.archive.pipeline.PersistenceArchiveResultSideEffectLocalClientStep",
+            aspect.get("runtimeStepClass").getAsString());
+        assertEquals(
+            "com.example.common.domain.ArchiveResult",
+            aspect.getAsJsonArray("acceptedRuntimeClasses").get(0).getAsString());
+        assertFalse(aspect.get("terminal").getAsBoolean());
     }
 
     private static PipelineStepModel stepModel(
