@@ -40,6 +40,7 @@ class FileRepresentationProviderTest {
             .getFirst().content();
 
         assertEquals("UNARY_STREAMING", claim.stepContract().orElseThrow().cardinality());
+        assertTrue(source.contains("@io.quarkus.arc.Unremovable"));
         assertTrue(source.contains("files.oneToMany(input.content(), 1024L"));
         assertTrue(source.contains("\"rendered\", 2048L, java.util.Optional.empty()"));
         assertTrue(source.contains("new example.Rendered(reference)"));
@@ -75,6 +76,7 @@ class FileRepresentationProviderTest {
             .getFirst().content();
 
         assertTrue(source.contains("files.withMaterialized("));
+        assertTrue(source.contains("@io.quarkus.arc.Unremovable"));
         assertTrue(source.contains("java.util.Map.entry(\"invoice\", input.invoice())"));
         assertTrue(source.contains("java.util.Map.entry(\"catalogue\", input.catalogue())"));
         assertTrue(source.contains("new example.MaterializedInvoiceFiles(input.documentId(), input.originalFilename(), paths.get(\"invoice\"), paths.get(\"catalogue\"))"));
@@ -120,6 +122,46 @@ class FileRepresentationProviderTest {
         assertTrue(!source.contains("\f"));
         assertTrue(!source.contains("\0"));
         assertTrue(!source.contains(String.valueOf((char) 0x0b)));
+    }
+
+    @Test
+    void structuredInputCanCarryAPayloadReferenceWithoutMaterializingIt() {
+        CanonicalType invoiceFiles = new CanonicalType(
+            "InvoiceFiles", "example.InvoiceFiles", CanonicalTypeShape.RECORD);
+        CanonicalType analysis = new CanonicalType(
+            "InvoiceAnalysisRequest", "example.InvoiceAnalysisRequest", CanonicalTypeShape.RECORD);
+        List<String> fields = List.of(
+            "documentId", "invoice", "catalogue", "invoiceReference");
+        BoundaryRequest boundary = new BoundaryRequest(
+            "Prepare invoice analysis", "example.PrepareInvoiceAnalysis", invoiceFiles, analysis,
+            "UNARY_UNARY", Set.of(),
+            Map.of(
+                "inputMappings", List.of("file"),
+                "outputMappings", List.of(),
+                "inputFields", Map.of(
+                    "documentId", "uuid",
+                    "invoice", "payload_ref",
+                    "catalogue", "payload_ref",
+                    "invoiceReference", "payload_ref"),
+                "outputFields", Map.of("documentId", "uuid")));
+        Map<String, Object> options = Map.of(
+            "fields", fields,
+            "materializeFields", List.of("invoice", "catalogue"));
+        var mapping = provider.resolve(new RepresentationMappingRequest(
+            "file", invoiceFiles, Optional.of("example.MaterializedInvoiceFiles"), Optional.empty(),
+            options)).orElseThrow();
+        var claim = provider.claim(boundary).orElseThrow();
+
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(
+            boundary, claim, List.of(mapping), Map.of("input", options)))
+            .getFirst().content();
+
+        assertTrue(source.contains("java.util.Map.entry(\"invoice\", input.invoice())"));
+        assertTrue(source.contains("java.util.Map.entry(\"catalogue\", input.catalogue())"));
+        org.junit.jupiter.api.Assertions.assertFalse(source.contains(
+            "java.util.Map.entry(\"invoiceReference\", input.invoiceReference())"));
+        assertTrue(source.contains(
+            "new example.MaterializedInvoiceFiles(input.documentId(), paths.get(\"invoice\"), paths.get(\"catalogue\"), input.invoiceReference())"));
     }
 
     @Test
