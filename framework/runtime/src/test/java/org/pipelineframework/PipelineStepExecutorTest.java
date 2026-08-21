@@ -18,6 +18,7 @@ package org.pipelineframework;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +39,10 @@ import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.branching.PipelineBranchRoutingException;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.branching.StepBranchingDescriptor;
+import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.cache.CacheKeyTarget;
+import org.pipelineframework.cache.CacheReadBypass;
+import org.pipelineframework.cache.PipelineCacheReader;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
@@ -131,6 +136,102 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void reactiveServiceCacheReadBypassSurvivesRuntimeAdaptation() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        AtomicInteger serviceCalls = new AtomicInteger();
+        ReactiveService<String, String> service = new BypassReactiveService(serviceCalls);
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "cached"),
+            List.of((item, context) -> Optional.of("key")),
+            "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            service,
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, cacheReads.get());
+        assertEquals(1, serviceCalls.get());
+    }
+
+    @Test
+    void reactiveServiceCacheTargetSurvivesRuntimeAdaptation() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        CacheKeyStrategy unsafeFallback = (item, context) -> Optional.of("wrong");
+        CacheKeyStrategy targeted = new CacheKeyStrategy() {
+            @Override
+            public Optional<String> resolveKey(Object item, PipelineContext context) {
+                return Optional.of("right");
+            }
+
+            @Override
+            public boolean supportsTarget(Class<?> targetType) {
+                return String.class.equals(targetType);
+            }
+        };
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "cached"), List.of(unsafeFallback, targeted), "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            new TargetedReactiveService(),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals("cached", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, cacheReads.get());
+    }
+
+    private static PipelineCacheReader cacheReader(AtomicInteger reads, String value) {
+        return new PipelineCacheReader() {
+            @Override
+            public Uni<Optional<Object>> get(String key) {
+                reads.incrementAndGet();
+                return Uni.createFrom().item(Optional.of(value));
+            }
+
+            @Override
+            public Uni<Boolean> exists(String key) {
+                return Uni.createFrom().item(false);
+            }
+        };
+    }
+
+    private record BypassReactiveService(AtomicInteger calls)
+            implements ReactiveService<String, String>, CacheReadBypass {
+        @Override
+        public Uni<String> process(String input) {
+            calls.incrementAndGet();
+            return Uni.createFrom().item(input + "-service");
+        }
+    }
+
+    private static final class TargetedReactiveService
+            implements ReactiveService<String, String>, CacheKeyTarget {
+        @Override
+        public Uni<String> process(String input) {
+            return Uni.createFrom().item(input + "-service");
+        }
+
+        @Override
+        public Class<?> cacheKeyTargetType() {
+            return String.class;
+        }
     }
 
     @Test

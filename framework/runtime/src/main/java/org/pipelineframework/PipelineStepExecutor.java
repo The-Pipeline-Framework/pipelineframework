@@ -183,7 +183,7 @@ class PipelineStepExecutor {
             return applyManyToMany(manyToMany, current, stepTelemetry,
                 contextSnapshot, awaitContextSnapshot);
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
-            var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
+            var adapter = adaptReactiveService((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOne(adapter, current, false, maxConcurrency, stepTelemetry, cacheReadSupport,
                 contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
@@ -201,7 +201,17 @@ class PipelineStepExecutor {
         }
     }
 
-    private static final class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
+    private static StepOneToOne<Object, Object> adaptReactiveService(ReactiveService<Object, Object> service) {
+        if (service instanceof CacheReadBypass) {
+            return new CacheReadBypassReactiveServiceStepAdapter(service);
+        }
+        if (service instanceof CacheKeyTarget cacheKeyTarget) {
+            return new CacheKeyTargetReactiveServiceStepAdapter(service, cacheKeyTarget.cacheKeyTargetType());
+        }
+        return new ReactiveServiceStepAdapter(service);
+    }
+
+    private static class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
         private final ReactiveService<Object, Object> service;
 
         private ReactiveServiceStepAdapter(ReactiveService<Object, Object> service) {
@@ -211,6 +221,33 @@ class PipelineStepExecutor {
         @Override
         public Uni<Object> applyOneToOne(Object in) {
             return service.process(in);
+        }
+    }
+
+    private static final class CacheReadBypassReactiveServiceStepAdapter extends ReactiveServiceStepAdapter
+        implements CacheReadBypass {
+
+        private CacheReadBypassReactiveServiceStepAdapter(ReactiveService<Object, Object> service) {
+            super(service);
+        }
+    }
+
+    private static final class CacheKeyTargetReactiveServiceStepAdapter extends ReactiveServiceStepAdapter
+        implements CacheKeyTarget {
+
+        private final Class<?> targetType;
+
+        private CacheKeyTargetReactiveServiceStepAdapter(
+            ReactiveService<Object, Object> service,
+            Class<?> targetType
+        ) {
+            super(service);
+            this.targetType = targetType;
+        }
+
+        @Override
+        public Class<?> cacheKeyTargetType() {
+            return targetType;
         }
     }
 
