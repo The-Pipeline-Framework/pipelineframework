@@ -17,7 +17,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -45,16 +44,9 @@ public final class FileRepresentationRuntime {
     private volatile ObjectTargetRegistry targets;
 
     @Inject
-    public FileRepresentationRuntime(Instance<PayloadMaterializer> materializers,
-                                     ConnectorBindingRegistry connectorBindings) {
-        Objects.requireNonNull(materializers, "materializers");
-        this.materializer = () -> {
-            if (!materializers.isResolvable()) {
-                throw new IllegalStateException("exactly one PayloadMaterializer is required for file representations");
-            }
-            return materializers.get();
-        };
+    public FileRepresentationRuntime(ConnectorBindingRegistry connectorBindings) {
         this.connectorBindings = Objects.requireNonNull(connectorBindings, "connectorBindings");
+        this.materializer = () -> connectorBindings::materialize;
     }
 
     FileRepresentationRuntime(PayloadMaterializer materializer, ConnectorBindingRegistry connectorBindings,
