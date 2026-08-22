@@ -852,13 +852,17 @@ public class PipelineYamlConfigLoader {
     }
 
     private PipelineYamlAwaitCompletion readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
-        Object completionObj = awaitMap.get("completion");
-        if (completionObj == null) {
+        if (!awaitMap.containsKey("completion")) {
             return null;
         }
+        Object completionObj = awaitMap.get("completion");
         if (!(completionObj instanceof Map<?, ?> completionMap)) {
             throw new IllegalArgumentException(
                 "step '" + stepName + "' await.completion must be defined as a map");
+        }
+        if (!completionMap.keySet().equals(java.util.Set.of("type", "projector"))) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion supports only type and projector");
         }
         String type = readString(completionMap, "type");
         String projector = readString(completionMap, "projector");

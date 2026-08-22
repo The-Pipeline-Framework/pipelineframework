@@ -560,6 +560,32 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsNullAndUnknownAwaitCompletionConfigurationAtRuntime() {
+        for (String completion : List.of(
+            "completion: null",
+            "completion: {type: com.example.Answer, projector: com.example.Projector, extra: value}")) {
+            assertThrows(IllegalArgumentException.class, () -> new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                transport: GRPC
+                platform: COMPUTE
+                steps:
+                  - name: Fraud Check
+                    kind: await
+                    cardinality: ONE_TO_ONE
+                    inputTypeName: com.example.Request
+                    outputTypeName: com.example.Decision
+                    timeout: PT10M
+                    await:
+                      correlation:
+                        strategy: interactionId
+                      %s
+                      transport:
+                        type: interaction-api
+                """.formatted(completion))), completion);
+        }
+    }
+
+    @Test
     void rejectsAwaitDispatchConfigurationAtRuntime() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

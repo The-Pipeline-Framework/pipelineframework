@@ -540,14 +540,14 @@ public class AwaitStepDescriptorFactory {
         String serviceName,
         String projectorClassName
     ) {
+        Class<?> projectorClass = loadClass(projectorClassName).orElseThrow(() -> new IllegalArgumentException(
+            "Await step " + serviceName + " could not load completion projector " + projectorClassName));
+        if (!AwaitCompletionProjector.class.isAssignableFrom(projectorClass)) {
+            throw new IllegalArgumentException(
+                "Await step " + serviceName + " completion projector " + projectorClassName
+                    + " must implement " + AwaitCompletionProjector.class.getName());
+        }
         try {
-            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-            Class<?> projectorClass = Class.forName(projectorClassName, true, classLoader);
-            if (!AwaitCompletionProjector.class.isAssignableFrom(projectorClass)) {
-                throw new IllegalArgumentException(
-                    "Await step " + serviceName + " completion projector " + projectorClassName
-                        + " must implement " + AwaitCompletionProjector.class.getName());
-            }
             return (AwaitCompletionProjector<Object, Object, Object>) projectorClass
                 .getDeclaredConstructor()
                 .newInstance();

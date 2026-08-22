@@ -164,6 +164,8 @@ class AwaitStepDescriptorFactoryTest {
                     type: interaction-api
             """.formatted(PrefixingProjector.class.getName()));
         System.setProperty("pipeline.config", explicit.toString());
+        ClassLoader previousLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(new ClassLoader(null) { });
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
@@ -178,6 +180,7 @@ class AwaitStepDescriptorFactoryTest {
                 "request", 7, new AwaitCompletionMetadata("interaction-1", "alice", java.time.Instant.EPOCH)));
         } finally {
             factory.shutdown();
+            Thread.currentThread().setContextClassLoader(previousLoader);
         }
     }
 

@@ -1175,10 +1175,9 @@ public class AwaitCoordinator {
             }
             validatePinnedCompletionProjector(record, descriptor);
             return descriptor;
+        } catch (PinnedCompletionProjectorMismatchException e) {
+            throw e;
         } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("pinned completion projector")) {
-                throw e;
-            }
             throw durableDescriptorFailure(record, e);
         }
     }
@@ -1205,9 +1204,15 @@ public class AwaitCoordinator {
         }
         String current = descriptor.completionProjector().getClass().getName();
         if (!descriptor.requestAwareCompletion() || !pinned.equals(current)) {
-            throw new IllegalStateException(
+            throw new PinnedCompletionProjectorMismatchException(
                 "Await pinned completion projector " + pinned + " is unavailable for interaction "
                     + record.interactionId() + "; current projector is " + current);
+        }
+    }
+
+    private static final class PinnedCompletionProjectorMismatchException extends IllegalStateException {
+        private PinnedCompletionProjectorMismatchException(String message) {
+            super(message);
         }
     }
 
