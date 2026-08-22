@@ -20,12 +20,21 @@ public abstract class LlmQueryConnectorProvider implements ConnectorProvider<Llm
     private static final ConnectorConfigSchema<LlmProviderConfiguration> PROVIDER_SCHEMA =
         ConnectorConfigSchema.record(LlmProviderConfiguration.class, "llm.query.provider", 1);
 
+    private final ConnectorProviderId providerId;
     private final AtomicReference<LlmDecisionClient> client = new AtomicReference<>();
     private final LlmQueryOperation operation = new LlmQueryOperation(() -> Optional.ofNullable(client.get()));
 
+    protected LlmQueryConnectorProvider() {
+        this(PROVIDER_ID);
+    }
+
+    protected LlmQueryConnectorProvider(ConnectorProviderId providerId) {
+        this.providerId = java.util.Objects.requireNonNull(providerId, "LLM provider ID must not be null");
+    }
+
     @Override
     public final ConnectorProviderId id() {
-        return PROVIDER_ID;
+        return providerId;
     }
 
     @Override
