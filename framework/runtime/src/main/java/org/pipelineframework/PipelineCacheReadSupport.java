@@ -64,14 +64,7 @@ class PipelineCacheReadSupport {
         }
         if (targetType != null) {
             Predicate<CacheKeyStrategy> supportsTarget = strategy -> strategy.supportsTarget(targetType);
-            Optional<String> targetKey = resolveWithFilter(item, context, supportsTarget);
-            if (targetKey.isPresent()) {
-                return targetKey;
-            }
-            boolean foundSupporting = strategies.stream().anyMatch(supportsTarget::test);
-            if (foundSupporting) {
-                return Optional.empty();
-            }
+            return resolveWithFilter(item, context, supportsTarget);
         }
         return resolveWithFilter(item, context, strategy -> true);
     }

@@ -17,8 +17,13 @@
 package org.pipelineframework;
 
 import java.text.MessageFormat;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -183,7 +188,7 @@ class PipelineStepExecutor {
             return applyManyToMany(manyToMany, current, stepTelemetry,
                 contextSnapshot, awaitContextSnapshot);
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
-            var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
+            var adapter = adaptReactiveService((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOne(adapter, current, false, maxConcurrency, stepTelemetry, cacheReadSupport,
                 contextSnapshot, awaitContextSnapshot, branchingDescriptor, invocationContext);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
@@ -201,7 +206,81 @@ class PipelineStepExecutor {
         }
     }
 
-    private static final class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
+    private static StepOneToOne<Object, Object> adaptReactiveService(ReactiveService<Object, Object> service) {
+        if (service instanceof CacheReadBypass) {
+            return new CacheReadBypassReactiveServiceStepAdapter(service);
+        }
+        if (service instanceof CacheKeyTarget cacheKeyTarget) {
+            return new CacheKeyTargetReactiveServiceStepAdapter(service, cacheKeyTarget.cacheKeyTargetType());
+        }
+        Optional<Class<?>> inferredOutput = reactiveServiceOutputType(service.getClass());
+        return inferredOutput
+            .<StepOneToOne<Object, Object>>map(target -> new CacheKeyTargetReactiveServiceStepAdapter(service, target))
+            .orElseGet(() -> new CacheReadBypassReactiveServiceStepAdapter(service));
+    }
+
+    private static Optional<Class<?>> reactiveServiceOutputType(Class<?> serviceType) {
+        return reactiveServiceOutputType(serviceType, Map.of());
+    }
+
+    private static Optional<Class<?>> reactiveServiceOutputType(
+        Type serviceType,
+        Map<TypeVariable<?>, Type> inheritedBindings
+    ) {
+        if (serviceType == null || serviceType == Object.class) {
+            return Optional.empty();
+        }
+        Class<?> rawType;
+        Map<TypeVariable<?>, Type> bindings = inheritedBindings;
+        if (serviceType instanceof ParameterizedType parameterized && parameterized.getRawType() instanceof Class<?> raw) {
+            rawType = raw;
+            bindings = new HashMap<>(inheritedBindings);
+            TypeVariable<?>[] parameters = rawType.getTypeParameters();
+            Type[] arguments = parameterized.getActualTypeArguments();
+            for (int index = 0; index < parameters.length; index++) {
+                bindings.put(parameters[index], resolveType(arguments[index], inheritedBindings));
+            }
+        } else if (serviceType instanceof Class<?> raw) {
+            rawType = raw;
+        } else {
+            return Optional.empty();
+        }
+        if (rawType == ReactiveService.class) {
+            return classOf(resolveType(rawType.getTypeParameters()[1], bindings));
+        }
+        for (Type implemented : rawType.getGenericInterfaces()) {
+            Optional<Class<?>> inherited = reactiveServiceOutputType(implemented, bindings);
+            if (inherited.isPresent()) {
+                return inherited;
+            }
+        }
+        Type superclass = rawType.getGenericSuperclass();
+        return superclass == null ? Optional.empty() : reactiveServiceOutputType(superclass, bindings);
+    }
+
+    private static Type resolveType(Type type, Map<TypeVariable<?>, Type> bindings) {
+        Type resolved = type;
+        while (resolved instanceof TypeVariable<?> variable && bindings.containsKey(variable)) {
+            Type next = bindings.get(variable);
+            if (next.equals(resolved)) {
+                break;
+            }
+            resolved = next;
+        }
+        return resolved;
+    }
+
+    private static Optional<Class<?>> classOf(Type type) {
+        if (type instanceof Class<?> clazz) {
+            return Optional.of(clazz);
+        }
+        if (type instanceof ParameterizedType parameterized && parameterized.getRawType() instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        return Optional.empty();
+    }
+
+    private static class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
         private final ReactiveService<Object, Object> service;
 
         private ReactiveServiceStepAdapter(ReactiveService<Object, Object> service) {
@@ -211,6 +290,33 @@ class PipelineStepExecutor {
         @Override
         public Uni<Object> applyOneToOne(Object in) {
             return service.process(in);
+        }
+    }
+
+    private static final class CacheReadBypassReactiveServiceStepAdapter extends ReactiveServiceStepAdapter
+        implements CacheReadBypass {
+
+        private CacheReadBypassReactiveServiceStepAdapter(ReactiveService<Object, Object> service) {
+            super(service);
+        }
+    }
+
+    private static final class CacheKeyTargetReactiveServiceStepAdapter extends ReactiveServiceStepAdapter
+        implements CacheKeyTarget {
+
+        private final Class<?> targetType;
+
+        private CacheKeyTargetReactiveServiceStepAdapter(
+            ReactiveService<Object, Object> service,
+            Class<?> targetType
+        ) {
+            super(service);
+            this.targetType = targetType;
+        }
+
+        @Override
+        public Class<?> cacheKeyTargetType() {
+            return targetType;
         }
     }
 
