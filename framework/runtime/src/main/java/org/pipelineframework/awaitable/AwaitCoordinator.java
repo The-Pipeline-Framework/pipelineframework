@@ -224,7 +224,8 @@ public class AwaitCoordinator {
 
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
+        AwaitStepDescriptor registered = descriptorFor(interaction);
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         long nowEpochMs = System.currentTimeMillis();
         return interactionStore().markDispatching(
                 interaction.tenantId(),
@@ -237,9 +238,9 @@ public class AwaitCoordinator {
             .onItem().transformToUni(claimedInteraction -> awaitTelemetry.inProviderDispatchSpan(
                 claimedInteraction,
                 () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
-                    descriptor,
+                    registered,
                     claimedInteraction,
-                    transportRequestPayload(descriptor, claimedInteraction))))
+                    transportRequestPayload(registered, claimedInteraction))))
                 .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -271,7 +272,8 @@ public class AwaitCoordinator {
      */
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatchLive(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
+        AwaitStepDescriptor registered = descriptorFor(interaction);
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         Uni<AwaitInteractionRecord> intended = interaction.status() == AwaitInteractionStatus.WAITING
             ? interactionStore().markDispatching(
                 interaction.tenantId(),
@@ -286,9 +288,9 @@ public class AwaitCoordinator {
         return intended.onItem().transformToUni(dispatching -> awaitTelemetry.inProviderDispatchSpan(
             dispatching,
             () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
-                descriptor,
+                registered,
                 dispatching,
-                transportRequestPayload(descriptor, dispatching))))
+                transportRequestPayload(registered, dispatching))))
             .onFailure().call(failure -> interactionStore().fail(
                 dispatching.tenantId(),
                 dispatching.interactionId(),

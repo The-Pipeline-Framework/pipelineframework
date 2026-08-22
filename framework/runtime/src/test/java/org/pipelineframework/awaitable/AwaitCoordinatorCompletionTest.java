@@ -708,6 +708,48 @@ class AwaitCoordinatorCompletionTest {
 
         assertEquals("selection-projector-v1",
             created.record().transportMetadata().get("tpf.await.completion.projector"));
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1", created.record().interactionId(), created.record().correlationId(), "completion-1",
+            Map.of("propertyId", "property-c"), "alice", 11_000L)).await().indefinitely();
+        assertEquals(new ConfirmedSelection(
+            "invoice-2", "property-b", "property-c", java.time.Instant.ofEpochMilli(11_000L)),
+            completed.record().responsePayload());
+    }
+
+    @Test
+    void dispatchPathsUseThePreviouslyRegisteredDescriptorForMappingAndTransport() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AtomicReference<Object> dispatchedPayload = new AtomicReference<>();
+        coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
+            @Override
+            public String type() {
+                return "interaction-api";
+            }
+
+            @Override
+            public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
+                dispatchedPayload.set(request.payload());
+                return Uni.createFrom().item(new AwaitDispatchResult(Map.of()));
+            }
+        }));
+        AwaitStepDescriptor original = mappedRequestAwareDescriptor(
+            "MappedSelection", "selection-projector-v1", "interaction-api", "original");
+        AwaitStepDescriptor replacement = mappedRequestAwareDescriptor(
+            "MappedSelection", "selection-projector-v2", "unregistered-transport", "replacement");
+
+        AwaitCreateResult regular = coordinator.createOrGet(
+            original, "tenant-1", "exec-1", 1, "cause-1",
+            new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
+        coordinator.dispatch(replacement, regular.record()).await().indefinitely();
+        assertEquals("original", dispatchedPayload.get());
+
+        AwaitCreateResult live = coordinator.createOrGet(
+            replacement, "tenant-1", "exec-2", 1, "cause-2",
+            new PendingSelection("invoice-2", "property-b"), "alice", "property-review").await().indefinitely();
+        dispatchedPayload.set(null);
+        coordinator.dispatchLive(replacement, live.record()).await().indefinitely();
+        assertEquals("original", dispatchedPayload.get());
     }
 
     @Test
@@ -921,6 +963,23 @@ class AwaitCoordinatorCompletionTest {
             "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
             List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
             Function.identity(), Function.identity(), projectorId, untyped, true);
+    }
+
+    private static AwaitStepDescriptor mappedRequestAwareDescriptor(
+        String stepId,
+        String projectorId,
+        String transportType,
+        String mappedRequest
+    ) {
+        @SuppressWarnings("unchecked")
+        AwaitCompletionProjector<Object, Object, Object> projector =
+            (AwaitCompletionProjector<Object, Object, Object>) (AwaitCompletionProjector<?, ?, ?>)
+                new OriginalSelectionProjector();
+        return new AwaitStepDescriptor(
+            stepId, PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
+            "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", transportType, Map.of(),
+            List.of("documentId"), String.class.getName(), SelectionChoice.class.getName(),
+            ignored -> mappedRequest, Function.identity(), projectorId, projector, true);
     }
 
     @Test
@@ -1174,8 +1233,8 @@ class AwaitCoordinatorCompletionTest {
             SelectionChoice completion,
             AwaitCompletionMetadata metadata
         ) {
-            return new ConfirmedSelection(request.documentId(), request.recommendedPropertyId(),
-                completion.propertyId(), metadata.completedAt());
+            return new ConfirmedSelection(request.documentId(), "changed-" + request.recommendedPropertyId(),
+                "changed-" + completion.propertyId(), metadata.completedAt());
         }
     }
 
