@@ -19,6 +19,7 @@ import DefaultTheme from 'vitepress/theme'
 import {h} from 'vue'
 import './custom.css'
 import './mermaid.css'
+import './coffee-machine.css'
 import Callout from './components/Callout.vue'
 import FeaturedArticles from './components/FeaturedArticles.vue'
 import HeroSection from './components/HeroSection.vue'
@@ -26,6 +27,12 @@ import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
 import MermaidDiagramEnhancer from './components/MermaidDiagramEnhancer.vue'
 import SidebarAccordion from './components/SidebarAccordion.vue'
+import CoffeeFaqFooter from './components/coffee-machine/CoffeeFaqFooter.vue'
+import CoffeeMachineLanding from './components/coffee-machine/CoffeeMachineLanding.vue'
+import CoffeeMisconceptions from './components/coffee-machine/CoffeeMisconceptions.vue'
+import CoffeePersonas from './components/coffee-machine/CoffeePersonas.vue'
+import CoffeeQuotes from './components/coffee-machine/CoffeeQuotes.vue'
+import CoffeeSearch from './components/coffee-machine/CoffeeSearch.vue'
 
 function installReplayViewerHardNavigation() {
   if (typeof window === 'undefined' || window.__tpfReplayViewerHardNavInstalled) {
@@ -62,7 +69,8 @@ export default {
   Layout() {
     return h('div', [
       h(DefaultTheme.Layout, null, {
-        'doc-before': () => h(VersionBadge)
+        'doc-before': () => h(VersionBadge),
+        'doc-after': () => h(CoffeeFaqFooter)
       }),
       h(SidebarAccordion),
       h(MermaidDiagramEnhancer)
@@ -74,6 +82,11 @@ export default {
     app.component('FeaturedArticles', FeaturedArticles)
     app.component('HeroSection', HeroSection)
     app.component('LatestReleases', LatestReleases)
+    app.component('CoffeeMachineLanding', CoffeeMachineLanding)
+    app.component('CoffeeMisconceptions', CoffeeMisconceptions)
+    app.component('CoffeePersonas', CoffeePersonas)
+    app.component('CoffeeQuotes', CoffeeQuotes)
+    app.component('CoffeeSearch', CoffeeSearch)
     installReplayViewerHardNavigation()
   }
 }
