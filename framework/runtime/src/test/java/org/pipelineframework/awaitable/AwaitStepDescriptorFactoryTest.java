@@ -99,10 +99,15 @@ class AwaitStepDescriptorFactoryTest {
             assertEquals(
                 "org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord",
                 descriptor.inputType());
+            assertEquals(
+                "org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus",
+                descriptor.outputType());
             assertEquals(descriptor.inputType(), descriptor.transportInputType());
             assertEquals(descriptor.outputType(), descriptor.transportOutputType());
             var input = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord("record-1");
             assertEquals(input, descriptor.inputToTransport().apply(input));
+            var output = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus("APPROVED");
+            assertEquals(output, descriptor.outputFromTransport().apply(output));
         } finally {
             factory.shutdown();
         }
