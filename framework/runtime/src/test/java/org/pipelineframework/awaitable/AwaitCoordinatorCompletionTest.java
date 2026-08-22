@@ -652,6 +652,7 @@ class AwaitCoordinatorCompletionTest {
             SelectionChoice.class.getName(),
             java.util.function.Function.identity(),
             java.util.function.Function.identity(),
+            "confirmed-selection-v1",
             (request, completion, metadata) -> {
                 PendingSelection pending = (PendingSelection) request;
                 SelectionChoice choice = (SelectionChoice) completion;
@@ -687,6 +688,68 @@ class AwaitCoordinatorCompletionTest {
         assertEquals(expected, completed.record().responsePayload());
         assertEquals(expected, coordinator.resumePayload(completed.record()));
         assertEquals(new PendingSelection("invoice-1", "property-a"), completed.record().requestPayload());
+    }
+
+    @Test
+    void createUsesThePreviouslyRegisteredProjectorForRepeatedStepIds() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor original = requestAwareDescriptor(
+            "RepeatedSelection", "selection-projector-v1", new OriginalSelectionProjector());
+        AwaitStepDescriptor replacement = requestAwareDescriptor(
+            "RepeatedSelection", "selection-projector-v2", new ChangedSelectionProjector());
+
+        coordinator.createOrGet(
+            original, "tenant-1", "exec-1", 1, "cause-1",
+            new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
+        AwaitCreateResult created = coordinator.createOrGet(
+            replacement, "tenant-1", "exec-2", 1, "cause-2",
+            new PendingSelection("invoice-2", "property-b"), "alice", "property-review").await().indefinitely();
+
+        assertEquals("selection-projector-v1",
+            created.record().transportMetadata().get("tpf.await.completion.projector"));
+    }
+
+    @Test
+    void requestAwareSuspensionRoundTripDoesNotProjectCanonicalCompletionTwice() throws Exception {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        java.util.concurrent.atomic.AtomicInteger projections = new java.util.concurrent.atomic.AtomicInteger();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "PortableSelection", PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
+            "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
+            List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
+            Function.identity(), Function.identity(), "portable-selection-v1",
+            (request, completion, metadata) -> {
+                projections.incrementAndGet();
+                PendingSelection pending = (PendingSelection) request;
+                SelectionChoice choice = (SelectionChoice) completion;
+                return new ConfirmedSelection(pending.documentId(), pending.recommendedPropertyId(),
+                    choice.propertyId(), metadata.completedAt());
+            }, true);
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor, "tenant-1", "exec-1", 1, "cause-1",
+            new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
+        coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1", created.record().interactionId(), created.record().correlationId(), "completion-1",
+            Map.of("propertyId", "property-b"), "alice", 11_000L)).await().indefinitely();
+
+        TransitionAwaitSuspension exported = coordinator.suspensionSnapshot(
+            new AwaitSuspendedException("tenant-1", "exec-1", created.record().unitId(), 1))
+            .await().indefinitely();
+        String json = PipelineJson.mapper().writeValueAsString(exported);
+        TransitionAwaitSuspension imported = PipelineJson.mapper().readValue(json, TransitionAwaitSuspension.class);
+        InMemoryAwaitInteractionStore restartedStore = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator restarted = coordinator(restartedStore);
+        restarted.descriptorFactory.register(descriptor);
+        restarted.importSuspension(imported).await().indefinitely();
+        AwaitInteractionRecord restored = restartedStore.get("tenant-1", created.record().interactionId())
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(new ConfirmedSelection(
+            "invoice-1", "property-a", "property-b", java.time.Instant.ofEpochMilli(11_000L)),
+            restarted.resumePayload(restored));
+        assertEquals(1, projections.get());
     }
 
     @Test
@@ -777,6 +840,7 @@ class AwaitCoordinatorCompletionTest {
             SelectionChoice.class.getName(),
             java.util.function.Function.identity(),
             java.util.function.Function.identity(),
+            "rejected-selection-v1",
             (request, completion, metadata) -> {
                 throw new IllegalArgumentException("selection is no longer valid");
             },
@@ -835,14 +899,23 @@ class AwaitCoordinatorCompletionTest {
     private static AwaitStepDescriptor requestAwareDescriptor(
         AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> projector
     ) {
+        return requestAwareDescriptor(
+            "RestartedSelection", projector.getClass().getName(), projector);
+    }
+
+    private static AwaitStepDescriptor requestAwareDescriptor(
+        String stepId,
+        String projectorId,
+        AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> projector
+    ) {
         @SuppressWarnings("unchecked")
         AwaitCompletionProjector<Object, Object, Object> untyped =
             (AwaitCompletionProjector<Object, Object, Object>) (AwaitCompletionProjector<?, ?, ?>) projector;
         return new AwaitStepDescriptor(
-            "RestartedSelection", PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
+            stepId, PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
             "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
             List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
-            Function.identity(), Function.identity(), untyped, true);
+            Function.identity(), Function.identity(), projectorId, untyped, true);
     }
 
     @Test

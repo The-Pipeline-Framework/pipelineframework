@@ -104,9 +104,10 @@ public class AwaitCoordinator {
     ) {
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
         return registerDescriptor(descriptor)
-            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
+            .onItem().transformToUni(registered -> createOrGetUnit(
+                registered, tenantId, unitId, executionId, stepIndex)
             .onItem().transformToUni(unit -> createInteraction(
-                descriptor,
+                registered,
                 unit.unitId(),
                 tenantId,
                 executionId,
@@ -122,7 +123,7 @@ public class AwaitCoordinator {
                         unit.unitId(),
                         created.record().interactionId(),
                         System.currentTimeMillis())
-                    .replaceWith(created)));
+                    .replaceWith(created))));
     }
 
     public Uni<AwaitCreateResult> createOrGetItem(
@@ -155,13 +156,13 @@ public class AwaitCoordinator {
         Map<String, Object> traceMetadata
     ) {
         return registerDescriptor(descriptor)
-            .onItem().transformToUni(ignored -> {
+            .onItem().transformToUni(registered -> {
                 if (itemIndex < 0) {
                     return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
                 }
-                return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+                return createOrGetUnit(registered, tenantId, unitId, executionId, stepIndex)
                     .onItem().transformToUni(unit -> createItemInPreparedUnit(
-                        descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                        registered, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
                         itemIndex, assignee, group, traceMetadata));
             });
     }
@@ -175,7 +176,8 @@ public class AwaitCoordinator {
         int stepIndex
     ) {
         return registerDescriptor(descriptor)
-            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
+            .onItem().transformToUni(registered -> createOrGetUnit(
+                registered, tenantId, unitId, executionId, stepIndex))
             .replaceWithVoid();
     }
 
@@ -210,12 +212,12 @@ public class AwaitCoordinator {
         Map<String, Object> traceMetadata
     ) {
         return registerDescriptor(descriptor)
-            .chain(() -> {
+            .onItem().transformToUni(registered -> {
                 if (itemIndex < 0) {
                     return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
                 }
                 return createItemInPreparedUnit(
-                    descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                    registered, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
                     itemIndex, assignee, group, traceMetadata);
             });
     }
@@ -1031,6 +1033,10 @@ public class AwaitCoordinator {
             if (canonicalOutputType.isInstance(record.responsePayload())) {
                 return record.responsePayload();
             }
+            if (descriptor.requestAwareCompletion()
+                && record.transportMetadata().containsKey(COMPLETION_PROJECTOR_METADATA)) {
+                return coerceCanonicalPayload(record, record.responsePayload());
+            }
             return canonicalCompletionPayload(
                 record,
                 descriptor,
@@ -1163,14 +1169,15 @@ public class AwaitCoordinator {
         }
     }
 
-    private Uni<Void> registerDescriptor(AwaitStepDescriptor descriptor) {
+    private Uni<AwaitStepDescriptor> registerDescriptor(AwaitStepDescriptor descriptor) {
         return Uni.createFrom().item(() -> {
-            directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+            AwaitStepDescriptor registered = directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+            registered = registered == null ? descriptor : registered;
             if (descriptorFactory != null) {
-                descriptorFactory.register(descriptor);
+                registered = descriptorFactory.register(registered);
             }
-            return descriptor;
-        }).replaceWithVoid();
+            return registered;
+        });
     }
 
     private AwaitStepDescriptor descriptorFor(AwaitInteractionRecord record) {
@@ -1200,7 +1207,7 @@ public class AwaitCoordinator {
         Map<String, Object> metadata = new java.util.LinkedHashMap<>(traceMetadata);
         metadata.remove(COMPLETION_PROJECTOR_METADATA);
         if (descriptor.requestAwareCompletion()) {
-            metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjector().getClass().getName());
+            metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjectorId());
         }
         return Map.copyOf(metadata);
     }
@@ -1216,7 +1223,7 @@ public class AwaitCoordinator {
         if (pinned == null) {
             return; // Compatibility for interactions created before projector identity was persisted.
         }
-        String current = descriptor.completionProjector().getClass().getName();
+        String current = descriptor.completionProjectorId();
         if (!pinned.equals(current)) {
             throw new PinnedCompletionProjectorMismatchException(
                 "Await pinned completion projector " + pinned + " is unavailable for interaction "

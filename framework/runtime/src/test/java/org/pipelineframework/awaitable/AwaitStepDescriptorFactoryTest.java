@@ -176,6 +176,7 @@ class AwaitStepDescriptorFactoryTest {
 
             assertEquals(Integer.class.getName(), descriptor.transportOutputType());
             assertTrue(descriptor.requestAwareCompletion());
+            assertEquals(PrefixingProjector.class.getName(), descriptor.completionProjectorId());
             assertEquals("request:7", descriptor.completionProjector().project(
                 "request", 7, new AwaitCompletionMetadata("interaction-1", "alice", java.time.Instant.EPOCH)));
         } finally {

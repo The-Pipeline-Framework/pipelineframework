@@ -21,6 +21,7 @@ import java.util.function.Function;
  * @param transportOutputType serialization representation used at completion
  * @param inputToTransport generated conversion applied immediately before dispatch
  * @param outputFromTransport generated conversion applied immediately after transport decoding
+ * @param completionProjectorId stable configured identity of the request-aware completion projector
  * @param completionProjector optional pure request-plus-completion projection
  * @param requestAwareCompletion whether completionProjector owns canonical output construction
  */
@@ -38,6 +39,7 @@ public record AwaitStepDescriptor(
     String transportOutputType,
     Function<Object, Object> inputToTransport,
     Function<Object, Object> outputFromTransport,
+    String completionProjectorId,
     AwaitCompletionProjector<Object, Object, Object> completionProjector,
     boolean requestAwareCompletion
 ) {
@@ -58,7 +60,7 @@ public record AwaitStepDescriptor(
     ) {
         this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType,
             transportConfig, idempotencyKeyFields, transportInputType, transportOutputType,
-            inputToTransport, outputFromTransport, defaultCompletionProjector(outputFromTransport), false);
+            inputToTransport, outputFromTransport, null, defaultCompletionProjector(outputFromTransport), false);
     }
 
     public AwaitStepDescriptor(
@@ -159,8 +161,17 @@ public record AwaitStepDescriptor(
         Function<Object, Object> normalizedOutputFromTransport =
             outputFromTransport == null ? Function.identity() : outputFromTransport;
         outputFromTransport = normalizedOutputFromTransport;
+        completionProjectorId = completionProjectorId == null || completionProjectorId.isBlank()
+            ? null
+            : completionProjectorId.trim();
         if (requestAwareCompletion && completionProjector == null) {
             throw new IllegalArgumentException("request-aware completion requires a completion projector");
+        }
+        if (requestAwareCompletion && completionProjectorId == null) {
+            throw new IllegalArgumentException("request-aware completion requires a stable completion projector id");
+        }
+        if (!requestAwareCompletion) {
+            completionProjectorId = null;
         }
         completionProjector = completionProjector == null
             ? defaultCompletionProjector(normalizedOutputFromTransport)

@@ -533,6 +533,7 @@ public class AwaitStepDescriptorFactory {
             effectiveTransportOutputType,
             inputToTransport,
             outputFromTransport,
+            completion.map(PipelineYamlAwaitCompletion::projector).orElse(null),
             completionProjector,
             completion.isPresent());
         return descriptor;
