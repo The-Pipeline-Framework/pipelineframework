@@ -391,6 +391,14 @@ public final class NormalizeDocumentService implements ReactiveService<Path, Pat
 `normalized-...` becomes the default publication key because it is the returned filename. For a
 singleton destination such as `latest.txt`, set `options.key: latest.txt` on the output mapping.
 
+Structured records may also carry ordinary context across a file transformation. Declare ordered
+`fields` on both mappings, select the input references to stage with `materializeFields`, and select
+the returned `Path` fields to publish with `publishFields`. The authored input/output records replace
+only those selected fields with `Path`; scalar fields and unselected `payload_ref` fields pass through
+unchanged. `carryFields` may name unchanged canonical fields to copy directly from input to output,
+so the authored result need only contain newly produced values. This form is ONE_TO_ONE and keeps correlation data beside a conditionally produced file
+without exposing connector or materializer APIs to the service.
+
 ### Example: expand one archive into many files
 
 `ONE_TO_MANY` lets one materialized file produce several published objects. Each returned path is

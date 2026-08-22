@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -110,6 +111,91 @@ public final class FileRepresentationRuntime {
                 .eventually(() -> cleanup(workspace.root())));
     }
 
+    /** Materializes structured inputs, invokes an authored transform, and publishes its file fields. */
+    public <R, O> Uni<O> transformStructured(
+        Map<String, PayloadReference> inputs,
+        long inputMaxBytes,
+        String targetName,
+        long outputMaxBytes,
+        Function<Map<String, Path>, Uni<R>> delegate,
+        Function<R, Map<String, Path>> outputs,
+        BiFunction<R, Map<String, PayloadReference>, O> canonicalizer
+    ) {
+        Objects.requireNonNull(delegate, "delegate");
+        Objects.requireNonNull(outputs, "outputs");
+        Objects.requireNonNull(canonicalizer, "canonicalizer");
+        requirePositive(outputMaxBytes, "output maxBytes");
+        return materializeStructured(inputs, inputMaxBytes)
+            .chain(workspace -> Uni.createFrom().deferred(() ->
+                Objects.requireNonNull(delegate.apply(workspace.inputs()), "file service returned a null Uni")
+                    .chain(result -> publishStructured(
+                        workspace, result, outputs.apply(result), targetName, outputMaxBytes, canonicalizer)))
+                .eventually(() -> cleanup(workspace.root())));
+    }
+
+    private Uni<StructuredWorkspace> materializeStructured(Map<String, PayloadReference> inputs, long maxBytes) {
+        Objects.requireNonNull(inputs, "inputs");
+        requirePositive(maxBytes, "input maxBytes");
+        if (inputs.isEmpty()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("file inputs must not be empty"));
+        }
+        LinkedHashMap<String, PayloadReference> ordered = new LinkedHashMap<>();
+        inputs.forEach((field, reference) -> {
+            if (field == null || field.isBlank()) {
+                throw new IllegalArgumentException("file input field names must not be blank");
+            }
+            ordered.put(field, Objects.requireNonNull(reference, "file input reference"));
+        });
+        return materialize(List.copyOf(ordered.entrySet()), 0, maxBytes, new LinkedHashMap<>())
+            .chain(materialized -> blocking(() -> stage(materialized, maxBytes)));
+    }
+
+    private <R, O> Uni<O> publishStructured(
+        StructuredWorkspace workspace,
+        R result,
+        Map<String, Path> outputs,
+        String targetName,
+        long outputMaxBytes,
+        BiFunction<R, Map<String, PayloadReference>, O> canonicalizer
+    ) {
+        Objects.requireNonNull(outputs, "structured file service outputs");
+        if (outputs.isEmpty()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("structured file outputs must not be empty"));
+        }
+        LinkedHashMap<String, Path> ordered = new LinkedHashMap<>();
+        outputs.forEach((field, path) -> {
+            if (field == null || field.isBlank()) {
+                throw new IllegalArgumentException("file output field names must not be blank");
+            }
+            ordered.put(field, Objects.requireNonNull(path, "file output path"));
+        });
+        return publishStructuredField(workspace, List.copyOf(ordered.entrySet()), 0, targetName,
+            outputMaxBytes, new LinkedHashMap<>())
+            .map(references -> canonicalizer.apply(result, references));
+    }
+
+    private Uni<Map<String, PayloadReference>> publishStructuredField(
+        StructuredWorkspace workspace,
+        List<Map.Entry<String, Path>> outputs,
+        int index,
+        String targetName,
+        long outputMaxBytes,
+        LinkedHashMap<String, PayloadReference> references
+    ) {
+        if (index == outputs.size()) {
+            return Uni.createFrom().item(Collections.unmodifiableMap(new LinkedHashMap<>(references)));
+        }
+        Map.Entry<String, Path> output = outputs.get(index);
+        Workspace publicationWorkspace = new Workspace(workspace.root(), workspace.root());
+        String objectKey = output.getKey() + "/" + output.getValue().getFileName();
+        return publish(publicationWorkspace, output.getValue(), targetName, outputMaxBytes, Optional.of(objectKey))
+            .chain(reference -> {
+                references.put(output.getKey(), reference);
+                return publishStructuredField(workspace, outputs, index + 1, targetName,
+                    outputMaxBytes, references);
+            });
+    }
+
     @SafeVarargs
     public static Map<String, PayloadReference> orderedInputs(
         Map.Entry<String, PayloadReference>... inputs
@@ -117,6 +203,15 @@ public final class FileRepresentationRuntime {
         LinkedHashMap<String, PayloadReference> ordered = new LinkedHashMap<>();
         for (Map.Entry<String, PayloadReference> input : inputs) {
             ordered.put(input.getKey(), input.getValue());
+        }
+        return Collections.unmodifiableMap(ordered);
+    }
+
+    @SafeVarargs
+    public static Map<String, Path> orderedOutputs(Map.Entry<String, Path>... outputs) {
+        LinkedHashMap<String, Path> ordered = new LinkedHashMap<>();
+        for (Map.Entry<String, Path> output : outputs) {
+            ordered.put(output.getKey(), output.getValue());
         }
         return Collections.unmodifiableMap(ordered);
     }

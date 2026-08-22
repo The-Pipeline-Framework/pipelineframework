@@ -847,7 +847,26 @@ public class PipelineYamlConfigLoader {
         }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(correlation, transport);
+        Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
+        return new PipelineYamlAwaitConfig(correlation, transport, completion);
+    }
+
+    private Optional<PipelineYamlAwaitCompletion> readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
+        if (!awaitMap.containsKey("completion")) {
+            return Optional.empty();
+        }
+        Object completionObj = awaitMap.get("completion");
+        if (!(completionObj instanceof Map<?, ?> completionMap)) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion must be defined as a map");
+        }
+        if (!completionMap.keySet().equals(java.util.Set.of("type", "projector"))) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion supports only type and projector");
+        }
+        String type = readString(completionMap, "type");
+        String projector = readString(completionMap, "projector");
+        return Optional.of(new PipelineYamlAwaitCompletion(type, projector));
     }
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {

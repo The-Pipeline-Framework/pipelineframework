@@ -43,6 +43,41 @@ steps:
 
 The input type is what the pipeline sends to external reality. The output type is what the pipeline expects before it can continue. TPF handles the interaction identity, correlation, persistence, replay, and transport adapter around that contract.
 
+### Constructing output from the suspended request
+
+Human interfaces and external providers should submit only the facts they own. When
+the canonical Await output also needs trusted fields from the suspended request,
+declare a smaller completion type and a pure projector:
+
+```yaml
+steps:
+  - name: Confirm Property
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PendingConfirmation
+    output: ConfirmedInvoice
+    timeout: PT8H
+    await:
+      correlation:
+        strategy: interactionId
+      completion:
+        type: com.example.PropertyChoice
+        projector: com.example.ConfirmedInvoiceProjector
+      transport:
+        type: interaction-api
+```
+
+The projector implements `AwaitCompletionProjector<PendingConfirmation,
+PropertyChoice, ConfirmedInvoice>`. It receives the canonical request, the admitted
+actor payload, and framework-authored completion metadata such as `completedAt`.
+It must be public, have a public no-argument constructor, and remain deterministic
+and side-effect free.
+
+TPF persists the request and projected completion as canonical values. Recovery
+therefore rebuilds the descriptor and resumes from the already projected output;
+it does not ask the browser to echo trusted invoice state and does not call the
+projector again for normally admitted canonical completions.
+
 ## Cardinality Shapes
 
 Cardinality defines what the pipeline is waiting for and what must be replayable after completion.

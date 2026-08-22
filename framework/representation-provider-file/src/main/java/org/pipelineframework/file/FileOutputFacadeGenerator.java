@@ -43,7 +43,7 @@ final class FileOutputFacadeGenerator {
                 optionalKey, canonicalOutput);
     }
 
-    private static String javaString(String value) {
+    static String javaString(String value) {
         StringBuilder escaped = new StringBuilder(value.length());
         for (int index = 0; index < value.length(); index++) {
             char character = value.charAt(index);

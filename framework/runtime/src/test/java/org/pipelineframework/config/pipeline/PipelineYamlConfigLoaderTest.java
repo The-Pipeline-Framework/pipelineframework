@@ -534,6 +534,9 @@ class PipelineYamlConfigLoaderTest {
                 await:
                   correlation:
                     strategy: "interactionId"
+                  completion:
+                    type: "com.example.FraudCheckAnswer"
+                    projector: "com.example.FraudCheckProjector"
                   transport:
                     type: "webhook"
                     request:
@@ -549,9 +552,37 @@ class PipelineYamlConfigLoaderTest {
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertNotNull(step.awaitConfig());
         assertEquals("interactionId", step.awaitConfig().correlation().strategy());
+        assertEquals("com.example.FraudCheckAnswer", step.awaitConfig().completion().orElseThrow().type());
+        assertEquals("com.example.FraudCheckProjector", step.awaitConfig().completion().orElseThrow().projector());
         assertEquals("webhook", step.awaitConfig().transport().type());
         assertNotNull(step.awaitConfig().transport().config().get("request"));
         assertNotNull(step.awaitConfig().transport().config().get("completion"));
+    }
+
+    @Test
+    void rejectsNullAndUnknownAwaitCompletionConfigurationAtRuntime() {
+        for (String completion : List.of(
+            "completion: null",
+            "completion: {type: com.example.Answer, projector: com.example.Projector, extra: value}")) {
+            assertThrows(IllegalArgumentException.class, () -> new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: com.example
+                transport: GRPC
+                platform: COMPUTE
+                steps:
+                  - name: Fraud Check
+                    kind: await
+                    cardinality: ONE_TO_ONE
+                    inputTypeName: com.example.Request
+                    outputTypeName: com.example.Decision
+                    timeout: PT10M
+                    await:
+                      correlation:
+                        strategy: interactionId
+                      %s
+                      transport:
+                        type: interaction-api
+                """.formatted(completion))), completion);
+        }
     }
 
     @Test
