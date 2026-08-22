@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
@@ -125,7 +126,7 @@ class LangChain4jOllamaQueryConnectorTest {
     }
 
     @Test
-    void usesNativeJsonSchemaForRequiredDirectCompletion() {
+    void usesNativeJsonSchemaForRequiredDirectCompletion() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         ChatModel model = new ChatModel() {
             @Override
@@ -174,7 +175,11 @@ class LangChain4jOllamaQueryConnectorTest {
             .toCompletableFuture().join();
 
         assertEquals("complete", proposal.alias());
-        assertTrue(proposal.argumentsJson().contains("\"facts\""));
+        assertEquals(new ObjectMapper().readTree("""
+            {"facts":{"supplier":"Acme","invoiceNumber":"INV-1","totalAmount":12.34,
+            "diagnostic":"Header text."},"recommendation":{"propertyId":"home",
+            "explanation":"Address match."},"note":"Friday callout."}
+            """), new ObjectMapper().readTree(proposal.argumentsJson()));
         assertEquals(1, calls.get());
     }
 

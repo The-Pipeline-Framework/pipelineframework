@@ -10,11 +10,11 @@ public record LlmDirectCompletionConfiguration(
     Optional<Map<String, String>> carry
 ) {
     public LlmDirectCompletionConfiguration {
-        field = requirePath(field, "LLM direct completion field");
+        field = requireComponent(field, "LLM direct completion field");
         carry = Objects.requireNonNull(carry, "LLM direct completion carry map must not be null")
             .map(Map::copyOf);
         carry.orElseGet(Map::of).forEach((outputField, inputPath) -> {
-            requirePath(outputField, "LLM direct completion output field");
+            requireComponent(outputField, "LLM direct completion output field");
             requirePath(inputPath, "LLM direct completion input path");
         });
     }
@@ -32,6 +32,15 @@ public record LlmDirectCompletionConfiguration(
         value = value.trim();
         if (!value.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
             throw new IllegalArgumentException(label + " must be a dotted field path: " + value);
+        }
+        return value;
+    }
+
+    private static String requireComponent(String value, String label) {
+        Objects.requireNonNull(value, label + " must not be null");
+        value = value.trim();
+        if (!value.matches("[A-Za-z][A-Za-z0-9]*")) {
+            throw new IllegalArgumentException(label + " must be a record component name: " + value);
         }
         return value;
     }

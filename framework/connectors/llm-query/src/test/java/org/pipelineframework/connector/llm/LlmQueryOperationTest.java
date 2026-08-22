@@ -2,6 +2,7 @@ package org.pipelineframework.connector.llm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
 import java.util.Optional;
@@ -136,6 +137,18 @@ class LlmQueryOperationTest {
         assertEquals("review", bound.directCompletion().orElseThrow().field());
         assertEquals(Map.of("invoiceId", "invoiceId"),
             bound.directCompletion().orElseThrow().carriedFields());
+    }
+
+    @Test
+    void rejectsDottedDirectCompletionOutputComponentsButAllowsDottedInputPaths() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new LlmDirectCompletionConfiguration("review.summary", Map.of()));
+        assertThrows(IllegalArgumentException.class,
+            () -> new LlmDirectCompletionConfiguration("review", Map.of("invoice.id", "invoice.id")));
+
+        assertEquals(Map.of("invoiceId", "invoice.id"),
+            new LlmDirectCompletionConfiguration("review", Map.of("invoiceId", "invoice.id"))
+                .carriedFields());
     }
 
     @Test
