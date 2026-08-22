@@ -281,7 +281,8 @@ public class AwaitStepDescriptorFactory {
                 binding.inputToTransport(),
                 binding.outputFromTransport());
         }
-        AwaitTypeIdentities identities = generatedLegacyTypeIdentities(config, serviceName)
+        AwaitTypeIdentities identities = authoredV3TypeIdentities(configPath, serviceName)
+            .or(() -> generatedLegacyTypeIdentities(config, serviceName))
             .orElseGet(() -> new AwaitTypeIdentities(
                 requiredType(step.inputType(), serviceName, "input"),
                 requiredType(step.outputType(), serviceName, "output")));
@@ -294,6 +295,22 @@ public class AwaitStepDescriptorFactory {
             identities.outputType(),
             Function.identity(),
             Function.identity());
+    }
+
+    private static Optional<AwaitTypeIdentities> authoredV3TypeIdentities(Path configPath, String serviceName) {
+        if (!isVersion3(configPath)) {
+            return Optional.empty();
+        }
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().stream()
+            .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No version 3 await step found for generated service " + serviceName));
+        String domainPackage = config.basePackage() + ".domain.";
+        return Optional.of(new AwaitTypeIdentities(
+            domainPackage + requiredType(step.inputTypeName(), serviceName, "input"),
+            domainPackage + requiredType(step.outputTypeName(), serviceName, "output")));
     }
 
     private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(
@@ -342,16 +359,21 @@ public class AwaitStepDescriptorFactory {
         String protoTypes = config.basePackage() + ".grpc.PipelineTypes";
         Class<?> canonicalInput = requiredGeneratedClass(domainPackage + inputLogicalType, serviceName, "canonical input");
         Class<?> canonicalOutput = requiredGeneratedClass(domainPackage + outputLogicalType, serviceName, "canonical output");
-        Class<?> transportInput = requiredGeneratedClass(protoTypes + "$" + inputLogicalType, serviceName, "transport input");
-        Class<?> transportOutput = requiredGeneratedClass(protoTypes + "$" + outputLogicalType, serviceName, "transport output");
-        Class<?> adapters = requiredGeneratedClass(domainPackage + "PipelineDomainProtoAdapters", serviceName, "domain protobuf adapters");
+        Optional<Class<?>> transportInput = loadClass(protoTypes + "$" + inputLogicalType);
+        Optional<Class<?>> transportOutput = loadClass(protoTypes + "$" + outputLogicalType);
+        Optional<Class<?>> adapters = loadClass(domainPackage + "PipelineDomainProtoAdapters");
+        if (transportInput.isEmpty() || transportOutput.isEmpty() || adapters.isEmpty()) {
+            return Optional.empty();
+        }
         return Optional.of(new V3AwaitTypeBinding(
             canonicalInput.getName(),
             canonicalOutput.getName(),
-            transportInput.getName(),
-            transportOutput.getName(),
-            generatedAdapter(adapters, "toProto", canonicalInput, transportInput, serviceName),
-            generatedAdapter(adapters, "fromProto", transportOutput, canonicalOutput, serviceName)));
+            transportInput.orElseThrow().getName(),
+            transportOutput.orElseThrow().getName(),
+            generatedAdapter(
+                adapters.orElseThrow(), "toProto", canonicalInput, transportInput.orElseThrow(), serviceName),
+            generatedAdapter(
+                adapters.orElseThrow(), "fromProto", transportOutput.orElseThrow(), canonicalOutput, serviceName)));
     }
 
     private static boolean isVersion3(Path configPath) {
