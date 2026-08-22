@@ -304,16 +304,20 @@ public class AwaitCoordinator {
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
         Map<String, Object> merged = new java.util.LinkedHashMap<>(interaction.transportMetadata());
         if (metadata != null) {
-            merged.putAll(metadata);
+            metadata.forEach((key, value) -> {
+                if (!COMPLETION_PROJECTOR_METADATA.equals(key)) {
+                    merged.put(key, value);
+                }
+            });
         }
         Map<String, Object> enriched = awaitAdmissionCoordinator == null ? Map.copyOf(merged)
             : awaitAdmissionCoordinator.dispatchMetadata(interaction, Map.copyOf(merged));
         Object pinnedProjector = interaction.transportMetadata().get(COMPLETION_PROJECTOR_METADATA);
-        if (pinnedProjector == null) {
-            return enriched;
-        }
         Map<String, Object> authoritative = new java.util.LinkedHashMap<>(enriched);
-        authoritative.put(COMPLETION_PROJECTOR_METADATA, pinnedProjector);
+        authoritative.remove(COMPLETION_PROJECTOR_METADATA);
+        if (pinnedProjector != null) {
+            authoritative.put(COMPLETION_PROJECTOR_METADATA, pinnedProjector);
+        }
         return Map.copyOf(authoritative);
     }
 
@@ -1193,11 +1197,11 @@ public class AwaitCoordinator {
         AwaitStepDescriptor descriptor,
         Map<String, Object> traceMetadata
     ) {
-        if (!descriptor.requestAwareCompletion()) {
-            return traceMetadata;
-        }
         Map<String, Object> metadata = new java.util.LinkedHashMap<>(traceMetadata);
-        metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjector().getClass().getName());
+        metadata.remove(COMPLETION_PROJECTOR_METADATA);
+        if (descriptor.requestAwareCompletion()) {
+            metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjector().getClass().getName());
+        }
         return Map.copyOf(metadata);
     }
 
@@ -1205,12 +1209,15 @@ public class AwaitCoordinator {
         AwaitInteractionRecord record,
         AwaitStepDescriptor descriptor
     ) {
+        if (!descriptor.requestAwareCompletion()) {
+            return; // Ignore reserved metadata supplied to legacy non-request-aware interactions.
+        }
         Object pinned = record.transportMetadata().get(COMPLETION_PROJECTOR_METADATA);
         if (pinned == null) {
             return; // Compatibility for interactions created before projector identity was persisted.
         }
         String current = descriptor.completionProjector().getClass().getName();
-        if (!descriptor.requestAwareCompletion() || !pinned.equals(current)) {
+        if (!pinned.equals(current)) {
             throw new PinnedCompletionProjectorMismatchException(
                 "Await pinned completion projector " + pinned + " is unavailable for interaction "
                     + record.interactionId() + "; current projector is " + current);

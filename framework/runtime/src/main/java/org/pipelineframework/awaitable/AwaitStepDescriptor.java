@@ -163,7 +163,7 @@ public record AwaitStepDescriptor(
             throw new IllegalArgumentException("request-aware completion requires a completion projector");
         }
         completionProjector = completionProjector == null
-            ? (request, completion, metadata) -> normalizedOutputFromTransport.apply(completion)
+            ? defaultCompletionProjector(normalizedOutputFromTransport)
             : completionProjector;
     }
 

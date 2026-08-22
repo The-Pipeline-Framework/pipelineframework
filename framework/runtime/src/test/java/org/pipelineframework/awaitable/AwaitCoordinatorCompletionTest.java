@@ -671,12 +671,12 @@ class AwaitCoordinatorCompletionTest {
             1,
             "cause-1",
             new PendingSelection("invoice-1", "property-a"),
-            null,
-            null).await().indefinitely();
+            "alice",
+            "property-review").await().indefinitely();
         AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
             "tenant-1",
             created.record().interactionId(),
-            null,
+            created.record().correlationId(),
             "completion-1",
             Map.of("propertyId", "property-b"),
             "alice",
@@ -697,7 +697,7 @@ class AwaitCoordinatorCompletionTest {
         coordinator.descriptorFactory.register(descriptor);
         AwaitCreateResult created = coordinator.createOrGet(
             descriptor, "tenant-1", "exec-1", 1, "cause-1",
-            new PendingSelection("invoice-1", "property-a"), null, null).await().indefinitely();
+            new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
         coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
             @Override
             public String type() {
@@ -718,6 +718,45 @@ class AwaitCoordinatorCompletionTest {
         assertEquals(OriginalSelectionProjector.class.getName(),
             store.get("tenant-1", created.record().interactionId()).await().indefinitely().orElseThrow()
                 .transportMetadata().get("tpf.await.completion.projector"));
+    }
+
+    @Test
+    void normalCompletionIgnoresReservedProjectorMetadataFromTraceAndAdapter() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = descriptor("NormalSelection");
+        coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
+            @Override
+            public String type() {
+                return "interaction-api";
+            }
+
+            @Override
+            public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
+                return Uni.createFrom().item(new AwaitDispatchResult(Map.of(
+                    "tpf.await.completion.projector", ChangedSelectionProjector.class.getName())));
+            }
+        }));
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-1", "exec-1", 1, AwaitContinuationMode.LIVE_IF_SUPPORTED,
+            TerminalOutputOwnership.TRANSITION_WORKER,
+            Map.of("tpf.await.completion.projector", ChangedSelectionProjector.class.getName())));
+        try {
+            AwaitCreateResult created = coordinator.createOrGet(
+                descriptor, "tenant-1", "exec-1", 1, "cause-1", Map.of("invoiceId", "invoice-1"),
+                "alice", "property-review").await().indefinitely();
+            assertFalse(created.record().transportMetadata().containsKey("tpf.await.completion.projector"));
+
+            AwaitInteractionRecord dispatched = coordinator.dispatch(descriptor, created.record()).await().indefinitely();
+            assertFalse(dispatched.transportMetadata().containsKey("tpf.await.completion.projector"));
+
+            AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+                "tenant-1", created.record().interactionId(), created.record().correlationId(), "completion-1",
+                Map.of("decision", "approved"), "alice", 11_000L)).await().indefinitely();
+            assertEquals(AwaitInteractionStatus.COMPLETED, completed.record().status());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test
@@ -751,14 +790,14 @@ class AwaitCoordinatorCompletionTest {
             1,
             "cause-1",
             new PendingSelection("invoice-1", "property-a"),
-            null,
-            null).await().indefinitely();
+            "alice",
+            "property-review").await().indefinitely();
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> coordinator.complete(
             new AwaitCompletionCommand(
                 "tenant-1",
                 created.record().interactionId(),
-                null,
+                created.record().correlationId(),
                 "completion-1",
                 Map.of("propertyId", "property-b"),
                 "alice",
@@ -779,13 +818,13 @@ class AwaitCoordinatorCompletionTest {
         firstRuntime.descriptorFactory.register(original);
         AwaitCreateResult created = firstRuntime.createOrGet(
             original, "tenant-1", "exec-1", 1, "cause-1",
-            new PendingSelection("invoice-1", "property-a"), null, null).await().indefinitely();
+            new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
 
         AwaitCoordinator restartedRuntime = coordinator(store);
         restartedRuntime.descriptorFactory.register(requestAwareDescriptor(new ChangedSelectionProjector()));
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> restartedRuntime.complete(
             new AwaitCompletionCommand(
-                "tenant-1", created.record().interactionId(), null, "completion-1",
+                "tenant-1", created.record().interactionId(), created.record().correlationId(), "completion-1",
                 Map.of("propertyId", "property-b"), "alice", 11_000L)).await().indefinitely());
 
         assertTrue(failure.getMessage().contains("pinned completion projector"));
