@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.SourceVersion;
@@ -63,6 +64,39 @@ final class FileMappingOptions {
         selected.forEach(this::validateIdentifier);
         if (selected.stream().distinct().count() != selected.size() || selected.stream().anyMatch(f -> !payloads.contains(f)))
             throw new IllegalStateException("Structured file input materializeFields must uniquely name payload_ref fields from options.fields.");
+        return selected;
+    }
+
+    List<String> publishedFields(List<String> outputFields) {
+        Map<String, String> fields = fields();
+        List<String> payloads = outputFields.stream().filter(f -> "payload_ref".equals(fields.get(f))).toList();
+        Object configured = options.get("publishFields");
+        if (configured == null) return payloads;
+        if (!(configured instanceof List<?> values) || values.isEmpty()
+                || values.stream().anyMatch(v -> !(v instanceof String text) || text.isBlank()))
+            throw new IllegalStateException("Structured file output requires publishFields to be a non-empty string list.");
+        List<String> selected = values.stream().map(String.class::cast).map(String::trim).toList();
+        selected.forEach(this::validateIdentifier);
+        if (selected.stream().distinct().count() != selected.size() || selected.stream().anyMatch(f -> !payloads.contains(f)))
+            throw new IllegalStateException("Structured file output publishFields must uniquely name payload_ref fields from options.fields.");
+        return selected;
+    }
+
+    List<String> carriedFields(List<String> outputFields) {
+        Object configured = options.get("carryFields");
+        if (configured == null) return List.of();
+        if (!(configured instanceof List<?> values) || values.isEmpty()
+                || values.stream().anyMatch(v -> !(v instanceof String text) || text.isBlank()))
+            throw new IllegalStateException("Structured file output requires carryFields to be a non-empty string list.");
+        List<String> selected = values.stream().map(String.class::cast).map(String::trim).toList();
+        selected.forEach(this::validateIdentifier);
+        Map<String, String> inputFields = stringMap(request.boundary().configuration().get("inputFields"));
+        Map<String, String> outputTypes = fields();
+        if (selected.stream().distinct().count() != selected.size()
+                || selected.stream().anyMatch(field -> !outputFields.contains(field)
+                    || !Objects.equals(inputFields.get(field), outputTypes.get(field)))) {
+            throw new IllegalStateException("Structured file output carryFields must uniquely name fields with the same canonical input/output type.");
+        }
         return selected;
     }
 

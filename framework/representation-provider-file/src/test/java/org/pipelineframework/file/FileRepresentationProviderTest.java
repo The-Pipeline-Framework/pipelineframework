@@ -84,6 +84,50 @@ class FileRepresentationProviderTest {
     }
 
     @Test
+    void generatesStructuredFileTransformFacadeThatCarriesContextAndPublishesSelectedOutput() {
+        CanonicalType request = new CanonicalType(
+            "VisionRequest", "example.VisionRequest", CanonicalTypeShape.RECORD);
+        CanonicalType result = new CanonicalType(
+            "VisionResult", "example.VisionResult", CanonicalTypeShape.RECORD);
+        List<String> inputFields = List.of("documentId", "invoice", "catalogueHash");
+        List<String> outputFields = List.of("documentId", "invoice", "image", "catalogueHash");
+        BoundaryRequest boundary = new BoundaryRequest(
+            "Rasterize invoice", "example.RasterizeInvoice", request, result, "UNARY_UNARY", Set.of(),
+            Map.of(
+                "inputMappings", List.of("file"),
+                "outputMappings", List.of("file"),
+                "inputFields", Map.of(
+                    "documentId", "uuid", "invoice", "payload_ref", "catalogueHash", "string"),
+                "outputFields", Map.of(
+                    "documentId", "uuid", "invoice", "payload_ref", "image", "payload_ref",
+                    "catalogueHash", "string")));
+        Map<String, Object> inputOptions = Map.of(
+            "fields", inputFields, "materializeFields", List.of("invoice"), "maxBytes", 4096);
+        String target = "analysis\0\nmedia";
+        Map<String, Object> outputOptions = Map.of(
+            "fields", outputFields, "publishFields", List.of("image"),
+            "carryFields", List.of("documentId", "invoice", "catalogueHash"),
+            "target", target, "maxBytes", 8192);
+        var inputMapping = provider.resolve(new RepresentationMappingRequest(
+            "file", request, Optional.of("example.MaterializedVisionRequest"), Optional.empty(), inputOptions))
+            .orElseThrow();
+        var outputMapping = provider.resolve(new RepresentationMappingRequest(
+            "file", result, Optional.of("example.MaterializedVisionResult"), Optional.empty(), outputOptions))
+            .orElseThrow();
+
+        String source = provider.describeArtifacts(new ProviderGenerationRequest(
+            boundary, provider.claim(boundary).orElseThrow(), List.of(inputMapping, outputMapping),
+            Map.of("input", inputOptions, "output", outputOptions))).getFirst().content();
+
+        assertTrue(source.contains("files.transformStructured("));
+        assertTrue(source.contains("new example.MaterializedVisionRequest(input.documentId(), paths.get(\"invoice\"), input.catalogueHash())"));
+        assertTrue(source.contains("java.util.Map.entry(\"image\", result.image())"));
+        assertTrue(source.contains("new example.VisionResult(input.documentId(), input.invoice(), references.get(\"image\"), input.catalogueHash())"));
+        assertTrue(source.contains("\"analysis\\000\\nmedia\", 8192L"), source);
+        assertTrue(!source.contains("\"analysis\nmedia"));
+    }
+
+    @Test
     void claimsBarePathInputOnlyBoundaryAndGeneratesSinglePayloadFacade() {
         BoundaryRequest boundary = new BoundaryRequest(
             "Read document", "example.ReadDocument", input, output, "UNARY_UNARY", Set.of(),
