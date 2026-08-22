@@ -516,6 +516,64 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void futureAfterStepObserverSkipsAnItemWhenItsFutureParentWasSkipped() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        FutureCountingIdentityStep<PhysicalOrder> parent = new FutureCountingIdentityStep<>();
+        DigitalOrder input = new DigitalOrder("o-future-branch");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Future Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null,
+            parentDescriptor, tracker);
+        Object skippedParentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        FutureCountingIdentityStep<DigitalOrder> observer = new FutureCountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Future Reserve Stock", observer.getClass().getName(), DigitalOrder.class.getName(),
+            DigitalOrder.class, List.of("DigitalOrder"), List.of(DigitalOrder.class.getName()),
+            List.of(DigitalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            observer, Uni.createFrom().item(skippedParentOutput), false, 16, null, null, null, null,
+            observerDescriptor, tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, parent.invocations());
+        assertEquals(0, observer.invocations());
+    }
+
+    @Test
+    void futureAfterStepObserverRunsWhenItsFutureParentExecuted() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        FutureCountingIdentityStep<PhysicalOrder> parent = new FutureCountingIdentityStep<>();
+        PhysicalOrder input = new PhysicalOrder("o-future-stock");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Future Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null,
+            parentDescriptor, tracker);
+        Object parentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        FutureCountingIdentityStep<PhysicalOrder> observer = new FutureCountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Future Reserve Stock", observer.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            observer, Uni.createFrom().item(parentOutput), false, 16, null, null, null, null,
+            observerDescriptor, tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, parent.invocations());
+        assertEquals(1, observer.invocations());
+    }
+
+    @Test
     void branchAwareOneToOneExtractsAcceptedUnionVariantBeforeInvokingStep() {
         ApprovePaymentStep step = new ApprovePaymentStep();
         StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
@@ -1170,6 +1228,21 @@ class PipelineStepExecutorTest {
         @Override
         public CompletableFuture<String> applyAsync(String in) {
             return CompletableFuture.completedFuture(in + suffix);
+        }
+    }
+
+    static final class FutureCountingIdentityStep<T> extends ConfigurableStep
+        implements StepOneToOneCompletableFuture<T, T> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public CompletableFuture<T> applyAsync(T input) {
+            invocations.incrementAndGet();
+            return CompletableFuture.completedFuture(input);
+        }
+
+        int invocations() {
+            return invocations.get();
         }
     }
 

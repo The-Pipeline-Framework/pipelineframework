@@ -184,7 +184,8 @@ public final class PipelineBranchingMetadataGenerator {
                 List.of(),
                 List.of(),
                 false,
-                model.aspectPosition() == org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP));
+                model.aspectPosition().filter(
+                    org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP::equals).isPresent()));
         }
     }
 

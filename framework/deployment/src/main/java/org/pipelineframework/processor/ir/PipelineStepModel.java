@@ -58,7 +58,7 @@ public record PipelineStepModel(
         PipelineTemplateStepExecution remoteExecution,
         ServiceApiKind serviceApiKind,
         ReactiveReturnKind reactiveReturnKind,
-        AspectPosition aspectPosition
+        Optional<AspectPosition> aspectPosition
 ) {
     /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
     public PipelineStepModel withServiceClassName(ClassName replacement) {
@@ -115,7 +115,7 @@ public record PipelineStepModel(
         this(serviceName, generatedName, servicePackage, serviceClassName, inputMapping, outputMapping,
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
-            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, null);
+            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, Optional.empty());
     }
 
     @SuppressWarnings("ConstantValue")
@@ -187,6 +187,35 @@ public record PipelineStepModel(
             ServiceApiKind serviceApiKind,
             ReactiveReturnKind reactiveReturnKind,
             AspectPosition aspectPosition) {
+        this(serviceName, generatedName, servicePackage, serviceClassName, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
+            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind,
+            Optional.ofNullable(aspectPosition));
+    }
+
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            Optional<String> delegateMethodName,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind,
+            Optional<AspectPosition> aspectPosition) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -226,7 +255,7 @@ public record PipelineStepModel(
         this.remoteExecution = remoteExecution;
         this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
         this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
-        this.aspectPosition = aspectPosition;
+        this.aspectPosition = aspectPosition == null ? Optional.empty() : aspectPosition;
     }
 
     /**
@@ -475,7 +504,7 @@ public record PipelineStepModel(
         private PipelineTemplateStepExecution remoteExecution;
         private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
         private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
-        private AspectPosition aspectPosition;
+        private Optional<AspectPosition> aspectPosition = Optional.empty();
 
         /**
          * Sets the service name.
@@ -611,7 +640,7 @@ public record PipelineStepModel(
 
         /** Records whether a synthetic observer runs before or after its authored parent. */
         public Builder aspectPosition(AspectPosition aspectPosition) {
-            this.aspectPosition = aspectPosition;
+            this.aspectPosition = Optional.ofNullable(aspectPosition);
             return this;
         }
 
@@ -845,6 +874,7 @@ public record PipelineStepModel(
             .executionMode(executionMode)
             .deploymentRole(deploymentRole)
             .sideEffect(sideEffect)
+            .aspectPosition(aspectPosition.orElse(null))
             .cacheKeyGenerator(cacheKeyGenerator)
             .orderingRequirement(orderingRequirement)
             .threadSafety(threadSafety)
