@@ -19,10 +19,6 @@ public record LlmDirectCompletionConfiguration(
         });
     }
 
-    public LlmDirectCompletionConfiguration(String field, Map<String, String> carry) {
-        this(field, Optional.ofNullable(carry));
-    }
-
     public Map<String, String> carriedFields() {
         return carry.orElseGet(Map::of);
     }

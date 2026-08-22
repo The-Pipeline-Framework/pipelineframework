@@ -142,12 +142,14 @@ class LlmQueryOperationTest {
     @Test
     void rejectsDottedDirectCompletionOutputComponentsButAllowsDottedInputPaths() {
         assertThrows(IllegalArgumentException.class,
-            () -> new LlmDirectCompletionConfiguration("review.summary", Map.of()));
+            () -> new LlmDirectCompletionConfiguration("review.summary", Optional.of(Map.of())));
         assertThrows(IllegalArgumentException.class,
-            () -> new LlmDirectCompletionConfiguration("review", Map.of("invoice.id", "invoice.id")));
+            () -> new LlmDirectCompletionConfiguration(
+                "review", Optional.of(Map.of("invoice.id", "invoice.id"))));
 
         assertEquals(Map.of("invoiceId", "invoice.id"),
-            new LlmDirectCompletionConfiguration("review", Map.of("invoiceId", "invoice.id"))
+            new LlmDirectCompletionConfiguration(
+                "review", Optional.of(Map.of("invoiceId", "invoice.id")))
                 .carriedFields());
     }
 

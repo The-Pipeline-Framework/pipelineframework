@@ -80,7 +80,7 @@ public record LlmTurnConfiguration(
             String field = values.get("field");
             Map<String, String> carry = new java.util.LinkedHashMap<>(values);
             carry.remove("field");
-            return new LlmDirectCompletionConfiguration(field, carry);
+            return new LlmDirectCompletionConfiguration(field, Optional.of(carry));
         });
     }
 

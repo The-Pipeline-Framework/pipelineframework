@@ -1,12 +1,8 @@
 package org.pipelineframework.connector.llm;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +38,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private static final ConnectorConfigSchema<LlmTurnConfiguration> CONFIGURATION_SCHEMA =
         ConnectorConfigSchema.record(LlmTurnConfiguration.class, "llm.query.turn", 1);
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final LlmModelInput MODEL_INPUT = new LlmModelInput(JSON);
     private static final System.Logger LOG = System.getLogger(LlmQueryOperation.class.getName());
     private final Supplier<Optional<LlmDecisionClient>> client;
     private final Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader;
@@ -89,7 +86,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 return DecisionContract.from(
                     binding.outputType(), binding.configuration(), catalogueLoader.apply(loader), loader);
             });
-            applicationStateJson = modelInputJson(
+            applicationStateJson = MODEL_INPUT.applicationStateJson(
                 invocation.input(), invocation.configuration().excludedModelInputPaths());
         } catch (Exception failure) {
             return CompletableFuture.failedStage(failure);
@@ -143,7 +140,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private CompletionStage<List<MaterializedPayload>> materializePayloads(
         QueryInvocation<Object, LlmTurnConfiguration, Object> invocation
     ) {
-        List<PayloadReference> references = payloadReferences(
+        List<PayloadReference> references = MODEL_INPUT.payloadReferences(
             invocation.input(), invocation.configuration().excludedModelInputPaths());
         if (references.isEmpty()) {
             return CompletableFuture.completedStage(List.of());
@@ -175,84 +172,6 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
 
     private record MaterializationBatch(List<MaterializedPayload> payloads, long totalBytes) { }
 
-    private static String modelInputJson(Object input, List<String> excludedPaths) throws Exception {
-        com.fasterxml.jackson.databind.JsonNode root = JSON.valueToTree(input);
-        for (String path : excludedPaths) {
-            removeJsonPath(root, path);
-        }
-        return JSON.writeValueAsString(root);
-    }
-
-    private static void removeJsonPath(com.fasterxml.jackson.databind.JsonNode root, String path) {
-        String[] components = path.split("\\.");
-        com.fasterxml.jackson.databind.JsonNode parent = root;
-        for (int index = 0; index < components.length - 1; index++) {
-            parent = parent.path(components[index]);
-            if (parent.isMissingNode()) {
-                return;
-            }
-        }
-        if (parent instanceof com.fasterxml.jackson.databind.node.ObjectNode object) {
-            object.remove(components[components.length - 1]);
-        }
-    }
-
-    private static List<PayloadReference> payloadReferences(Object input, List<String> excludedPaths) {
-        LinkedHashSet<PayloadReference> references = new LinkedHashSet<>();
-        collectPayloadReferences(input, "", java.util.Set.copyOf(excludedPaths), references,
-            java.util.Collections.newSetFromMap(new IdentityHashMap<>()));
-        return List.copyOf(references);
-    }
-
-    private static void collectPayloadReferences(
-        Object value,
-        String path,
-        java.util.Set<String> excludedPaths,
-        LinkedHashSet<PayloadReference> references,
-        java.util.Set<Object> visited
-    ) {
-        if (!path.isEmpty() && excludedPaths.contains(path)) {
-            return;
-        }
-        if (value == null || value instanceof String || value instanceof Number
-            || value instanceof Boolean || value instanceof Character || value.getClass().isEnum()) {
-            return;
-        }
-        if (value instanceof PayloadReference reference) {
-            references.add(reference);
-            return;
-        }
-        if (!visited.add(value)) {
-            return;
-        }
-        if (value instanceof Optional<?> optional) {
-            optional.ifPresent(item -> collectPayloadReferences(item, path, excludedPaths, references, visited));
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            iterable.forEach(item -> collectPayloadReferences(item, path, excludedPaths, references, visited));
-            return;
-        }
-        if (value instanceof Map<?, ?> map) {
-            map.forEach((key, item) -> collectPayloadReferences(
-                item, path.isEmpty() ? String.valueOf(key) : path + "." + key, excludedPaths, references, visited));
-            return;
-        }
-        if (!value.getClass().isRecord()) {
-            return;
-        }
-        for (RecordComponent component : value.getClass().getRecordComponents()) {
-            try {
-                String componentPath = path.isEmpty() ? component.getName() : path + "." + component.getName();
-                collectPayloadReferences(component.getAccessor().invoke(value), componentPath,
-                    excludedPaths, references, visited);
-            } catch (IllegalAccessException | InvocationTargetException failure) {
-                throw new IllegalStateException(
-                    "Failed inspecting payload reference field '" + component.getName() + "'", failure);
-            }
-        }
-    }
-
     private record DecisionContractKey(Class<?> outputType, LlmTurnConfiguration configuration) {
         private DecisionContractKey {
             Objects.requireNonNull(outputType, "LLM output type must not be null");
@@ -277,7 +196,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         Map<String, String> completionVariants,
         Optional<String> callDiscriminator,
         Optional<String> directCompletionType,
-        Optional<LlmDirectCompletionConfiguration> directCompletion,
+        Optional<LlmDirectCompletionProjection> directCompletion,
         List<LlmToolDefinition> tools
     ) {
         private DecisionContract {
@@ -303,11 +222,11 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     throw new IllegalStateException(
                         "LLM Query callables require an output union containing <tpf.llm.AgentCall>");
                 }
-                Optional<LlmDirectCompletionConfiguration> projection = configuration.directCompletion();
+                Optional<LlmDirectCompletionProjection> projection = configuration.directCompletion()
+                    .map(value -> new LlmDirectCompletionProjection(outputType, value));
                 String completionType = projection
-                    .map(value -> completionComponent(outputType, value.field()).getType().getSimpleName())
+                    .map(value -> value.completionType().getSimpleName())
                     .orElse(outputName);
-                projection.ifPresent(value -> validateProjection(outputType, value));
                 return new DecisionContract(
                     outputType,
                     classLoader,
@@ -382,10 +301,9 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     if (directCompletion.isEmpty()) {
                         return JSON.readValue(arguments, outputType);
                     }
-                    LlmDirectCompletionConfiguration projection = directCompletion.orElseThrow();
-                    RecordComponent completion = completionComponent(outputType, projection.field());
-                    Object modelValue = JSON.readValue(arguments, completion.getType());
-                    return instantiateProjectedOutput(projection, input, modelValue);
+                    LlmDirectCompletionProjection projection = directCompletion.orElseThrow();
+                    Object modelValue = JSON.readValue(arguments, projection.completionType());
+                    return projection.materialize(input, modelValue);
                 } catch (InvalidModelDecisionException failure) {
                     throw failure;
                 } catch (Exception failure) {
@@ -418,81 +336,6 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             } catch (Exception failure) {
                 throw new InvalidModelDecisionException("completion payload cannot be materialized", failure);
             }
-        }
-
-        private Object instantiateProjectedOutput(
-            LlmDirectCompletionConfiguration projection,
-            Object input,
-            Object modelValue
-        ) {
-            RecordComponent[] components = outputType.getRecordComponents();
-            Object[] arguments = new Object[components.length];
-            Class<?>[] parameterTypes = new Class<?>[components.length];
-            for (int index = 0; index < components.length; index++) {
-                RecordComponent component = components[index];
-                parameterTypes[index] = component.getType();
-                if (component.getName().equals(projection.field())) {
-                    arguments[index] = modelValue;
-                } else {
-                    String inputPath = projection.carriedFields().get(component.getName());
-                    arguments[index] = readPath(input, inputPath);
-                }
-            }
-            try {
-                return outputType.getDeclaredConstructor(parameterTypes).newInstance(arguments);
-            } catch (Exception failure) {
-                throw new InvalidModelDecisionException("projected completion output cannot be materialized", failure);
-            }
-        }
-
-        private static void validateProjection(
-            Class<?> outputType,
-            LlmDirectCompletionConfiguration projection
-        ) {
-            if (!outputType.isRecord()) {
-                throw new IllegalStateException("LLM direct completion projection requires a record output");
-            }
-            completionComponent(outputType, projection.field());
-            java.util.Set<String> expectedCarry = new java.util.LinkedHashSet<>();
-            for (RecordComponent component : outputType.getRecordComponents()) {
-                if (!component.getName().equals(projection.field())) {
-                    expectedCarry.add(component.getName());
-                }
-            }
-            if (!expectedCarry.equals(projection.carriedFields().keySet())) {
-                throw new IllegalStateException(
-                    "LLM direct completion carry fields must exactly cover output fields " + expectedCarry);
-            }
-        }
-
-        private static RecordComponent completionComponent(Class<?> outputType, String field) {
-            return java.util.Arrays.stream(outputType.getRecordComponents())
-                .filter(component -> component.getName().equals(field))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                    "LLM direct completion output has no field '" + field + "'"));
-        }
-
-        private static Object readPath(Object input, String path) {
-            Object current = Objects.requireNonNull(input, "LLM Query input must not be null");
-            for (String segment : path.split("\\.")) {
-                if (!current.getClass().isRecord()) {
-                    throw new InvalidModelDecisionException(
-                        "LLM direct completion input path '" + path + "' crosses a non-record value");
-                }
-                RecordComponent component = java.util.Arrays.stream(current.getClass().getRecordComponents())
-                    .filter(candidate -> candidate.getName().equals(segment))
-                    .findFirst()
-                    .orElseThrow(() -> new InvalidModelDecisionException(
-                        "LLM direct completion input path '" + path + "' has no field '" + segment + "'"));
-                try {
-                    current = component.getAccessor().invoke(current);
-                } catch (IllegalAccessException | InvocationTargetException failure) {
-                    throw new InvalidModelDecisionException(
-                        "LLM direct completion input path '" + path + "' cannot be read", failure);
-                }
-            }
-            return current;
         }
 
         private Object instantiateAgentCall(LlmCallableConfiguration callable, String arguments) {
