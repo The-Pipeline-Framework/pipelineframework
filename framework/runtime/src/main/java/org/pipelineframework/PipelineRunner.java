@@ -37,6 +37,7 @@ import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.branching.BranchExecutionTracker;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
@@ -306,6 +307,7 @@ public class PipelineRunner implements AutoCloseable {
                 contextSnapshot,
                 awaitContext,
                 telemetryContext));
+        BranchExecutionTracker branchExecutionTracker = new BranchExecutionTracker();
         Object current = PipelineInvocationContextHolder.call(invocationContext, () ->
             PipelineRunContextHolder.call(telemetryContext, () -> runnerCore.runSync(
             contextualInput,
@@ -347,7 +349,8 @@ public class PipelineRunner implements AutoCloseable {
                     awaitContextSnapshot,
                     definitionId,
                     definitionTerminalStepIndex,
-                    java.util.Optional.of(invocationContext));
+                    java.util.Optional.of(invocationContext),
+                    branchExecutionTracker);
             },
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index))));
 

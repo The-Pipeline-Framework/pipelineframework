@@ -87,7 +87,8 @@ public final class PipelineBranchingResourceLoader {
             variantList(raw.get("inputVariants")),
             variantList(raw.get("acceptedVariants")),
             variantList(raw.get("producedVariants")),
-            booleanValue(raw.get("terminal")));
+            booleanValue(raw.get("terminal")),
+            booleanValue(raw.get("afterStepObserver")));
     }
 
     private static BranchingResource selectBestCandidate(List<BranchingResource> candidates, ClassLoader classLoader) {
@@ -251,10 +252,30 @@ public final class PipelineBranchingResourceLoader {
         List<BranchVariantIdentity> inputVariants,
         List<BranchVariantIdentity> acceptedVariants,
         List<BranchVariantIdentity> producedVariants,
-        boolean terminal
+        boolean terminal,
+        boolean afterStepObserver
     ) {
         public BranchingStep {
             definitionId = definitionId == null || definitionId.isBlank() ? "$root" : definitionId.strip();
+        }
+
+        public BranchingStep(
+            String definitionId,
+            int definitionTerminalStepIndex,
+            int index,
+            String step,
+            String runtimeStepClass,
+            String inputRuntimeClass,
+            List<String> acceptedContracts,
+            List<String> acceptedRuntimeClasses,
+            List<BranchVariantIdentity> inputVariants,
+            List<BranchVariantIdentity> acceptedVariants,
+            List<BranchVariantIdentity> producedVariants,
+            boolean terminal
+        ) {
+            this(definitionId, definitionTerminalStepIndex, index, step, runtimeStepClass, inputRuntimeClass,
+                acceptedContracts, acceptedRuntimeClasses, inputVariants, acceptedVariants, producedVariants,
+                terminal, false);
         }
 
         public BranchingStep(
@@ -270,7 +291,7 @@ public final class PipelineBranchingResourceLoader {
             boolean terminal
         ) {
             this("$root", -1, index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts,
-                acceptedRuntimeClasses, inputVariants, acceptedVariants, producedVariants, terminal);
+                acceptedRuntimeClasses, inputVariants, acceptedVariants, producedVariants, terminal, false);
         }
 
         public BranchingStep(
@@ -283,7 +304,7 @@ public final class PipelineBranchingResourceLoader {
             boolean terminal
         ) {
             this("$root", -1, index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts, acceptedRuntimeClasses,
-                List.of(), List.of(), List.of(), terminal);
+                List.of(), List.of(), List.of(), terminal, false);
         }
     }
 }
