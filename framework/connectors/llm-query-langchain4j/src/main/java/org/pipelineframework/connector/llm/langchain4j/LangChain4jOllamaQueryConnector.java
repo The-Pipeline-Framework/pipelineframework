@@ -27,9 +27,8 @@ import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.ollama.OllamaChatModel;
-import io.smallrye.config.ConfigMapping;
-import io.smallrye.config.WithDefault;
 import jakarta.enterprise.context.ApplicationScoped;
+import io.quarkus.arc.Unremovable;
 import jakarta.inject.Inject;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
@@ -42,6 +41,7 @@ import org.pipelineframework.connector.llm.LlmTurnRequest;
 
 /** LangChain4j adapter that observes one tool proposal and never invokes a tool executor. */
 @ApplicationScoped
+@Unremovable
 public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProvider {
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
@@ -95,17 +95,6 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
     @FunctionalInterface
     interface OllamaModelFactory {
         ChatModel create(String baseUrl, String modelName, Duration timeout, boolean thinking, int maxRetries);
-    }
-
-    @ConfigMapping(prefix = "pipeline.llm.langchain4j.ollama")
-    interface OllamaRuntimeConfiguration {
-        /** Maximum wall-clock time for one Ollama HTTP request. */
-        @WithDefault("PT30S")
-        Duration requestTimeout();
-
-        /** Whether Ollama should enable model thinking/reasoning output. */
-        @WithDefault("true")
-        boolean thinking();
     }
 
     record OllamaRuntimeSettings(Duration requestTimeout, boolean thinking) {

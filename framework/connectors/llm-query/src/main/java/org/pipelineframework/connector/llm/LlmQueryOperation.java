@@ -1,12 +1,8 @@
 package org.pipelineframework.connector.llm;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.PayloadMaterializer;
+import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
@@ -41,6 +38,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private static final ConnectorConfigSchema<LlmTurnConfiguration> CONFIGURATION_SCHEMA =
         ConnectorConfigSchema.record(LlmTurnConfiguration.class, "llm.query.turn", 1);
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final LlmModelInput MODEL_INPUT = new LlmModelInput(JSON);
     private static final System.Logger LOG = System.getLogger(LlmQueryOperation.class.getName());
     private final Supplier<Optional<LlmDecisionClient>> client;
     private final Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader;
@@ -64,6 +62,11 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     }
 
     @Override
+    public QueryCapabilities capabilities() {
+        return QueryCapabilities.cacheable();
+    }
+
+    @Override
     public Optional<ConnectorConfigSchema<LlmTurnConfiguration>> configurationSchema() {
         return Optional.of(CONFIGURATION_SCHEMA);
     }
@@ -83,7 +86,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 return DecisionContract.from(
                     binding.outputType(), binding.configuration(), catalogueLoader.apply(loader), loader);
             });
-            applicationStateJson = JSON.writeValueAsString(invocation.input());
+            applicationStateJson = MODEL_INPUT.applicationStateJson(
+                invocation.input(), invocation.configuration().excludedModelInputPaths());
         } catch (Exception failure) {
             return CompletableFuture.failedStage(failure);
         }
@@ -101,7 +105,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     media,
                     contract.tools(),
                     invocation.configuration().structuredOutputMode()),
-                contract))
+                contract,
+                invocation.input()))
             .exceptionally(failure -> {
                 LOG.log(System.Logger.Level.WARNING,
                     "LLM Query failed without a repair or retry inference", failure);
@@ -112,7 +117,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private CompletionStage<QueryOutcome<Object>> decide(
         LlmDecisionClient active,
         LlmTurnRequest request,
-        DecisionContract contract
+        DecisionContract contract,
+        Object input
     ) {
         CompletionStage<LlmToolProposal> decision;
         try {
@@ -122,7 +128,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         }
         return decision.thenApply(proposal -> {
             try {
-                return new QueryOutcome.Found<>(contract.materialize(proposal));
+                return new QueryOutcome.Found<>(contract.materialize(proposal, input));
             } catch (InvalidModelDecisionException failure) {
                 LOG.log(System.Logger.Level.WARNING,
                     "LLM Query rejected an invalid model decision: " + failure.getMessage(), failure);
@@ -134,7 +140,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private CompletionStage<List<MaterializedPayload>> materializePayloads(
         QueryInvocation<Object, LlmTurnConfiguration, Object> invocation
     ) {
-        List<PayloadReference> references = payloadReferences(invocation.input());
+        List<PayloadReference> references = MODEL_INPUT.payloadReferences(
+            invocation.input(), invocation.configuration().excludedModelInputPaths());
         if (references.isEmpty()) {
             return CompletableFuture.completedStage(List.of());
         }
@@ -165,53 +172,6 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
 
     private record MaterializationBatch(List<MaterializedPayload> payloads, long totalBytes) { }
 
-    private static List<PayloadReference> payloadReferences(Object input) {
-        LinkedHashSet<PayloadReference> references = new LinkedHashSet<>();
-        collectPayloadReferences(input, references, java.util.Collections.newSetFromMap(new IdentityHashMap<>()));
-        return List.copyOf(references);
-    }
-
-    private static void collectPayloadReferences(
-        Object value,
-        LinkedHashSet<PayloadReference> references,
-        java.util.Set<Object> visited
-    ) {
-        if (value == null || value instanceof String || value instanceof Number
-            || value instanceof Boolean || value instanceof Character || value.getClass().isEnum()) {
-            return;
-        }
-        if (value instanceof PayloadReference reference) {
-            references.add(reference);
-            return;
-        }
-        if (!visited.add(value)) {
-            return;
-        }
-        if (value instanceof Optional<?> optional) {
-            optional.ifPresent(item -> collectPayloadReferences(item, references, visited));
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            iterable.forEach(item -> collectPayloadReferences(item, references, visited));
-            return;
-        }
-        if (value instanceof Map<?, ?> map) {
-            map.values().forEach(item -> collectPayloadReferences(item, references, visited));
-            return;
-        }
-        if (!value.getClass().isRecord()) {
-            return;
-        }
-        for (RecordComponent component : value.getClass().getRecordComponents()) {
-            try {
-                collectPayloadReferences(component.getAccessor().invoke(value), references, visited);
-            } catch (IllegalAccessException | InvocationTargetException failure) {
-                throw new IllegalStateException(
-                    "Failed inspecting payload reference field '" + component.getName() + "'", failure);
-            }
-        }
-    }
-
     private record DecisionContractKey(Class<?> outputType, LlmTurnConfiguration configuration) {
         private DecisionContractKey {
             Objects.requireNonNull(outputType, "LLM output type must not be null");
@@ -236,6 +196,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         Map<String, String> completionVariants,
         Optional<String> callDiscriminator,
         Optional<String> directCompletionType,
+        Optional<LlmDirectCompletionProjection> directCompletion,
         List<LlmToolDefinition> tools
     ) {
         private DecisionContract {
@@ -244,6 +205,8 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             callDiscriminator = Objects.requireNonNull(callDiscriminator, "call discriminator must not be null");
             directCompletionType = Objects.requireNonNull(
                 directCompletionType, "direct completion type must not be null");
+            directCompletion = Objects.requireNonNull(
+                directCompletion, "direct completion projection must not be null");
             tools = List.copyOf(tools);
         }
 
@@ -259,6 +222,11 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     throw new IllegalStateException(
                         "LLM Query callables require an output union containing <tpf.llm.AgentCall>");
                 }
+                Optional<LlmDirectCompletionProjection> projection = configuration.directCompletion()
+                    .map(value -> new LlmDirectCompletionProjection(outputType, value));
+                String completionType = projection
+                    .map(value -> value.completionType().getSimpleName())
+                    .orElse(outputName);
                 return new DecisionContract(
                     outputType,
                     classLoader,
@@ -266,9 +234,10 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     Map.of(),
                     Map.of(),
                     Optional.empty(),
-                    Optional.of(outputName),
+                    Optional.of(completionType),
+                    projection,
                     List.of(new LlmToolDefinition(
-                        "complete", "Complete with " + outputName, catalogue.schema(outputName))));
+                        "complete", "Complete with " + completionType, catalogue.schema(completionType))));
             }
             Map<String, String> variants = catalogue.unionVariants(outputName);
             List<String> callVariants = variants.entrySet().stream()
@@ -313,10 +282,11 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 completions,
                 Optional.of(callDiscriminator),
                 Optional.empty(),
+                Optional.empty(),
                 tools);
         }
 
-        Object materialize(LlmToolProposal proposal) {
+        Object materialize(LlmToolProposal proposal, Object input) {
             if (proposal == null || proposal.alias().isBlank()) {
                 throw new InvalidModelDecisionException("model did not select a tool alias");
             }
@@ -328,7 +298,12 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 try {
                     String arguments = catalogue.validateAndCanonicalize(
                         directCompletionType.orElseThrow(), proposal.argumentsJson());
-                    return JSON.readValue(arguments, outputType);
+                    if (directCompletion.isEmpty()) {
+                        return JSON.readValue(arguments, outputType);
+                    }
+                    LlmDirectCompletionProjection projection = directCompletion.orElseThrow();
+                    Object modelValue = JSON.readValue(arguments, projection.completionType());
+                    return projection.materialize(input, modelValue);
                 } catch (InvalidModelDecisionException failure) {
                     throw failure;
                 } catch (Exception failure) {
