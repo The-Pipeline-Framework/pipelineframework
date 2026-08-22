@@ -37,17 +37,17 @@ tags:
 
 ## Elevator answer
 
-**Treat widely used connectors as versioned products: publish compatibility contracts, test consumers, name owners, and evolve mappings deliberately rather than changing a shared client silently.**
+**Treat widely used connectors as versioned products: give providers and operations stable contracts, name owners, test compatibility, and migrate consumers deliberately rather than changing shared behavior silently.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A shared connector is not merely a library. It encodes an external boundary, mappings, credentials, delivery behavior, and operational assumptions that several teams may depend on. Changing it silently can alter more business flows than its implementation suggests.
+A shared connector is not merely a library. A provider packages reusable integration capabilities; its operations identify what can be invoked, for which kind of boundary, under a major version. Typed input and output contracts, configuration, and declared capabilities make that promise more precise than a shared client API alone.
 
-TPF makes connector declarations explicit, which makes the consumer relationship more discoverable. Governance should then be ordinary product discipline: a named owner, a compatibility promise, versioned contract where needed, focused connector tests, and a migration path for incompatible changes. Different teams may need different versions temporarily; pretending one upgrade suits every consumer creates an accidental shared-monolith boundary.
+Applications select those operations through named bindings that supply deployment-specific configuration without redefining the operation contract. That separation matters: the provider and operation contract can evolve as shared infrastructure, while each application still owns where the boundary appears in its flow and which configured binding it uses.
 
-The goal is not to create a central approval queue. It is to make broad impact visible before it becomes a production dependency failure.
+Governance should then be ordinary product discipline: a named owner, a compatibility promise, focused provider and operation tests, and a migration path for incompatible changes. Different teams may need different major versions temporarily. The goal is not a central approval queue; it is to make broad impact visible before it becomes a production dependency failure.
 
 ## Trade-offs
 

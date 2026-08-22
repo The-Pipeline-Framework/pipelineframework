@@ -38,17 +38,17 @@ tags:
 
 ## Elevator answer
 
-**Teams own their business flows; shared framework conventions, connectors, and runtime contracts need explicit product ownership, versioning, and change review without centralizing every application decision.**
+**Teams own the meaning and outcomes of their business flows; shared connector contracts and framework runtime semantics need explicit product ownership without centralizing every application decision.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Shared pipelines expose an ordinary ownership question. The team that owns a business capability should own its flow’s meaning and outcome. A shared connector, runtime convention, or generated contract has a broader blast radius and needs a named maintainer, compatibility policy, and version story.
+Shared pipelines expose an ordinary ownership question. The team that owns a business capability should own its flow’s meaning, domain decisions, and outcomes. Sharing infrastructure does not transfer that semantic ownership to the platform team.
 
-TPF makes these seams easier to see, but it cannot assign responsibility. A checkpoint handoff transfers operational ownership; a connector change may affect several consumers; a shared policy may need a published compatibility promise. Good governance makes those dependencies explicit without converting every application change into a central ticket.
+A connector contract, framework runtime semantic, or generated contract has a broader blast radius and needs a named maintainer, compatibility policy, and deliberate evolution path. TPF makes these seams easier to see, but it cannot assign responsibility. Ownership should follow the promise being made: business teams own flow meaning, connector owners own provider and operation compatibility, and the framework team owns shared execution semantics.
 
-The trade-off is a little process where broad impact exists. That is preferable to discovering shared ownership only after a connector change breaks someone else’s flow.
+The trade-off is a little process where broad impact exists. Good governance makes those dependencies explicit without converting every application change into a central ticket.
 
 ## Trade-offs
 

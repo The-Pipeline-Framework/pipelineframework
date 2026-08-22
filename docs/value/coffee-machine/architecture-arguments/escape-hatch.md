@@ -45,7 +45,9 @@ tags:
 
 An opinionated framework without an escape hatch eventually asks teams to lie. Critical integrations, unusual protocols, legacy constraints, or a business model that does not fit may require code outside the preferred path. The honest response is not to smuggle it into a business step or declare that the framework is universally wrong.
 
-Use an explicit boundary. Name the exception, keep external I/O and operational ownership visible, apply the supported telemetry and security controls where possible, and document what semantics differ. If the exception is temporary, give it a retirement condition. If it is recurring, treat it as design input for the framework or connector model.
+First classify the requirement: is it dataflow, representation, observation, effect, suspension, persistence, replay, routing, or something the framework genuinely does not model? That question often reveals an existing boundary before an exception is needed.
+
+If it is a real exception, use an explicit boundary. Name it, keep external I/O and operational ownership visible, apply the supported telemetry and security controls where possible, and document which semantics differ. If the exception is temporary, give it a retirement condition. If it recurs, treat it as design input for the framework or connector model.
 
 The escape hatch must not become a second undocumented architecture. Frequent bypasses indicate either a poor fit or a missing extension point. In both cases, more silent shortcuts make the answer harder to discover.
 

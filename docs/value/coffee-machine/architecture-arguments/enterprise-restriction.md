@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**TPF restricts repeated execution semantics deliberately, while leaving teams autonomy over domain behavior, deployment choices, and supported boundary contracts; the restriction must earn its keep.**
+**TPF standardizes recurring execution semantics deliberately, while leaving teams autonomy over domain behavior, supported boundary choices, and deployment shape; every restriction must earn its keep.**
 
 <CoffeeMisconceptions />
 
@@ -45,9 +45,9 @@ tags:
 
 Large enterprises rarely lack flexibility. They lack a way to keep repeated cross-boundary behavior coherent while many teams make reasonable local decisions. Retries, adapters, connectors, telemetry, deployment mappings, and generated contracts are exactly where local freedom can become systemic ambiguity.
 
-TPF is opinionated about those recurring execution semantics. It asks teams to declare typed flow shape, boundary contracts, and ownership. It does not prescribe every domain model, business policy, deployment, or bounded context. The distinction matters: standardize the mechanics that should mean the same thing, and leave business variation where it actually belongs.
+TPF is opinionated about those recurring execution semantics. It asks teams to declare typed flow shape, boundary contracts, and ownership. It does not prescribe every domain model, business policy, deployment decision, or bounded context. The distinction matters: standardize the mechanics that must remain coherent across applications, and leave business variation where it actually belongs.
 
-The risk is real. A central framework can become a gatekeeping platform if every unusual case requires an exception tribunal. The remedy is a supported extension model, transparent constraints, and a real escape hatch—not a promise that all teams will always want the same model.
+The risk is real. A central framework can become a gatekeeping platform if every unusual case requires an exception tribunal. The remedy is a supported extension model, transparent constraints, and a real escape hatch—not a promise that every team will always want the same model.
 
 ## Trade-offs
 

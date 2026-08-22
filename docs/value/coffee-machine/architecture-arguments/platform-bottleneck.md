@@ -37,17 +37,17 @@ tags:
 
 ## Elevator answer
 
-**It should not: teams change their own typed flows independently, while the platform owns supported runtime and connector contracts whose broader impact justifies coordinated evolution.**
+**It should not: application teams own their typed flows, while shared connector contracts and framework runtime semantics receive coordination proportional to their wider impact.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Centralization occurs when a framework owns business meaning it does not understand. TPF should not do that. Application teams define their flows, domain decisions, and use of supported boundaries. A platform team supplies runtime conventions, security controls, generated integration patterns, and shared connectors where those services reduce repeated operational work.
+Centralization occurs when a framework owns business meaning it does not understand. TPF should not do that. Application teams define their flow composition, domain decisions, and use of supported boundaries. They should be able to change application-owned steps and policies without asking a platform team to interpret the business.
 
-Coordination is appropriate when a change affects a shared contract. A connector version, generated runtime behavior, or security boundary can have many consumers and should evolve with compatibility review. Requiring the same process for a team’s local business step would be a platform bottleneck disguised as consistency.
+Coordination is appropriate when a change affects a shared contract. A connector provider or operation contract can have many consumers; framework runtime semantics can affect every pipeline that relies on them. Their identities, versions, capabilities, compatibility promises, and generated behavior deserve deliberate evolution. Requiring the same process for a team’s local business step would be a platform bottleneck disguised as consistency.
 
-The boundary is therefore impact, not hierarchy. Teams should be autonomous inside their owned flows and deliberate at shared interfaces. TPF’s typed contract model makes the interface visible enough to support that distinction.
+The boundary is therefore impact, not hierarchy: application-owned flow meaning stays local, shared connector contracts receive product ownership, and framework runtime semantics remain a platform concern. TPF’s typed contract model makes those interfaces visible enough to support the distinction.
 
 ## Trade-offs
 

@@ -45,9 +45,9 @@ tags:
 
 A small startup should be suspicious of any framework that demands a new language before it has a costly problem. A local CRUD feature, simple integration, or quickly changing hypothesis may be clearer as ordinary framework code. TPF is not a maturity badge.
 
-It becomes useful when the same path begins collecting transport logic, mapping glue, retries, external effects, and operational ambiguity. At that point the team is already paying architecture cost; it is merely paying it in scattered code and late failures. A typed flow can reduce that cost by making the consequential path explicit.
+It becomes useful when the same path begins collecting transport logic, mapping glue, retries, external effects, durable waits, or operational ambiguity. At that point the team is already paying architecture cost; it is merely paying it in scattered code and late failures. A typed flow can reduce that cost by making the consequential path and its boundaries explicit.
 
-The right adoption is narrow. Pick one flow that hurts, prove the contract helps, and keep the rest simple. If the framework’s model is more complex than the business behavior and boundary it describes, do not use it yet.
+The right adoption is narrow. Pick one flow that hurts, prove that the contract removes more complexity than it adds, and keep the rest simple. If the framework’s model is more complex than the business behavior and boundaries it describes, do not use it yet.
 
 ## Trade-offs
 

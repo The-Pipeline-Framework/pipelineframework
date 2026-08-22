@@ -37,17 +37,17 @@ tags:
 
 ## Elevator answer
 
-**Declared connectors, typed mappings, generated metadata, and runtime contracts give security and compliance teams a focused view of external data boundaries without replacing detailed service review.**
+**Declared connectors, typed contracts and mappings, compiled metadata, and runtime evidence give security and compliance teams a focused view of external boundaries without replacing detailed service review.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Security review struggles when external data movement is scattered across injected clients, helper methods, and configuration that only developers can reconstruct. TPF does not make risk disappear, but declared connectors and typed mappings make the important question more searchable: what crosses this boundary, through which runtime, with what ownership and transport?
+Security review struggles when external data movement is scattered across injected clients, helper methods, and configuration that only developers can reconstruct. TPF does not make risk disappear, but declared connector operations, typed mappings, and named bindings make the important questions more searchable: what can cross this boundary, through which provider and operation, under which contract and configuration, and with what ownership?
 
-Generated metadata can support an inventory of flow shape, telemetry, platform, and connector boundaries. Security teams can use that as a focused review surface for egress, credentials, tenant handling, and sensitive-data capture. Application teams still own the correctness of their domain behavior and mappings; security teams still need detailed review for high-risk paths.
+Compiled contracts and generated metadata can support an inventory of flow shape, platform, and connector boundaries. Runtime invocation and telemetry can then provide evidence about what actually executed, while deployment policy governs what was allowed to execute. Security teams can use that aligned surface to review egress, credentials, tenant handling, and sensitive-data capture. Application teams still own the correctness of their domain behavior and mappings; high-risk paths still need detailed review.
 
-The value is evidence alignment. A connector declaration, generated adapter, telemetry record, and deployment policy should describe the same boundary rather than four unrelated versions of it.
+The value is evidence alignment. The authored declaration, compiled contract and metadata, runtime invocation, telemetry, and deployment policy should describe the same boundary rather than five unrelated versions of it. Any gap between them is itself a finding, not something a generated inventory should conceal.
 
 ## Trade-offs
 

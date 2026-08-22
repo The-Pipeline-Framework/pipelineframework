@@ -37,15 +37,15 @@ tags:
 
 ## Elevator answer
 
-**Yes. Business actions may require different retry semantics, while shared runtime contracts, telemetry, ownership, and policy guardrails keep those differences visible and operable.**
+**Yes. Business actions may require different resilience semantics, while shared runtime vocabulary, contracts, telemetry, ownership, and policy guardrails keep those differences visible and operable.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Different actions have different consequences. Retrying a price lookup, a payment, and a regulatory submission should not have identical budgets or terminal behavior. A framework that forces one resilience policy everywhere turns business difference into technical debt.
+Different actions have different consequences. A price lookup, a payment, and a regulatory submission should not have identical retry budgets or terminal behavior. A framework that forces one resilience policy everywhere turns business difference into technical debt.
 
-TPF separates the decision about business outcome from the runtime mechanics that execute it. Teams can declare appropriate behavior for supported flows while shared telemetry, stable identifiers, retry categories, and terminal ownership keep the result operable. Operators should see that policies differ and why, rather than reverse-engineering special cases from annotations.
+TPF separates decisions about business outcomes from the runtime mechanics that execute them. Teams can declare appropriate behavior for supported flows while shared telemetry, stable identifiers, failure categories, and terminal ownership keep the result operable. Operators should see that policies differ and why, rather than reverse-engineering special cases from application code.
 
 The risk is uncontrolled variation. If every team invents its own error names, retry semantics, and DLQ behavior, shared operations fragment. Guardrails should standardize the vocabulary and supported choices, not erase meaningful business differences.
 
