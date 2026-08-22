@@ -1033,8 +1033,9 @@ public class AwaitCoordinator {
             if (canonicalOutputType.isInstance(record.responsePayload())) {
                 return record.responsePayload();
             }
-            if (descriptor.requestAwareCompletion()
-                && record.transportMetadata().containsKey(COMPLETION_PROJECTOR_METADATA)) {
+            // Request-aware completion has always persisted its canonical projection. Records created
+            // before projector IDs were pinned therefore need the same direct coercion on recovery.
+            if (descriptor.requestAwareCompletion()) {
                 return coerceCanonicalPayload(record, record.responsePayload());
             }
             return canonicalCompletionPayload(

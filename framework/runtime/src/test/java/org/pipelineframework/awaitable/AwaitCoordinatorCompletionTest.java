@@ -711,7 +711,7 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
-    void requestAwareSuspensionRoundTripDoesNotProjectCanonicalCompletionTwice() throws Exception {
+    void preIdRequestAwareSuspensionRoundTripDoesNotProjectCanonicalCompletionTwice() throws Exception {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         java.util.concurrent.atomic.AtomicInteger projections = new java.util.concurrent.atomic.AtomicInteger();
@@ -737,8 +737,13 @@ class AwaitCoordinatorCompletionTest {
         TransitionAwaitSuspension exported = coordinator.suspensionSnapshot(
             new AwaitSuspendedException("tenant-1", "exec-1", created.record().unitId(), 1))
             .await().indefinitely();
-        String json = PipelineJson.mapper().writeValueAsString(exported);
-        TransitionAwaitSuspension imported = PipelineJson.mapper().readValue(json, TransitionAwaitSuspension.class);
+        com.fasterxml.jackson.databind.node.ObjectNode serialized =
+            (com.fasterxml.jackson.databind.node.ObjectNode) PipelineJson.mapper().valueToTree(exported);
+        serialized.withArray("interactions").forEach(interaction ->
+            ((com.fasterxml.jackson.databind.node.ObjectNode) interaction.path("transportMetadata"))
+                .remove("tpf.await.completion.projector"));
+        TransitionAwaitSuspension imported = PipelineJson.mapper().treeToValue(
+            serialized, TransitionAwaitSuspension.class);
         InMemoryAwaitInteractionStore restartedStore = new InMemoryAwaitInteractionStore();
         AwaitCoordinator restarted = coordinator(restartedStore);
         restarted.descriptorFactory.register(descriptor);
