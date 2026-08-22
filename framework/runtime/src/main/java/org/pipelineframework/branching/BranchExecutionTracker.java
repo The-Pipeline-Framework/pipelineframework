@@ -30,6 +30,11 @@ public final class BranchExecutionTracker {
             && Boolean.TRUE.equals(lastStepSkipped.get(new IdentityWeakReference(item)));
     }
 
+    synchronized int trackedItemCount() {
+        expungeCollectedItems();
+        return lastStepSkipped.size();
+    }
+
     private void expungeCollectedItems() {
         IdentityWeakReference collected;
         while ((collected = (IdentityWeakReference) collectedItems.poll()) != null) {

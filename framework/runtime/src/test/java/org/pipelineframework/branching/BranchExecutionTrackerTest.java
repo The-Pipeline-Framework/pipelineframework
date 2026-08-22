@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
@@ -14,6 +15,7 @@ class BranchExecutionTrackerTest {
     void doesNotRetainProcessedItemsForTheLifetimeOfTheRun() {
         BranchExecutionTracker tracker = new BranchExecutionTracker();
         WeakReference<Object> processed = recordTemporaryItem(tracker);
+        assertEquals(1, tracker.trackedItemCount());
 
         assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
             while (processed.get() != null) {
@@ -22,6 +24,7 @@ class BranchExecutionTrackerTest {
             }
         });
         assertNull(processed.get());
+        assertEquals(0, tracker.trackedItemCount());
     }
 
     private static WeakReference<Object> recordTemporaryItem(BranchExecutionTracker tracker) {

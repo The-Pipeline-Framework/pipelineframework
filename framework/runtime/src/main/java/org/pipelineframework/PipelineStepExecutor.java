@@ -533,7 +533,7 @@ class PipelineStepExecutor {
         java.util.Optional<PipelineInvocationContext> invocationContext,
         BranchExecutionTracker branchExecutionTracker) {
         BranchAwareOneToOneExecution branchExecution = new BranchAwareOneToOneExecution(
-            branchingDescriptor, branchExecutionTracker, telemetry);
+            Optional.ofNullable(branchingDescriptor), branchExecutionTracker, telemetry);
         if (current instanceof Uni<?>) {
             Uni<I> input = telemetry.consume(step.getClass(), (Uni<I>) current);
             Uni<O> result = input
@@ -1042,7 +1042,7 @@ class PipelineStepExecutor {
         StepBranchingDescriptor branchingDescriptor,
         BranchExecutionTracker branchExecutionTracker) {
         BranchAwareOneToOneExecution branchExecution = new BranchAwareOneToOneExecution(
-            branchingDescriptor, branchExecutionTracker, telemetry);
+            Optional.ofNullable(branchingDescriptor), branchExecutionTracker, telemetry);
         if (current instanceof Uni<?>) {
             Uni<I> input = telemetry.consume(step.getClass(), (Uni<I>) current);
             Uni<O> result = input.onItem().transformToUni(item -> branchExecution.execute(
@@ -1092,22 +1092,23 @@ class PipelineStepExecutor {
     static <O> Uni<O> skippedUni(
         Class<?> stepClass,
         Object item,
-        StepBranchingDescriptor branchingDescriptor,
+        Optional<StepBranchingDescriptor> branchingDescriptor,
         PipelineStepTelemetry telemetry) {
-        if (branchingDescriptor == null) {
+        if (branchingDescriptor.isEmpty()) {
             return (Uni<O>) (Uni<?>) Uni.createFrom().item(item);
         }
-        if (branchingDescriptor.terminal()) {
-            return Uni.createFrom().failure(terminalMismatch(branchingDescriptor, item));
+        StepBranchingDescriptor descriptor = branchingDescriptor.orElseThrow();
+        if (descriptor.terminal()) {
+            return Uni.createFrom().failure(terminalMismatch(descriptor, item));
         }
         if (item != null && "org.pipelineframework.csv.grpc.PipelineTypes$PaymentStatus".equals(item.getClass().getName())) {
             logger.infof(
                 "Branch-aware skip for step %s on PaymentStatus payload: %s",
-                branchingDescriptor.stepName(),
+                descriptor.stepName(),
                 item);
         }
-        telemetry.recordSkip(stepClass, item, branchingDescriptor.acceptedContracts(),
-            branchingDescriptor.variantIdentity(item));
+        telemetry.recordSkip(stepClass, item, descriptor.acceptedContracts(),
+            descriptor.variantIdentity(item));
         return (Uni<O>) (Uni<?>) Uni.createFrom().item(item);
     }
 
