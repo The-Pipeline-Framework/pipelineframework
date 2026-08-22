@@ -21,6 +21,9 @@ import java.util.function.Function;
  * @param transportOutputType serialization representation used at completion
  * @param inputToTransport generated conversion applied immediately before dispatch
  * @param outputFromTransport generated conversion applied immediately after transport decoding
+ * @param completionProjectorId stable configured identity of the request-aware completion projector
+ * @param completionProjector optional pure request-plus-completion projection
+ * @param requestAwareCompletion whether completionProjector owns canonical output construction
  */
 public record AwaitStepDescriptor(
     String stepId,
@@ -35,8 +38,31 @@ public record AwaitStepDescriptor(
     String transportInputType,
     String transportOutputType,
     Function<Object, Object> inputToTransport,
-    Function<Object, Object> outputFromTransport
+    Function<Object, Object> outputFromTransport,
+    String completionProjectorId,
+    AwaitCompletionProjector<Object, Object, Object> completionProjector,
+    boolean requestAwareCompletion
 ) {
+    public AwaitStepDescriptor(
+        String stepId,
+        String inputType,
+        String outputType,
+        String cardinality,
+        Duration timeout,
+        String correlationStrategy,
+        String transportType,
+        Map<String, Object> transportConfig,
+        List<String> idempotencyKeyFields,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
+        this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType,
+            transportConfig, idempotencyKeyFields, transportInputType, transportOutputType,
+            inputToTransport, outputFromTransport, null, defaultCompletionProjector(outputFromTransport), false);
+    }
+
     public AwaitStepDescriptor(
         String stepId,
         String inputType,
@@ -132,6 +158,30 @@ public record AwaitStepDescriptor(
         transportInputType = transportInputType == null || transportInputType.isBlank() ? inputType : transportInputType;
         transportOutputType = transportOutputType == null || transportOutputType.isBlank() ? outputType : transportOutputType;
         inputToTransport = inputToTransport == null ? Function.identity() : inputToTransport;
-        outputFromTransport = outputFromTransport == null ? Function.identity() : outputFromTransport;
+        Function<Object, Object> normalizedOutputFromTransport =
+            outputFromTransport == null ? Function.identity() : outputFromTransport;
+        outputFromTransport = normalizedOutputFromTransport;
+        completionProjectorId = completionProjectorId == null || completionProjectorId.isBlank()
+            ? null
+            : completionProjectorId.trim();
+        if (requestAwareCompletion && completionProjector == null) {
+            throw new IllegalArgumentException("request-aware completion requires a completion projector");
+        }
+        if (requestAwareCompletion && completionProjectorId == null) {
+            throw new IllegalArgumentException("request-aware completion requires a stable completion projector id");
+        }
+        if (!requestAwareCompletion) {
+            completionProjectorId = null;
+        }
+        completionProjector = completionProjector == null
+            ? defaultCompletionProjector(normalizedOutputFromTransport)
+            : completionProjector;
+    }
+
+    static AwaitCompletionProjector<Object, Object, Object> defaultCompletionProjector(
+        Function<Object, Object> outputFromTransport
+    ) {
+        Function<Object, Object> converter = outputFromTransport == null ? Function.identity() : outputFromTransport;
+        return (request, completion, metadata) -> converter.apply(completion);
     }
 }

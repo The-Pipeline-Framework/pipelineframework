@@ -35,6 +35,7 @@ import org.pipelineframework.telemetry.PipelineReplayTelemetry;
 @ApplicationScoped
 public class AwaitCoordinator {
     private static final Logger LOG = Logger.getLogger(AwaitCoordinator.class);
+    private static final String COMPLETION_PROJECTOR_METADATA = "tpf.await.completion.projector";
 
     @Inject
     Instance<AwaitInteractionStore> interactionStores;
@@ -103,9 +104,10 @@ public class AwaitCoordinator {
     ) {
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
         return registerDescriptor(descriptor)
-            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
+            .onItem().transformToUni(registered -> createOrGetUnit(
+                registered, tenantId, unitId, executionId, stepIndex)
             .onItem().transformToUni(unit -> createInteraction(
-                descriptor,
+                registered,
                 unit.unitId(),
                 tenantId,
                 executionId,
@@ -121,7 +123,7 @@ public class AwaitCoordinator {
                         unit.unitId(),
                         created.record().interactionId(),
                         System.currentTimeMillis())
-                    .replaceWith(created)));
+                    .replaceWith(created))));
     }
 
     public Uni<AwaitCreateResult> createOrGetItem(
@@ -154,13 +156,13 @@ public class AwaitCoordinator {
         Map<String, Object> traceMetadata
     ) {
         return registerDescriptor(descriptor)
-            .onItem().transformToUni(ignored -> {
+            .onItem().transformToUni(registered -> {
                 if (itemIndex < 0) {
                     return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
                 }
-                return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+                return createOrGetUnit(registered, tenantId, unitId, executionId, stepIndex)
                     .onItem().transformToUni(unit -> createItemInPreparedUnit(
-                        descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                        registered, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
                         itemIndex, assignee, group, traceMetadata));
             });
     }
@@ -174,7 +176,8 @@ public class AwaitCoordinator {
         int stepIndex
     ) {
         return registerDescriptor(descriptor)
-            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
+            .onItem().transformToUni(registered -> createOrGetUnit(
+                registered, tenantId, unitId, executionId, stepIndex))
             .replaceWithVoid();
     }
 
@@ -209,19 +212,20 @@ public class AwaitCoordinator {
         Map<String, Object> traceMetadata
     ) {
         return registerDescriptor(descriptor)
-            .chain(() -> {
+            .onItem().transformToUni(registered -> {
                 if (itemIndex < 0) {
                     return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
                 }
                 return createItemInPreparedUnit(
-                    descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                    registered, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
                     itemIndex, assignee, group, traceMetadata);
             });
     }
 
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
+        AwaitStepDescriptor registered = descriptorFor(interaction);
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         long nowEpochMs = System.currentTimeMillis();
         return interactionStore().markDispatching(
                 interaction.tenantId(),
@@ -234,9 +238,9 @@ public class AwaitCoordinator {
             .onItem().transformToUni(claimedInteraction -> awaitTelemetry.inProviderDispatchSpan(
                 claimedInteraction,
                 () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
-                    descriptor,
+                    registered,
                     claimedInteraction,
-                    transportRequestPayload(descriptor, claimedInteraction))))
+                    transportRequestPayload(registered, claimedInteraction))))
                 .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -268,7 +272,8 @@ public class AwaitCoordinator {
      */
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatchLive(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
+        AwaitStepDescriptor registered = descriptorFor(interaction);
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         Uni<AwaitInteractionRecord> intended = interaction.status() == AwaitInteractionStatus.WAITING
             ? interactionStore().markDispatching(
                 interaction.tenantId(),
@@ -283,9 +288,9 @@ public class AwaitCoordinator {
         return intended.onItem().transformToUni(dispatching -> awaitTelemetry.inProviderDispatchSpan(
             dispatching,
             () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
-                descriptor,
+                registered,
                 dispatching,
-                transportRequestPayload(descriptor, dispatching))))
+                transportRequestPayload(registered, dispatching))))
             .onFailure().call(failure -> interactionStore().fail(
                 dispatching.tenantId(),
                 dispatching.interactionId(),
@@ -303,10 +308,21 @@ public class AwaitCoordinator {
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
         Map<String, Object> merged = new java.util.LinkedHashMap<>(interaction.transportMetadata());
         if (metadata != null) {
-            merged.putAll(metadata);
+            metadata.forEach((key, value) -> {
+                if (!COMPLETION_PROJECTOR_METADATA.equals(key)) {
+                    merged.put(key, value);
+                }
+            });
         }
-        return awaitAdmissionCoordinator == null ? Map.copyOf(merged)
+        Map<String, Object> enriched = awaitAdmissionCoordinator == null ? Map.copyOf(merged)
             : awaitAdmissionCoordinator.dispatchMetadata(interaction, Map.copyOf(merged));
+        Object pinnedProjector = interaction.transportMetadata().get(COMPLETION_PROJECTOR_METADATA);
+        Map<String, Object> authoritative = new java.util.LinkedHashMap<>(enriched);
+        authoritative.remove(COMPLETION_PROJECTOR_METADATA);
+        if (pinnedProjector != null) {
+            authoritative.put(COMPLETION_PROJECTOR_METADATA, pinnedProjector);
+        }
+        return Map.copyOf(authoritative);
     }
 
     /**
@@ -731,7 +747,7 @@ public class AwaitCoordinator {
                 descriptor.transportType(),
                 unitId,
                 itemIndex,
-                traceMetadata,
+                completionContractMetadata(descriptor, traceMetadata),
                 now,
                 deadline,
                 ttl))
@@ -1019,7 +1035,16 @@ public class AwaitCoordinator {
             if (canonicalOutputType.isInstance(record.responsePayload())) {
                 return record.responsePayload();
             }
-            return canonicalCompletionPayload(record, descriptor, record.responsePayload());
+            // Request-aware completion has always persisted its canonical projection. Records created
+            // before projector IDs were pinned therefore need the same direct coercion on recovery.
+            if (descriptor.requestAwareCompletion()) {
+                return coerceCanonicalPayload(record, record.responsePayload());
+            }
+            return canonicalCompletionPayload(
+                record,
+                descriptor,
+                record.responsePayload(),
+                completionMetadata(record));
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
                 "Failed resolving await canonical output type " + record.outputType()
@@ -1034,9 +1059,17 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object completionPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
+        Object completionPayload = !descriptor.requestAwareCompletion()
+            && sameTypeIdentity(record.outputType(), record.transportOutputType())
             ? command.responsePayload()
-            : canonicalCompletionPayload(record, descriptor, command.responsePayload());
+            : canonicalCompletionPayload(
+                record,
+                descriptor,
+                command.responsePayload(),
+                new AwaitCompletionMetadata(
+                    record.interactionId(),
+                    command.actor(),
+                    Instant.ofEpochMilli(command.nowEpochMs())));
         return new ValidatedCompletion(record, withResponsePayload(command, completionPayload), descriptor);
     }
 
@@ -1048,11 +1081,28 @@ public class AwaitCoordinator {
     private Object canonicalCompletionPayload(
         AwaitInteractionRecord record,
         AwaitStepDescriptor descriptor,
-        Object payload
+        Object payload,
+        AwaitCompletionMetadata metadata
     ) {
         Object transportPayload = coerceTransportPayload(record, payload);
-        Object canonicalPayload = descriptor.outputFromTransport().apply(transportPayload);
+        Object canonicalPayload;
+        if (descriptor.requestAwareCompletion()) {
+            Object canonicalRequest = restoreCanonicalRequestPayload(descriptor, record.requestPayload());
+            canonicalPayload = descriptor.completionProjector().project(canonicalRequest, transportPayload, metadata);
+        } else {
+            canonicalPayload = descriptor.outputFromTransport().apply(transportPayload);
+        }
         return coerceCanonicalPayload(record, canonicalPayload);
+    }
+
+    private static AwaitCompletionMetadata completionMetadata(AwaitInteractionRecord record) {
+        long completedAtEpochMs = record.updatedAtEpochMs() > 0
+            ? record.updatedAtEpochMs()
+            : record.createdAtEpochMs();
+        return new AwaitCompletionMetadata(
+            record.interactionId(),
+            record.actor(),
+            Instant.ofEpochMilli(completedAtEpochMs));
     }
 
     private Object coerceTransportPayload(AwaitInteractionRecord record, Object payload) {
@@ -1122,29 +1172,72 @@ public class AwaitCoordinator {
         }
     }
 
-    private Uni<Void> registerDescriptor(AwaitStepDescriptor descriptor) {
+    private Uni<AwaitStepDescriptor> registerDescriptor(AwaitStepDescriptor descriptor) {
         return Uni.createFrom().item(() -> {
-            directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+            AwaitStepDescriptor registered = directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+            registered = registered == null ? descriptor : registered;
             if (descriptorFactory != null) {
-                descriptorFactory.register(descriptor);
+                registered = descriptorFactory.register(registered);
             }
-            return descriptor;
-        }).replaceWithVoid();
+            return registered;
+        });
     }
 
     private AwaitStepDescriptor descriptorFor(AwaitInteractionRecord record) {
         try {
+            AwaitStepDescriptor descriptor;
             if (descriptorFactory != null) {
-                return descriptorFactory.descriptorByStepIdNow(record.stepId());
+                descriptor = descriptorFactory.descriptorByStepIdNow(record.stepId());
+            } else {
+                descriptor = directDescriptors.get(record.stepId());
+                if (descriptor == null) {
+                    throw durableDescriptorFailure(record, null);
+                }
             }
-            AwaitStepDescriptor descriptor = directDescriptors.get(record.stepId());
-            if (descriptor != null) {
-                return descriptor;
-            }
+            validatePinnedCompletionProjector(record, descriptor);
+            return descriptor;
+        } catch (PinnedCompletionProjectorMismatchException e) {
+            throw e;
         } catch (RuntimeException e) {
             throw durableDescriptorFailure(record, e);
         }
-        throw durableDescriptorFailure(record, null);
+    }
+
+    private static Map<String, Object> completionContractMetadata(
+        AwaitStepDescriptor descriptor,
+        Map<String, Object> traceMetadata
+    ) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(traceMetadata);
+        metadata.remove(COMPLETION_PROJECTOR_METADATA);
+        if (descriptor.requestAwareCompletion()) {
+            metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjectorId());
+        }
+        return Map.copyOf(metadata);
+    }
+
+    private static void validatePinnedCompletionProjector(
+        AwaitInteractionRecord record,
+        AwaitStepDescriptor descriptor
+    ) {
+        if (!descriptor.requestAwareCompletion()) {
+            return; // Ignore reserved metadata supplied to legacy non-request-aware interactions.
+        }
+        Object pinned = record.transportMetadata().get(COMPLETION_PROJECTOR_METADATA);
+        if (pinned == null) {
+            return; // Compatibility for interactions created before projector identity was persisted.
+        }
+        String current = descriptor.completionProjectorId();
+        if (!pinned.equals(current)) {
+            throw new PinnedCompletionProjectorMismatchException(
+                "Await pinned completion projector " + pinned + " is unavailable for interaction "
+                    + record.interactionId() + "; current projector is " + current);
+        }
+    }
+
+    private static final class PinnedCompletionProjectorMismatchException extends IllegalStateException {
+        private PinnedCompletionProjectorMismatchException(String message) {
+            super(message);
+        }
     }
 
     private static IllegalStateException durableDescriptorFailure(

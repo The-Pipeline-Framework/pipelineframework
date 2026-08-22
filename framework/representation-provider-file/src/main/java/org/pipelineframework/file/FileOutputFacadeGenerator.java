@@ -25,6 +25,7 @@ final class FileOutputFacadeGenerator {
             package %s;
 
             @jakarta.enterprise.context.ApplicationScoped
+            @io.quarkus.arc.Unremovable
             @org.pipelineframework.annotation.PipelineStep
             public final class %s implements org.pipelineframework.service.%s<%s, %s> {
                 @jakarta.inject.Inject %s delegate;

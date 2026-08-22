@@ -26,6 +26,7 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
+import org.pipelineframework.config.pipeline.PipelineYamlAwaitCompletion;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
@@ -511,6 +512,13 @@ public class AwaitStepDescriptorFactory {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
+        Optional<PipelineYamlAwaitCompletion> completion = step.awaitConfig().completion();
+        AwaitCompletionProjector<Object, Object, Object> completionProjector = completion
+            .map(value -> loadCompletionProjector(serviceName, value.projector()))
+            .orElseGet(() -> AwaitStepDescriptor.defaultCompletionProjector(outputFromTransport));
+        String effectiveTransportOutputType = completion
+            .map(PipelineYamlAwaitCompletion::type)
+            .orElse(transportOutputType);
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             serviceName,
             inputType,
@@ -522,10 +530,36 @@ public class AwaitStepDescriptorFactory {
             step.awaitConfig().transport().config(),
             step.idempotencyKeyFields(),
             transportInputType,
-            transportOutputType,
+            effectiveTransportOutputType,
             inputToTransport,
-            outputFromTransport);
+            outputFromTransport,
+            completion.map(PipelineYamlAwaitCompletion::projector).orElse(null),
+            completionProjector,
+            completion.isPresent());
         return descriptor;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static AwaitCompletionProjector<Object, Object, Object> loadCompletionProjector(
+        String serviceName,
+        String projectorClassName
+    ) {
+        Class<?> projectorClass = loadClass(projectorClassName).orElseThrow(() -> new IllegalArgumentException(
+            "Await step " + serviceName + " could not load completion projector " + projectorClassName));
+        if (!AwaitCompletionProjector.class.isAssignableFrom(projectorClass)) {
+            throw new IllegalArgumentException(
+                "Await step " + serviceName + " completion projector " + projectorClassName
+                    + " must implement " + AwaitCompletionProjector.class.getName());
+        }
+        try {
+            return (AwaitCompletionProjector<Object, Object, Object>) projectorClass
+                .getDeclaredConstructor()
+                .newInstance();
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException(
+                "Await step " + serviceName + " could not instantiate completion projector " + projectorClassName,
+                exception);
+        }
     }
 
     private static String requiredType(String typeName, String serviceName, String position) {
@@ -546,7 +580,8 @@ public class AwaitStepDescriptorFactory {
         if (!descriptor.inputType().equals(inputType)
             || !descriptor.outputType().equals(outputType)
             || !descriptor.transportInputType().equals(transportInputType)
-            || !descriptor.transportOutputType().equals(transportOutputType)) {
+            || (!descriptor.requestAwareCompletion()
+                && !descriptor.transportOutputType().equals(transportOutputType))) {
             throw new IllegalStateException(
                 "Conflicting await descriptor identities for stepId " + descriptor.stepId()
                     + ": canonical=" + descriptor.inputType() + " -> " + descriptor.outputType()

@@ -452,6 +452,9 @@ class StepDefinitionParserTest {
                 await:
                   correlation:
                     strategy: "interactionId"
+                  completion:
+                    type: "com.example.FraudCheckAnswer"
+                    projector: "com.example.FraudCheckProjector"
                   transport:
                     type: "webhook"
                     request:
@@ -468,10 +471,51 @@ class StepDefinitionParserTest {
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
         assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
+        assertEquals("com.example.FraudCheckAnswer",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("type"));
+        assertEquals("com.example.FraudCheckProjector",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("projector"));
         assertEquals("https://partner.example/check",
             ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
+    }
+
+    @Test
+    void rejectsMalformedAwaitCompletionConfiguration() throws IOException {
+        for (String completion : List.of(
+            "completion: null",
+            "completion: answer",
+            "completion: {type: 7, projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: 7}",
+            "completion: {type: '   ', projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: '   '}",
+            "completion: {type: com.example.Answer, projector: com.example.Projector, extra: value}")) {
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: Test
+                basePackage: com.example
+                steps:
+                  - name: Fraud Check
+                    kind: await
+                    cardinality: ONE_TO_ONE
+                    input: com.example.Request
+                    output: com.example.Decision
+                    timeout: PT10M
+                    await:
+                      correlation:
+                        strategy: interactionId
+                      %s
+                      transport:
+                        type: interaction-api
+                """.formatted(completion), diagnostics);
+
+            assertTrue(steps.isEmpty(), completion);
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+                "await.completion must contain only non-blank string type and projector fields")),
+                completion + ": " + diagnostics);
+        }
     }
 
     @Test
