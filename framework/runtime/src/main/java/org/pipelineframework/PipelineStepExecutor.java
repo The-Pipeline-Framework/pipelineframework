@@ -19,8 +19,11 @@ package org.pipelineframework;
 import java.text.MessageFormat;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -217,23 +220,64 @@ class PipelineStepExecutor {
     }
 
     private static Optional<Class<?>> reactiveServiceOutputType(Class<?> serviceType) {
+        return reactiveServiceOutputType(serviceType, Map.of());
+    }
+
+    private static Optional<Class<?>> reactiveServiceOutputType(
+        Type serviceType,
+        Map<TypeVariable<?>, Type> inheritedBindings
+    ) {
         if (serviceType == null || serviceType == Object.class) {
             return Optional.empty();
         }
-        for (Type implemented : serviceType.getGenericInterfaces()) {
-            if (implemented instanceof ParameterizedType parameterized
-                && parameterized.getRawType() == ReactiveService.class
-                && parameterized.getActualTypeArguments()[1] instanceof Class<?> outputType) {
-                return Optional.of(outputType);
+        Class<?> rawType;
+        Map<TypeVariable<?>, Type> bindings = inheritedBindings;
+        if (serviceType instanceof ParameterizedType parameterized && parameterized.getRawType() instanceof Class<?> raw) {
+            rawType = raw;
+            bindings = new HashMap<>(inheritedBindings);
+            TypeVariable<?>[] parameters = rawType.getTypeParameters();
+            Type[] arguments = parameterized.getActualTypeArguments();
+            for (int index = 0; index < parameters.length; index++) {
+                bindings.put(parameters[index], resolveType(arguments[index], inheritedBindings));
             }
-            if (implemented instanceof Class<?> implementedClass) {
-                Optional<Class<?>> inherited = reactiveServiceOutputType(implementedClass);
-                if (inherited.isPresent()) {
-                    return inherited;
-                }
+        } else if (serviceType instanceof Class<?> raw) {
+            rawType = raw;
+        } else {
+            return Optional.empty();
+        }
+        if (rawType == ReactiveService.class) {
+            return classOf(resolveType(rawType.getTypeParameters()[1], bindings));
+        }
+        for (Type implemented : rawType.getGenericInterfaces()) {
+            Optional<Class<?>> inherited = reactiveServiceOutputType(implemented, bindings);
+            if (inherited.isPresent()) {
+                return inherited;
             }
         }
-        return reactiveServiceOutputType(serviceType.getSuperclass());
+        Type superclass = rawType.getGenericSuperclass();
+        return superclass == null ? Optional.empty() : reactiveServiceOutputType(superclass, bindings);
+    }
+
+    private static Type resolveType(Type type, Map<TypeVariable<?>, Type> bindings) {
+        Type resolved = type;
+        while (resolved instanceof TypeVariable<?> variable && bindings.containsKey(variable)) {
+            Type next = bindings.get(variable);
+            if (next.equals(resolved)) {
+                break;
+            }
+            resolved = next;
+        }
+        return resolved;
+    }
+
+    private static Optional<Class<?>> classOf(Type type) {
+        if (type instanceof Class<?> clazz) {
+            return Optional.of(clazz);
+        }
+        if (type instanceof ParameterizedType parameterized && parameterized.getRawType() instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        return Optional.empty();
     }
 
     private static class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
