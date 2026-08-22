@@ -1915,11 +1915,13 @@ public final class PipelineTemplateSchemaExporter {
           "properties": {
             "type": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
             },
             "projector": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
             }
           },
           "required": ["type", "projector"],

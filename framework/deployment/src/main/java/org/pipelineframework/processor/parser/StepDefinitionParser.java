@@ -1777,13 +1777,16 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
-        Object completionObj = awaitMap.get("completion");
-        if (completionObj != null) {
+        if (awaitMap.containsKey("completion")) {
+            Object completionObj = awaitMap.get("completion");
             if (!(completionObj instanceof Map<?, ?> completionMap)
-                || isBlank(stringValue(completionMap.get("type")))
-                || isBlank(stringValue(completionMap.get("projector")))) {
+                || !completionMap.keySet().equals(java.util.Set.of("type", "projector"))
+                || !(completionMap.get("type") instanceof String completionType)
+                || completionType.isBlank()
+                || !(completionMap.get("projector") instanceof String completionProjector)
+                || completionProjector.isBlank()) {
                 String message = "Skipping step '" + stepName
-                    + "': await.completion must declare non-blank type and projector";
+                    + "': await.completion must contain only non-blank string type and projector fields";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;

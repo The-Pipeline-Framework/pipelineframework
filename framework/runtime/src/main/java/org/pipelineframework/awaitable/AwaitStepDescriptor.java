@@ -58,7 +58,7 @@ public record AwaitStepDescriptor(
     ) {
         this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType,
             transportConfig, idempotencyKeyFields, transportInputType, transportOutputType,
-            inputToTransport, outputFromTransport, null, false);
+            inputToTransport, outputFromTransport, legacyCompletionProjector(outputFromTransport), false);
     }
 
     public AwaitStepDescriptor(
@@ -159,8 +159,18 @@ public record AwaitStepDescriptor(
         Function<Object, Object> normalizedOutputFromTransport =
             outputFromTransport == null ? Function.identity() : outputFromTransport;
         outputFromTransport = normalizedOutputFromTransport;
+        if (requestAwareCompletion && completionProjector == null) {
+            throw new IllegalArgumentException("request-aware completion requires a completion projector");
+        }
         completionProjector = completionProjector == null
             ? (request, completion, metadata) -> normalizedOutputFromTransport.apply(completion)
             : completionProjector;
+    }
+
+    private static AwaitCompletionProjector<Object, Object, Object> legacyCompletionProjector(
+        Function<Object, Object> outputFromTransport
+    ) {
+        Function<Object, Object> converter = outputFromTransport == null ? Function.identity() : outputFromTransport;
+        return (request, completion, metadata) -> converter.apply(completion);
     }
 }

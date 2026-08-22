@@ -848,7 +848,7 @@ public class PipelineYamlConfigLoader {
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
         PipelineYamlAwaitCompletion completion = readAwaitCompletion(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(correlation, transport, completion);
+        return new PipelineYamlAwaitConfig(correlation, transport, Optional.ofNullable(completion));
     }
 
     private PipelineYamlAwaitCompletion readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {

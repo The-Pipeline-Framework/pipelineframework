@@ -741,6 +741,41 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void requestAwareCompletionRejectsAChangedProjectorAfterRestart() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator firstRuntime = coordinator(store);
+        AwaitStepDescriptor original = requestAwareDescriptor(new OriginalSelectionProjector());
+        firstRuntime.descriptorFactory.register(original);
+        AwaitCreateResult created = firstRuntime.createOrGet(
+            original, "tenant-1", "exec-1", 1, "cause-1",
+            new PendingSelection("invoice-1", "property-a"), null, null).await().indefinitely();
+
+        AwaitCoordinator restartedRuntime = coordinator(store);
+        restartedRuntime.descriptorFactory.register(requestAwareDescriptor(new ChangedSelectionProjector()));
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> restartedRuntime.complete(
+            new AwaitCompletionCommand(
+                "tenant-1", created.record().interactionId(), null, "completion-1",
+                Map.of("propertyId", "property-b"), "alice", 11_000L)).await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("pinned completion projector"));
+        assertEquals(AwaitInteractionStatus.WAITING,
+            store.get("tenant-1", created.record().interactionId()).await().indefinitely().orElseThrow().status());
+    }
+
+    private static AwaitStepDescriptor requestAwareDescriptor(
+        AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> projector
+    ) {
+        @SuppressWarnings("unchecked")
+        AwaitCompletionProjector<Object, Object, Object> untyped =
+            (AwaitCompletionProjector<Object, Object, Object>) (AwaitCompletionProjector<?, ?, ?>) projector;
+        return new AwaitStepDescriptor(
+            "RestartedSelection", PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
+            "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
+            List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
+            Function.identity(), Function.identity(), untyped, true);
+    }
+
+    @Test
     void acceptsLegacyV2NestedProtobufSourceTypeIdentity() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
@@ -968,6 +1003,32 @@ class AwaitCoordinatorCompletionTest {
         String confirmedPropertyId,
         java.time.Instant confirmedAt
     ) {
+    }
+
+    private static final class OriginalSelectionProjector
+        implements AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> {
+        @Override
+        public ConfirmedSelection project(
+            PendingSelection request,
+            SelectionChoice completion,
+            AwaitCompletionMetadata metadata
+        ) {
+            return new ConfirmedSelection(request.documentId(), request.recommendedPropertyId(),
+                completion.propertyId(), metadata.completedAt());
+        }
+    }
+
+    private static final class ChangedSelectionProjector
+        implements AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> {
+        @Override
+        public ConfirmedSelection project(
+            PendingSelection request,
+            SelectionChoice completion,
+            AwaitCompletionMetadata metadata
+        ) {
+            return new ConfirmedSelection(request.documentId(), request.recommendedPropertyId(),
+                completion.propertyId(), metadata.completedAt());
+        }
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {

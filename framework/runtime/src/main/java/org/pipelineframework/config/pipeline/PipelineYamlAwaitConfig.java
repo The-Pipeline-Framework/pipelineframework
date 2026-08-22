@@ -16,6 +16,8 @@
 
 package org.pipelineframework.config.pipeline;
 
+import java.util.Optional;
+
 /**
  * Await-step configuration parsed from pipeline.yaml.
  *
@@ -26,13 +28,13 @@ package org.pipelineframework.config.pipeline;
 public record PipelineYamlAwaitConfig(
     PipelineYamlAwaitCorrelation correlation,
     PipelineYamlAwaitTransport transport,
-    PipelineYamlAwaitCompletion completion
+    Optional<PipelineYamlAwaitCompletion> completion
 ) {
     public PipelineYamlAwaitConfig(
         PipelineYamlAwaitCorrelation correlation,
         PipelineYamlAwaitTransport transport
     ) {
-        this(correlation, transport, null);
+        this(correlation, transport, Optional.empty());
     }
 
     public PipelineYamlAwaitConfig {
@@ -40,5 +42,6 @@ public record PipelineYamlAwaitConfig(
         if (transport == null) {
             throw new IllegalArgumentException("await.transport must be defined");
         }
+        completion = completion == null ? Optional.empty() : completion;
     }
 }

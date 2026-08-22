@@ -482,6 +482,43 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsMalformedAwaitCompletionConfiguration() throws IOException {
+        for (String completion : List.of(
+            "completion: null",
+            "completion: answer",
+            "completion: {type: 7, projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: 7}",
+            "completion: {type: '   ', projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: '   '}",
+            "completion: {type: com.example.Answer, projector: com.example.Projector, extra: value}")) {
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: Test
+                basePackage: com.example
+                steps:
+                  - name: Fraud Check
+                    kind: await
+                    cardinality: ONE_TO_ONE
+                    input: com.example.Request
+                    output: com.example.Decision
+                    timeout: PT10M
+                    await:
+                      correlation:
+                        strategy: interactionId
+                      %s
+                      transport:
+                        type: interaction-api
+                """.formatted(completion), diagnostics);
+
+            assertTrue(steps.isEmpty(), completion);
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+                "await.completion must contain only non-blank string type and projector fields")),
+                completion + ": " + diagnostics);
+        }
+    }
+
+    @Test
     void rejectsInvalidAwaitIdempotencyConfigurations() throws IOException {
         for (String idempotencyConfig : List.of(
             """

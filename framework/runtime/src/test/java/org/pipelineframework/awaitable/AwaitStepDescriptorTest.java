@@ -133,6 +133,17 @@ class AwaitStepDescriptorTest {
     }
 
     @Test
+    void rejectsRequestAwareCompletionWithoutAProjector() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
+            "review-step", String.class.getName(), String.class.getName(), "ONE_TO_ONE",
+            Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(), List.of(),
+            String.class.getName(), String.class.getName(), java.util.function.Function.identity(),
+            java.util.function.Function.identity(), null, true));
+
+        assertEquals("request-aware completion requires a completion projector", failure.getMessage());
+    }
+
+    @Test
     void acceptsCardinalitySpecificConstructorWithoutDispatchMode() {
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "await-payment-provider",

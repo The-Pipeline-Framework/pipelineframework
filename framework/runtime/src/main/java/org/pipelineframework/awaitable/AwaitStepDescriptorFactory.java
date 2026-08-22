@@ -512,7 +512,7 @@ public class AwaitStepDescriptorFactory {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
-        PipelineYamlAwaitCompletion completion = step.awaitConfig().completion();
+        PipelineYamlAwaitCompletion completion = step.awaitConfig().completion().orElse(null);
         AwaitCompletionProjector<Object, Object, Object> completionProjector =
             completion == null ? null : loadCompletionProjector(serviceName, completion.projector());
         String effectiveTransportOutputType = completion == null ? transportOutputType : completion.type();
