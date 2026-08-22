@@ -6,6 +6,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,6 +15,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +26,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.invocation.TransportBoundaryDescriptor;
@@ -33,6 +39,7 @@ import org.pipelineframework.invocation.TransportBoundaryInvocation;
 public class RestPipelineTransitionWorker implements PipelineTransitionWorker, TransportBoundaryInvocation {
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final Logger LOG = Logger.getLogger(RestPipelineTransitionWorker.class);
     private static final AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
     private static final TransportBoundaryDescriptor BOUNDARY =
         new TransportBoundaryDescriptor("rest", "transition-worker.execute");
@@ -48,6 +55,11 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
 
     private final ExecutorService blockingExecutor = Executors.newCachedThreadPool(task -> {
         Thread thread = new Thread(task, "rest-transition-worker-client-" + THREAD_SEQUENCE.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ScheduledExecutorService deadlineWarningExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "rest-transition-worker-deadline-warning-" + THREAD_SEQUENCE.incrementAndGet());
         thread.setDaemon(true);
         return thread;
     });
@@ -70,12 +82,58 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
     @Override
     public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
         return invocationRuntime().invokeTransportUni(this, () ->
-            Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(() -> request(command), blockingExecutor)
+            Uni.createFrom().deferred(() -> executeRequest(command)));
+    }
+
+    private Uni<TransitionResultEnvelope> executeRequest(TransitionCommandEnvelope command) {
+        Duration deadline = orchestratorConfig.workerRest().requestTimeout();
+        long deadlineMillis = Math.max(1L, deadline.toMillis());
+        long startedAtNanos = System.nanoTime();
+        String target = workerTarget();
+        ScheduledFuture<?> warning = scheduleDeadlineWarning(command, target, deadlineMillis);
+        return Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(() -> request(command), blockingExecutor)
                 .thenCompose(request -> httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()))
                 .thenCompose(response -> CompletableFuture.supplyAsync(
                     () -> decodeResponse(response, command),
                     blockingExecutor)))
-                .onFailure().transform(this::unwrapFailure));
+            .onItemOrFailure().invoke((ignored, failure) -> warning.cancel(false))
+            .onFailure().transform(failure -> classifyFailure(failure, target, startedAtNanos, deadlineMillis));
+    }
+
+    private ScheduledFuture<?> scheduleDeadlineWarning(
+        TransitionCommandEnvelope command,
+        String target,
+        long deadlineMillis
+    ) {
+        long warningDelayMillis = Math.max(1L, deadlineMillis * 3L / 4L);
+        return deadlineWarningExecutor.schedule(() -> LOG.warnf(
+            "event=remote_transition_deadline_warning executionId=%s attempt=%d transitionKey=%s "
+                + "protocol=rest target=%s elapsedMs=%d deadlineMs=%d state=running",
+            command.executionId(),
+            command.attempt(),
+            command.transitionKey(),
+            target,
+            warningDelayMillis,
+            deadlineMillis), warningDelayMillis, TimeUnit.MILLISECONDS);
+    }
+
+    private Throwable classifyFailure(
+        Throwable failure,
+        String target,
+        long startedAtNanos,
+        long deadlineMillis
+    ) {
+        Throwable unwrapped = unwrapFailure(failure);
+        if (unwrapped instanceof HttpTimeoutException) {
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos);
+            return new RemoteTransitionOutcomeUnknownException(
+                "rest",
+                target,
+                elapsedMillis,
+                deadlineMillis,
+                unwrapped);
+        }
+        return unwrapped;
     }
 
     /**
@@ -235,6 +293,12 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
         return URI.create(normalizedBase + normalizedPath);
     }
 
+    private String workerTarget() {
+        URI uri = workerUri(orchestratorConfig.workerRest().path());
+        String host = uri.getHost() == null ? "<unknown>" : uri.getHost();
+        return uri.getScheme() + "://" + host + (uri.getPort() < 0 ? "" : ":" + uri.getPort()) + uri.getPath();
+    }
+
     private String sharedSecret() {
         return WorkerSecretSupport.resolve(
             orchestratorConfig.workerRest().sharedSecret(),
@@ -276,6 +340,7 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
 
     @PreDestroy
     void close() {
+        deadlineWarningExecutor.shutdownNow();
         blockingExecutor.shutdownNow();
     }
 }

@@ -21,6 +21,7 @@ import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.RemoteTransitionOutcomeUnknownException;
 import org.pipelineframework.orchestrator.TransitionFailureEnvelope;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
@@ -296,6 +297,49 @@ class QueueAsyncFailureMatrixTest {
 
         assertTrue(exception instanceof NonRetryableException);
         assertEquals("custom non-retryable", exception.getMessage());
+    }
+
+    @Test
+    void remoteOutcomeUnknownSuppressesAutomaticRetryAndDeadLettering() {
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-remote", 9L, 2);
+        RemoteTransitionOutcomeUnknownException failure = new RemoteTransitionOutcomeUnknownException(
+            "rest",
+            "http://worker:8182/pipeline/worker/transitions/execute",
+            180_001L,
+            180_000L,
+            new java.net.http.HttpTimeoutException("request timed out"));
+        when(executionStateStore.markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote"),
+            eq(9L),
+            eq("exec-remote:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-remote:0:2",
+            failure,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
+
+        verify(executionStateStore).markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote"),
+            eq(9L),
+            eq("exec-remote:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong());
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore, never()).markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong());
+        verify(workDispatcher, never()).enqueueDelayed(any(), any());
+        verify(deadLetterPublisher, never()).publish(any());
     }
 
     @Test

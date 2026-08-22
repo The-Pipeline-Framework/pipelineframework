@@ -248,6 +248,26 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        long nowEpochMs
+    ) {
+        return blocking(() -> markRemoteOutcomeUnknownBlocking(
+            tenantId,
+            executionId,
+            expectedVersion,
+            transitionKey,
+            errorCode,
+            errorMessage,
+            nowEpochMs));
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> deferCircuit(
         String tenantId,
         String executionId,
@@ -531,17 +551,18 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             "#version", VERSION,
             "#updated", UPDATED_AT_EPOCH_MS,
             "#ttl", TTL_EPOCH_S);
-        Map<String, AttributeValue> values = Map.of(
-            ":now", avN(nowEpochMs),
-            ":leaseOwner", avS(leaseOwner),
-            ":leaseExpires", avN(nowEpochMs + leaseMs),
-            ":running", avS(ExecutionStatus.RUNNING.name()),
-            ":one", avN(1),
-            ":succeeded", avS(ExecutionStatus.SUCCEEDED.name()),
-            ":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()),
-            ":failed", avS(ExecutionStatus.FAILED.name()),
-            ":dlq", avS(ExecutionStatus.DLQ.name()),
-            ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":now", avN(nowEpochMs)),
+            Map.entry(":leaseOwner", avS(leaseOwner)),
+            Map.entry(":leaseExpires", avN(nowEpochMs + leaseMs)),
+            Map.entry(":running", avS(ExecutionStatus.RUNNING.name())),
+            Map.entry(":one", avN(1)),
+            Map.entry(":succeeded", avS(ExecutionStatus.SUCCEEDED.name())),
+            Map.entry(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
+            Map.entry(":failed", avS(ExecutionStatus.FAILED.name())),
+            Map.entry(":dlq", avS(ExecutionStatus.DLQ.name())),
+            Map.entry(":remoteOutcomeUnknown", avS(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN.name())),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
 
         UpdateItemRequest request = UpdateItemRequest.builder()
             .tableName(executionTable())
@@ -550,6 +571,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 "#nextDue <= :now " +
                     "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
                     "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
+                    "AND #status <> :remoteOutcomeUnknown " +
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
                 "SET #status = :running, #leaseOwner = :leaseOwner, #leaseExpires = :leaseExpires, " +
@@ -979,6 +1001,62 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
+    private Optional<ExecutionRecord<Object, Object>> markRemoteOutcomeUnknownBlocking(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS),
+            Map.entry("#version", VERSION),
+            Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#transition", LAST_TRANSITION_KEY),
+            Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#resultReference", RESULT_PAYLOAD_REFERENCE),
+            Map.entry("#leaseOwner", LEASE_OWNER),
+            Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":expected", avN(expectedVersion)),
+            Map.entry(":outcomeUnknown", avS(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN.name())),
+            Map.entry(":nextDue", avN(Long.MAX_VALUE)),
+            Map.entry(":transition", avS(transitionKey == null ? "" : transitionKey)),
+            Map.entry(":errorCode", avS(errorCode == null ? "" : errorCode)),
+            Map.entry(":errorMessage", avS(truncate(errorMessage))),
+            Map.entry(":zero", avN(0)),
+            Map.entry(":now", avN(nowEpochMs)),
+            Map.entry(":one", avN(1)),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
+        UpdateItemRequest request = UpdateItemRequest.builder()
+            .tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression("#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression(
+                "SET #status = :outcomeUnknown, #version = #version + :one, #nextDue = :nextDue, " +
+                    "#transition = :transition, #errorCode = :errorCode, #errorMessage = :errorMessage, " +
+                    "#leaseExpires = :zero, #updated = :now REMOVE #result, #resultReference, #leaseOwner")
+            .expressionAttributeNames(names)
+            .expressionAttributeValues(values)
+            .returnValues(ReturnValue.ALL_NEW)
+            .build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
     private Optional<ExecutionRecord<Object, Object>> deferCircuitBlocking(
         String tenantId,
         String executionId,
@@ -1117,10 +1195,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         values.put(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
         if (allowFailed) {
             values.put(":failed", avS(ExecutionStatus.FAILED.name()));
+            values.put(":remoteOutcomeUnknown", avS(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN.name()));
         }
 
         String statusCondition = allowFailed
-            ? "(#status = :dlq OR #status = :failed)"
+            ? "(#status = :dlq OR #status = :failed OR #status = :remoteOutcomeUnknown)"
             : "#status = :dlq";
         UpdateItemRequest request = UpdateItemRequest.builder()
             .tableName(executionTable())
@@ -1161,6 +1240,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()),
             ":failed", avS(ExecutionStatus.FAILED.name()),
             ":dlq", avS(ExecutionStatus.DLQ.name()),
+            ":remoteOutcomeUnknown", avS(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN.name()),
             ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
 
         int candidateLimit = Math.max(limit * 3, limit);
@@ -1173,7 +1253,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 .filterExpression(
                     "#nextDue <= :now " +
                         "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
-                        "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
+                    "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
+                    "AND #status <> :remoteOutcomeUnknown " +
                         "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
                 .expressionAttributeNames(names)
                 .expressionAttributeValues(values)
