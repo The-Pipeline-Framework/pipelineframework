@@ -78,6 +78,6 @@ final class StructuredFileTransformFacadeGenerator {
     }
 
     private static String javaString(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return FileOutputFacadeGenerator.javaString(value);
     }
 }

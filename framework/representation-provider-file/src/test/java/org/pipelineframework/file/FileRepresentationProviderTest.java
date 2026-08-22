@@ -103,10 +103,11 @@ class FileRepresentationProviderTest {
                     "catalogueHash", "string")));
         Map<String, Object> inputOptions = Map.of(
             "fields", inputFields, "materializeFields", List.of("invoice"), "maxBytes", 4096);
+        String target = "analysis\0\nmedia";
         Map<String, Object> outputOptions = Map.of(
             "fields", outputFields, "publishFields", List.of("image"),
             "carryFields", List.of("documentId", "invoice", "catalogueHash"),
-            "target", "analysis-media", "maxBytes", 8192);
+            "target", target, "maxBytes", 8192);
         var inputMapping = provider.resolve(new RepresentationMappingRequest(
             "file", request, Optional.of("example.MaterializedVisionRequest"), Optional.empty(), inputOptions))
             .orElseThrow();
@@ -122,7 +123,8 @@ class FileRepresentationProviderTest {
         assertTrue(source.contains("new example.MaterializedVisionRequest(input.documentId(), paths.get(\"invoice\"), input.catalogueHash())"));
         assertTrue(source.contains("java.util.Map.entry(\"image\", result.image())"));
         assertTrue(source.contains("new example.VisionResult(input.documentId(), input.invoice(), references.get(\"image\"), input.catalogueHash())"));
-        assertTrue(source.contains("\"analysis-media\", 8192L"));
+        assertTrue(source.contains("\"analysis\\000\\nmedia\", 8192L"), source);
+        assertTrue(!source.contains("\"analysis\nmedia"));
     }
 
     @Test

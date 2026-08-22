@@ -187,7 +187,8 @@ public final class FileRepresentationRuntime {
         }
         Map.Entry<String, Path> output = outputs.get(index);
         Workspace publicationWorkspace = new Workspace(workspace.root(), workspace.root());
-        return publish(publicationWorkspace, output.getValue(), targetName, outputMaxBytes, Optional.empty())
+        String objectKey = output.getKey() + "/" + output.getValue().getFileName();
+        return publish(publicationWorkspace, output.getValue(), targetName, outputMaxBytes, Optional.of(objectKey))
             .chain(reference -> {
                 references.put(output.getKey(), reference);
                 return publishStructuredField(workspace, outputs, index + 1, targetName,
