@@ -39,17 +39,17 @@ tags:
 
 ## Elevator answer
 
-**Bounded contexts exchange typed domain or integration contracts; pipelines coordinate each context’s execution without becoming a shared technical language across their boundary.**
+**Send Fulfillment an order it can understand—not Order’s pipeline state, retry counters, Hibernate entity, and childhood memories. Each context translates at its own edge.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Bounded contexts exist so a model can have coherent language and ownership. Customer, order, risk, and fulfillment may use familiar words differently because they make different decisions. A framework becomes harmful when it causes those contexts to share an implementation vocabulary merely because they participate in one business journey.
+Order may call something “accepted” when payment is authorised; Fulfillment may reserve that word until a warehouse has claimed it. That difference is the point of the boundary. Sharing one Java record because both teams use `orderId` does not create alignment; it creates a meeting scheduled by the next field rename.
 
 TPF should sit inside a boundary, not erase it. A pipeline declares how one context admits work, invokes its typed domain behavior, and publishes a result through a connector. Another context receives a command, event, or external representation through its own connector and translates it into its own model. The connection is a contract between contexts, not a shared pipeline definition with a different package name.
 
-Connectors and mappers make this practical. A connector marks captured external reality or a publication boundary. A mapper translates a pair of types deliberately and deterministically. They prevent one model’s internal object shape from becoming another model’s accidental API. A fulfillment context should receive a contract it can own, not the order context’s pipeline state, retry metadata, or private decisions about acceptance.
+Connectors and mappers make the translation explicit. Order can publish `OrderReadyForFulfillment`; Fulfillment maps that representation into its own intake command. Headers, retry metadata, internal step results, and the Order JPA entity stay home. A handoff is healthy when the receiver owns the contract, not the sender's implementation.
 
 Pipelines may coordinate a business journey that crosses contexts, but ownership must remain explicit. A checkpoint handoff is not just a convenient graph continuation: after admission, the downstream pipeline owns retry, DLQ, and lifecycle semantics. That answers the operational question alongside the business one: who owns failure, replay, and completion now?
 

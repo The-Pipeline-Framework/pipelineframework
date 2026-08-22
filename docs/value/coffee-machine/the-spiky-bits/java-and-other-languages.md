@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**TPF is Java-first today, while external services may join through explicit contracts; portability should preserve business semantics without pretending every language has identical support.**
+**TPF is Java-first. A Go or Python service can meet it at an HTTP, gRPC, or message contract; that does not mean every generator and runtime surface suddenly speaks Go or Python.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-TPF’s core and generated application surfaces are Java-first. That is a real constraint, not a detail to hide. Strong typing and generation rely on types and compiler support in the primary ecosystem. Kotlin or other JVM languages may participate where the relevant paths support them, but teams should not claim parity without validation.
+The compiler, type model, and generated application surfaces are built around Java. Say that plainly. A Python risk service may still participate behind a declared external contract, and Kotlin may work on paths that have been exercised. “Runs on the JVM” and “fully supported” are not synonyms, however friendly the bytecode.
 
 Non-JVM services can still join a business journey through stable transport and connector contracts. They do not need to import the pipeline runtime to receive an API, command, or event. The boundary must remain explicit so that language portability does not become semantic vagueness.
 

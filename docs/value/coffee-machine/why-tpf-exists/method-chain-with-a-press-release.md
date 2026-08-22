@@ -40,13 +40,13 @@ tags:
 
 ## Elevator answer
 
-**A method chain describes calls; a TPF pipeline declares an execution contract including flow shape, compatible mappings, boundaries, and artifacts.**
+**A method chain says “call B after A.” A pipeline also says what B accepts, how the data gets there, where I/O happens, and what must be generated before production can call any of it.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Method chaining is not a crime. It can be expressive, local, and perfectly adequate. If one object transforms another object through a few in-memory calls, a chain is often the clearest representation. The skepticism begins when a framework calls something a “pipeline” but merely wraps the same calls in a builder API. That would be a long walk to arrive back at `next(next(next(input)))`.
+For three in-memory transformations, `validate().price().summarise()` may be perfect. The suspicion begins when a framework replaces it with 40 lines of builder API and announces a platform. That is a long walk back to `next(next(next(input)))`, now with a press release.
 
 TPF uses a different level of description. A pipeline declares a typed application flow whose shape and operational boundaries are part of the build-time contract. The declaration includes steps, input and output types, ordering, cardinality and linkage where relevant, mapper selection, connector declarations, transport requirements, platform choices, and the generated artifacts that allow the path to execute. The compiler can then reject incompatible step resolution, ambiguous mappings, missing bindings, or invalid link compatibility before a request reaches production.
 

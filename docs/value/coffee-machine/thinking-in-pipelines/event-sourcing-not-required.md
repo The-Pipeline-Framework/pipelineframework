@@ -38,17 +38,17 @@ tags:
 
 ## Elevator answer
 
-**Yes. Event sourcing records domain state differently; TPF coordinates typed execution and boundaries, without requiring events to become every pipeline’s persistence model.**
+**No. An event store may remain the source of truth for an aggregate; TPF coordinates the command, publication, and waits around it. Ordinary rows are invited too.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Event sourcing and pipelines solve different problems. Event sourcing represents state as a sequence of domain events and rebuilds or projects state from that sequence. A pipeline describes a typed application flow and the operational boundaries around execution. They work together because neither requires the other to surrender its central idea.
+An event store rebuilds an account from `AccountOpened`, `MoneyDeposited`, and `MoneyWithdrawn`. A pipeline gets `WithdrawMoney` to the aggregate, publishes the resulting integration message, and perhaps waits for a fraud review. One records domain state; the other coordinates the journey around a decision. Nobody has to surrender a database.
 
 An event-sourced aggregate can remain the owner of its invariant and produce domain events as a command result. A TPF pipeline can admit the command, obtain the aggregate through a declared boundary, invoke the decision, persist resulting events through the chosen store, and publish an integration representation through a connector. The flow does not need to pretend the event store is a message broker, and the event store does not become the pipeline’s universal runtime.
 
-This protects both models from category errors. Replay in TPF concerns reliable execution and captured operational history. It does not automatically mean replaying an event stream to rebuild domain state. Conversely, an event-sourced stream is not automatically a record of every retry, transport attempt, or adapter failure. Those can require separate telemetry and durable state surfaces. Treating them as one thing produces a record too technical for the domain and too vague for an operator.
+Keep the two replay buttons labelled. Replaying an account's event stream rebuilds domain state. Replaying pipeline computation, reusing a captured Query, or recovering a Command effect answers different operational questions. The event stream is not obliged to record every HTTP attempt; runtime telemetry is not the bank ledger. Combining them produces a record too technical for the domain and too vague for the operator.
 
 TPF can be useful in an event-sourced system because command handling often crosses boundaries after a domain decision. A command may need validation, enrichment, external publication, or a durable await. The framework makes those semantics explicit while aggregates and event stores retain their own rules. Mappers matter because a domain event need not be the exact contract consumed by another bounded context.
 

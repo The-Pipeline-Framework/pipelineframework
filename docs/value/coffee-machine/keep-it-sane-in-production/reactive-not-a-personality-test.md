@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**TPF is reactive-first for runtime safety, while ordinary blocking work remains possible when explicitly offloaded so it cannot starve the execution path.**
+**You may write ordinary Java. Just do not make 300 flows wait behind one blocking JDBC or PDF call on the event-loop thread; offload it deliberately.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Reactive execution is a runtime strategy, not a demand that every developer think in a new philosophical language. TPF uses it because flows often encounter asynchronous I/O, high concurrency, waits, and transport adapters. Blocking work on an event loop can stall unrelated work, turn latency into queue growth, and create failures that look mysterious from inside an ordinary method.
+Reactive is not a personality test. It is a runtime response to many flows waiting on HTTP, Kafka, or durable completion at once. The danger is concrete: one step renders a PDF or performs blocking JDBC work on an event-loop thread, and hundreds of unrelated requests queue behind it while every individual method looks innocent.
 
 Business code can still be ordinary Java. A typed decision may be simple and synchronous. The important rule is that genuine blocking work—JPA calls, legacy clients, CPU-heavy transformations, file operations—must be identified and explicitly offloaded in the runtime path that uses it. That makes the cost visible and prevents a convenient dependency from silently consuming the executor that carries many other requests.
 

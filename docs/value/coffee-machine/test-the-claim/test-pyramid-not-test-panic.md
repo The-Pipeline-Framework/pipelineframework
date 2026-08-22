@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**No. Use fast unit tests for domain behavior, contract checks for flow structure, and focused integration tests for boundaries whose runtime semantics cannot be mocked honestly.**
+**No. Unit-test the rule, compile-check the flow, contract-test the connector, and boot real infrastructure only for the boundary behavior a mock would lie about.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-TPF needs several layers of evidence because its responsibilities span business code and operational boundaries. Unit tests remain the fastest way to verify typed decisions. Compilation and contract validation verify that steps, mappers, connectors, and generated artifacts fit together. Integration tests verify the part that cannot be proved locally: actual transport, persistence, retries, awaits, external effects, and deployment integration.
+Use the cheapest honest test. A pricing rule needs direct Java. A bad mapper should fail contract compilation. A Stripe connector needs protocol-shaped tests. A durable Await or real Kafka acknowledgement may justify focused infrastructure. Booting PostgreSQL, Kafka, and half the company to test `isEligible()` is test panic with containers.
 
 This is not a pyramid argument by geometry. It is an argument by failure mode. Test the cheap deterministic behavior cheaply; test the risky boundary where it actually exists; avoid booting infrastructure for a rule that is just arithmetic. A small number of high-value end-to-end paths can then prove topology without becoming the only feedback mechanism.
 

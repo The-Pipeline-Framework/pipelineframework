@@ -37,25 +37,25 @@ tags:
 
 ## Elevator answer
 
-**JPA may remain an adapter, but pipelines should receive explicit typed facts rather than allowing persistence sessions and lazy loading to define business execution.**
+**Keep the repository. Stop making an open Hibernate session the secret co-author of the business flow. Carry known facts forward; use a Query when you genuinely need a new database observation.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-JPA is often where a legacy application hides its real coupling. Repositories carry useful persistence behavior, while lazy loading lets ordinary-looking domain code reach back into an open session for more data. That can be convenient, and it can also make business behavior depend on transaction scope, query shape, and the accidental availability of infrastructure.
+Imagine step B has loaded a customer and already knows the delivery address. Step X needs that address. Do not throw it away, carry the customer ID for six steps, and let X heroically fetch the address from PostgreSQL six milliseconds later. Carry the bloody address.
 
-TPF does not require throwing repositories away. It asks a more precise question: is this data already known, or is the flow making a new observation? Facts already admitted or produced should be carried forward immutably through the typed flow. Historical data or a fresh database observation should be obtained through an explicit Query boundary. The adapter may still use JPA, but the business decision no longer needs a live session as an undocumented collaborator.
+That is ordinary immutable dataflow: X receives exactly what this execution knew, the dependency is visible in its input type, and no lazy proxy gets to place a surprise query during a retry. If the flow really needs a fresh fact—“what is the customer's current credit limit?”—make that lookup a Query. The Query adapter may use the same Spring Data repository you have today. JPA has not been excommunicated; it has been given a visible job.
 
-Migration should be careful. Replacing lazy access with eager loading everywhere can create performance regressions, and copying entities into parallel DTO hierarchies can duplicate the model. Start with one flow, observe the actual reads, carry forward the facts the flow already knows, and introduce a Query only where the decision truly needs historical or fresh data. A repository may stay behind that boundary for a long time. The immediate win is not a new ORM; it is making observation and data ownership visible.
+Do not “fix” lazy loading by eager-fetching the known universe or inventing a shadow DTO empire. Pick one flow, watch which SQL it actually issues, carry facts that are already in hand, and query only when time or external state makes a new observation necessary. A PDF or other large immutable value should travel as a `PayloadReference` with an explicit representation provider, not as a 40 MB field copied through every step.
 
-This matters for retries and replay. A business step whose behavior depends on whatever a lazy proxy fetches later is difficult to reproduce. Carried facts make the decision input explicit; a captured Query makes the external observation explicit. Neither makes data timeless, but both tell operators and tests what the decision was based on and whether replay should reuse that observation or ask again.
+This distinction matters when something retries. A lazy getter can observe a different row on the second attempt. Carried data preserves what that execution knew; Query capture can preserve the observation a decision used when replay policy says to reuse it. Neither freezes the database forever. They merely stop “whatever Hibernate returned this time” from masquerading as deterministic business input.
 
-The trade-off is that explicit observation reveals queries that were previously convenient but hidden. Teams may need to design read models, batch access, or separate decision and Query shapes. That is real work. It is also often the work that prevents a persistence implementation detail from becoming the application’s de facto architecture.
+The bill arrives as visible query design. You may need batching, a read model, or a smaller Query result. That is less convenient than an open session and considerably easier to reason about at 03:00.
 
 ## Trade-offs
 
-TPF gains explicit persistence boundaries and more reproducible decisions. It gives up invisible lazy convenience. Teams must manage query performance deliberately rather than relying on a session that happens to remain open.
+TPF gains reproducible inputs and visible database observations. It gives up invisible lazy convenience, so query shape and performance become deliberate work.
 
 ## When TPF is not a good fit
 

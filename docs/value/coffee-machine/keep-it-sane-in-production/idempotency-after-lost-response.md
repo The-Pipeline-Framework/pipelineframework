@@ -39,13 +39,13 @@ tags:
 
 ## Elevator answer
 
-**Treat the result as uncertain, preserve a stable idempotency key, reconcile with the external system when possible, and never retry irreversible effects blindly.**
+**The timeout does not mean the charge failed. Reuse the same effect identity, ask the provider what happened when possible, and do not turn network uncertainty into a second payment.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Lost responses are one of the least theatrical and most dangerous distributed failures. The request may have reached the remote system and succeeded; the response may have been lost after the effect occurred. The caller now has uncertainty, not a clean failure. Treating it as an ordinary retry can duplicate a payment, email, booking, or order.
+The provider receives `charge €120`, commits it, and its response dies between load balancers. Your client sees a timeout; the customer sees money leave. That is not a failed charge. It is an unknown outcome, and blindly constructing a new Command is how one purchase becomes two payments.
 
 TPF cannot infer an external business outcome from a timeout. It can preserve the identifiers that make a safe response possible: idempotency keys, dispatch IDs, correlation IDs, and stable request identity. A connector contract can use those identifiers to make a repeated request safe, query the external system for status, or route the item into a reconciliation path rather than a blind retry.
 

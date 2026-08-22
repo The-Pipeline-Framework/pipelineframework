@@ -39,21 +39,21 @@ tags:
 
 ## Elevator answer
 
-**Domain events express business facts; pipelines may produce, route, and publish them, but the framework must not confuse those facts with transport mechanics.**
+**`PaymentDeclined` says what happened. A Kafka record says how another system hears about it. The pipeline may connect the two; it should not pretend they are the same object wearing JSON.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Domain events are easy to overstate and easy to trivialize. Overstated, they become an event for every field change and an excuse to make a local model impossible to follow. Trivialized, they become whatever payload happened to be published by an integration client. Neither definition helps a team distinguish a meaningful business fact from a transport record.
+`CustomerSurnameFieldUpdated` is probably not a moment in business history. Nor is every byte array a domain event because it escaped through Kafka. Event confetti makes the model impossible to follow; calling every transport payload an event makes the word useless.
 
 TPF treats the distinction seriously. A domain event is a typed statement about something that occurred in the business domain: an order was accepted, a reservation expired, a payment was declined. It should be named in ubiquitous language and remain meaningful even if no broker, HTTP endpoint, or runtime adapter exists. A pipeline may produce that event as an outcome of domain behavior, and a connector may publish it externally. Those are related facts, but they are not the same thing.
 
-The separation matters because an external message has a different shape and lifecycle. A Kafka record carries headers, partitioning, serialization, consumer-group behavior, and delivery semantics. A REST callback carries a route, authentication, and HTTP failure behavior. A domain event should not acquire all that vocabulary merely because an integration currently uses it. TPF’s connector and mapper boundaries let the domain fact become an external representation deliberately, with a typed contract rather than accidental entity serialization.
+The external message has a different job. A Kafka record needs headers, a schema version, partitioning, and delivery rules. A REST callback needs a route, authentication, and an answer to “what does 503 mean?” Map the domain event to that representation at the connector. Do not serialize the aggregate and let five consumers discover its private fields by accident.
 
 This avoids treating technical events as business events. MessageReceived, RetryScheduled, or HTTPCallSucceeded may be useful telemetry or operational signals. They are not automatically domain facts. They should not leak into the core merely because the runtime observes them. Conversely, an important domain event should not be downgraded to a logging line because no external consumer exists yet. The business model owns its meaning; the pipeline and shell own how it moves and is observed.
 
-Pipelines make the handoff visible. A flow can declare where it publishes external reality, preserve order and metadata, and route failure through proper execution semantics. That is valuable when delivery is not instantaneous or may be retried. A publication boundary needs idempotency and ownership just as any other external effect does. Saying “we emitted an event” is not enough if a retry may duplicate it or a downstream failure leaves the originating pipeline uncertain about responsibility.
+Publishing `PaymentDeclined` is a Command with consequences. The flow must preserve its identity and required metadata, and somebody must own a timeout or terminal publish failure. “We emitted an event” is optimistic narration if a retry can duplicate the Kafka record and nobody knows whether the consumer accepted the first one.
 
 There is no requirement that every pipeline end with a domain event. Some flows return a query result, persist a state transition, or hand work to another boundary. There is also no requirement that every domain event be broadcast through a broker. A local event can be useful without becoming a distributed integration contract. TPF keeps those decisions explicit instead of treating an event name as a transport configuration shortcut.
 

@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Yes. Pipeline contracts, metadata, types, mappings, and generated artifacts give coding assistants constraints they can inspect, but human review still owns architectural intent.**
+**Yes. An assistant can inspect the step types, mappings, connector operations, and generated metadata instead of guessing from the nearest client call. Humans still decide what the boundary means.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-AI assistants work best when the system gives them evidence: types, declared contracts, mappings, generated metadata, and compiler diagnostics. TPF can provide these artifacts as a machine-readable account of what a flow is allowed to do. That makes an assistant less likely to infer architecture solely from nearby method calls.
+Without evidence, an assistant copies the pattern three files away—even if that file is the historical mistake. A typed flow can show that `RiskRequest` maps to a declared connector operation and returns `RiskObservation`; compiler diagnostics can reject the wrong shortcut. This narrows the assistant's guessing. It does not outsource the decision that Risk is an external observation.
 
 It is not authority. A machine-readable contract can say which connector is declared or which mapper fits; it cannot decide whether a business boundary is wise, whether a new side effect is acceptable, or whether a migration preserves a customer promise. Humans still own that judgment.
 

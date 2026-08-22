@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**Often, yes. A startup should adopt TPF only when repeated boundary and reliability costs exceed the learning cost; simple local code remains the better choice.**
+**Often, yes. If the product is three CRUD screens and one Stripe call, ship it. Reconsider TPF when retries, callbacks, duplicate effects, and hand-built adapters become a recurring tax.**
 
 <CoffeeMisconceptions />
 

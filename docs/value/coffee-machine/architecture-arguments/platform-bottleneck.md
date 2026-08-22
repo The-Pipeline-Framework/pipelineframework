@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**It should not: application teams own their typed flows, while shared connector contracts and framework runtime semantics receive coordination proportional to their wider impact.**
+**Application teams should change pricing and order flows without filing a platform ticket. Platform review belongs where one connector or runtime change can break everybody.**
 
 <CoffeeMisconceptions />
 
@@ -47,7 +47,7 @@ Centralization occurs when a framework owns business meaning it does not underst
 
 Coordination is appropriate when a change affects a shared contract. A connector provider or operation contract can have many consumers; framework runtime semantics can affect every pipeline that relies on them. Their identities, versions, capabilities, compatibility promises, and generated behavior deserve deliberate evolution. Requiring the same process for a team’s local business step would be a platform bottleneck disguised as consistency.
 
-The boundary is therefore impact, not hierarchy: application-owned flow meaning stays local, shared connector contracts receive product ownership, and framework runtime semantics remain a platform concern. TPF’s typed contract model makes those interfaces visible enough to support the distinction.
+Use blast radius, not hierarchy. Orders can change `PricingPolicy` locally. Changing the shared Stripe connector's retry classification needs its product owner because forty flows may charge money differently afterward. Changing runtime-wide replay behavior belongs with the framework team. The typed declarations make it possible to see which sort of change this is before opening the ticket.
 
 ## Trade-offs
 

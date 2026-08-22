@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Yes. TPF keeps typed domain transformations independent from transport and runtime mechanics, so business rules remain direct, fast, readable Java tests.**
+**Yes. Construct the input, call the pricing rule, assert the result. No broker, container, Spring context, database, or ceremonial `Thread.sleep()` should be needed.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The functional core is deliberately boring in the best way. A pricing decision, validation rule, or domain transformation receives typed facts and returns a typed result. It should not need a message broker, HTTP client, thread pool, or active persistence session to explain its meaning. That makes tests readable and failures local.
+The best business test is almost rude in its simplicity: `assertThat(price(order, customer)).isEqualTo(...)`. The decision receives typed facts and returns a typed result. If explaining a discount requires Kafka, an HTTP stub, a thread pool, and an open Hibernate session, the “unit” has acquired municipal infrastructure.
 
 TPF does not ask developers to replace normal Java testing with framework fixtures. It asks them to preserve the boundary so the business behavior is testable without the shell. A test can assert ordinary outcomes, rejected cases, and property-like invariants. The flow and runtime tests then prove that this behavior is invoked through the intended connector and execution contract.
 

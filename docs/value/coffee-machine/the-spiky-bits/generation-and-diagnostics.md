@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Generation adds build work, but it should move contract failures earlier and explain the flow-model mistake directly rather than deferring incompatible boundaries to production.**
+**Generation costs build time. Its bargain is catching “no mapper from ApprovedOrder to ShipmentRequest” before a customer catches it at runtime—and saying exactly that.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Generation is not free. It adds validation and output to the build, and teams must learn where diagnostics originate. The alternative is not free either: incompatible mappings, missing bindings, invalid step order, and absent adapters emerge later as runtime investigation.
+Generation makes the build do more work. In return, a missing connector binding or incompatible mapper should fail next to the declaration, not as a `ClassCastException` after deployment. If diagnostics merely say “generation failed,” the framework has moved the mystery earlier without making it smaller.
 
 TPF chooses to make those contracts build-time concerns. A useful diagnostic should name the pipeline, step, types, boundary, or transport requirement that is incompatible—not merely expose Java internals from a generated class. Generation earns its cost only when it makes the next action clearer.
 

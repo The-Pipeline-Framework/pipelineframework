@@ -39,13 +39,13 @@ tags:
 
 ## Elevator answer
 
-**Use a step for typed business behavior, a connector for external I/O boundaries, and a plugin for reusable cross-cutting runtime behavior such as telemetry or persistence.**
+**Calculating tax is a step. Calling the tax API is a connector operation. Recording every step’s duration is a plugin or aspect. If one class does all three, it is a cupboard.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-This classification is not taxonomy for its own sake. It prevents three different responsibilities from being hidden in one convenient abstraction. A pipeline step contains typed business behavior: it transforms, decides, validates, or coordinates domain-relevant work. A connector represents an external admission or publication boundary. A plugin provides cross-cutting framework capability such as telemetry, caching, persistence integration, or logging.
+Suppose `TaxStep` calculates tax, calls Avalara, records metrics, and writes replay state. The name has become a small lie. Keep the business calculation in a typed step; put the external call in a connector operation; apply telemetry or persistence across flows as a plugin, aspect, or runtime authority. Three names, three reasons to change, no taxonomy page required during the incident.
 
 The test is ownership. If a function’s main reason to exist is a domain decision, it belongs in a step or focused domain behavior. If it converts external reality into a typed contract or publishes outward, it is a connector. If it changes how many flows execute without becoming a business action itself, it is a plugin.
 

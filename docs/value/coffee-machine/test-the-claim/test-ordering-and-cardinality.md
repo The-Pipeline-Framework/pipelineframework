@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Declare ordering and cardinality in the flow model, then test deterministic split, merge, mapper, and lineage behavior with inputs designed to expose duplicates and reordering.**
+**Split one order into awkwardly numbered items, duplicate one, delay another, then prove the merge returns the promised count and order after retry. “Usually sorted” is not cardinality.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Split and merge are where a flow stops looking like a sequence and starts accumulating mathematical promises. How many outputs may one input create? Which lineage belongs to each one? When results merge, does business ordering matter, and is it deterministic after retry or replay?
+One order becomes twelve line-item checks; item 7 retries, item 4 completes twice, and item 2 returns last. Does the merge emit twelve results, eleven, thirteen, or “whatever arrived”? Split and merge turn a tidy arrow into promises about count, lineage, duplicates, and order. Test the promises with hostile inputs.
 
 TPF makes cardinality, linkage, and ordered step descriptors part of the contract. Tests should use deliberately awkward inputs: several branches, duplicate-like values, slow branches, rejection, and retries. Assert both values and lineage or ordering metadata. A test that only checks the final collection size can miss the bug that will confuse replay or downstream consumers.
 

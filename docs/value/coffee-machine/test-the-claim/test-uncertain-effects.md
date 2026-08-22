@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Test uncertainty explicitly: simulate a lost response after the effect, assert stable idempotency identity, and verify reconciliation or controlled terminal handling rather than blind retries.**
+**Make the fake provider charge the card and then drop the response. Assert the retry keeps the same effect identity and reconciles; otherwise the happy-path test has avoided the dangerous part.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The hard failure is not “the client threw.” It is “the remote system may have completed the effect, but our caller cannot know.” Tests should model that exact state: send a request with a stable key, make the fake or test system record success, then lose the response. Assert that the pipeline does not create a new intent on retry.
+`client throws TimeoutException` is only half the scene. Make the fake provider record a successful €120 charge and then lose the response. On recovery, assert the Command keeps its logical identity, consults the effect store or provider, and does not invent another intent. Distributed systems hide in that missing response.
 
 The expected result may be a status lookup, a reconciliation path, a durable wait, or a terminal item for review. It depends on the boundary contract. What should never be accepted is a test that treats uncertainty as an ordinary exception and proves only that the retry loop ran.
 

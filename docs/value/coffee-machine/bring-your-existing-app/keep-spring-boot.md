@@ -39,29 +39,25 @@ tags:
 
 ## Elevator answer
 
-**No. TPF can introduce typed flows alongside existing Spring application code, preserving familiar composition while making selected execution boundaries explicit and generated.**
+**No. Keep Spring Boot hosting the application. Pick the one service method that loads three rows, calls two APIs, retries one, and publishes a message; that is the candidate, not the whole bean factory.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The emotional question is not really about Spring Boot. It is whether adopting TPF declares years of working application code, operational knowledge, and team habit to be a mistake. It does not. Spring remains useful for application composition, configuration, integration libraries, component lifecycle, and the familiar surface through which many teams already run production systems.
+Spring Boot can keep creating beans, loading configuration, exposing health endpoints, and hosting the controller your runbook already knows. TPF is not asking the application to renounce starters and live in a YAML monastery.
 
-TPF asks for a different decision: identify a business flow whose execution contract is becoming hard to hold together, then describe that flow explicitly. The surrounding Spring application can remain the shell in which adapters, configuration, controllers, and existing services live. A pipeline does not demand that every bean become a step or that every dependency injection point be replaced by framework ceremony.
+Look for a concrete sore spot: `PaymentService.process()` loads an invoice and customer, asks a fraud API, charges a card, saves three status changes, then publishes Kafka—with retry annotations spread across two classes. Keep the Spring controller and adapters. Extract the decisions and their typed dataflow; make the fraud lookup a Query and the charge an external Command. Now the order and data dependencies are reviewable without replacing every surrounding bean.
 
-This matters because replacement is a poor migration strategy when the risk is semantic rather than syntactic. A payment flow may already work through a Spring controller, JPA repository, Kafka producer, and retry configuration. Rewriting all of that before learning whether TPF improves the flow would replace known risks with unknown ones. A narrower migration can retain the existing edge, extract a typed business decision, declare the connector or boundary that actually matters, and compare behavior under controlled conditions.
+The first slice should preserve the working edge and compare behavior. If the old controller maps `CardDeclinedException` to 422, keep that promise until the team deliberately changes it. Framework compilation can catch incompatible mappings, missing connectors, and unsupported generated paths; characterization tests still have to prove the pricing rule and failure behavior.
 
-The framework’s value appears where the current code has grown a distributed responsibility. A change to mapper behavior, transport, retries, telemetry, or generated adapter placement can be checked against a pipeline contract rather than inferred from several classes and configuration files. Spring still helps assemble the application; TPF makes selected flow semantics visible to compilation and runtime.
+Before choosing the slice, verify the exact host path you intend to use: compiler support, generated adapters, transport mode, lifecycle integration, and a representative smoke example. “TPF supports runtimes” is not evidence that your particular Spring deployment shape works. If one capability is missing, leave it in Spring behind an honest adapter.
 
-Runtime support is a capability question, not a brand promise. Before migrating a slice, verify that the required compiler path, generated adapters, transport mode, lifecycle integration, and smoke coverage exist for the chosen host. If a needed capability is absent, keep that responsibility in the existing Spring application or supply an explicit boundary until the supported path exists. This guidance remains useful as runtime support evolves because it ties adoption to tested capabilities rather than release labels.
-
-The cost is coexistence. For a period, a codebase may have ordinary Spring services and declared pipelines. That is not architectural failure if the boundary is deliberate and the migration has a destination. The failure is leaving two styles forever because nobody chose which responsibilities each one owns.
-
-The useful mental model is additive: keep Spring where it composes and hosts the application; use TPF where a flow needs a stronger typed execution contract. The first migration should prove that distinction with one capability, not attempt to settle the history of Java frameworks.
+Coexistence is fine when it has a direction. Each new TPF capability should retire some old plumbing: a retry loop, mapper chain, orchestration service, or hand-written adapter. If migration only adds files and deletes nothing, it is not migrating. It is collecting architectures.
 
 ## Trade-offs
 
-TPF gains incremental adoption and explicit contracts. It gives up the false simplicity of one universal style during transition. Teams must document the seam and avoid claiming runtime capabilities that the tested path does not provide.
+TPF gains an incremental path while Spring keeps doing useful Spring work. The cost is a temporary mixed style, a documented seam, and evidence that the chosen runtime path actually works.
 
 ## When TPF is not a good fit
 

@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**Declared connectors, typed contracts and mappings, compiled metadata, and runtime evidence give security and compliance teams a focused view of external boundaries without replacing detailed service review.**
+**A reviewer can find every declared place customer data leaves: which connector, operation, mapping, credentials, and owner. That is better evidence, not a magic compliance stamp.**
 
 <CoffeeMisconceptions />
 

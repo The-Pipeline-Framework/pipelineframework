@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Customize through declared extension points and adapters, not edits to generated output; regeneration remains safe only when the contract remains the source of truth.**
+**Change the template, provider, plugin, or adapter the generator reads. Editing `GeneratedPaymentHandler.java` works beautifully until Tuesday’s regeneration eats it.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Generated output is a consequence of the pipeline model. Editing it directly may solve a local need once, but the next generation run cannot know whether to retain the change. The result is archaeology: the system works because a file was altered years ago, and nobody knows which contract it now represents.
+Adding one header directly to `GeneratedPaymentHandler.java` feels efficient. Six months later generation removes it, production authentication fails, and Git blame points to a robot. Put the change in a declared adapter, provider, plugin, or template input so generated output remains disposable and the contract remains the source.
 
 TPF should expose customization through declared configuration, connector implementations, plugins, templates, or other supported extension points. That keeps the variation visible, reviewable, and reproducible. If an extension point does not exist for a recurring need, that is evidence for evolving the model rather than normalizing edits to output.
 

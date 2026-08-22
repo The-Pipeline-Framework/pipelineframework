@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Yes. Terminal work needs durable ownership, diagnostic context, controlled replay, and clear safeguards so a failure can be investigated without repeating irreversible external effects.**
+**A DLQ entry must say what failed, who owns it, which IDs and observations were used, and whether replay would resend an email or recharge a card. Otherwise it is a bin with retention.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A dead-letter path is useful only if it preserves more than an error message. Terminal work needs enough durable context to answer what was attempted, which identifiers were used, which boundary owned the failure, what retries occurred, and whether a replay is safe. Otherwise a DLQ is merely a quieter place for lost work.
+`Payment failed: timeout` is not enough to operate anything. Did the provider charge the card? Which idempotency key was sent? Did three attempts share the same logical effect? Which Query observation fed the decision, and which team owns the next move? Without those answers, a DLQ is merely a quieter place for lost work.
 
 TPF treats handoff ownership explicitly. After a checkpoint admission, the downstream pipeline owns retry, DLQ, and lifecycle semantics. That lets an operator know who should investigate instead of asking every upstream caller to retry independently. Telemetry and replay metadata should preserve the flow’s order and lineage without exposing sensitive payloads unnecessarily.
 

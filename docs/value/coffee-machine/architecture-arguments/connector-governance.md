@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**Treat widely used connectors as versioned products: give providers and operations stable contracts, name owners, test compatibility, and migrate consumers deliberately rather than changing shared behavior silently.**
+**Treat the shared SAP or Stripe connector like a product, not office stationery: version its operations, name an owner, test the real protocol, and do not surprise 40 consumers on Friday.**
 
 <CoffeeMisconceptions />
 

@@ -38,7 +38,7 @@ tags:
 
 ## Elevator answer
 
-**Teams own the meaning and outcomes of their business flows; shared connector contracts and framework runtime semantics need explicit product ownership without centralizing every application decision.**
+**The Orders team owns what “accept order” means. The platform team may own the shared Kafka connector and runtime. Sharing plumbing does not transfer the business.**
 
 <CoffeeMisconceptions />
 
@@ -46,7 +46,7 @@ tags:
 
 Shared pipelines expose an ordinary ownership question. The team that owns a business capability should own its flow’s meaning, domain decisions, and outcomes. Sharing infrastructure does not transfer that semantic ownership to the platform team.
 
-A connector contract, framework runtime semantic, or generated contract has a broader blast radius and needs a named maintainer, compatibility policy, and deliberate evolution path. TPF makes these seams easier to see, but it cannot assign responsibility. Ownership should follow the promise being made: business teams own flow meaning, connector owners own provider and operation compatibility, and the framework team owns shared execution semantics.
+A change to `ApproveOrder` belongs with Orders. A change to the provider operation that 30 flows use needs the connector owner, a compatibility policy, and a migration path. A change to Command recovery belongs with the runtime team. TPF can expose those seams; it cannot make “everyone” a useful owner.
 
 The trade-off is a little process where broad impact exists. Good governance makes those dependencies explicit without converting every application change into a central ticket.
 

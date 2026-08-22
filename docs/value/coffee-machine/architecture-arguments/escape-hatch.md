@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**Use explicit, reviewed integration at the boundary, preserve typed ownership and observability where possible, and treat the exception as evidence for model evolution—not a reason to bypass everything.**
+**Use the escape hatch in daylight: isolate the odd protocol behind a typed adapter, name its owner, keep telemetry, and record why the normal connector path cannot do the job.**
 
 <CoffeeMisconceptions />
 
@@ -47,7 +47,7 @@ An opinionated framework without an escape hatch eventually asks teams to lie. C
 
 First classify the requirement: is it dataflow, representation, observation, effect, suspension, persistence, replay, routing, or something the framework genuinely does not model? That question often reveals an existing boundary before an exception is needed.
 
-If it is a real exception, use an explicit boundary. Name it, keep external I/O and operational ownership visible, apply the supported telemetry and security controls where possible, and document which semantics differ. If the exception is temporary, give it a retirement condition. If it recurs, treat it as design input for the framework or connector model.
+Put the odd mainframe protocol behind `LegacyClaimsAdapter`, not inside `DecideClaim`. Keep its I/O, credentials, telemetry, and owner visible; document which retry or replay guarantees it cannot provide. Give a temporary exception a deletion condition. If five teams need the same escape hatch, it is no longer an exception—it is product research.
 
 The escape hatch must not become a second undocumented architecture. Frequent bypasses indicate either a poor fit or a missing extension point. In both cases, more silent shortcuts make the answer harder to discover.
 

@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Typing makes incompatible change visible sooner; evolution still needs versioned contracts, deliberate mappings, and rollout discipline rather than relying on runtime surprise.**
+**Changing `amount` from cents to decimal should break a mapper in the build, not silently reinterpret €12.34 as €1,234 in a consumer. Types expose the argument; versioning resolves it.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Schema evolution is never free. An untyped system can make a change look easy by accepting any payload until a consumer interprets it differently. Strong typing moves the disagreement earlier: a mapper no longer matches, a step contract changes, or a generated binding is incompatible.
+Rename `customerId`, split `address`, or change money from integer cents to decimal and somebody must adapt. Untyped payloads postpone the argument until a consumer guesses wrong in production. Strong typing moves it into a broken mapper or incompatible binding where the team can version, map, and roll out deliberately.
 
 That is not slowness for its own sake. It gives a team a deliberate place to add a compatible representation, version a public boundary, or stage a migration. TPF’s pair-accurate mapper selection and generated contracts should make ambiguity explicit rather than silently choosing a convenient conversion.
 

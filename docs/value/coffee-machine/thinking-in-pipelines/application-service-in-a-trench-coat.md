@@ -41,19 +41,19 @@ tags:
 
 ## Elevator answer
 
-**Both coordinate a use case; TPF adds an explicit, typed execution contract for boundaries, generated adapters, operational semantics, and observable flow structure.**
+**Both coordinate a use case. The pipeline earns the trench coat when the method also has to survive API calls, retries, Kafka, a callback on Thursday, and an operator asking what happened.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The question is a good one because both concepts sit in the same awkward middle ground. A DDD application service coordinates a use case without becoming the domain model itself. It receives a request, obtains the necessary domain objects or facts, invokes behavior, persists outcomes, and perhaps calls outward. A TPF pipeline also coordinates a business flow. If all it did was put a different label on an application service, the change would be more wardrobe than architecture.
+The question is fair. An application service receives `PlaceOrder`, loads what it needs, invokes domain behavior, saves the result, and perhaps calls outward. A pipeline also coordinates that work. If the only change is renaming `PlaceOrderService` to `PlaceOrderPipeline`, the architecture has acquired outerwear.
 
-TPF’s distinction is that a pipeline is not only a coordinating object in code. It is a typed execution contract that the compiler and runtime can understand. The model describes the flow shape, step contracts, mappings, connector boundaries, cardinality and ordering where they matter, and the generated artifacts required for a particular execution path. A traditional application service can embody those decisions, but they are usually spread across method bodies, framework configuration, adapters, and deployment code. TPF asks for the consequential ones to be declared together.
+An application service can hide the whole itinerary in `process()`: map the request, split the items, call the provider, merge results, and publish. A pipeline puts the step types, mappings, connector calls, count/order promises, and required adapters where the compiler and runtime can inspect them together. Same coordination territory; fewer crucial facts hiding between method bodies and configuration files.
 
 That extra declaration does not demote an application service. It makes a particular kind of application service more explicit: one whose behavior crosses an operational boundary and needs shared semantics around it. Consider an order path that validates a command, obtains a pricing fact, decides an outcome, publishes an external event, and later receives a correlated completion. The domain decisions can remain in rich entities, policies, or small domain services. The pipeline owns the itinerary through those decisions and the shell that makes the itinerary reliable: admission, transport, retries, correlation, generated adapters, telemetry, and durable waiting where required.
 
-This is why a pipeline does not automatically correspond to every use case. “Change the customer’s preferred display name” may be a local transaction with no meaningful flow beyond an application service. Modeling it as a pipeline would likely make it more ceremonious and less clear. “Accept an order, enrich it, pass it through a risk boundary, notify an external fulfillment system, and handle a later response” has a different shape. Its contracts and failure behavior are part of the application’s public reality, even if the endpoint that starts it is only one small controller.
+This is why a pipeline does not correspond to every use case. “Change the customer’s preferred display name” is probably one transaction and a short service. “Accept an order, fetch a risk score, reserve stock, notify fulfillment, then correlate its later callback” has a failure story that no single happy-path method body tells. That is where the explicit flow starts paying rent.
 
 The distinction also protects the domain model from a common application-service failure mode. Application services often grow into places where business policy, repository choreography, exception translation, message production, retry behavior, and framework calls accumulate because each next requirement is convenient there. A pipeline can grow badly too, but its declared steps, inputs, outputs, and boundaries make the growth visible. It is harder to pretend that an unrelated side effect is merely another line in a coordinator when it must occupy a named place in a flow.
 

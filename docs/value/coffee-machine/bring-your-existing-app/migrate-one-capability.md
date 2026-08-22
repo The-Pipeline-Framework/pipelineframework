@@ -39,29 +39,25 @@ tags:
 
 ## Elevator answer
 
-**Yes. Start with one consequential flow, preserve its existing edges, extract typed decisions gradually, and use compatibility checks to keep behavior trustworthy throughout migration.**
+**Yes. Keep the controller, repository, or consumer at the edge; move one painful flow behind it; and make every new TPF piece earn its keep by deleting old plumbing.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Incremental migration is not a timid version of transformation. It is the only honest response when a running application contains business knowledge that no diagram fully captures. A legacy flow embodies edge cases, exception conventions, data assumptions, and operational behaviors. Replacing all of it at once gives a team fewer places to compare meaning and more places for a regression to hide.
+Pick something a developer can point at: the 180-line method that loads an order, calls a fraud API, retries payment, saves status, and sends Kafka at the end. Leave the controller or consumer in place. First extract the pricing decision and make the old method call it. Then move the fresh fraud observation to a Query. Then move the charge to a Command. Compare behavior after each cut.
 
-Choose a capability with a meaningful boundary: a flow that already suffers from repeated mapper glue, inconsistent retries, a difficult transport change, or unclear ownership after failure. Keep its existing controller, consumer, repository, or client where that is the safest edge. Extract one typed business decision at a time. Declare the connector or runtime boundary only when the original behavior has a counterpart that can be observed and tested.
+This is a strangler with manners. The old path remains evidence while the new one proves itself. Existing repositories and exception translation may stay temporarily, provided each bridge has an owner and a replacement decision. Ideological neatness is a poor substitute for knowing why production returns 409 in one obscure case.
 
-The goal is not to duplicate the entire old system beside a shiny new one. It is to create a narrow seam. Existing components can provide facts to a new flow; the new flow can initially call an existing adapter. As confidence grows, a team can move one boundary at a time. Each new framework capability should make some old application plumbing obsolete. Each step should answer a concrete question: what responsibility moved, what code or configuration can now be deleted, what still belongs to the legacy shell, and what evidence shows callers see the same promise?
+Watch the deletion side of the diff. A generated adapter should replace a hand-written adapter. A runtime retry policy should retire the local retry loop. A typed mapping should remove the mapper chain it supersedes. A migration that only adds files is not migrating. It is collecting architectures.
 
-Compatibility is more important than ideological neatness. A migrated flow may temporarily use JPA repositories, established exception translation, or existing Kafka consumers. That is acceptable if the temporary dependency is explicit, owned, and attached to a replacement decision. Migration is measured by responsibility replaced and old plumbing retired, not by the number of new framework artifacts accumulated beside the old ones.
+TPF compilation can reject incompatible step mappings, missing connector declarations, and unsupported flow shapes before deployment. It cannot tell you that the old controller quietly waived a fee for customers in Malta. Characterization tests and comparison runs carry that part of the promise.
 
-TPF helps by making more of the target contract build-time visible. Step resolution, mapper compatibility, declared connectors, transport requirements, and generated artifacts can fail before deployment. That does not prove the legacy semantics are identical, but it reduces the class of accidental integration mistakes while tests and comparison runs handle the business behavior.
-
-The trade-off is patience. A staged migration produces a period of mixed styles and demands documentation of the seam. It may feel slower than announcing a replacement. It is usually faster than discovering, late in a big-bang effort, that an old controller contained the only implementation of an obscure but important rule.
-
-The mental model is a strangler with manners: replace responsibility at a boundary, not vocabulary across the whole codebase. The old application stays useful evidence until the new execution contract has proved it can carry the same promise.
+Mixed styles are the price of moving safely. Keep the seam narrow, write down what remains on each side, and turn every proven replacement into deletion or deliberate long-term ownership. Otherwise “incremental” becomes the polite word for “both forever.”
 
 ## Trade-offs
 
-TPF gains a reversible migration path and continuous evidence. It gives up the visual purity of a clean-slate diagram. Teams must pay attention to temporary bridges and turn each proven replacement into deletion or deliberate long-term ownership.
+TPF gains a reversible path with evidence at every cut. The cost is temporary bridges, comparison tests, and the discipline to delete the plumbing each new capability replaces.
 
 ## When TPF is not a good fit
 

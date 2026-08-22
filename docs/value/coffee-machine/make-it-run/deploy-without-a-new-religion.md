@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Deploy generated application runtimes through your existing Kubernetes practices; TPF makes flow boundaries explicit but does not replace containers, manifests, policy, or operations teams.**
+**Keep the Dockerfile, Helm chart, probes, policies, and on-call habits. TPF generates application/runtime pieces; Kubernetes still decides where the pod goes and whether it is alive.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Kubernetes is already an operational environment with its own vocabulary: images, deployments, services, ingress, policies, probes, scaling, and incident habits. TPF does not ask teams to exchange that vocabulary for a pipeline-specific deployment religion. A pipeline application still becomes an application runtime that can be built, packaged, deployed, observed, and governed through the platform practices a team already trusts.
+Your platform already knows how to build an image, inject secrets, expose a service, run probes, enforce policy, scale pods, and wake somebody when they burn. A generated TPF runtime enters that machinery as an application. It does not arrive with tablets announcing a replacement for Kubernetes.
 
 What TPF contributes is a clearer source for the runtime’s behavior. The pipeline model owns the typed flow, declared connectors, transport and platform choices, and generated artifacts that implement the necessary edges. Kubernetes then runs the resulting deployable. The distinction is important: runtime layout is the logical shape of an application flow; build topology and containers are the physical structure used to ship it. They influence one another, but they are not interchangeable.
 

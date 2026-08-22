@@ -37,25 +37,25 @@ tags:
 
 ## Elevator answer
 
-**No. Controllers remain useful transport adapters; TPF lets them admit typed requests into selected flows without turning HTTP details into business logic.**
+**No. Keep the route, request binding, authentication, and status codes. Move the part that prices the order, charges the card, and emails the receipt into a typed flow.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Controllers are not an architectural mistake. They translate an HTTP request into application work and translate an outcome back into HTTP. They own routes, authentication integration, headers, request binding, and response status. The problem begins only when a controller becomes the place that decides business policy, talks directly to several external systems, creates retry behavior, and silently defines the order of a distributed flow.
+The controller is not guilty. It was standing nearest to the HTTP request when everybody started giving it responsibilities.
 
-TPF does not ask a team to hide or delete a working controller. It gives the controller a clearer job: admit a typed request into a declared flow and return the appropriate result. The controller can remain an adapter while the pipeline expresses the business execution contract behind it. Historical or fresh read concerns belong behind an explicit Query/read side, not in controller code that quietly reconstructs persisted pipeline state. This preserves the familiar web edge and makes the more consequential behavior reviewable without forcing HTTP or persistence vocabulary into every business step.
+A healthy controller knows that `POST /orders` needs authentication, that malformed JSON gets a 400, and that an accepted order becomes a 202. Trouble starts when the same method loads the customer, checks credit, reserves stock, calls the payment API, retries it, publishes to Kafka, and decides which exception means 409. At that point the doorway has become the whole building.
 
-Migration can begin with the controller untouched. Put the existing request and response mapping behind an explicit boundary, extract a typed decision, and keep existing exception conventions while tests compare old and new outcomes. Only move a concern when its ownership becomes clearer. A controller that simply maps input to a flow is not redundant; it is exactly the kind of imperative shell TPF expects.
+TPF lets the doorway stay. Map the request to a typed input, admit it to the flow, then map the result back to HTTP. The pricing rule sees an order, not a header. The payment step returns a business result, not `ResponseEntity`. If it needs today's exchange rate, make that fresh observation a Query; do not have the controller reconstruct half a previous execution from database rows.
 
-This distinction improves later change. If a business flow must also be admitted from gRPC, a function-style runtime, or a message connector, the domain behavior need not learn a second or third transport vocabulary. Each adapter can translate to the typed flow contract. That does not make transports interchangeable; REST, gRPC, and LOCAL remain distinct modes. It makes the business decision less hostage to the first endpoint that happened to call it.
+Migration can start without changing the route at all. Extract one decision, have the existing controller call it, and keep the current exception mapping while characterization tests compare responses. When the same flow later starts from Kafka or gRPC, those adapters translate their own envelopes into the same typed input. REST, gRPC, and LOCAL are still different transports; the discount rule simply stops caring which one woke it up.
 
-The cost is another seam to understand. A team must decide where request validation ends and domain validation begins, and it must avoid duplicating rules on both sides. HTTP-shaped concerns remain at the controller. Business and execution facts move through the typed flow. Historical reads use an explicit Query/read side. The pipeline composes these responsibilities without collapsing them into the endpoint.
+The seam does need policing. Request-shape validation belongs at the web edge; rules such as “a cancelled order cannot be paid” belong in the flow. Copying the same rule into both places buys two future bugs for the price of one.
 
 ## Trade-offs
 
-TPF gains transport-neutral business execution while retaining familiar web adapters. It gives up the convenience of treating the controller as the entire use case. Teams must keep mappings and validation responsibilities distinct.
+TPF keeps the familiar web adapter and makes the business flow callable from somewhere else. The cost is an explicit mapping and a real decision about where validation lives.
 
 ## When TPF is not a good fit
 

@@ -40,13 +40,13 @@ tags:
 
 ## Elevator answer
 
-**Clean and Hexagonal Architecture protect dependency direction; TPF adds a typed, compiled model for application flows and their operational boundaries.**
+**Clean Architecture keeps `ChargeCard` from depending on Stripe. TPF also checks how the request reaches it, what maps into it, what happens next, and which adapter must exist at runtime.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Clean Architecture and Hexagonal Architecture gave the industry a valuable corrective: business rules should not be trapped behind a particular framework, database, or delivery mechanism. Dependencies should point toward the policy that matters, and adapters should keep the outside world from dictating the shape of the core. TPF agrees with that direction. It would be strange for a framework that separates a functional core from an imperative shell to disagree.
+Clean and Hexagonal Architecture gave us a useful rule: the pricing policy should not import Hibernate, Kafka, or Stripe's SDK. Put those behind ports and point dependencies toward the business. TPF agrees. Drawing a hexagon around the same tangled method would be an expensive fake moustache.
 
 Agreement on dependency direction is not the same as agreement on how an application flow should be made executable. Clean and Hexagonal Architecture are primarily architectural disciplines. They tell you how responsibilities and dependencies should relate. They do not, by themselves, supply a shared build-time contract for a flow’s step order, mapper compatibility, cardinality, transport requirements, generated adapters, telemetry metadata, or replay semantics. A skilled team can build all of that on top of them. Many do, repeatedly.
 

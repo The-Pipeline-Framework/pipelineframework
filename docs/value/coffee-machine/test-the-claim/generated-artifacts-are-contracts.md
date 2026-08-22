@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Generated artifacts are part of the contract: keep them deterministic, validate them from the pipeline model, and review meaningful semantic changes rather than accepting noisy output.**
+**The same flow should generate the same handler, metadata, and bindings. If a one-line mapping change rewrites 4,000 unrelated lines, the generator has produced weather, not evidence.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Generated code and metadata are useful only when they are traceable to a declared model. TPF treats pipeline order, telemetry, branching, platform descriptions, and semantic contracts as generated artifacts that must not drift from the flow. Determinism turns them from weather into reviewable evidence.
+Generated files are useful when a reviewer can point from a changed mapper or branch to the exact changed handler, metadata, or binding. Deterministic output makes that possible. A generator that rearranges everything on each run has replaced hand-written drift with machine-written fog.
 
 Teams need not read every line on every pull request. They should be able to inspect a stable semantic diff when flow shape, mapping, transport, or runtime placement changes. Contract tests and compilation checks catch the rest. If generation creates endless irrelevant noise, the generator or review surface needs improvement—not lower expectations.
 

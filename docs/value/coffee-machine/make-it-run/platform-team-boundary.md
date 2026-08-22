@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Yes. Platform teams own approved runtime, security, delivery, and observability controls while application teams own typed business behavior and declared flow semantics.**
+**Yes. Platform owns the paved road—base runtime, identity, policy, telemetry, delivery. The application team owns why an order is rejected and which business flow it runs.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The functional-core, imperative-shell distinction is also an organisational boundary. Platform teams should be able to provide secure base runtimes, policy, networking, identity, logging, deployment controls, and supportable operational conventions. Application teams should be able to describe business flows, domain behavior, and the connector contracts their capabilities need. Neither team benefits when it quietly owns the other’s work.
+Platform should be able to patch a base image, rotate identity, enforce network policy, and standardise telemetry without editing `PricingPolicy`. The Orders team should change rejection rules and flow composition without asking Platform to interpret the business. When either team quietly owns the other's code, the ticket queue becomes the architecture.
 
 TPF helps make the seam concrete. The application declares flow shape, transport, connectors, and runtime requirements. The platform can provide approved deployment templates, sidecars, ingress, service mesh policy, secrets handling, and telemetry integration around the generated runtime. The platform does not need to rewrite a business decision to enforce security, and business teams do not need to reinvent every operational shell.
 

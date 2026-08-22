@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**TPF generates application artifacts and adapters from declared flow contracts; your build and platform tools still package images, provision infrastructure, and deploy runtimes.**
+**TPF can generate the handler, adapter, metadata, and binding implied by the flow. It does not build the image, create the cluster, choose the subnet, or negotiate with Finance.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Code generation is often credited with either too much or too little. Too little: it is dismissed as boilerplate reduction. Too much: it is imagined to create an entire production platform. TPF sits in the useful middle. It generates application-facing artifacts from the declared pipeline contract: adapters, handlers, metadata, bindings, runtime descriptions, and the integration code needed to make the typed flow executable in its selected runtime shape.
+Generation is neither a glorified getter factory nor a small cloud provider. From a declared flow, TPF can produce handlers, adapters, bindings, metadata, and runtime descriptions that would otherwise drift across hand-written files. Your build still packages them; Terraform still provisions things; Kubernetes still runs them. The generator has enough responsibility already.
 
 That generated code is part of the contract, not disposable decoration. Pipeline order, telemetry metadata, branching information, platform and transport descriptions, and semantic step descriptors should align with the compiler model. This is why a missing binding or incompatible mapper is better discovered during generation than as a surprise behind a remote call.
 

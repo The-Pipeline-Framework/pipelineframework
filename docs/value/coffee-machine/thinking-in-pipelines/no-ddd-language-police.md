@@ -39,21 +39,21 @@ tags:
 
 ## Elevator answer
 
-**Yes. TPF needs clear typed ownership and contracts, not ceremonial vocabulary; teams may keep their language while preserving meaningful business boundaries and execution semantics.**
+**Yes. Call it a rule, policy, handler, or service. TPF needs clear inputs, outputs, effects, and an owner—not proof that the class has read the blue book.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-DDD is useful because it encourages teams to make business language, ownership, and invariants explicit. It is not useful when it becomes a compulsory dialect spoken before anyone is allowed to improve a system. Teams have existing terminology: policy, rule engine, validator, handler, or service. TPF does not require a glossary exam before it can provide value.
+If the team says “eligibility rule,” making everyone rename it `CustomerAdmissionDomainPolicy` will not improve the rule. It will improve autocomplete's opinion of the architecture. TPF does not require a glossary exam before a payment can be declined.
 
 What TPF requires is semantic clarity. A typed step has a coherent responsibility. A connector represents an actual I/O boundary. A pipeline has a meaningful input, outcome, and ownership story. Business logic is not silently defined by transport callbacks, and runtime behavior is not smuggled into a domain decision. Those needs exist whether a team uses the word aggregate or never utters it.
 
 The framework fits a DDD-rich team and a pragmatic team. In the former, pipelines coordinate aggregates, policies, domain services, and domain events while leaving their language intact. In the latter, pipelines coordinate named business functions and explicit contracts without demanding that every function be classified by a pattern catalogue. The test is not vocabulary purity. It is whether a reader can tell what the step means, what it owns, and what happens when it crosses a boundary.
 
-Refusing DDD terminology should not become permission for vague names. A pipeline called HandleStuff that invokes ProcessThing and publishes EventData has avoided jargon only by avoiding meaning. TPF’s typed model makes unclear language more costly. If a flow cannot state input and outcome in terms the business recognises, the implementation may define a technical itinerary rather than a capability.
+Refusing DDD terminology is not permission for `HandleStuff` to invoke `ProcessThing` and publish `EventData`. That has avoided jargon by avoiding meaning. If an engineer cannot say what enters the flow, what decision it makes, and what leaves, the business will not be rescued by a suffix.
 
-TPF does not prescribe one interpretation of DDD. It does not decide whether every policy is a domain service, whether an event must arise from an aggregate, or how a team divides contexts. Those are design choices with legitimate variation. Its narrower claim is that once a team has chosen behavior, execution boundaries and operational semantics should be explicit and compatible.
+TPF will not issue a citation because `EligibilityRule` is not called a domain service. It cares that the rule receives the right facts, that the external credit lookup is a Query rather than a hidden client call, and that the resulting Command fits the next step. Pattern theology remains optional.
 
 The trade-off is that ambiguity cannot hide behind familiar framework names. A team may keep its language, but it must make that language precise enough for type contracts, mappings, and ownership to be reviewed. That is smaller than adopting doctrine and larger than naming every class Manager.
 

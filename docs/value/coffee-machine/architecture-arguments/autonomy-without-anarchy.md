@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**Yes. Business actions may require different resilience semantics, while shared runtime vocabulary, contracts, telemetry, ownership, and policy guardrails keep those differences visible and operable.**
+**Yes. A price lookup may retry; a rejected payment should not; a regulatory filing may need a human. Let flows differ, but make every retry budget, terminal outcome, and owner visible.**
 
 <CoffeeMisconceptions />
 

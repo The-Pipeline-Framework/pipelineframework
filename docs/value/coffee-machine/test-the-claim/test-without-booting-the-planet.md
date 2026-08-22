@@ -38,17 +38,17 @@ tags:
 
 ## Elevator answer
 
-**Test typed business steps directly, test flow contracts at compilation, and reserve real infrastructure for focused connector and integration tests where boundaries actually matter.**
+**Call ordinary Java for ordinary decisions. Boot Kafka, Postgres, or a provider simulator only when the test is specifically about Kafka, Postgres, or the provider—not because the rule lives in a pipeline.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A pipeline should not make the business rule harder to test. Typed business steps remain ordinary Java functions: pass explicit inputs, assert explicit outputs, and exercise rejection behavior without a runtime. That is the fast feedback layer.
+A pipeline should not make `calculateDiscount()` wait for Testcontainers. Pass explicit inputs, assert explicit output, and test rejection as ordinary Java. Bring up Kafka only to prove offset, acknowledgement, serialization, or duplicate-delivery behavior. The planet may remain unbooted for arithmetic.
 
 The pipeline model adds a different test layer: compilation and contract validation. Step resolution, mapper compatibility, connector declarations, cardinality, and generated artifacts can be checked before a runtime test begins. This catches structural mistakes that a perfectly isolated function test cannot see.
 
-Then test actual boundaries deliberately. A connector deserves focused contract tests against a realistic dependency or controlled test double. A flow with retries, durable awaits, or external side effects deserves an integration test that proves the relevant runtime semantics. The point is proportion: do not start every test with the whole platform, but do not mock away the boundary that defines the risk.
+Then spend infrastructure where the risk lives. Test the Kafka connector against real serialization and acknowledgement behavior. Test an Await through durable suspend and duplicate completion. Test a lost payment response with a provider simulator that records the charge. Do not boot the platform for arithmetic, and do not mock away the one boundary the test claims to prove.
 
 ## Trade-offs
 

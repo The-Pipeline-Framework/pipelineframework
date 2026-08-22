@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Often yes: preserve typed business semantics while selecting supported transports, runtime mappings, and deployment patterns explicitly rather than treating all environments as identical.**
+**The pricing decision can stay Java while its host changes. REST, gRPC, LOCAL, containers, and functions are not interchangeable costumes; each needs a supported adapter and an honest runtime mapping.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Portability is valuable when it preserves business semantics, not when it pretends every runtime behaves the same. A typed domain flow can run locally for tests, behind a REST or gRPC adapter, in a container runtime, or through a function-style deployment pattern when the corresponding compiler and runtime support exists. The business decision should not need a new vocabulary for each one.
+`CalculatePrice` should not learn HTTP because production uses REST or Lambda because somebody wants functions. That is useful portability. Claiming REST, gRPC, LOCAL, containers, and functions behave identically is hand-waving with billing consequences. Each target needs a compiler path, generated adapter, lifecycle, and representative test that actually exists.
 
 The boundaries remain real. LOCAL, REST, and GRPC are transport modes with different invocation behavior. A function-style deployment is a platform or deployment pattern, not another transport mode. Latency, startup, concurrency, credentials, and operational limits still vary. TPF makes these choices explicit so the generated adapter and runtime contract can match the intended environment.
 

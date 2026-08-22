@@ -39,19 +39,19 @@ tags:
 
 ## Elevator answer
 
-**Keep each aggregate’s invariants local; express cross-aggregate policy as typed domain behavior, then let a pipeline coordinate facts and durable external consequences.**
+**Let each aggregate protect its own state. Put the rule that compares customer credit with an open reservation in a named policy, then let the pipeline fetch facts and carry out the result.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Cross-aggregate rules are where architecture slogans meet an actual business. An aggregate is useful precisely because it limits the state that must change consistently. But businesses regularly ask questions that span those limits: can a customer consume more credit while a reservation is pending; may an order be fulfilled while a compliance case is open; does a promotion apply across catalog and customer facts? Pretending these are all one aggregate merely moves the difficulty into a larger transaction boundary.
+Cross-aggregate rules are where “keep invariants local” meets a checkout button. Can this customer spend another €400 while a reservation is pending? May this order ship while Compliance still has an open case? Stuffing Customer, Reservation, Order, and ComplianceCase into `EnterpriseAggregate` does not answer the question. It merely makes loading it an event.
 
 TPF does not remove that difficulty, and it should not claim to. A pipeline can coordinate the typed flow that gathers facts, invokes policies, applies legitimate aggregate operations, and handles external consequences. It cannot declare an invariant and make it atomic across independent state stores, remote systems, or bounded contexts. The first design question remains domain ownership: which invariant must be protected locally, which rule is a policy that evaluates multiple facts, and which outcome can be eventually consistent?
 
 For a local cross-aggregate policy, a focused domain service or specification can be the right home. It receives the necessary typed values, makes the rule explicit, and returns a result that aggregates can act upon. The pipeline’s job is then to arrange the use case: obtain facts through declared boundaries, invoke the policy, call aggregate behavior that preserves each aggregate’s invariants, and publish or persist an outcome in a controlled shell. The policy is business language; the pipeline is execution language.
 
-For a distributed rule, the answer may include a reservation, a command, an event, an await boundary, or a compensation. The right choice depends on the business promise, not on the number of boxes in a diagram. TPF can make the boundary and operational semantics explicit. A checkpoint handoff is an ownership transfer: after admission, the downstream pipeline owns retry, DLQ, and lifecycle semantics. That clarity matters because a cross-aggregate flow otherwise leaves everyone responsible for failure and nobody responsible for recovery.
+Across systems, the business may reserve credit, Command the warehouse, Await its answer, then release the reservation if fulfillment refuses. Choose that shape from the promise—not from the number of fashionable boxes available. Once Fulfillment accepts a checkpoint handoff, it owns retries, terminal work, and completion. Without that sentence, every team owns the happy path and nobody owns Tuesday's failure.
 
 Stable identifiers and replay matter here. A retry across systems must preserve the idempotency, dispatch, checkpoint, or correlation identifiers that let a receiver recognise the same intent. A retry that creates a new business action on every attempt is not resilience; it is a discount generator with a pager. The shell makes these concerns systematic, while the domain still decides whether a second reservation is permitted.
 

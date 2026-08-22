@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Backpressure is an execution contract that must be designed across connectors, concurrency limits, queues, and downstream capacity; a library alone cannot guarantee it.**
+**If one CSV can create 80,000 supplier calls, somebody must decide how many may run at once. Reactor cannot guess the partner’s rate limit from the mood of the event loop.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Backpressure matters when a flow can produce work faster than a downstream boundary can accept it. Fan-out, high-cardinality inputs, slow remote dependencies, and retries can turn one reasonable request into thousands of concurrent calls. A reactive library provides useful mechanics, but it does not know the capacity of a partner API, database, connector, or queue unless the application declares and operates those limits.
+Backpressure begins with an ordinary disaster: one uploaded CSV becomes 80,000 payments, the provider accepts 200 requests per second, and every timeout schedules another attempt. Without limits, a perfectly reasonable file becomes a denial-of-service attack with a purchase order. The reactive library can slow a publisher; it cannot invent the provider's capacity or your queue budget.
 
 TPF makes the flow shape visible, which helps teams reason about cardinality and split/merge behavior. It does not promise that every boundary is automatically safe. Connectors need admission limits, runtime mappings need appropriate concurrency, and operators need visibility into queue depth and downstream saturation. A step that creates parallel work must preserve deterministic ordering and lineage where the business contract requires it.
 

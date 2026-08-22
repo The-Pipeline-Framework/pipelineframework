@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**No. Runtime layout describes logical execution and invocation boundaries; Maven topology describes how artifacts are built, packaged, and physically assembled for delivery.**
+**No. A Maven module says how code compiles and packages. A runtime boundary says a call now crosses a process, transport, failure domain, and probably somebody else’s pager.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Maven modules are valuable build topology. They define dependency relationships, artifact boundaries, compilation, tests, and packaging. Runtime layout answers different questions: which components execute together, which calls cross a runtime boundary, and which transport or platform behavior applies. The two often influence each other, but a module boundary is not evidence of a network boundary, and a remote runtime does not require a particular source-tree ceremony.
+Splitting `pricing` into its own Maven module may improve dependencies and tests. It has not created a service. Conversely, calling Pricing over gRPC changes latency, retries, failure, deployment, and ownership even if both sides still live in one repository. A folder is not a network, however ambitious its `pom.xml`.
 
 TPF keeps the distinction deliberately. The pipeline model may map a step to a local runtime or a remote invocation. Generated artifacts can then implement the relevant adapter and binding. A team may package related code in one JAR while deploying several runtime components, or package several internal modules into one deployable. That flexibility is useful because build convenience and operational isolation rarely align perfectly.
 

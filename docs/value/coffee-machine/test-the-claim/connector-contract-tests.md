@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Test connector contracts at their boundary: mappings, authentication, error classes, idempotency, and delivery semantics must agree with both the pipeline and the real dependency.**
+**Send the connector a real-shaped request and make the fake provider misbehave: 401, 429, timeout after success, duplicate callback, malformed body. “Returns 200” is not a contract suite.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A connector test should not require the entire application, but it should be more honest than a mock that always returns success. The connector owns translation between a typed flow contract and an external system. Test that mapping, authentication behavior, timeout and failure classification, idempotency keys, and any protocol-specific admission or publication rule.
+A connector test need not boot the whole application, but `when(client.call()).thenReturn(ok)` proves very little about Stripe, SAP, or Kafka. Exercise the actual mapping, auth headers, idempotency key, timeout classification, retryable status codes, duplicate delivery, and the ugly payload the provider really sends.
 
 Generated adapters should be included where they implement the boundary. The test then proves that the compiler model, generated code, and actual connector agree. Use a provider test environment or controlled fake when possible; the important point is to model the failure and delivery behavior the business depends on.
 

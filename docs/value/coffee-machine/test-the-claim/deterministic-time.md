@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**Yes. Treat time, correlation, attempts, and completion as controllable test inputs, then assert durable state transitions rather than sleeping and hoping.**
+**Advance a controllable clock, complete the Await with its correlation ID, and assert the durable transition. Sleeping 30 seconds is not testing time; it is donating life to CI.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Time-based behavior becomes untestable when tests wait for wall-clock luck. A durable await should expose correlation, admission, timeout, duplicate completion handling, and resume behavior as observable state transitions. Retries should expose attempt identity, policy, and terminal outcome. Test doubles can control the scheduler or completion boundary so a test advances the scenario instead of sleeping.
+Wall-clock tests are tiny weather forecasts. For a durable Await, admit the work, capture its correlation, advance a controllable clock, submit the completion twice, and inspect the resume or timeout transition. For retry, control the attempt sequence and terminal result. The test should move time; time should not move the test suite toward retirement.
 
 This is more than convenience. A test that waits rarely proves which transition occurred; it merely proves that something eventually happened in one environment. Deterministic tests can assert that a duplicate completion is rejected, a timeout routes to the correct state, or a retry preserves its idempotency key.
 

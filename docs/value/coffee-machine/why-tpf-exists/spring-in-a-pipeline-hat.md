@@ -40,13 +40,13 @@ tags:
 
 ## Elevator answer
 
-**Spring composes applications; TPF defines typed business flows and owns recurring operational mechanics around them, while Spring applications remain useful.**
+**Spring can assemble the beans and host the app. TPF describes the order-to-payment journey and makes its mappings, retries, connectors, and generated adapters somebody's explicit problem.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The question is sensible because Spring has already solved a remarkable amount of Java application work. It composes objects, manages configuration, offers web and messaging integrations, supports transactions, and gives a team a familiar place to put code. A team that hears “put business behavior in typed pipelines” is reasonably entitled to ask whether somebody has discovered `@Service` again and given it a new logo.
+Spring already creates objects, loads configuration, opens transactions, serves HTTP, and consumes Kafka quite competently. When somebody says “typed pipeline,” a Java engineer is entitled to ask whether `@Service` has been rediscovered in a hat.
 
 TPF does not treat that experience as wasted. Spring answers, “How do I assemble an application and integrate it with the technologies it uses?” TPF answers a narrower but more persistent question: “How do I describe a typed business flow once, then make the recurring operational consequences of that flow explicit and consistent?” Those are adjacent responsibilities, not competing slogans.
 

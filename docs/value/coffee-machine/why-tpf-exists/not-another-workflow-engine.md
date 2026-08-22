@@ -39,15 +39,15 @@ tags:
 
 ## Elevator answer
 
-**Workflow engines center durable process coordination; TPF centers typed application execution, adding durable boundaries only where operational reality requires them.**
+**If the product is a three-week claims process with human work queues and BPMN, use a workflow engine. TPF starts with typed Java execution and adds a durable Await where the real flow must stop.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Workflow engines are good at a real problem: long-running, durable process coordination. They record state, schedule work, resume after failure, and often make a process model visible to operators or business users. If your primary problem is a claims process that waits weeks for human decisions, a BPMN-driven approval chain, or a saga whose life is the product, a workflow engine may be exactly what you need. Calling every alternative “not a workflow engine” would be more defensive than useful.
+Workflow engines solve a real problem. A claim arrives on Monday, waits for an adjuster, escalates on Friday, and resumes after somebody uploads a police report next month. If queues, calendars, visual process management, and human tasks are the product, choose the tool built for them. A pipeline is not improved by pretending to be cheaper BPMN.
 
-TPF starts from a different centre of gravity. It treats a pipeline as a strongly typed application flow: a sequence or graph of domain-relevant steps with declared contracts, mappers, connector boundaries, transport requirements, and generated runtime artifacts. The flow exists so that ordinary business execution is explicit and build-time verifiable. It is not primarily a visual language for drawing the organisation chart in arrows.
+TPF starts with Java work such as validate order, observe risk, decide, and charge. It checks how the step types connect, which mapper is selected, where the connector sits, and which adapter must be generated. An Await can make one pause durable; the framework is still not a visual language for drawing the organisation chart in arrows.
 
 The difference matters before anything goes wrong. In a workflow engine, the durable process model is usually the dominant unit. Activities are coordinated because the engine owns the process life cycle. In TPF, the dominant unit is the typed flow and the operational semantics surrounding it. A domain function still says something concrete—validate a request, calculate a price, enrich an order, decide a result. TPF’s shell then provides the necessary admission, transport, retries, telemetry, persistence, replay, and generated adapter behavior around that function.
 

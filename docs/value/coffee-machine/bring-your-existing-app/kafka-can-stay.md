@@ -38,25 +38,25 @@ tags:
 
 ## Elevator answer
 
-**Yes. Keep Kafka adapters at the edge, migrate typed business behavior inward, and make ownership, mapping, retries, duplicates, and backpressure explicit gradually.**
+**Yes. Keep the consumer group, topics, schemas, and pager runbook. Translate each record into typed flow data, and keep offsets out of the invoice.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Kafka is usually both infrastructure and history. Consumers, producers, topics, offsets, and established operational conventions often carry production traffic before a framework migration begins. Treating all of that as disposable would be reckless. TPF allows Kafka to remain at the boundary while a team changes the business flow behind it.
+Kafka can remain Kafka. The invoice does not need to learn what an offset is.
 
-A Kafka consumer can continue admitting a record, using the existing serialization and operational setup. The migration seam is the translation from the external record into a typed input and the declared flow that follows. On the way out, a declared, versioned connector boundary can publish the required external representation while domain events and business results retain their own meaning. This is not Kafka denial; it is refusing to make topic names, schemas, and offsets the vocabulary of every business decision.
+Keep the current consumer, deserializer, group ID, and operational setup. At the seam, turn the `InvoiceRequested` record into a typed flow input. Inside the flow, steps talk about the invoice, customer, and payment—not topic names and acknowledgement modes. On the way out, a declared connector maps the business result to the versioned record the existing producer must publish.
 
-The gradual approach is important for delivery semantics. Existing duplicate handling, partition order, consumer groups, DLQ practice, and backpressure are part of the real system. A new pipeline must not claim exactly-once processing merely because it has a typed contract. The logical identity of an effect must remain stable across retries even though Kafka may make several delivery attempts. That distinction supports idempotency, correlation, explicit ownership, and honest duplicate tests. TPF can make those obligations visible; it cannot repeal broker behavior.
+None of this repeals broker physics. A record can arrive twice. Partition order still matters. The DLQ still exists, and backpressure does not disappear because the pipeline compiled. If publishing a payment result is retried after a lost response, the Command needs a stable logical effect identity so recovery can tell “same effect, another attempt” from “charge the card again.” Exactly-once is not a personality trait acquired by adding types.
 
-Teams can migrate one consumer path at a time, keep established producers, and compare results. As confidence grows, mapping, connector versions, representations, telemetry, and retry semantics become part of the boundary contract. The legacy adapter may stay permanently if Kafka remains the right transport. The goal is not to eliminate the broker; it is to keep its mechanics at the edge where they can be operated honestly.
+Move one consumer path at a time. Run duplicate, timeout, rebalance, and poison-record cases against the old and new paths. Decide precisely when the record is acknowledged and who owns a failure before and after that point. The legacy Kafka adapter may stay forever if it is still the right road; the useful migration is that broker mechanics stop leaking into every business class.
 
-The trade-off is transitional complexity. For a while, the old consumer and the new flow must agree about acknowledgements, retries, and failures. That requires careful ownership, not a generic abstraction that hides offsets until an incident demands them.
+During coexistence, the old consumer and new flow must agree about acknowledgements, retries, and failures. Write that agreement down where an operator can find it. An abstraction that hides offsets until an incident is just an incident with a nicer class name.
 
 ## Trade-offs
 
-TPF gains typed business behavior without requiring broker replacement. It gives up a little local convenience: Kafka-specific behavior must be declared and owned at the boundary rather than leaking through every step.
+TPF gains typed business behavior without replacing the broker. The cost is declaring mapping, acknowledgement, duplicate, and retry behavior at the Kafka boundary.
 
 ## When TPF is not a good fit
 

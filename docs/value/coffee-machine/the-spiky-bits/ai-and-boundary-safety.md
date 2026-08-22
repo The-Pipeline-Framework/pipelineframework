@@ -37,15 +37,15 @@ tags:
 
 ## Elevator answer
 
-**They can, unless contracts, compiler checks, connector conventions, and review require external effects to remain declared, typed, and attributable rather than hidden client calls.**
+**Yes—an assistant can make the test green by injecting an HTTP client straight into a business step. Typed connector rules and review must make that shortcut loud.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Coding assistants optimize for a local success signal: make the requested feature work. That can produce the classic shortcut—inject a client, call an external system from a business step, and bypass the connector or policy boundary the application relies on. The code may compile while making retry, security, telemetry, and ownership less visible.
+Ask an assistant to “check the customer's risk score” and the shortest solution may be `riskClient.get()` inside `ApproveOrderStep`. The feature works locally. Retry identity, credentials, capture, telemetry, and ownership have quietly vanished into a method call. AI did not invent that shortcut; it can merely type it before the architect finishes inhaling.
 
-TPF’s value is partly defensive here. Declared connectors, typed mappings, generated contracts, and build-time validation give review and tooling a way to spot the missing boundary. A direct external effect in the core is no longer merely a style disagreement; it is a contract violation with operational consequences.
+If the assistant places `stripeClient.charge()` inside `CalculateTotal`, the declared flow has no matching Command or connector operation. That gives the compiler, review tooling, and a human something objective to reject. The problem is no longer “I dislike this style”; it is “this effect has no identity, recovery rule, or owner.”
 
 The framework cannot prevent bad changes by itself. Teams need guardrails, reviews, tests, and a culture that treats generated suggestions as proposals. AI is most useful when it helps implement a clear contract, not when it invents a new integration path because that was faster.
 

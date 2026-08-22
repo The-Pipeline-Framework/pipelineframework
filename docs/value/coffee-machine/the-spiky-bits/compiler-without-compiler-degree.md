@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**No. Developers need to understand their flow contracts and diagnostics; compiler phases exist to enforce those contracts, not to become a second application language.**
+**No. You should read “two mappers match Order → Invoice,” fix one declaration, and return to Java. You should not need a minor in compiler archaeology.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Most application developers should not need to understand compiler implementation phases any more than they need to understand bytecode generation. They do need useful errors: this step did not resolve, this mapper is ambiguous, this transport binding is absent, this connector declaration does not fit the flow.
+An application developer needs an error such as “`ChargeCard` accepts `Payment`, but this branch produces `RejectedOrder`.” They do not need to know which compiler pass discovered it or why an intermediate representation is feeling introspective. Diagnostics should point to the broken flow promise and the declaration that can fix it.
 
 TPF’s compiler is successful when it turns those architectural mismatches into direct feedback about the model. Specialists maintain the internals; users understand the contracts they are declaring and the action a diagnostic asks them to take.
 

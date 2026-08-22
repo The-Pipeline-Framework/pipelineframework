@@ -40,13 +40,13 @@ tags:
 
 ## Elevator answer
 
-**TPF keeps business decisions typed and transport-neutral, so adapters, retries, persistence, and delivery concerns can change without redefining the domain.**
+**The rule “decline payments over this limit” should receive facts and return a decision. REST, Kafka, retries, rows, and Stripe belong around it—not inside its `if`.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-TPF’s opinion begins with an ordinary observation: business behavior and the machinery that delivers it have different reasons to change. The decision to reject a payment because its amount exceeds a policy limit is business behavior. Whether that decision arrived through REST, gRPC, a queue, a scheduled job, or a local test harness is not. Whether the result is retried, persisted, recorded for replay, or published through a connector is also not the decision itself, even though all of it may be essential to a working system.
+`amount.compareTo(limit) > 0` should mean the same thing whether the request arrived through REST, Kafka, a scheduled job, or a test. The retry counter, database row, Stripe request, and telemetry span matter enormously to the working system. They still have no vote in the payment policy.
 
 Many applications begin with that distinction intact. Then a service method acquires a repository, an HTTP client, a message producer, a retry annotation, a transaction boundary, a metrics call, and a cache. None of those additions is individually foolish. The problem is cumulative: the code now explains a business rule and a changing set of operational policies in the same breath. The team cannot move one concern without fearing an accidental change to the other.
 

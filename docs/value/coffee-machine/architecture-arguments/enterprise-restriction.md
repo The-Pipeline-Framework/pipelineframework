@@ -37,7 +37,7 @@ tags:
 
 ## Elevator answer
 
-**TPF standardizes recurring execution semantics deliberately, while leaving teams autonomy over domain behavior, supported boundary choices, and deployment shape; every restriction must earn its keep.**
+**TPF standardises the boring dangerous parts—retries, handoffs, connector declarations, telemetry—not whether your discount rule deserves a strategy pattern. Every restriction must pay rent.**
 
 <CoffeeMisconceptions />
 
@@ -45,7 +45,7 @@ tags:
 
 Large enterprises rarely lack flexibility. They lack a way to keep repeated cross-boundary behavior coherent while many teams make reasonable local decisions. Retries, adapters, connectors, telemetry, deployment mappings, and generated contracts are exactly where local freedom can become systemic ambiguity.
 
-TPF is opinionated about those recurring execution semantics. It asks teams to declare typed flow shape, boundary contracts, and ownership. It does not prescribe every domain model, business policy, deployment decision, or bounded context. The distinction matters: standardize the mechanics that must remain coherent across applications, and leave business variation where it actually belongs.
+TPF insists that the payment call declare its Command boundary, mapping, and recovery rules. It does not insist that every team model `Payment` with the same aggregate pattern or deploy it in the same pod. Standardise the mechanics that cause company-wide incidents; leave discount rules and domain language with the people who understand them.
 
 The risk is real. A central framework can become a gatekeeping platform if every unusual case requires an exception tribunal. The remedy is a supported extension model, transparent constraints, and a real escape hatch—not a promise that every team will always want the same model.
 

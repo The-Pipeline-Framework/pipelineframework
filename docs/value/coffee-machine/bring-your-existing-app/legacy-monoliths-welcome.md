@@ -38,25 +38,23 @@ tags:
 
 ## Elevator answer
 
-**Yes. A monolith can expose or consume explicit flow boundaries incrementally, retaining valuable local behavior while selected capabilities gain typed execution contracts.**
+**Yes. Keep the local transaction and the useful old code. Put one troublesome capability behind a typed flow boundary; the monolith need not cosplay as twelve startups.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A monolith is not one thing. It may contain a coherent domain, valuable transactions, awkward dependencies, and years of business knowledge. Treating it as a failed microservice architecture is a reliable way to lose the advantages it still has. TPF does not require conversion before participation; it gives a team a way to make a consequential capability explicit without pretending the rest of the application has vanished.
+A monolith may contain excellent local transactions, one horrifying partner client, and fifteen years of rules nobody has written down. Calling it a failed microservice architecture is a good way to throw away its strengths while preserving its bugs.
 
-Start at a real boundary. A legacy module can admit work into a pipeline through an existing controller, job, consumer, or internal adapter. It can also consume a typed result from another declared boundary. The monolith remains the host for local data and behavior while the selected flow becomes more visible: its input, steps, mappings, external connectors, and operational semantics can be checked together.
+Start where work already enters: a controller, scheduled reconciliation job, Kafka consumer, or internal facade. Suppose the nightly reconciliation now uploads a file, calls a partner API, waits for human approval, and emails a report. The database updates can remain local. Put that cross-system path into a typed flow, with a Command for the upload and an Await for the approval. The other 900 service methods do not have to attend the ceremony.
 
-This is especially useful when a monolith has one capability that is now reaching beyond its original transaction: a fulfillment request, a background reconciliation job, a partner integration, or a long-running await. Extracting that path does not demand that every repository, entity, and controller follow. It creates evidence about whether the framework helps before the team changes the architecture of the entire estate.
+Be honest about who holds the keys. If the monolith still owns the invoice rows and retry policy, say so. If another runtime accepts the work, record who persists the suspension, who may retry the partner call, and what completion looks like. Moving a call over HTTP has not transferred responsibility; it has merely made the stack trace more adventurous.
 
-The migration must still be honest about ownership. A pipeline does not make an internal module independent merely because it calls a connector. If the monolith owns the data and retry policy, say so. If responsibility crosses a boundary, declare who owns acceptance, durable state, retries, and completion on each side. The useful outcome is not a diagram with more boxes; it is a boundary a team can operate and evolve without guessing.
-
-There is a trade-off. Coexistence creates seams, and seams need tests, documentation, and eventual decisions. But a clean boundary inside a monolith is often more valuable than a premature service boundary across a network. TPF supports that more modest improvement.
+The useful result may be a clean boundary inside the same deployment. That is often better than replacing a method call with a network and celebrating the new latency. A monolith can gain a boundary without pretending it has become twelve companies.
 
 ## Trade-offs
 
-TPF gains incremental clarity without forcing decomposition. It gives up the fantasy that a new flow alone modernizes the rest of a monolith. Teams must keep ownership and lifecycle explicit.
+TPF makes one consequential path explicit without forcing deployment decomposition. The cost is maintaining and testing the seam—and admitting that the rest of the monolith remains the rest of the monolith.
 
 ## When TPF is not a good fit
 

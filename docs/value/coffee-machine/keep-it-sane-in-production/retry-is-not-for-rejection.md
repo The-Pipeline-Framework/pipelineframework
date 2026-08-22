@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**No. Retry transient technical uncertainty; reject known business outcomes immediately, and declare the distinction so operators and callers can understand what actually happened.**
+**Retry a 503 or a lost connection. Do not ask the payment policy every five seconds whether a blocked card has reconsidered its life choices.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Retry is valuable when the outcome is uncertain or a technical dependency may recover: a timeout, temporary network failure, rate limit, or unavailable service. It is wrong when the business has made a definite decision: a payment is not permitted, stock is unavailable, a request violates a rule. Repeating a rejection adds load and obscures meaning.
+Retry belongs to uncertainty: a timeout, 503, rate limit, or connection that may recover. `CardBlocked`, `OutOfStock`, and `AgeRequirementNotMet` are answers. Repeating the question adds load and turns a clear rejection into an operational mystery.
 
 TPF treats that distinction as part of execution semantics. Business steps should return explicit outcomes or rejection signals. Connector and runtime boundaries can apply retry policy to transient technical failure. The resulting telemetry should show whether an item was rejected by the business, failed technically, was retried, or reached a terminal failure path.
 

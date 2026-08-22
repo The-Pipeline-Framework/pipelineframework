@@ -36,13 +36,13 @@ tags:
 
 ## Elevator answer
 
-**A connector is a declared typed I/O boundary: it admits or publishes external reality with ownership, mapping, and operational semantics an ordinary adapter may leave implicit.**
+**A connector is the named door through which an HTTP request, Kafka record, payment, or email crosses. Unlike a random injected client, the door comes with a contract and an owner.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-An adapter is a broad and useful idea: code that translates one interface or technology into another. A connector is more specific. TPF uses it for a typed boundary where external reality is admitted into a flow or published from it. That distinction matters because external I/O carries consequences beyond method shape: credentials, mapping, retries, duplicate delivery, traceability, partial data, and ownership when something fails.
+Any wrapper around an SDK can call itself an adapter. A connector is narrower: it is the declared place where a Kafka record enters, an HTTP request leaves, or an email is published. That door must answer awkward questions a Java interface cannot: which credentials, which mapping, which retry policy, what duplicate means, and who gets paged when the provider accepted the request but lost the response.
 
 A business function should decide from typed facts. A connector can obtain or admit those facts from a REST request, message, database, legacy service, or another external system, then translate them into a declared contract. On the way out, it can publish a result without teaching the business core about a topic, route, client library, or serialization rule.
 

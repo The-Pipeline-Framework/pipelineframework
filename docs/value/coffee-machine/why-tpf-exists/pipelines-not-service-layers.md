@@ -39,13 +39,13 @@ tags:
 
 ## Elevator answer
 
-**Services remain useful; TPF makes business flows explicit so their contracts, execution boundaries, and operational behavior can be checked together.**
+**Keep the small services. Model the checkout flow when its real implementation spans a controller, fraud API, payment retry, Kafka publish, status row, and three different owners.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-“Use services” is good advice until it stops being advice and becomes a storage strategy. A service layer can collect useful application behavior: coordinating a repository, enforcing a policy, calling another component, and returning a result. It remains an excellent fit for behavior that is local, easy to test, and operationally uncomplicated. TPF does not require a ceremonial conversion of every service method into a pipeline step.
+“Put it in a service” is good advice until `CheckoutService` has eleven injected collaborators and a method with its own weather system. A focused service that loads a row, applies a rule, and returns is fine. It does not need ceremonial promotion to Step.
 
 The trouble starts when one business outcome is distributed across several kinds of code that must change together. A checkout path might begin in a controller, validate through a service, call an external fraud provider, publish an event, schedule work, retain an execution record, retry a failure, and expose a status API. Each individual class can look tidy. The flow, however, is no longer visible as a contract. Its order, cardinality, error behavior, mapper choices, and transport assumptions are reconstructed by reading an entire neighborhood of annotations and integrations.
 

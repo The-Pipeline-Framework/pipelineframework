@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**You should not believe it automatically; TPF stays worthwhile only while its explicit contracts remove more repeated accidental complexity than its model, tooling, and governance add.**
+**Do not believe the slide. Count the mapper glue, retry loops, hidden clients, incident archaeology, generated noise, and concepts developers must learn. Simplicity must win the receipt.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-No framework remains simple by declaration. TPF adds concepts: pipelines, connectors, plugins, generated artifacts, runtime mappings, and contracts. It earns those concepts only when they replace larger repeated costs—hidden I/O, accidental retries, ambiguous ownership, inconsistent adapters, and failures discovered too late.
+TPF adds Pipelines, Queries, Commands, Awaits, connectors, aspects, generation, and runtime mappings. That is not free. It earns the vocabulary when a team deletes hand-written orchestration, retry loops, mapper glue, invisible I/O, and hours of incident archaeology. If the old costs remain and the new nouns arrive, the framework is decorating the problem.
 
 The test is practical. Can a team explain a business flow, locate its external boundaries, understand failure ownership, evolve a mapping, and investigate an incident more easily than before? Are generated artifacts deterministic and reviewable? Are escape hatches rare and explicit? If the answer becomes no, the framework must be simplified or its use narrowed.
 

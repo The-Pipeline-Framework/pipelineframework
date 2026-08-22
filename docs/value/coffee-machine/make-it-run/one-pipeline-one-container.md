@@ -38,15 +38,15 @@ tags:
 
 ## Elevator answer
 
-**No. A pipeline is a logical business flow; deployment units group runtimes deliberately according to operational needs, ownership, scaling, and isolation requirements.**
+**No. One pipeline is one business itinerary, not one shipping box. Several may share a runtime; one may cross runtimes where ownership, scale, or failure isolation earns the network.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A pipeline is an execution model, not a shipping unit. It describes a typed business flow and the boundaries around it. A container, service, or deployment is a physical decision about how code is built, operated, scaled, secured, and owned. Conflating the two is how a useful flow model turns into a machine for generating a distributed monolith.
+An order flow may validate, price, and reserve stock in one runtime, then hand fulfillment to another team. That does not require a pod for Validate, a pod for Price, and a tiny service mesh for the mapper between them. A pipeline describes the itinerary; a container is a decision about packaging, scaling, security, and who carries the pager.
 
-Several pipelines can run in one deployable when they share a runtime, lifecycle, operational profile, and ownership. That is often sensible: a bounded capability can expose several related flows without pretending that each one needs independent networking, scaling, and release machinery. Conversely, one pipeline may need separate placement if it has a distinct runtime need, a high-load connector, a different security boundary, or operational ownership that should not be coupled to another flow.
+`PlaceOrder`, `CancelOrder`, and `GetOrderStatus` can share one Orders deployment when the same team releases and scales them. PDF rendering may deserve separate placement if it consumes huge memory; Fulfillment may deserve it because another team owns the pager. Independent networking is a cost to justify, not a participation trophy for every flow.
 
 TPF makes the logical runtime layout explicit so that placement is a design decision rather than an accidental result of package structure. It does not declare that every step, connector, or pipeline must become an independently deployed service. A generated adapter can be in-process. A connector can remain an edge of the same runtime. A checkpoint handoff may be a real cross-pipeline ownership boundary, but even that does not automatically mandate a new container.
 

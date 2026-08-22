@@ -38,13 +38,13 @@ tags:
 
 ## Elevator answer
 
-**Runtime placement follows the flow’s declared boundaries, transport, platform needs, ownership, scale, latency, and failure isolation—not its folder name or diagram aesthetics.**
+**Place work together until ownership, scaling, security, latency, or failure isolation gives you a concrete reason not to. Package names are not placement strategy.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Runtime placement is the decision about the logical runtime shape of a flow: which work executes together, which boundary invokes another runtime, and which adapter carries the call. It is not the same thing as Maven modules, Java packages, or the number of deployables a team happens to have today.
+If PDF rendering needs ten times the memory of order validation, or Fulfillment belongs to another team with its own lifecycle, a runtime boundary may earn its cost. If two steps merely sit in different packages, sending them over HTTP gives the package structure latency and a pager. Runtime placement is a production decision, not diagram feng shui.
 
 TPF treats transport and platform as orthogonal dimensions. GRPC, REST, and LOCAL are transport modes. Function-style and container-oriented deployments are platform or deployment choices. A flow may be local today, gain a remote boundary tomorrow, or use a function pattern for a particular entry point. The business semantics should remain coherent while the generated adapters and runtime mapping reflect the chosen placement.
 

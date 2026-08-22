@@ -39,13 +39,13 @@ tags:
 
 ## Elevator answer
 
-**Keep business ownership, runtime placement, and deployment boundaries deliberate; TPF generates adapters from those decisions but cannot turn accidental coupling into healthy architecture.**
+**Do not turn every arrow into HTTP because a generator can. If Order and Pricing must deploy, fail, and change together, putting them in separate pods has only added weather.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A distributed monolith is not caused by containers alone. It appears when independently deployed components must still release together, share hidden data assumptions, coordinate through synchronous chains, and fail as one business unit. A generator can make that worse if it turns every internal step into a remote artifact without asking whether ownership or operations justify the boundary.
+Order calls Pricing, Pricing calls Customer, Customer reads Order's tables, and all three must deploy together on Thursday night. That is the monolith, now distributed. A generator can make the situation impressively fast to create if every internal arrow becomes a remote adapter without an ownership or isolation reason.
 
 TPF avoids prescribing a service per pipeline. A pipeline is a logical flow, and runtime placement is a separate decision. Several flows may share a deployable. A remote boundary should exist because a team needs independent ownership, isolation, scaling, security, or lifecycle—not because the framework can render one.
 

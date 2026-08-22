@@ -37,13 +37,13 @@ tags:
 
 ## Elevator answer
 
-**TPF generates execution metadata and preserves correlation across boundaries so operators can relate business steps, retries, waits, duplicate delivery, and external effects coherently.**
+**An operator should follow one order from HTTP admission through Query, Command attempts, Kafka handoff, Await, callback, and completion without collecting seven unrelated IDs by hand.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Operators do not experience a pipeline as source code. They experience one customer request that becomes an asynchronous handoff, a retry, a wait, a duplicate message, and a downstream failure. If every adapter reports a different identifier and generated code hides the step that ran, the system may be observable in theory while remaining unexplainable in practice.
+An operator sees order `O-1842` arrive over HTTP, call a risk provider, retry a payment, publish Kafka, wait two hours, receive the same callback twice, then fail in fulfillment. If each adapter invents a new identifier, the system has plenty of spans and no story. Observability without a coherent timeline is telemetry confetti.
 
 TPF’s generated metadata and execution context aim to keep the operational story aligned with the flow contract. Order, telemetry, branching, correlation, and runtime descriptions can provide a common vocabulary for traces, metrics, replay, and investigation. A business rejection should not look identical to a technical failure; a retry should not look like a brand-new request; a durable await should be visible as waiting rather than a vanished thread.
 

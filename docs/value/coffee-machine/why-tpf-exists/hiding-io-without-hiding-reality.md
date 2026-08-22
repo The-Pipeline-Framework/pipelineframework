@@ -39,13 +39,13 @@ tags:
 
 ## Elevator answer
 
-**TPF does not hide I/O; it names and declares it at connectors and runtime boundaries, separating reality from business decisions.**
+**The card charge, Kafka publish, DB observation, and human click stay visible. TPF gives each one an honest name and keeps it out of the pricing rule.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-The fear behind this question is healthy. Side effects are where systems become real. Money is charged, messages are published, records are stored, suppliers are called, and a human eventually asks why the system did any of it. An architecture that makes those things invisible is not elegant; it is merely harder to debug.
+Side effects are where the application stops discussing money and actually charges somebody. A row changes, a Kafka record leaves, a supplier receives an HTTP request, and six hours later a human clicks Approve. Hiding that behind `process()` is not functional elegance. It is camouflage with a stack trace.
 
 TPF does not try to erase external reality. It tries to stop external reality from masquerading as ordinary business code. A connector models a typed I/O boundary: how work is admitted from outside, how something is published outward, or how captured external facts enter a flow. The runtime and generated adapters own the mechanics of transport, retries, correlation, telemetry, and persistence where those mechanics are part of the declared execution contract. This makes I/O visible at the level where an operator and a reviewer can reason about it.
 

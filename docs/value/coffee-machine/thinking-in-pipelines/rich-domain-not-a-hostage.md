@@ -39,19 +39,19 @@ tags:
 
 ## Elevator answer
 
-**No. Pipelines coordinate typed execution while entities, value objects, policies, and domain services retain the behavior and invariants that give the model meaning.**
+**No. Let `Order.cancel()` reject an already-shipped order. The pipeline decides when to call it and what happens next; it should not reach into the entity and set `status = CANCELLED`.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Anemic-domain-model anxiety is warranted because orchestration frameworks often create it by accident. Once a team has a place called “flow,” “process,” or “orchestrator,” it can become tempting to place every business decision there. Entities become records, value objects become transport bags, and the interesting rules dissolve into a long coordinator that happens to know every field. The result has a strong central narrative and weak local meaning.
+The danger is familiar: a shiny `CancelOrderFlow` loads an `OrderData` record, checks `status` itself, mutates three fields, and saves it. The old anemic service has returned wearing a pipeline badge. The flow is easy to draw; the order no longer knows what cancellation means.
 
 TPF does not need that arrangement. Its functional core is meant to contain typed business transformations and decisions. Those can live in rich domain entities, value objects, policies, specifications, or focused domain services, depending on the language the team already uses. A pipeline coordinates the work around those concepts: it accepts a typed input, invokes domain behavior, passes a result to the next typed step, and places declared operational boundaries around the flow. It should not become the place that decides what an order, payment, or customer is allowed to mean.
 
 Aggregates remain particularly important. An aggregate defines a consistency boundary and protects invariants that must hold together. TPF cannot make a cross-aggregate update magically transactional just because the steps appear next to one another in a pipeline definition. If an invariant belongs inside an aggregate, keep it there. The pipeline may load or receive the aggregate, call a meaningful operation, and arrange what follows. It does not get special permission to reach inside several aggregates and edit their state because it has a helpful-looking flow diagram.
 
-This distinction gives the model two useful scales. At the small scale, a domain object can say approve, reserve, or applyPolicy and enforce its own rules without knowing whether it was called from REST, a local execution, or a replay. At the larger scale, a pipeline can say how a customer request enters, which facts are needed, where a connector boundary lies, and how the outcome is published or persisted. The domain is reusable because it does not learn the shell’s vocabulary; the shell is observable because it does not have to guess what the domain did.
+The two scales are practical. `Reservation.reserve(quantity)` protects stock rules without knowing whether REST, Kafka, or replay called it. The pipeline obtains the current inventory, invokes that behavior, then issues the Command that tells the warehouse. The entity never learns a topic name; the flow never edits its private fields with a determined expression.
 
 Domain services and policies still have a place when a rule does not naturally belong to one entity. A pricing policy may combine facts without owning their lifecycle. A cross-aggregate rule may decide whether a request is permitted, then ask separate aggregates to perform their own legitimate transitions. TPF’s preference is not “all business logic in entities.” Its preference is “business meaning remains in typed domain behavior, rather than being disguised as client calls, transport adapters, or pipeline plumbing.”
 

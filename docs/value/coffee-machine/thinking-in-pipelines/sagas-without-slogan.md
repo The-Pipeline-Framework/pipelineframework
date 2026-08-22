@@ -37,17 +37,17 @@ tags:
 
 ## Elevator answer
 
-**TPF can coordinate durable multi-system work, but sagas remain a business consistency strategy requiring explicit ownership, compensation, idempotency, and truthful failure semantics.**
+**TPF can remember where the flow stopped and resume it. You still have to decide whether a failed shipment means release stock, refund money, apologise by email, or all three.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-A saga is not a synonym for “more than one service.” It manages a business outcome that crosses independent consistency boundaries. Each participant completes a local action; if the larger outcome cannot proceed, later actions may need compensating business behavior. The hard part is not drawing the sequence. It is deciding what the business can undo, what it must correct forward, who owns the next attempt, and how duplicate messages are recognised.
+A saga is not three HTTP calls standing near a whiteboard. Suppose payment succeeds, the warehouse rejects the reservation, and the refund provider times out after accepting the request. The hard part is deciding what “undo” means, who tries again, and how the provider recognises the same refund instead of paying the customer twice.
 
 TPF can help with execution. A pipeline can make a command, await a correlated completion, persist durable state at an await boundary, hand work to another pipeline, retain stable identifiers across retries, and expose telemetry or replay metadata. Those are valuable ingredients in a saga-shaped flow. They do not turn every pipeline into a saga, and they do not write credible compensation for a team.
 
-Compensation belongs to business behavior. Cancelling a reservation may be valid; un-sending an email may not be. Reversing a charge may require a refund with different rules. A pipeline can invoke compensating behavior and give it consistent operational treatment, but it must not disguise a technical retry as a business reversal. The difference matters to customers and auditors, not only diagrams.
+Compensation is business behavior. Releasing stock may be valid; un-sending an email remains stubbornly unsupported. Reversing a charge is usually a new refund with its own rules, identity, and audit trail. A backward arrow is not an implementation.
 
 Ownership is equally important. Once a checkpoint handoff is admitted, the downstream pipeline owns its retry, DLQ, and lifecycle semantics. Correlation, dispatch, and idempotency identifiers remain stable so a repeated attempt is recognisably the same business intent. Without that, a retry turns into a new command wearing the old command’s coat.
 

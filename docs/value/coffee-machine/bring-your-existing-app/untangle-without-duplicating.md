@@ -37,36 +37,32 @@ tags:
 
 ## Elevator answer
 
-**No. Extract decisions gradually from their infrastructure dependencies, keep adapters temporary where needed, and prove behavior before retiring the old transaction script.**
+**No. Make the old service call one newly extracted decision, then move reads, effects, and waits behind the right TPF seams. If both implementations keep deciding, you have duplicated the business.**
 
 <CoffeeMisconceptions />
 
 ## The real explanation
 
-Legacy transaction scripts often combine several responsibilities because that was the shortest path to a working feature. They load data, apply rules, call remote clients, persist changes, translate exceptions, publish messages, and return an HTTP-shaped response. Asking a team to “extract the pure core” can sound like an instruction to rewrite the same behavior twice: once in the old service and once in a new idealized function.
+`InvoiceService.process()` loads three entities, checks eligibility, renders a PDF, calls the payment provider, saves status, publishes Kafka, translates exceptions, and returns an HTTP-shaped result. It became a transaction script because shipping the feature was more urgent than satisfying a diagram. Fair enough.
 
-TPF does not need a duplicate. It needs a controlled separation. Begin with the decision that can be named without its infrastructure: calculate eligibility, decide a reservation, validate a transition, choose a price. Keep the old script as the adapter while that decision is extracted and tested. The point is to move one responsibility at a time, with the old path calling the new decision, not to create a parallel application.
+Do not copy it into `PureInvoiceServiceAdapterFactory`. Moving the repository call to a class with a longer name has not purified anything. It has given the repository call a longer commute.
 
-The seam becomes clearer when each dependency is classified by what it means:
+Start with one decision—calculate eligibility, choose a price, validate a transition—and make the old service call it. There is now one implementation of that rule. Then classify the dependencies around it by what they actually do:
 
-- Data the flow already knows moves forward through typed, immutable propagation.
-- Large content travels by `PayloadReference` and an explicit representation rather than bloating every step contract.
-- A fresh or historical external observation becomes a Query.
-- An external effect becomes a Command with explicit execution and replay safety.
-- A durable wait for a person, callback, provider, or long-running job becomes an Await.
-- Persistence, capture, cache, and replay belong to declared aspects or runtime authorities rather than hiding inside the business decision.
+- If an earlier step already knows the customer address, carry it immutably. Do not discard it so a later step can rediscover PostgreSQL.
+- Let a large immutable PDF travel by `PayloadReference` and an explicit representation provider, not as a byte array in every record.
+- Use a Query to observe the current account balance or exchange rate.
+- Use a Command to charge the card, send the email, or publish the record.
+- Use an Await when a human click, callback, or long-running provider must suspend the flow durably.
+- Put persistence, capture, cache, and replay policy in declared aspects or runtime authorities, not inside `calculateEligibility()`.
 
-This classification avoids both extremes: a supposedly pure function that secretly reaches into the old world, and a new abstraction for every legacy method call. Existing repositories, clients, and publishers can stay behind the appropriate boundary until the team is ready to replace them.
+Existing repositories and clients can sit behind those seams while the old service still coordinates them. Characterization tests and safe comparison runs protect the inconvenient edge cases; compilation checks the new mappings and flow shape. Each successful extraction should delete a rule, retry loop, mapper, or orchestration branch from the old script. Otherwise the team is not untangling it—it is growing a second tangle.
 
-Behavioral comparison is the safeguard. Characterization tests, golden inputs and outputs, captured Queries, and safe shadow execution can preserve what the script currently promises, including inconvenient edge cases. TPF compilation then adds another kind of evidence: mappings, connector declarations, representations, and flow shape must be compatible. Neither form of evidence is sufficient alone; together they let a team change structure without guessing that behavior followed.
-
-Some code will resist clean extraction. Stored procedures, lazy-loading assumptions, mutable session state, and broad exception conventions are not defects a framework can wish away. Treat them as explicit migration constraints and choose the nearest honest boundary. A temporary adapter with a named retirement decision is safer than a fake pure function that secretly calls the old world.
-
-The trade-off is a period of indirection. The team pays for adapters and comparative tests in return for a core that can be reasoned about independently of transport and persistence. That is only worthwhile for a flow whose accumulated operational complexity has made the script costly to change.
+Stored procedures, lazy sessions, and broad exception conventions may resist clean extraction. Name them as migration constraints and choose the nearest honest seam. A temporary ugly adapter with a retirement condition is safer than a beautiful “pure” function with a concealed `EntityManager`.
 
 ## Trade-offs
 
-TPF gains a gradual route to typed business behavior and explicit operational boundaries. It gives up the immediate satisfaction of a spotless rewrite. Teams must maintain temporary bridges, classify them honestly, and remove them intentionally.
+TPF gains one gradually extracted business flow rather than a parallel rewrite. The cost is temporary adapters, comparison tests, and deliberate deletion from the old script.
 
 ## When TPF is not a good fit
 
