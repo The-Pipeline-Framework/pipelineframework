@@ -160,6 +160,12 @@ class LlmQueryOperationTest {
             new LlmDirectCompletionConfiguration(
                 "review", Optional.of(Map.of(" invoiceId ", " invoice.invoiceId ")))
                 .carriedFields());
+        assertThrows(IllegalArgumentException.class,
+            () -> new LlmDirectCompletionConfiguration(
+                "review",
+                Optional.of(Map.of(
+                    "invoiceId", "invoice.invoiceId",
+                    " invoiceId ", "invoice.otherId"))));
     }
 
     @Test
