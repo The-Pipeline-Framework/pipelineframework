@@ -1,5 +1,6 @@
 package org.pipelineframework.connector.llm;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -12,11 +13,18 @@ public record LlmDirectCompletionConfiguration(
     public LlmDirectCompletionConfiguration {
         field = requireComponent(field, "LLM direct completion field");
         carry = Objects.requireNonNull(carry, "LLM direct completion carry map must not be null")
-            .map(Map::copyOf);
-        carry.orElseGet(Map::of).forEach((outputField, inputPath) -> {
-            requireComponent(outputField, "LLM direct completion output field");
-            requirePath(inputPath, "LLM direct completion input path");
-        });
+            .map(entries -> {
+                Map<String, String> normalized = new LinkedHashMap<>();
+                entries.forEach((outputField, inputPath) -> {
+                    String component = requireComponent(outputField, "LLM direct completion output field");
+                    String path = requirePath(inputPath, "LLM direct completion input path");
+                    if (normalized.putIfAbsent(component, path) != null) {
+                        throw new IllegalArgumentException(
+                            "LLM direct completion output field is duplicated after normalization: " + component);
+                    }
+                });
+                return Map.copyOf(normalized);
+            });
     }
 
     public Map<String, String> carriedFields() {

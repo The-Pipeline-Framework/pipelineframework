@@ -32,6 +32,7 @@ class LlmQueryOperationTest {
     private record InvoiceBatchInput(java.util.List<PayloadReference> payloadReferences) { }
     private record TextFirstInput(PayloadReference invoice, String evidence) { }
     private record ReviewInput(String invoiceId, String evidence) { }
+    private record NestedReviewInput(ReviewInput invoice) { }
 
     private static final LlmTurnConfiguration CONFIGURATION = new LlmTurnConfiguration(
         "Choose one alternative.",
@@ -154,6 +155,14 @@ class LlmQueryOperationTest {
     }
 
     @Test
+    void normalizesDirectCompletionCarryEntries() {
+        assertEquals(Map.of("invoiceId", "invoice.invoiceId"),
+            new LlmDirectCompletionConfiguration(
+                "review", Optional.of(Map.of(" invoiceId ", " invoice.invoiceId ")))
+                .carriedFields());
+    }
+
+    @Test
     void buildsTheDecisionContractOncePerOutputAndConfigurationBinding() {
         AtomicInteger loads = new AtomicInteger();
         CanonicalTypeCatalogue catalogue = CanonicalTypeCatalogue.load(Decision.class.getClassLoader());
@@ -255,6 +264,38 @@ class LlmQueryOperationTest {
             observed.get().tools().getFirst().inputSchemaJson().contains("supplier"));
         org.junit.jupiter.api.Assertions.assertFalse(
             observed.get().tools().getFirst().inputSchemaJson().contains("invoiceId"));
+    }
+
+    @Test
+    void nullIntermediateCarryValueIsAnInvalidModelDecision() {
+        LlmDecisionClient client = new LlmDecisionClient() {
+            @Override
+            public boolean supportsNativeStructuredOutput(java.util.List<LlmToolDefinition> tools) {
+                return true;
+            }
+
+            @Override
+            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+                return CompletableFuture.completedFuture(
+                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+            }
+        };
+        LlmTurnConfiguration completion = new LlmTurnConfiguration(
+            "Analyse once.",
+            Optional.of(Map.of()),
+            Optional.empty(),
+            Optional.of(Map.of("field", "review", "invoiceId", "invoice.invoiceId")));
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class<Object> output = (Class) ReviewEnvelope.class;
+
+        QueryOutcome<Object> outcome = operation(client).query(new QueryInvocation<>(
+            new NestedReviewInput(null),
+            completion,
+            output,
+            ConnectorExecutionContext.empty())).toCompletableFuture().join();
+
+        QueryOutcome.TerminalFailure<?> failure = assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome);
+        assertEquals("invalid-model-decision", failure.code());
     }
 
     @Test

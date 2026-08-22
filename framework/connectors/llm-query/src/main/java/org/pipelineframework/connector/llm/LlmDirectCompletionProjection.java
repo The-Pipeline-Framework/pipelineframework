@@ -66,6 +66,10 @@ final class LlmDirectCompletionProjection {
     private static Object readPath(Object input, String path) {
         Object current = Objects.requireNonNull(input, "LLM Query input must not be null");
         for (String segment : path.split("\\.")) {
+            if (current == null) {
+                throw new InvalidModelDecisionException(
+                    "LLM direct completion input path '" + path + "' crosses a null value before '" + segment + "'");
+            }
             if (!current.getClass().isRecord()) {
                 throw new InvalidModelDecisionException(
                     "LLM direct completion input path '" + path + "' crosses a non-record value");
