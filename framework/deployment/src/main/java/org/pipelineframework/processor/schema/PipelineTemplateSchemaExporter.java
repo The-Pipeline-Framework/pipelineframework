@@ -1910,6 +1910,23 @@ public final class PipelineTemplateSchemaExporter {
         "transport": {
           "$ref": "#/$defs/awaitTransport"
         },
+        "completion": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
+            },
+            "projector": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
+            }
+          },
+          "required": ["type", "projector"],
+          "additionalProperties": false
+        },
         "dispatch": {
           "type": "object",
           "additionalProperties": true

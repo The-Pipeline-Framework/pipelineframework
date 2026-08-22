@@ -1777,6 +1777,21 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (awaitMap.containsKey("completion")) {
+            Object completionObj = awaitMap.get("completion");
+            if (!(completionObj instanceof Map<?, ?> completionMap)
+                || !completionMap.keySet().equals(java.util.Set.of("type", "projector"))
+                || !(completionMap.get("type") instanceof String completionType)
+                || completionType.isBlank()
+                || !(completionMap.get("projector") instanceof String completionProjector)
+                || completionProjector.isBlank()) {
+                String message = "Skipping step '" + stepName
+                    + "': await.completion must contain only non-blank string type and projector fields";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+        }
         Object transportObj = awaitMap.get("transport");
         if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {
             String message = "Skipping step '" + stepName + "': await.transport.type must be declared";

@@ -142,6 +142,50 @@ class AwaitStepDescriptorFactoryTest {
     }
 
     @Test
+    void requestAwareCompletionOverridesActorPayloadTypeAndLoadsPureProjector() throws Exception {
+        Path explicit = tempDir.resolve("pipeline-completion.yaml");
+        Files.writeString(explicit, """
+            basePackage: org.example
+            transport: LOCAL
+            steps:
+              - name: Await Payment Provider
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: java.lang.String
+                output: java.lang.String
+                timeout: PT5M
+                await:
+                  correlation:
+                    strategy: interactionId
+                  completion:
+                    type: java.lang.Integer
+                    projector: %s
+                  transport:
+                    type: interaction-api
+            """.formatted(PrefixingProjector.class.getName()));
+        System.setProperty("pipeline.config", explicit.toString());
+        ClassLoader previousLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(new ClassLoader(null) { });
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitPaymentProviderService",
+                String.class.getName(),
+                String.class.getName()).await().indefinitely();
+
+            assertEquals(Integer.class.getName(), descriptor.transportOutputType());
+            assertTrue(descriptor.requestAwareCompletion());
+            assertEquals(PrefixingProjector.class.getName(), descriptor.completionProjectorId());
+            assertEquals("request:7", descriptor.completionProjector().project(
+                "request", 7, new AwaitCompletionMetadata("interaction-1", "alice", java.time.Instant.EPOCH)));
+        } finally {
+            factory.shutdown();
+            Thread.currentThread().setContextClassLoader(previousLoader);
+        }
+    }
+
+    @Test
     void rebuildsLegacyAwaitDescriptorOffTheCallingThread() throws Exception {
         Path explicit = tempDir.resolve("pipeline.yaml");
         Files.writeString(explicit, pipelineYaml("interaction-api", ""));
@@ -221,6 +265,15 @@ class AwaitStepDescriptorFactoryTest {
                     type: %s
             %s
             """.formatted(transportType, transportConfig);
+    }
+
+    public static final class PrefixingProjector
+        implements AwaitCompletionProjector<String, Integer, String> {
+
+        @Override
+        public String project(String request, Integer completion, AwaitCompletionMetadata metadata) {
+            return request + ":" + completion;
+        }
     }
 
     private static String v3PipelineYaml() {
