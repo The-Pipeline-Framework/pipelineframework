@@ -306,8 +306,15 @@ public class AwaitCoordinator {
         if (metadata != null) {
             merged.putAll(metadata);
         }
-        return awaitAdmissionCoordinator == null ? Map.copyOf(merged)
+        Map<String, Object> enriched = awaitAdmissionCoordinator == null ? Map.copyOf(merged)
             : awaitAdmissionCoordinator.dispatchMetadata(interaction, Map.copyOf(merged));
+        Object pinnedProjector = interaction.transportMetadata().get(COMPLETION_PROJECTOR_METADATA);
+        if (pinnedProjector == null) {
+            return enriched;
+        }
+        Map<String, Object> authoritative = new java.util.LinkedHashMap<>(enriched);
+        authoritative.put(COMPLETION_PROJECTOR_METADATA, pinnedProjector);
+        return Map.copyOf(authoritative);
     }
 
     /**

@@ -847,13 +847,13 @@ public class PipelineYamlConfigLoader {
         }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
-        PipelineYamlAwaitCompletion completion = readAwaitCompletion(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(correlation, transport, Optional.ofNullable(completion));
+        Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
+        return new PipelineYamlAwaitConfig(correlation, transport, completion);
     }
 
-    private PipelineYamlAwaitCompletion readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
+    private Optional<PipelineYamlAwaitCompletion> readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
         if (!awaitMap.containsKey("completion")) {
-            return null;
+            return Optional.empty();
         }
         Object completionObj = awaitMap.get("completion");
         if (!(completionObj instanceof Map<?, ?> completionMap)) {
@@ -866,7 +866,7 @@ public class PipelineYamlConfigLoader {
         }
         String type = readString(completionMap, "type");
         String projector = readString(completionMap, "projector");
-        return new PipelineYamlAwaitCompletion(type, projector);
+        return Optional.of(new PipelineYamlAwaitCompletion(type, projector));
     }
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {

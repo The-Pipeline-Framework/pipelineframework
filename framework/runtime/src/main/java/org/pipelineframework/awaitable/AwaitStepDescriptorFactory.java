@@ -512,10 +512,13 @@ public class AwaitStepDescriptorFactory {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
-        PipelineYamlAwaitCompletion completion = step.awaitConfig().completion().orElse(null);
-        AwaitCompletionProjector<Object, Object, Object> completionProjector =
-            completion == null ? null : loadCompletionProjector(serviceName, completion.projector());
-        String effectiveTransportOutputType = completion == null ? transportOutputType : completion.type();
+        Optional<PipelineYamlAwaitCompletion> completion = step.awaitConfig().completion();
+        AwaitCompletionProjector<Object, Object, Object> completionProjector = completion
+            .map(value -> loadCompletionProjector(serviceName, value.projector()))
+            .orElseGet(() -> AwaitStepDescriptor.defaultCompletionProjector(outputFromTransport));
+        String effectiveTransportOutputType = completion
+            .map(PipelineYamlAwaitCompletion::type)
+            .orElse(transportOutputType);
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             serviceName,
             inputType,
@@ -531,7 +534,7 @@ public class AwaitStepDescriptorFactory {
             inputToTransport,
             outputFromTransport,
             completionProjector,
-            completionProjector != null);
+            completion.isPresent());
         return descriptor;
     }
 

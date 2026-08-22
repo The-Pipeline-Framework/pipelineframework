@@ -58,7 +58,7 @@ public record AwaitStepDescriptor(
     ) {
         this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType,
             transportConfig, idempotencyKeyFields, transportInputType, transportOutputType,
-            inputToTransport, outputFromTransport, null, false);
+            inputToTransport, outputFromTransport, defaultCompletionProjector(outputFromTransport), false);
     }
 
     public AwaitStepDescriptor(
@@ -165,5 +165,12 @@ public record AwaitStepDescriptor(
         completionProjector = completionProjector == null
             ? (request, completion, metadata) -> normalizedOutputFromTransport.apply(completion)
             : completionProjector;
+    }
+
+    static AwaitCompletionProjector<Object, Object, Object> defaultCompletionProjector(
+        Function<Object, Object> outputFromTransport
+    ) {
+        Function<Object, Object> converter = outputFromTransport == null ? Function.identity() : outputFromTransport;
+        return (request, completion, metadata) -> converter.apply(completion);
     }
 }

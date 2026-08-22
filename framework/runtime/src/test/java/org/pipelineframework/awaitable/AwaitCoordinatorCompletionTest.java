@@ -690,6 +690,37 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void dispatchMetadataCannotOverwritePinnedCompletionProjector() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = requestAwareDescriptor(new OriginalSelectionProjector());
+        coordinator.descriptorFactory.register(descriptor);
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor, "tenant-1", "exec-1", 1, "cause-1",
+            new PendingSelection("invoice-1", "property-a"), null, null).await().indefinitely();
+        coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
+            @Override
+            public String type() {
+                return "interaction-api";
+            }
+
+            @Override
+            public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
+                return Uni.createFrom().item(new AwaitDispatchResult(Map.of(
+                    "tpf.await.completion.projector", ChangedSelectionProjector.class.getName())));
+            }
+        }));
+
+        AwaitInteractionRecord dispatched = coordinator.dispatch(descriptor, created.record()).await().indefinitely();
+
+        assertEquals(OriginalSelectionProjector.class.getName(),
+            dispatched.transportMetadata().get("tpf.await.completion.projector"));
+        assertEquals(OriginalSelectionProjector.class.getName(),
+            store.get("tenant-1", created.record().interactionId()).await().indefinitely().orElseThrow()
+                .transportMetadata().get("tpf.await.completion.projector"));
+    }
+
+    @Test
     void requestAwareProjectionFailureLeavesInteractionWaiting() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
