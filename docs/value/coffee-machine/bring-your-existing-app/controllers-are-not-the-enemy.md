@@ -45,13 +45,13 @@ tags:
 
 Controllers are not an architectural mistake. They translate an HTTP request into application work and translate an outcome back into HTTP. They own routes, authentication integration, headers, request binding, and response status. The problem begins only when a controller becomes the place that decides business policy, talks directly to several external systems, creates retry behavior, and silently defines the order of a distributed flow.
 
-TPF does not ask a team to hide or delete a working controller. It gives the controller a clearer job: admit a typed request into a declared flow and return the appropriate result. The controller can remain an adapter while the pipeline expresses the business execution contract behind it. This preserves the familiar web edge and makes the more consequential behavior reviewable without forcing HTTP vocabulary into every business step.
+TPF does not ask a team to hide or delete a working controller. It gives the controller a clearer job: admit a typed request into a declared flow and return the appropriate result. The controller can remain an adapter while the pipeline expresses the business execution contract behind it. Historical or fresh read concerns belong behind an explicit Query/read side, not in controller code that quietly reconstructs persisted pipeline state. This preserves the familiar web edge and makes the more consequential behavior reviewable without forcing HTTP or persistence vocabulary into every business step.
 
 Migration can begin with the controller untouched. Put the existing request and response mapping behind an explicit boundary, extract a typed decision, and keep existing exception conventions while tests compare old and new outcomes. Only move a concern when its ownership becomes clearer. A controller that simply maps input to a flow is not redundant; it is exactly the kind of imperative shell TPF expects.
 
 This distinction improves later change. If a business flow must also be admitted from gRPC, a function-style runtime, or a message connector, the domain behavior need not learn a second or third transport vocabulary. Each adapter can translate to the typed flow contract. That does not make transports interchangeable; REST, gRPC, and LOCAL remain distinct modes. It makes the business decision less hostage to the first endpoint that happened to call it.
 
-The cost is another seam to understand. A team must decide where request validation ends and domain validation begins, and it must avoid duplicating rules on both sides. HTTP-shaped concerns remain at the controller. Business invariants remain in typed domain behavior. The pipeline composes the execution between them.
+The cost is another seam to understand. A team must decide where request validation ends and domain validation begins, and it must avoid duplicating rules on both sides. HTTP-shaped concerns remain at the controller. Business and execution facts move through the typed flow. Historical reads use an explicit Query/read side. The pipeline composes these responsibilities without collapsing them into the endpoint.
 
 ## Trade-offs
 

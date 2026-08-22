@@ -45,11 +45,13 @@ tags:
 
 “Exactly like” needs care. Legacy behavior may include a valuable promise, an accidental quirk, and a production bug that nobody wants to preserve. The first task is therefore not a tool choice but a decision: which observable outcomes, failures, timings, and integration side effects define the contract that must remain? A migration is safer when the team can state that answer before changing the implementation.
 
-Characterization tests are a practical start. Feed representative inputs through the legacy path, capture outputs, rejection behavior, persistence effects, and published contracts, then compare the new flow. Include the unhappy cases: duplicate messages, missing data, timeouts, exception translation, and retry boundaries. Happy-path equivalence is how a migration earns a convincing demo and an unconvincing incident report.
+Characterization tests are a practical start. Feed representative inputs through the legacy path, capture outputs, rejection behavior, persistence effects, external observations, and published contracts, then compare the new flow. Include the unhappy cases: duplicate messages, missing data, timeouts, exception translation, and retry boundaries. Happy-path equivalence is how a migration earns a convincing demo and an unconvincing incident report.
 
 TPF adds compile-time evidence to this behavioral work. A declared flow can reject incompatible steps, ambiguous mapper selection, missing connector declarations, invalid cardinality, or unavailable generated artifacts. This does not prove that a pricing rule is unchanged, but it catches a class of structural mistakes that handwritten migration code can hide until runtime.
 
-Comparison can also be operational. Run the new decision in shadow where safe, compare telemetry and results, or route a carefully bounded slice of traffic through the new path. Preserve stable identifiers so retries and correlation can be understood across both versions. Do not shadow an irreversible side effect merely because it is technically possible; compare the decision or use a controlled adapter.
+Cache and capture add useful comparison tools. Stable upstream computation can be replayed without repeating every earlier step, and a captured Query can preserve the external observation on which a decision depended. That makes targeted comparison cheaper and more reproducible. It does not authorize replaying effects: Query observations, cached computation, and Commands with external consequences have different safety rules.
+
+Comparison can also be operational. Run the new decision in shadow where safe, compare telemetry and results, or route a carefully bounded slice of traffic through the new path. Preserve stable logical identifiers so retries and correlation can be understood across both versions. Do not shadow or replay an irreversible side effect merely because it is technically possible; compare the decision, reuse a safe capture, or substitute a controlled adapter.
 
 The evidence should drive retirement. Once tests and production observation show that a flow carries the intended promise, remove or narrow the old path deliberately. Leaving both indefinitely produces disagreement rather than safety. If the comparison reveals a legacy quirk, decide whether it is a requirement, a compatibility constraint, or a bug worth changing openly.
 
@@ -57,7 +59,7 @@ The trade-off is that proof costs time. It is still cheaper than asserting seman
 
 ## Trade-offs
 
-TPF gains a contract that can be compiled and observed. It gives up shortcut migrations based solely on refactoring confidence. Teams must invest in characterization and comparison before retiring legacy behavior.
+TPF gains a contract that can be compiled, captured, replayed selectively, and observed. It gives up shortcut migrations based solely on refactoring confidence. Teams must invest in characterization, effect-safe comparison, and production evidence before retiring legacy behavior.
 
 ## When TPF is not a good fit
 

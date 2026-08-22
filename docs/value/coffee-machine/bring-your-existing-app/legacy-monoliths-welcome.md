@@ -50,7 +50,7 @@ Start at a real boundary. A legacy module can admit work into a pipeline through
 
 This is especially useful when a monolith has one capability that is now reaching beyond its original transaction: a fulfillment request, a background reconciliation job, a partner integration, or a long-running await. Extracting that path does not demand that every repository, entity, and controller follow. It creates evidence about whether the framework helps before the team changes the architecture of the entire estate.
 
-The migration must still be honest about ownership. A pipeline does not make an internal module independent merely because it calls a connector. If the monolith owns the data and retry policy, say so. If a checkpoint handoff transfers responsibility to another flow, make that ownership durable and explicit. The useful outcome is not a diagram with more boxes; it is a boundary a team can operate and evolve without guessing.
+The migration must still be honest about ownership. A pipeline does not make an internal module independent merely because it calls a connector. If the monolith owns the data and retry policy, say so. If responsibility crosses a boundary, declare who owns acceptance, durable state, retries, and completion on each side. The useful outcome is not a diagram with more boxes; it is a boundary a team can operate and evolve without guessing.
 
 There is a trade-off. Coexistence creates seams, and seams need tests, documentation, and eventual decisions. But a clean boundary inside a monolith is often more valuable than a premature service boundary across a network. TPF supports that more modest improvement.
 

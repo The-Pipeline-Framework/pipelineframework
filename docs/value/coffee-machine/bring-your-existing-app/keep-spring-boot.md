@@ -53,7 +53,7 @@ This matters because replacement is a poor migration strategy when the risk is s
 
 The framework’s value appears where the current code has grown a distributed responsibility. A change to mapper behavior, transport, retries, telemetry, or generated adapter placement can be checked against a pipeline contract rather than inferred from several classes and configuration files. Spring still helps assemble the application; TPF makes selected flow semantics visible to compilation and runtime.
 
-There is no promise of instant Spring parity for every surface. TPF’s canonical production runtime is Quarkus, and Spring support is emerging and limited. A team should not claim equivalent runtime behavior without the corresponding compiler path and smoke coverage. That is not an argument to avoid the framework; it is a reason to migrate a supported, valuable slice rather than adopting a slogan.
+Runtime support is a capability question, not a brand promise. Before migrating a slice, verify that the required compiler path, generated adapters, transport mode, lifecycle integration, and smoke coverage exist for the chosen host. If a needed capability is absent, keep that responsibility in the existing Spring application or supply an explicit boundary until the supported path exists. This guidance remains useful as runtime support evolves because it ties adoption to tested capabilities rather than release labels.
 
 The cost is coexistence. For a period, a codebase may have ordinary Spring services and declared pipelines. That is not architectural failure if the boundary is deliberate and the migration has a destination. The failure is leaving two styles forever because nobody chose which responsibilities each one owns.
 
@@ -61,7 +61,7 @@ The useful mental model is additive: keep Spring where it composes and hosts the
 
 ## Trade-offs
 
-TPF gains incremental adoption and explicit contracts. It gives up the false simplicity of one universal style during transition. Teams must document the seam and avoid claiming Spring support where the tested path does not exist.
+TPF gains incremental adoption and explicit contracts. It gives up the false simplicity of one universal style during transition. Teams must document the seam and avoid claiming runtime capabilities that the tested path does not provide.
 
 ## When TPF is not a good fit
 

@@ -49,9 +49,9 @@ Incremental migration is not a timid version of transformation. It is the only h
 
 Choose a capability with a meaningful boundary: a flow that already suffers from repeated mapper glue, inconsistent retries, a difficult transport change, or unclear ownership after failure. Keep its existing controller, consumer, repository, or client where that is the safest edge. Extract one typed business decision at a time. Declare the connector or runtime boundary only when the original behavior has a counterpart that can be observed and tested.
 
-The goal is not to duplicate the entire old system beside a shiny new one. It is to create a narrow seam. Existing components can provide facts to a new flow; the new flow can initially call an existing adapter. As confidence grows, a team can move one boundary at a time. Each step should answer a concrete question: what behavior now belongs to the typed core, what still belongs to the legacy shell, and what evidence shows callers see the same promise?
+The goal is not to duplicate the entire old system beside a shiny new one. It is to create a narrow seam. Existing components can provide facts to a new flow; the new flow can initially call an existing adapter. As confidence grows, a team can move one boundary at a time. Each new framework capability should make some old application plumbing obsolete. Each step should answer a concrete question: what responsibility moved, what code or configuration can now be deleted, what still belongs to the legacy shell, and what evidence shows callers see the same promise?
 
-Compatibility is more important than ideological neatness. A migrated flow may temporarily use JPA repositories, established exception translation, or existing Kafka consumers. That is acceptable if the temporary dependency is explicit and has an owner. The migration becomes dangerous only when temporary bridges become invisible architecture and nobody can say which direction the application is moving.
+Compatibility is more important than ideological neatness. A migrated flow may temporarily use JPA repositories, established exception translation, or existing Kafka consumers. That is acceptable if the temporary dependency is explicit, owned, and attached to a replacement decision. Migration is measured by responsibility replaced and old plumbing retired, not by the number of new framework artifacts accumulated beside the old ones.
 
 TPF helps by making more of the target contract build-time visible. Step resolution, mapper compatibility, declared connectors, transport requirements, and generated artifacts can fail before deployment. That does not prove the legacy semantics are identical, but it reduces the class of accidental integration mistakes while tests and comparison runs handle the business behavior.
 
@@ -61,7 +61,7 @@ The mental model is a strangler with manners: replace responsibility at a bounda
 
 ## Trade-offs
 
-TPF gains a reversible migration path and continuous evidence. It gives up the visual purity of a clean-slate diagram. Teams must pay attention to temporary bridges and remove or formalize them deliberately.
+TPF gains a reversible migration path and continuous evidence. It gives up the visual purity of a clean-slate diagram. Teams must pay attention to temporary bridges and turn each proven replacement into deletion or deliberate long-term ownership.
 
 ## When TPF is not a good fit
 
