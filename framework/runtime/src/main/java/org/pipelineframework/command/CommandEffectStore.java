@@ -29,16 +29,51 @@ public interface CommandEffectStore {
     Uni<CommandEffectRecord> createPending(CommandRequest<?> request, long nowEpochMs);
 
     /**
+     * Whether this store can atomically append and persist deliberate Command attempts.
+     */
+    default boolean supportsRetryAttempts() {
+        return false;
+    }
+
+    /**
+     * Atomically appends the next attempt when, and only when, the logical effect is
+     * currently {@link CommandEffectStatus#FAILED_RETRYABLE}.
+     */
+    default Uni<CommandEffectRecord> createRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "deliberate Command retry requires a CommandEffectStore that persists attempt history"));
+    }
+
+    /**
      * Marks an existing pending command as dispatching. Retrying this transition may be
      * accepted only when the stored state already reflects the same dispatch.
      */
     Uni<CommandEffectRecord> markDispatching(String tenantId, String commandId, long nowEpochMs);
+
+    default Uni<CommandEffectRecord> markDispatching(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        long nowEpochMs
+    ) {
+        return markDispatching(tenantId, commandId, nowEpochMs);
+    }
 
     /**
      * Records the successful command output. The stored output type must remain compatible
      * with the command step output type for duplicate replay.
      */
     Uni<CommandEffectRecord> markSucceeded(String tenantId, String commandId, Object output, long nowEpochMs);
+
+    default Uni<CommandEffectRecord> markSucceeded(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Object output,
+        long nowEpochMs
+    ) {
+        return markSucceeded(tenantId, commandId, output, nowEpochMs);
+    }
 
     /**
      * Whether this store can durably preserve native command outcome snapshots. Native command
@@ -64,16 +99,47 @@ public interface CommandEffectStore {
             "native command outcomes require a CommandEffectStore that persists outcome snapshots"));
     }
 
+    default Uni<CommandEffectRecord> markSucceeded(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Object output,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return markSucceeded(tenantId, commandId, output, outcome, nowEpochMs);
+    }
+
     /**
      * Records a retryable command failure. Implementations should retain enough error
      * detail for operators to classify and retry the effect.
      */
     Uni<CommandEffectRecord> markFailed(String tenantId, String commandId, Throwable failure, long nowEpochMs);
 
+    default Uni<CommandEffectRecord> markFailed(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Throwable failure,
+        long nowEpochMs
+    ) {
+        return markFailed(tenantId, commandId, failure, nowEpochMs);
+    }
+
     /**
      * Records a terminal command failure that should be routed to dead-letter handling.
      */
     Uni<CommandEffectRecord> markDlq(String tenantId, String commandId, Throwable failure, long nowEpochMs);
+
+    default Uni<CommandEffectRecord> markDlq(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Throwable failure,
+        long nowEpochMs
+    ) {
+        return markDlq(tenantId, commandId, failure, nowEpochMs);
+    }
 
     /**
      * Records a non-success native command outcome with its durable terminal or retryable state.
@@ -89,5 +155,17 @@ public interface CommandEffectStore {
     ) {
         return Uni.createFrom().failure(new UnsupportedOperationException(
             "native command outcomes require a CommandEffectStore that persists outcome snapshots"));
+    }
+
+    default Uni<CommandEffectRecord> markOutcome(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        CommandEffectStatus status,
+        Throwable failure,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return markOutcome(tenantId, commandId, status, failure, outcome, nowEpochMs);
     }
 }
