@@ -1,40 +1,175 @@
-# TPF authoring Skill evidence note
+# TPF Author Skill evidence note
 
-This note records the evidence used to synthesize `SKILL.md`. It is intentionally not a second guide.
+This note records the evidence and archaeology behind the Skill. It is intentionally
+not a second authoring guide. The detailed pre-edit matrix is in `coverage-audit.md`.
 
-## Repository areas inspected
+## Bases and repository evidence
 
-- Architecture and data doctrine: `docs/design/application-structure.md`, `docs/design/state-model.md`, and the current `docs/design/data-architecture/` pages, especially pipeline knowledge, carrying known data, Query meaning, effects authority, and large-data references.
-- Authoring and type model: `docs/develop/pipeline-template-dsl.md`, `docs/develop/code-a-step.md`, operator/connector authoring docs, and their v3 loader, schema, IDL, routing, repeated-field, union, and local-pipeline tests under `framework/runtime` and `framework/deployment`.
-- Query, Command, and Await: runtime/deployment docs; `QueryStepSupport`, Query capture tests; `CommandStepSupport`, `CommandEffectStore`, command outcome tests; Await coordinator/admission/continuation code and duplicate, correlation, timeout, projection, and resume tests.
-- Orthogonal state: persistence and cache design/docs plus foundational plugin managers/tests; JPA Query capture docs/tests; command effect and Await storage contracts.
-- Large/object data: materialization and object-ingest docs; `PayloadReference`, `PayloadMaterializer`, `MaterializedPayload`, connector payload origin, Object Source/Publish operations, representation-provider SPI, generated file facade, and focused tests.
-- Composition and placement: branch routing, v3 flow compatibility, nested/local pipeline composition, runtime-mapping docs, generated deployment phases, and transport/platform configuration.
-- Examples and history: current pipeline YAML and authored services across CSV Payments, Search, Restaurant, object/stdio, Query/Command/Await fixtures, plus targeted git history for the same surfaces. CSV Payments was treated as a compatibility surface that includes both current native paths and historical/application-specific residue—not as universal doctrine.
+The audit compared PR #690 branch `tpf-skill` at `f817e1a9` with current
+`origin/main` at `4c7e59b1` on 2026-08-23.
 
-The current working tree also contained uncommitted data-architecture documentation. Its arguments were cross-checked against current runtime/compiler source and tests before inclusion; this note does not imply those edits were authored by this task.
+High-value current sources included:
 
-## Repowise decisions that were useful as leads
+- architecture/state: `docs/design/fcis.md`, `application-structure.md`,
+  `state-model.md`, execution safety, Await, persistence/cache, and object I/O docs;
+- types/steps/operators: `docs/develop/pipeline-template-dsl.md`, `code-a-step.md`,
+  `pipeline-step.md`, operator/delegation/service-contract docs, and compiler/runtime
+  tests for cardinality, generated domain types, union applicability, nested pipelines,
+  direct recursion, blocking bridges, mapper selection, and operator resolution;
+- representations: canonical-domain readiness, `PipelineTemplateTypeMappings`, Java
+  domain binding and mapper inference, representation-provider API/generation phases,
+  file/OpenCSV providers, persistence boundaries, `PayloadReference`, materializers,
+  durable codecs, and object ingest/publish tests;
+- execution: Query/Command/Await support and stores, connector-provider manifests and
+  operations, aspects, checkpoint handoff, retry/DLQ/circuit docs, and focused replay,
+  identity, duplicate, recovery, and target-safe cache tests;
+- deployment/build: runtime-layout and POM lifecycle docs, mapping loader/resolver,
+  generation phases and `META-INF/pipeline/` tests, plus current CSV Payments, Search,
+  Checkout, Restaurant Approval, stdio/object, Spring, Query, Command, and Await fixtures;
+- configuration: `docs/develop/configuration/all-settings.md`, then the matching
+  processor/config loaders, telemetry capability/policy/resource code, provider loaders,
+  generated client wiring, execution defaults, and circuit-boundary resolution tests;
+- history: recent canonical type, repeated-field, payload representation, object I/O,
+  Await, Query/provider, aspect applicability, cache replay, and packaging changes.
 
-All 34 decisions returned by `repowise decision list --status all` were still `proposed`; none was accepted as authority by status alone.
+Examples were treated as executable compatibility evidence, not universal scaffolds.
+CSV Payments in particular contains current native paths plus historical build/application
+residue.
 
-- `817224fe` — “Keep LLM adapter tuning out of portable connector bindings.” Useful lead for separating portable Query semantics from adapter tuning. Retained only at the broader, source-backed level: portable semantics and provider/runtime tuning remain separate.
-- `460dd001`, `7e4bb654`, `5a4d88c2`, and `4c176833` — v3 rejects legacy/wire metadata, compiler-owned IDL state/tags, and the canonical template DSL. Useful leads for compiler ownership. Exact migration and tag-allocation details were omitted as implementation-specific and high-staleness.
-- `11ebf7f6` — CSV Payments object-I/O migration. Useful lead for checking whether `PayloadReference`, Object Ingest/Publish, and representation providers actually replace application file/storage responsibility. Current docs/source/tests verified the general rule.
-- `7a8af571`, `0a47ca5c`, and `cbd4ce89` — live Await, explicit admission/continuation boundaries, and immutable queue-async control-plane records. Useful leads for durable admission, duplicate suppression, and separation of Await/execution state. Only transport-neutral Await semantics were retained.
+## Audit outcome
 
-## Decisions rejected from the Skill
+The important omissions were the service/operator/cardinality decision, reactive versus
+blocking/backpressure trade-offs, canonical/Java/persistence/wire identity separation,
+representation-consumer selection, grouped object ingest, connector configuration
+lifetimes, resilience and checkpoint ownership, generated build artifacts, bootstrap/
+testing search rules, and the current simple-first deployment prior.
 
-- PR-slicing/refactor proposals such as extracting queue-async submission, read-model, operations, or renderer classes were rejected as internal implementation structure.
-- CI caching, Testcontainers, smoke-template placement, and virtual-thread smoke details were rejected as operational/transient.
-- `fa14d403` renderer splitting was rejected as a current deployment implementation choice, not an application-authoring prior.
-- Low-confidence inferred decisions such as `f9bd2c20` (a CSV Payments sealed superclass) and `7c88f140` (specific replay prerequisites) were rejected as example-specific or inferred.
-- Exact current support limits—provider catalogues, nested-pipeline recursion/cardinality restrictions, Query capture modes, failed-command redrive behavior, Spring parity, and representation consumers—were deliberately not promoted to doctrine. The Skill tells agents to inspect the current release.
-- The immutable-control-plane proposals were not generalized to claim that every existing TPF store is append-only; current execution/Await stores include legacy mutable patterns.
+`SKILL.md` now carries only the always-needed additions: the four cardinality choices,
+ordinary-service-versus-operator rule, the four representation identities, the two
+different meanings of mapping, simple-first deployment, semantic-owner-first framework
+change process, configuration-lifetime/telemetry routing, and routes to deeper guidance.
+Its line count decreased from 164 to 155.
 
-## Genuinely unresolved questions
+The former `composition-and-placement.md`, `payload-representations.md`,
+`external-interactions.md`, and `state-and-replay.md` were replaced—not retained beside
+the new structure—by four on-demand references:
 
-- Which retry/redrive entrypoint shapes will become uniformly available across Command providers and runtime layouts remains release-specific.
-- The long-term boundary between generic representation mappings and consumer-specific generated adapters is still evolving; current consumers have different readiness rules.
-- Some examples still carry historical Java types, mappers, logging, or file-path compatibility code while newer canonical v3/object-I/O paths exist. Whether each residue should be removed is a migration decision, not doctrine.
-- Spring support and parity with canonical Quarkus compiler/runtime paths remain implementation-dependent and must be checked per capability.
+- `authoring-model.md`: canonical modeling, services/operators, cardinality,
+  backpressure, composition/recursion, failure channels, and testing;
+- `representations-and-runtime-mappings.md`: Java bindings, consumer mappings,
+  providers, payload/object boundaries, and durable/wire identity;
+- `execution-and-replay.md`: Query/Command/Await, connector lifetimes, distinct state
+  authorities, resilience/recovery, and checkpoint handoff;
+- `deployment-and-packaging.md`: logical placement versus physical artifacts,
+  configuration lifetimes and telemetry, simple/split deployment decisions, generated
+  build boundaries, bootstrap, and tests.
+
+## What `all-settings.md` added
+
+The settings page is valuable because it exposes configuration as several lifetimes,
+not one bag of properties. The audit retained these stable decisions:
+
+- `pipeline.yaml` owns portable semantic choices and generated contract intent;
+- build-time/augmentation inputs determine which adapters, metadata, and telemetry
+  capabilities exist, so some changes require a rebuild;
+- runtime framework policy owns concurrency, backpressure, retry/circuit behavior,
+  durability/provider choice, background execution, Await plumbing, and health;
+- deployment wiring owns concrete endpoints, brokers, storage, secrets, exporters, and
+  telemetry backends;
+- dynamic business facts remain typed pipeline input;
+- global defaults are preferred, with exact step/boundary overrides reserved for real
+  operational exceptions and keyed from generated diagnostics.
+
+Telemetry was the most important omission: generated item-boundary metadata and artifact
+capabilities are separate from runtime policy, which is separate again from exporter/
+backend configuration. The Skill now routes configuration and telemetry work to the
+deployment reference and warns that a runtime toggle cannot add build-absent signals.
+
+The exact Kafka, SQS, S3, PostgreSQL, Redis, provider-class, port, timeout, and property
+catalogue was deliberately not copied. The current settings page is the search map for
+those details. Its compatibility/annotation/template-generator entries and composed
+configuration prefixes still need verification against the current loader/processor and
+chosen runtime before use.
+
+## What the retired app-generator taught us
+
+The old `/Users/mari/IdeaProjects/app-generator` was inspected as archaeology. Its
+generator normalized YAML, planned scaffolds, selected dependencies, emitted Maven
+modules/configuration/bootstrap, generated DTOs/mappers/connectors, and created topology
+and test assets. The significant behavior classifies as follows:
+
+| Class | Generator knowledge | Disposition |
+| --- | --- | --- |
+| A — still required author knowledge | validated `pipeline.yaml`; canonical contract and step/cardinality choices; processor/runtime/provider dependencies visible to the compiling module; runtime config; genuine mappers/provider code; build and test the topology actually deployed | Taught through core decisions and deployment/representation references, without a frozen POM template |
+| B — now compiler/generated | canonical Java/protobuf domain artifacts; union/routing and transport adapters; generated role sources and pipeline metadata; provider manifests/descriptors/registration; supported aspect and I/O facades | Skill tells agents to compile/inspect generation before writing equivalents |
+| C — simplified by current TPF | v3 canonical types replace much DTO/protobuf/union boilerplate; representation providers own file/OpenCSV facades; named connector bindings separate provider/operation/input; monolith layout can yield one runnable unit when build topology matches | Encoded as search/decision rules, not support promises |
+| D — obsolete assumption | every step needs its own Maven/runtime module; dedicated orchestrator/persistence/cache modules are always required; runtime layout rewrites POMs; generated host/factory/stub classes belong to the app; positional generator API; handwritten canonical DTO/proto/union mirrors; old scaffold layouts are doctrine | Explicit warnings in deployment reference; do not revive |
+| E — application-specific | chosen ports, certificates, Postgres/Kafka defaults, Docker scripts/images, package names, sample provider endpoints, example module names, and test-container matrix | Omitted from the Skill |
+
+The stable lesson is not “reproduce the generator.” It is: ensure the chosen build
+exposes the compiler/runtime/provider inputs it needs, then let current generation own
+the deterministic artifacts.
+
+## Repowise findings retained as leads
+
+`repowise decision list --status all --format json` returned 34 decisions; all were
+`proposed`. None became doctrine by status alone.
+
+- `7e4bb654`, `5a4d88c2`, `460dd001`, `4c176833`: compiler-owned canonical DSL/IDL
+  state and exclusion of wire metadata. Current template DSL, loaders, generators, IDL
+  tests, and generated adapters verify the broader rule; exact tag mechanics stay out.
+- `11ebf7f6`: CSV Payments object-I/O migration. Current object ingest/publish,
+  `PayloadReference`, representation provider, and example tests verify the ownership
+  transfer and deletion heuristic.
+- `817224fe`: keep LLM adapter tuning outside portable bindings. Current connector docs
+  and implementation verify the broader provider-config/operation-config/input split.
+- `7a8af571`, `0a47ca5c`, `cbd4ce89`: live/durable Await boundaries. Current Await
+  descriptors, admission, completion, continuation, and recovery tests verify only the
+  transport-neutral suspension rules retained by the Skill.
+
+Repowise did not contain a decision for runtime layout versus Maven build topology.
+That doctrine came from current deployment docs, mapping code/tests, and examples.
+
+## Repowise findings rejected
+
+- Renderer extraction, queue-async class slicing, read-model/operations splits, and
+  other PR-level refactor plans are internal implementation choices.
+- CI cache, Testcontainers, smoke-template placement, and virtual-thread smoke details
+  are transient build/operations concerns.
+- Low-confidence inferred/example decisions such as a CSV sealed superclass or exact
+  replay prerequisites are not application-authoring doctrine.
+- Exact provider catalogues, support matrices, retry counts, store schemas, and current
+  renderer/module names are release details.
+- Proposed immutable control-plane patterns were not generalized to every existing
+  store; current execution/Await storage includes legacy exceptions.
+- Hotspot/dependent counts were used to set review rigor only. They were rejected as a
+  reason to place semantics in a lower-impact sibling abstraction or additive sidecar.
+
+## Current documentation gaps / unresolved questions
+
+- The runtime-layout docs still describe “after scaffold generation,” while the retired
+  generator is no longer the canonical onboarding mechanism. There is no single current,
+  minimal bootstrap/package page that replaces its useful dependency/classpath setup.
+- One runnable monolith is proven, but current docs expose example-specific
+  `monolith-svc` source aggregation and alternate POM mechanics. The stable simple-first
+  prior is clear; exact “single deployment unit JAR” ergonomics are not cleanly
+  documented enough to encode beyond current build topology evidence.
+- Representation mappings are generic in the model but consumer support remains uneven.
+  Current readiness docs, compiler diagnostics, and consumer tests must be checked.
+- Operator pass-through/union applicability is clearer in compiler/applicability tests
+  than in one author-facing decision guide. The Skill retains only type-based routing.
+- Aspect observer applicability across union branches is implemented/tested but weakly
+  surfaced in author docs.
+- Local/remote/operator/cardinality/function and Spring parity remain release-specific;
+  compile and test the intended runtime rather than relying on a memorized matrix.
+- Retry/redrive availability across Command providers and layouts continues to evolve.
+
+## Lightweight validation
+
+- `git diff --check`, relative Markdown-link checks, YAML parsing, one-entry-point
+  discovery, stale-reference checks, and an explicit architectural-coverage assertion
+  passed.
+- The skill-creator `quick_validate.py` entrypoint could not import its undeclared
+  `PyYAML` dependency in the available Python runtimes. The same frontmatter key/name/
+  description/TODO checks were run with the available Ruby YAML parser and passed.
+- No Maven verification or CodeRabbit review was run, as requested.
