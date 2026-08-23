@@ -40,7 +40,7 @@ public record CommandEffectRecord(
     ) {
         this(
             tenantId, executionId, stepId, command, commandId, status, input, output,
-            errorClass, errorMessage, Optional.empty(), null, createdAtEpochMs, updatedAtEpochMs);
+            errorClass, errorMessage, Optional.empty(), List.of(), createdAtEpochMs, updatedAtEpochMs);
     }
 
     public CommandEffectRecord(
@@ -60,7 +60,7 @@ public record CommandEffectRecord(
     ) {
         this(
             tenantId, executionId, stepId, command, commandId, status, input, output,
-            errorClass, errorMessage, outcome, null, createdAtEpochMs, updatedAtEpochMs);
+            errorClass, errorMessage, outcome, List.of(), createdAtEpochMs, updatedAtEpochMs);
     }
 
     public CommandEffectRecord {

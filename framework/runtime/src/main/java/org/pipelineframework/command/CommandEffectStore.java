@@ -30,6 +30,9 @@ public interface CommandEffectStore {
 
     /**
      * Whether this store can atomically append and persist deliberate Command attempts.
+     * Implementations returning {@code true} must override {@code createRetryAttempt}
+     * and every attempt-id-aware transition overload; the compatibility defaults discard
+     * the attempt id and are only suitable for stores that retain the {@code false} default.
      */
     default boolean supportsRetryAttempts() {
         return false;

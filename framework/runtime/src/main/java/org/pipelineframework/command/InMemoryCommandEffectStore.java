@@ -73,7 +73,9 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
 
     @Override
     public Uni<CommandEffectRecord> markDispatching(String tenantId, String commandId, long nowEpochMs) {
-        return markDispatching(tenantId, commandId, currentAttemptId(tenantId, commandId), nowEpochMs);
+        return update(
+            tenantId, commandId,
+            record -> record.dispatching(record.currentAttempt().attemptId(), nowEpochMs));
     }
 
     @Override
@@ -227,14 +229,6 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
 
     private static String key(String tenantId, String commandId) {
         return tenantId + ":" + commandId;
-    }
-
-    private String currentAttemptId(String tenantId, String commandId) {
-        CommandEffectRecord record = records.get(key(tenantId, commandId));
-        if (record == null) {
-            throw new IllegalStateException("No command effect record found for commandId " + commandId);
-        }
-        return record.currentAttempt().attemptId();
     }
 
     private static CommandEffectRecord legacyCompletionSource(CommandEffectRecord record, long nowEpochMs) {
