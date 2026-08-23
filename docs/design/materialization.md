@@ -108,6 +108,24 @@ Connector-owned references must carry this provenance because release and execut
 not pin connector binding definitions. Resolution must compare the captured provenance with the
 active binding and fail before provider access when they differ.
 
+### Durable reference storage
+
+`PayloadReferenceProtobufCodec` exposes the generated `payload_ref` protobuf representation as a
+public durable codec for one canonical `PayloadReference`. Application persistence mappings may
+store `encode(reference)` in an opaque binary column and recover it with `decode(storedBytes)`;
+applications must not parse the field layout or reconstruct connector provenance themselves.
+
+This is the same field-number contract used by generated pipeline protobuf messages. Schema version
+1 follows protobuf compatibility rules: existing field numbers and meanings are immutable, removed
+numbers are reserved, and compatible additions use new numbers. Decoders ignore unknown fields.
+Regression fixtures retain compatibility with published bytes.
+
+The codec stores one reference, not its containing pipeline boundary or a historical connector
+binding. Decoding therefore does not relax ordinary resolution: the active runtime must still offer
+a provenance-compatible binding and the immutable object must remain available. The canonical
+origin contains only sanitized configuration identity and logical connection references; resolved
+credentials are never part of the value or its encoded form.
+
 The Java record gains a connector-origin component and is therefore a source/binary shape change.
 For JSON, old documents that omit `connectorOrigin` deserialize as repository-owned references;
 new connector-owned documents serialize that field. For protobuf, the existing fields retain
