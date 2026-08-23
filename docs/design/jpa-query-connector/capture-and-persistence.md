@@ -53,8 +53,11 @@ entities used by blocking persistence providers without exposing blocking work t
 
 When the Query output type declares a `mappings.persistence` representation matching the configured
 JPA entity, the generated Query client requests that entity and applies the existing
-`Mapper.fromExternal(...)` before Query capture. Unmapped Query outputs retain record-property
-projection. In both cases, captured values use the canonical Query output type.
+`Mapper.fromExternal(...)` while the JPA persistence context is still open and before Query capture.
+This generated mapping path currently applies to `LOCAL` transport; REST and gRPC Query clients
+retain their existing representation behavior and do not pass the local mapper callback to
+`QueryStepSupport`. Unmapped Query outputs retain record-property projection. In both cases,
+captured values use the canonical Query output type.
 
 ## Current limits
 

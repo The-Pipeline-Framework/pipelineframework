@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -49,7 +50,8 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
     @Inject
     public JpaQueryConnector(Instance<EntityManagerFactory> entityManagerFactory) {
         this.entityManagerFactory = Optional.of(entityManagerFactory);
-        this.blockingExecutor = Optional.of(Executors.newVirtualThreadPerTaskExecutor());
+        this.blockingExecutor = Optional.of(Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("tpf-jpa-query-", 0).factory()));
     }
 
     @PreDestroy
@@ -91,26 +93,48 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
     }
 
     private <O> CompletionStage<O> queryOne(JpaQueryPlan plan, Object input, Class<O> outputType) {
+        return queryOne(plan, input, outputType, Optional.empty()).thenApply(outputType::cast);
+    }
+
+    private <O> CompletionStage<Object> queryOne(
+        JpaQueryPlan plan,
+        Object input,
+        Class<O> outputType,
+        Optional<Function<O, ?>> localResultMapper
+    ) {
         if (entityManagerFactory.isEmpty() || !entityManagerFactory.orElseThrow().isResolvable()) {
             return CompletableFuture.failedStage(new IllegalStateException(
                 "No JPA EntityManagerFactory is available for connector jpa"));
         }
         try {
             return CompletableFuture.supplyAsync(
-                () -> queryBlocking(plan, input, outputType), blockingExecutor.orElseThrow());
+                () -> queryBlocking(plan, input, outputType, localResultMapper),
+                blockingExecutor.orElseThrow());
         } catch (RuntimeException ex) {
             return CompletableFuture.failedStage(ex);
         }
     }
 
-    private <O> O queryBlocking(JpaQueryPlan plan, Object input, Class<O> outputType) {
+    private <O> Object queryBlocking(
+        JpaQueryPlan plan,
+        Object input,
+        Class<O> outputType,
+        Optional<Function<O, ?>> localResultMapper
+    ) {
         EntityManager entityManager = entityManagerFactory.orElseThrow().get().createEntityManager();
         try {
             TypedQuery<?> query = entityManager.createQuery(plan.toHql(), plan.entityType())
                 .setFlushMode(FlushModeType.COMMIT)
                 .setMaxResults(plan.maxResults());
             plan.bindings(input).forEach(query::setParameter);
-            return projectSingle(plan, query.getResultList(), outputType);
+            O external = projectSingle(plan, query.getResultList(), outputType);
+            Object result = localResultMapper.isPresent()
+                ? localResultMapper.orElseThrow().apply(external)
+                : external;
+            if (result == null) {
+                throw new IllegalStateException("JPA query local result mapper returned null");
+            }
+            return result;
         } finally {
             entityManager.close();
         }
@@ -155,7 +179,11 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
             } catch (RuntimeException failure) {
                 return CompletableFuture.failedStage(failure);
             }
-            return queryOne(plan, invocation.input(), invocation.outputType()).handle((output, failure) -> {
+            return queryOne(
+                plan,
+                invocation.input(),
+                invocation.outputType(),
+                invocation.localResultMapper()).handle((output, failure) -> {
                 if (failure == null) {
                     return new QueryOutcome.Found<>(output);
                 }

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.concurrent.ExecutionException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -235,15 +237,23 @@ public class QueryStepSupport {
         Mapper<O, E> mapper,
         Optional<NativeCapture> capture
     ) {
-        return executeNative(descriptor, input, externalOutputType)
+        AtomicBoolean mappedWithinProvider = new AtomicBoolean();
+        Function<E, O> localResultMapper = external -> {
+            O canonical = mapper.fromExternal(external);
+            if (canonical == null) {
+                throw new IllegalStateException(
+                    "persistence representation mapper returned null for canonical output " + outputType.getName());
+            }
+            O result = outputType.cast(canonical);
+            mappedWithinProvider.set(true);
+            return result;
+        };
+        return executeNative(descriptor, input, externalOutputType, Optional.of(localResultMapper))
             .onItem().transformToUni(outcome -> {
-                QueryOutcome<Object> mapped;
-                try {
-                    mapped = mapFoundRepresentation(descriptor, outcome, outputType, externalOutputType, mapper);
-                } catch (RuntimeException failure) {
-                    return Uni.createFrom().failure(failure);
-                }
-                return applyNativeOutcome(descriptor, outputType, mapped, capture);
+                QueryOutcome<Object> canonicalOutcome = mappedWithinProvider.get()
+                    ? outcome
+                    : mapFoundRepresentation(descriptor, outcome, outputType, externalOutputType, mapper);
+                return applyNativeOutcome(descriptor, outputType, canonicalOutcome, capture);
             });
     }
 
@@ -308,6 +318,16 @@ public class QueryStepSupport {
         I input,
         Class<O> outputType
     ) {
+        return executeNative(descriptor, input, outputType, Optional.empty());
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private <I, O> Uni<QueryOutcome<Object>> executeNative(
+        QueryStepDescriptor descriptor,
+        I input,
+        Class<O> outputType,
+        Optional<Function<O, ?>> localResultMapper
+    ) {
         NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
         ConnectorBindingRegistry bindings;
         try {
@@ -327,7 +347,8 @@ public class QueryStepSupport {
                             schema.orElseThrow(), configuration, "native query operation " + selector.operationIdentity())
                         : zeroConfiguration(selector, configuration);
                     return invokeNative(
-                        descriptor, selector, operation, input, boundConfiguration, outputType, bindings);
+                        descriptor, selector, operation, input, boundConfiguration, outputType,
+                        localResultMapper, bindings);
                 } catch (RuntimeException failure) {
                     return Uni.createFrom().failure(failure);
                 }
@@ -347,13 +368,14 @@ public class QueryStepSupport {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private <I> Uni<QueryOutcome<Object>> invokeNative(
+    private <I, O> Uni<QueryOutcome<Object>> invokeNative(
         QueryStepDescriptor descriptor,
         NativeQuerySelector selector,
         QueryOperation operation,
         I input,
         Object boundConfiguration,
-        Class<?> outputType,
+        Class<O> outputType,
+        Optional<Function<O, ?>> localResultMapper,
         ConnectorBindingRegistry bindings
     ) {
         CompletionStage<QueryOutcome<Object>> stage;
@@ -363,7 +385,8 @@ public class QueryStepSupport {
                 boundConfiguration,
                 outputType,
                 connectorExecutionContext(descriptor),
-                Optional.of(bindings::materialize)));
+                Optional.of(bindings::materialize),
+                localResultMapper));
         } catch (Throwable failure) {
             return Uni.createFrom().failure(unwrapTransportFailure(failure));
         }

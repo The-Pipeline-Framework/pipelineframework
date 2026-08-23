@@ -1,6 +1,8 @@
 package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.Base64;
@@ -58,6 +60,8 @@ class JpaGeneratedQueryJourneyTest {
 
     @Test
     void persistenceMapperRoundTripsOpaquePayloadReferencesThroughFindOne() {
+        Thread callerThread = Thread.currentThread();
+        InvoiceFilesEntity.LAST_LOAD_THREAD.set(null);
         UUID documentId = UUID.randomUUID();
         InvoiceFiles expected = new InvoiceFiles(
             documentId,
@@ -82,6 +86,9 @@ class JpaGeneratedQueryJourneyTest {
             .await().indefinitely();
 
         assertEquals(expected, actual);
+        Thread loadThread = InvoiceFilesEntity.LAST_LOAD_THREAD.get();
+        assertNotEquals(callerThread, loadThread);
+        assertTrue(loadThread.isVirtual(), "JPA reads must run on the connector's virtual-thread executor");
     }
 
     private void replaceWith(Class<?> entityType, Object entity) {
@@ -156,6 +163,7 @@ class JpaGeneratedQueryJourneyTest {
     static final class InvoiceFilesPersistenceMapper implements Mapper<InvoiceFiles, InvoiceFilesEntity> {
         @Override
         public InvoiceFiles fromExternal(InvoiceFilesEntity external) {
+            assertEquals(List.of("canonical-payloads"), external.evidenceLabels);
             return new InvoiceFiles(
                 external.documentId,
                 external.originalFilename,
@@ -172,6 +180,7 @@ class JpaGeneratedQueryJourneyTest {
                 PayloadReferenceProtobufCodec.encode(domain.invoice()));
             entity.catalogueReference = Base64.getEncoder().encodeToString(
                 PayloadReferenceProtobufCodec.encode(domain.catalogue()));
+            entity.evidenceLabels.add("canonical-payloads");
             return entity;
         }
     }
