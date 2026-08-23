@@ -44,12 +44,24 @@ const mainSidebar = [
             {text: 'Overview', link: '/design/'},
             {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
             {text: 'State Model', link: '/design/state-model'},
+            {text: 'Data Architecture', link: '/design/data-architecture'},
             {text: 'Application Structure', link: '/design/application-structure'},
             {text: 'Common Module Structure', link: '/design/common-module-structure'},
             {text: 'Operators', link: '/design/operators'},
             {text: 'Execution Safety', link: '/design/execution-safety'},
             {text: 'Await Boundaries', link: '/design/await-boundaries'},
             {text: 'Object Ingest', link: '/design/object-ingest'},
+            {
+                text: 'Data Architecture',
+                link: '/design/data-architecture/',
+                collapsed: true,
+                items: [
+                    {text: 'Immutable Dataflow', link: '/design/data-architecture/'},
+                    {text: 'Data coupling', link: '/design/data-architecture/carry-data-computation'},
+                    {text: 'Query and Command', link: '/design/data-architecture/query-command'},
+                    {text: 'Effects and comparisons', link: '/design/data-architecture/workflow-effects'}
+                ]
+            },
             {
                 text: 'JPA Query Connector',
                 link: '/design/jpa-query-connector/',
