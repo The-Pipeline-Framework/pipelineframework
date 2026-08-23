@@ -132,7 +132,9 @@ public class PipelineOrderMetadataGenerator {
                     current.after().add(sideEffect);
                 }
             } else {
-                String functionalStep = ClientStepClassNames.className(model, ctx.getTransportMode());
+                String functionalStep = ctx.isOrchestratorGenerated()
+                    ? ClientStepClassNames.className(model, ctx.getTransportMode())
+                    : localExecutionStepName(model);
                 current = new GeneratedStepGroup(List.copyOf(pendingBefore), functionalStep, new ArrayList<>());
                 pendingBefore.clear();
                 groupsByFunctionalStep.computeIfAbsent(functionalStep, ignored -> new ArrayDeque<>()).add(current);
@@ -302,29 +304,29 @@ public class PipelineOrderMetadataGenerator {
             if (model.sideEffect() || model.serviceClassName() == null) {
                 continue;
             }
-            if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "QueryClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "DynamicOperationClientStep");
-                continue;
-            }
-            ordered.add(model.serviceClassName().canonicalName());
+            ordered.add(localExecutionStepName(model));
         }
         return new ArrayList<>(ordered);
+    }
+
+    private String localExecutionStepName(PipelineStepModel model) {
+        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "AwaitClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "CommandClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "QueryClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "DynamicOperationClientStep");
+        }
+        return model.serviceClassName().canonicalName();
+    }
+
+    private String specialLocalClientStepName(PipelineStepModel model, String suffix) {
+        return model.servicePackage() + ".pipeline." + stripTrailingService(model.generatedName()) + suffix;
     }
 
     private Set<String> resolveGeneratedOrderSteps(PipelineCompilationContext ctx) {
