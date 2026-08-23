@@ -184,6 +184,69 @@ class QueryClientStepRendererTest {
         }
     }
 
+    @Test
+    void generatedJpaQueryUsesTheOutputPersistenceRepresentationMapper() throws Exception {
+        Path metadataRoot = tempDir.resolve("jpa-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"jpa.query","version":{"major":1,"minor":0},
+            "operations":[{"id":"find.one","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE"}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("mapped-jpa-query.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            appName: Mapped JPA Query
+            basePackage: com.example
+            transport: LOCAL
+            types:
+              RedriveAnalysis: { fields: [[documentId, uuid]] }
+              InvoiceFiles:
+                fields: [[documentId, uuid]]
+                mappings:
+                  persistence:
+                    type: com.example.persistence.InvoiceFilesEntity
+                    mapper: com.example.persistence.InvoiceFilesPersistenceMapper
+            connectors:
+              jpa:
+                provider: jpa.query
+                version: 1
+            steps:
+              - name: Load Customer Risk
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: RedriveAnalysis
+                output: InvoiceFiles
+                operation: find.one
+                using: jpa
+                config:
+                  entity: com.example.persistence.InvoiceFilesEntity
+                  where:
+                    documentId: { operator: eq, values: [input.documentId] }
+                  result: single
+            """);
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            PipelineStepModel model = model(
+                ClassName.get("com.example.domain", "RedriveAnalysis"),
+                ClassName.get("com.example.domain", "InvoiceFiles"));
+
+            new QueryClientStepRenderer().render(model, generationContext(Map.of(
+                "pipeline.config", pipeline.toString(),
+                "pipeline.transport", "LOCAL")));
+
+            String source = Files.readString(tempDir.resolve(
+                "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+            assertTrue(source.contains("InvoiceFilesPersistenceMapper representationMapper"));
+            assertTrue(source.contains(
+                "InvoiceFiles.class, InvoiceFilesEntity.class, representationMapper"));
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
     private PipelineStepModel model(ClassName inputType, ClassName outputType) {
         return new PipelineStepModel.Builder()
             .serviceName("LoadCustomerRisk")

@@ -18,8 +18,7 @@ import com.squareup.javapoet.TypeSpec;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateDialect;
-import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
-import org.pipelineframework.config.template.RepresentationMapping;
+import org.pipelineframework.processor.representation.PersistenceRepresentationMappingResolver;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -128,51 +127,8 @@ public class SideEffectBeanService {
             || !(observedType instanceof ClassName domainType)) {
             return java.util.Optional.empty();
         }
-        String domainPrefix = config.basePackage() + ".domain.";
-        if (!domainType.canonicalName().startsWith(domainPrefix)) {
-            return java.util.Optional.empty();
-        }
-        String domainName = domainType.simpleName();
-        RepresentationMapping mapping = config.typeModel().representationMapping(domainName, "persistence").orElse(null);
-        if (mapping == null) {
-            return java.util.Optional.empty();
-        }
-        if (!(config.typeModel().definition(domainName).orElse(null) instanceof PipelineTemplateTypeDefinition.RecordType)) {
-            throw representationFailure(mapping, "persistence mappings currently support only record domain types");
-        }
-        String representationName = mapping.representationType().orElseThrow(() ->
-            representationFailure(mapping, "persistence mapping requires representation type"));
-        String mapperName = mapping.mapperType().orElseThrow(() ->
-            representationFailure(mapping, "persistence mapping requires mapper type"));
-        javax.lang.model.element.TypeElement representation = ctx.getProcessingEnv().getElementUtils().getTypeElement(representationName);
-        if (representation == null) {
-            throw representationFailure(mapping, "representation class is unavailable");
-        }
-        javax.lang.model.element.TypeElement mapper = ctx.getProcessingEnv().getElementUtils().getTypeElement(mapperName);
-        if (mapper == null) {
-            throw representationFailure(mapping, "mapper class is unavailable");
-        }
-        javax.lang.model.element.TypeElement mapperContract = ctx.getProcessingEnv().getElementUtils()
-            .getTypeElement("org.pipelineframework.mapper.Mapper");
-        javax.lang.model.element.TypeElement domain = ctx.getProcessingEnv().getElementUtils()
-            .getTypeElement(domainType.canonicalName());
-        if (mapperContract == null || domain == null) {
-            throw representationFailure(mapping, "canonical mapper contract is unavailable");
-        }
-        javax.lang.model.type.DeclaredType expected = ctx.getProcessingEnv().getTypeUtils().getDeclaredType(
-            mapperContract, domain.asType(), representation.asType());
-        if (!ctx.getProcessingEnv().getTypeUtils().isAssignable(mapper.asType(), expected)) {
-            throw representationFailure(mapping, "mapper must implement Mapper<" + domainType.canonicalName() + ", "
-                + representationName + ">");
-        }
-        return java.util.Optional.of(new PersistenceRepresentationMapping(ClassName.bestGuess(mapperName)));
-    }
-
-    private IllegalStateException representationFailure(RepresentationMapping mapping, String reason) {
-        return new IllegalStateException("Representation mapping failure for domain type '" + mapping.domainType()
-            + "', key '" + mapping.key() + "', representation type '"
-            + mapping.representationType().orElse("<missing>") + "', mapper type '"
-            + mapping.mapperType().orElse("<missing>") + "': " + reason);
+        return PersistenceRepresentationMappingResolver.resolve(config, domainType, ctx.getProcessingEnv())
+            .map(mapping -> new PersistenceRepresentationMapping(mapping.mapperType()));
     }
 
     private record PersistenceRepresentationMapping(ClassName mapperType) {

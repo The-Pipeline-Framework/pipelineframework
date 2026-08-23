@@ -47,8 +47,14 @@ The query connector is not bundled into the persistence plugin and does not requ
 ## Runtime boundaries
 
 The public provider `QueryOperation` and query connector/store contracts use JDK `CompletionStage`
-for unary boundaries. The Quarkus JPA connector uses Hibernate Reactive internally to run the
-read-only query, but provider and application step code do not depend on Mutiny.
+for unary boundaries. The Quarkus JPA connector runs ordinary Jakarta Persistence reads on
+framework-owned virtual threads, so applications can share the same JDBC datasource and JPA
+entities used by blocking persistence providers without exposing blocking work to pipeline threads.
+
+When the Query output type declares a `mappings.persistence` representation matching the configured
+JPA entity, the generated Query client requests that entity and applies the existing
+`Mapper.fromExternal(...)` before Query capture. Unmapped Query outputs retain record-property
+projection. In both cases, captured values use the canonical Query output type.
 
 ## Current limits
 

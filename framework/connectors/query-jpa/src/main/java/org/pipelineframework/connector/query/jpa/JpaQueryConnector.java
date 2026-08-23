@@ -6,13 +6,17 @@ import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.FlushModeType;
+import jakarta.persistence.TypedQuery;
 
-import io.smallrye.mutiny.Uni;
-import org.hibernate.FlushMode;
-import org.hibernate.reactive.mutiny.Mutiny;
 import org.pipelineframework.query.FrameworkQueryConnector;
 import org.pipelineframework.query.QueryRequest;
 import org.pipelineframework.connector.ConnectorOperation;
@@ -21,6 +25,7 @@ import org.pipelineframework.connector.ConnectorProvider;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderVersion;
 import org.pipelineframework.connector.QueryInvocation;
+import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
 
@@ -32,16 +37,24 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
     static final String CONNECTOR_NAME = "jpa";
     static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("jpa.query");
 
-    private final Optional<Instance<Mutiny.SessionFactory>> sessionFactory;
+    private final Optional<Instance<EntityManagerFactory>> entityManagerFactory;
+    private final Optional<ExecutorService> blockingExecutor;
 
     /** Side-effect-free constructor used by connector artifact packaging. */
     public JpaQueryConnector() {
-        this.sessionFactory = Optional.empty();
+        this.entityManagerFactory = Optional.empty();
+        this.blockingExecutor = Optional.empty();
     }
 
     @Inject
-    public JpaQueryConnector(Instance<Mutiny.SessionFactory> sessionFactory) {
-        this.sessionFactory = Optional.of(sessionFactory);
+    public JpaQueryConnector(Instance<EntityManagerFactory> entityManagerFactory) {
+        this.entityManagerFactory = Optional.of(entityManagerFactory);
+        this.blockingExecutor = Optional.of(Executors.newVirtualThreadPerTaskExecutor());
+    }
+
+    @PreDestroy
+    void closeExecutor() {
+        blockingExecutor.ifPresent(ExecutorService::close);
     }
 
     @Override
@@ -78,28 +91,29 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
     }
 
     private <O> CompletionStage<O> queryOne(JpaQueryPlan plan, Object input, Class<O> outputType) {
-        if (sessionFactory.isEmpty() || sessionFactory.orElseThrow().isUnsatisfied()) {
+        if (entityManagerFactory.isEmpty() || !entityManagerFactory.orElseThrow().isResolvable()) {
             return CompletableFuture.failedStage(new IllegalStateException(
-                "No Hibernate Reactive SessionFactory is available for connector jpa"));
+                "No JPA EntityManagerFactory is available for connector jpa"));
         }
         try {
-            Class<?> entityType = plan.entityType();
-            return sessionFactory.orElseThrow().get().withSession(session -> executeQuery(session, plan, input, entityType))
-                .onItem().transform(rows -> projectSingle(plan, rows, outputType))
-                .subscribeAsCompletionStage();
+            return CompletableFuture.supplyAsync(
+                () -> queryBlocking(plan, input, outputType), blockingExecutor.orElseThrow());
         } catch (RuntimeException ex) {
             return CompletableFuture.failedStage(ex);
         }
     }
 
-    private Uni<List<?>> executeQuery(Mutiny.Session session, JpaQueryPlan plan, Object input, Class<?> entityType) {
-        session.setDefaultReadOnly(true);
-        Mutiny.SelectionQuery<?> query = session.createQuery(plan.toHql(), entityType)
-            .setReadOnly(true)
-            .setFlushMode(FlushMode.MANUAL)
-            .setMaxResults(plan.maxResults());
-        plan.bindings(input).forEach(query::setParameter);
-        return query.getResultList().onItem().transform(rows -> (List<?>) rows);
+    private <O> O queryBlocking(JpaQueryPlan plan, Object input, Class<O> outputType) {
+        EntityManager entityManager = entityManagerFactory.orElseThrow().get().createEntityManager();
+        try {
+            TypedQuery<?> query = entityManager.createQuery(plan.toHql(), plan.entityType())
+                .setFlushMode(FlushModeType.COMMIT)
+                .setMaxResults(plan.maxResults());
+            plan.bindings(input).forEach(query::setParameter);
+            return projectSingle(plan, query.getResultList(), outputType);
+        } finally {
+            entityManager.close();
+        }
     }
 
     private <O> O projectSingle(JpaQueryPlan plan, List<?> rows, Class<O> outputType) {
@@ -119,6 +133,11 @@ public class JpaQueryConnector implements FrameworkQueryConnector, ConnectorProv
         @Override
         public String id() {
             return "find.one";
+        }
+
+        @Override
+        public QueryCapabilities capabilities() {
+            return QueryCapabilities.cacheable();
         }
 
         @Override

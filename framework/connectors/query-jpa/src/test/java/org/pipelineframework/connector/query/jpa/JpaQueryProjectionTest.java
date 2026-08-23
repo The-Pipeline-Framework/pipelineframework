@@ -2,6 +2,7 @@ package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
@@ -9,6 +10,13 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class JpaQueryProjectionTest {
+    @Test
+    void returnsTheEntityItselfWhenTheRequestedOutputIsItsExternalType() {
+        CustomerRiskEntity entity = new CustomerRiskEntity(
+            "customer-1", "HIGH", 97, new Account("ACTIVE"));
+
+        assertSame(entity, JpaQueryProjection.project(entity, CustomerRiskEntity.class, Map.of()));
+    }
 
     @Test
     void projectsEntityPropertiesIntoRecordOutput() {
