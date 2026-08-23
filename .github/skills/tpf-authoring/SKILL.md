@@ -1,13 +1,13 @@
 ---
 name: tpf-authoring
-description: Author or modify Pipeline Framework (TPF) applications using typed dataflow, generated boundaries, and framework-owned I/O. Use for pipeline.yaml, canonical types, authored steps/operators, mappings, deployment shape, migrations, and application architecture.
+description: Design, author, or migrate applications built with The Pipeline Framework (TPF). Use for pipeline.yaml, canonical types, authored services/operators, mappings, deployment shape, and application architecture; not for maintaining TPF compiler/runtime internals.
 ---
 
 # TPF authoring
 
-Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation or a support matrix.
+Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation, a support matrix, or guidance for maintaining TPF itself.
 
-> This Skill defines architectural priors. Current repository source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing a workaround or modifying a framework seam.
+> This Skill defines architectural priors. Current repository source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing an application workaround.
 
 ## The TPF shape
 
@@ -30,6 +30,7 @@ external-observation replay       -> Query capture
 external-effect authority         -> CommandEffectStore
 branching                          -> typed unions / accepts
 composition                        -> pipeline step / nested pipeline
+typed iteration / agentic looping -> bounded recursive nested pipeline
 ```
 
 These are different jobs with different authorities. Do not collapse them into an application registry.
@@ -94,7 +95,7 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 - Read [execution-and-replay.md](references/execution-and-replay.md) for Query/Command/Await, connectors, aspects, persistence/cache/capture/effects, resilience, retry/DLQ, or checkpoint handoff.
 - Read [deployment-and-packaging.md](references/deployment-and-packaging.md) for configuration lifetime, telemetry, runtime placement, transport/platform, generated artifacts, bootstrap, testing, or single-unit packaging.
 
-Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. Examples prove compatibility; they may contain historical or application-specific residue. Repowise is an index and archaeological lead, never authority.
+Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. Read the relevant record under `docs/decisions/` only when application docs leave the owning TPF primitive or an important trade-off unclear. Examples prove compatibility; they may contain historical or application-specific residue. Repowise is an index and archaeological lead, never authority.
 
 ## Before you implement
 
@@ -129,14 +130,6 @@ layout flag assumed to create JARs             vs align runtime layout with the 
 
 When TPF gains a native boundary, remove the application glue, registry, client, dispatch/retry code, duplicated configuration, and obsolete tests whose responsibility it replaces. A migration that only adds files and deletes nothing may be installing a second architecture.
 
-For framework work, follow semantic ownership first:
-
-```text
-identify semantic owner -> design the coherent change -> inspect impact -> handle compatibility/tests
-```
-
-Churn and dependent count determine review and testing rigor, not which abstraction is allowed to own the behavior. Additive sidecars and compatibility wrappers are not automatically safer; during framework maturation, consolidation and deletion may be the coherent change.
-
 Do not overfit. TPF is not mandatory for simple local code; existing controllers, JPA, Kafka, Spring/Quarkus code, and monoliths can remain. Do not turn every method into a step or add a framework abstraction for one application's policy. Keep portable semantics separate from provider/runtime configuration and verify current release support.
 
 ## Final self-check
@@ -151,5 +144,3 @@ Do not overfit. TPF is not mandatory for simple local code; existing controllers
 - Did I add application infrastructure instead of reporting a framework gap?
 - Did this migration remove obsolete application responsibility?
 - Did I verify current TPF reality before claiming a missing capability?
-
-Read [evidence-note.md](references/evidence-note.md) or [coverage-audit.md](references/coverage-audit.md) only for provenance and audit history.
