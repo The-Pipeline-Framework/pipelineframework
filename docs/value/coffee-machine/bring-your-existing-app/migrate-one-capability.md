@@ -20,7 +20,7 @@ social:
       - "The repository root"
       - "The most fashionable module"
       - "Explicit typed boundary"
-      - "Everything after a long"
+      - "Everything after a long debate"
     preferred: "Explicit typed boundary"
 fortune:
   quote: "A good migration replaces responsibility at a seam, not confidence with a deadline."

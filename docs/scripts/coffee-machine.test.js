@@ -73,6 +73,11 @@ test('private poll validation enforces LinkedIn constraints', () => {
   tooLong.frontmatter.social.poll.options = ['A', 'This LinkedIn option is definitely too long']
   assert.throws(() => validatePrivatePoll(tooLong), /exceeds 30 characters/)
 
+  const duplicateOptions = sourcePage('duplicate-options')
+  duplicateOptions.frontmatter.social.poll.options = ['Java-first', 'Java-first']
+  duplicateOptions.frontmatter.social.poll.preferred = 'Java-first'
+  assert.throws(() => validatePrivatePoll(duplicateOptions), /must not contain duplicates/)
+
   const noPreferredMatch = sourcePage('no-preferred')
   noPreferredMatch.frontmatter.social.poll.preferred = 'Something else'
   assert.throws(() => validatePrivatePoll(noPreferredMatch), /must exactly match/)
@@ -97,6 +102,20 @@ test('public dataset validation rejects invalid contracts', () => {
   const brokenRelated = sourcePage('broken-related')
   brokenRelated.frontmatter.related = ['does-not-exist']
   assert.throws(() => buildPublicDataset([brokenRelated]), /broken related FAQ id/)
+
+  const normalizedInvalidDate = sourcePage('invalid-date')
+  normalizedInvalidDate.frontmatter.faq = {
+    ...normalizedInvalidDate.frontmatter.faq,
+    added: '2026-02-29'
+  }
+  assert.throws(() => buildPublicDataset([normalizedInvalidDate]), /valid ISO date/)
+
+  const validLeapDate = sourcePage('valid-leap-date')
+  validLeapDate.frontmatter.faq = {
+    ...validLeapDate.frontmatter.faq,
+    added: '2024-02-29'
+  }
+  assert.doesNotThrow(() => buildPublicDataset([validLeapDate]))
 })
 
 test('public utilities keep random selection and FAQ search deterministic', () => {

@@ -17,8 +17,8 @@ social:
   poll:
     question: "What language does TPF require?"
     options:
-      - "The complete DDD glossary,"
-      - "The framework’s internal"
+      - "The complete DDD glossary"
+      - "The framework’s internal names"
       - "Explicit ownership"
       - "Whatever the generator guessed"
     preferred: "Explicit ownership"

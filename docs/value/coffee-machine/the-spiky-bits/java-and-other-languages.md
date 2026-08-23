@@ -19,7 +19,7 @@ social:
     options:
       - "Language neutral"
       - "Java-first"
-      - "Java-first"
+      - "Polyglot at boundaries"
       - "A universal compiler"
     preferred: "Java-first"
 fortune:

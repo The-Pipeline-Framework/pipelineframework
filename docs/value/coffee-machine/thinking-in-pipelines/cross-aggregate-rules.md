@@ -18,7 +18,7 @@ social:
     question: "What solves a cross-aggregate rule?"
     options:
       - "One aggregate to rule them all"
-      - "A Kafka topic and"
+      - "A Kafka topic and optimism"
       - "Explicit business policy"
       - "An annotation with ambition"
     preferred: "Explicit business policy"

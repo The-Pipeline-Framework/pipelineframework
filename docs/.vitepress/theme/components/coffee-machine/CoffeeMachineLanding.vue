@@ -31,10 +31,10 @@ onMounted(() => {
     </header>
 
     <section class="coffee-section" aria-labelledby="coffee-topics">
-      <div class="coffee-section__heading"><div><p class="coffee-eyebrow">Browse</p><h2 id="coffee-topics">By topic</h2></div></div>
+      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Browse</p><h2 id="coffee-topics">By topic</h2></div></div>
       <div class="coffee-topic-grid">
         <a v-for="topic in data.topics" :key="topic.id" class="coffee-topic-card" :href="`/value/coffee-machine/search?topic=${topic.id}`">
-          <span class="coffee-topic-card__icon" aria-hidden="true">{{ topic.icon }}</span>
+          <span class="coffee-topic-card-icon" aria-hidden="true">{{ topic.icon }}</span>
           <strong>{{ topic.name }}</strong>
           <span>{{ topic.description }}</span>
           <small>{{ topic.count }} questions</small>
@@ -48,7 +48,7 @@ onMounted(() => {
         <p class="coffee-eyebrow">Today’s debate</p>
         <h2>What trade-off is this missing?</h2>
         <article :style="{ '--coffee-accent': personaById.get(debates[debateIndex].persona)?.accent }">
-          <div class="coffee-persona-card__identity"><span aria-hidden="true">{{ personaById.get(debates[debateIndex].persona)?.icon }}</span><strong>{{ personaById.get(debates[debateIndex].persona)?.name }}</strong></div>
+          <div class="coffee-persona-card-identity"><span aria-hidden="true">{{ personaById.get(debates[debateIndex].persona)?.icon }}</span><strong>{{ personaById.get(debates[debateIndex].persona)?.name }}</strong></div>
           <blockquote>“{{ debates[debateIndex].text }}”</blockquote>
           <a :href="debates[debateIndex].faq.route">Join the conversation</a>
         </article>
@@ -56,14 +56,14 @@ onMounted(() => {
     </section>
 
     <section class="coffee-section">
-      <div class="coffee-section__heading"><div><p class="coffee-eyebrow">Fresh pot</p><h2>Recently added FAQs</h2></div><a href="/value/coffee-machine/search">Browse all</a></div>
+      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Fresh pot</p><h2>Recently added FAQs</h2></div><a href="/value/coffee-machine/search">Browse all</a></div>
       <div class="coffee-faq-grid">
         <a v-for="faq in recentFaqs" :key="faq.id" class="coffee-faq-card" :href="faq.route"><span>{{ data.topics.find((topic) => topic.id === faq.track)?.name }}</span><strong>{{ faq.question }}</strong></a>
       </div>
     </section>
 
     <section class="coffee-section" aria-labelledby="coffee-personas">
-      <div class="coffee-section__heading"><div><p class="coffee-eyebrow">Choose a chair</p><h2 id="coffee-personas">Browse by persona</h2></div><a href="/value/coffee-machine/personas">Meet everyone</a></div>
+      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Choose a chair</p><h2 id="coffee-personas">Browse by persona</h2></div><a href="/value/coffee-machine/personas">Meet everyone</a></div>
       <div class="coffee-persona-picker">
         <button
           v-for="persona in data.personas"

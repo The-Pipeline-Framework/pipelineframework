@@ -18,10 +18,10 @@ social:
     question: "What is a domain event?"
     options:
       - "Any JSON that escapes"
-      - "A Kafka record after"
-      - "Typed flow contract"
-      - "A meeting invitation for"
-    preferred: "Typed flow contract"
+      - "A Kafka record after lunch"
+      - "Typed fact: what happened"
+      - "A meeting invitation for Kafka"
+    preferred: "Typed fact: what happened"
 fortune:
   quote: "A domain event says what happened; a connector says who, if anyone, gets to hear about it."
 related:
@@ -53,7 +53,7 @@ The external message has a different job. A Kafka record needs headers, a schema
 
 This avoids treating technical events as business events. MessageReceived, RetryScheduled, or HTTPCallSucceeded may be useful telemetry or operational signals. They are not automatically domain facts. They should not leak into the core merely because the runtime observes them. Conversely, an important domain event should not be downgraded to a logging line because no external consumer exists yet. The business model owns its meaning; the pipeline and shell own how it moves and is observed.
 
-Publishing `PaymentDeclined` is a Command with consequences. The flow must preserve its identity and required metadata, and somebody must own a timeout or terminal publish failure. “We emitted an event” is optimistic narration if a retry can duplicate the Kafka record and nobody knows whether the consumer accepted the first one.
+Publishing `PaymentDeclined` has consequences. The flow must preserve its identity and required metadata, and somebody must own a timeout or terminal publish failure. “We emitted an event” is optimistic narration if a retry can duplicate the Kafka record and nobody knows whether the consumer accepted the first one.
 
 There is no requirement that every pipeline end with a domain event. Some flows return a query result, persist a state transition, or hand work to another boundary. There is also no requirement that every domain event be broadcast through a broker. A local event can be useful without becoming a distributed integration contract. TPF keeps those decisions explicit instead of treating an event name as a transport configuration shortcut.
 

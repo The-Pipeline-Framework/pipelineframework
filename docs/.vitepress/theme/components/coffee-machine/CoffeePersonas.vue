@@ -13,7 +13,7 @@ import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
       :style="{ '--coffee-accent': persona.accent }"
     >
       <header><span aria-hidden="true">{{ persona.icon }}</span><div><h2>{{ persona.name }}</h2><p>{{ persona.description }}</p></div></header>
-      <div class="coffee-persona-profile__body">
+      <div class="coffee-persona-profile-body">
         <div><h3>Biography</h3><p>{{ persona.biography }}</p><h3>Typical worldview</h3><p>{{ persona.worldview }}</p></div>
         <div><h3>Favorite misconceptions</h3><ul><li v-for="item in persona.favoriteMisconceptions" :key="`${item.faqId}-${item.text}`"><a :href="item.route">“{{ item.text }}”</a></li></ul></div>
       </div>

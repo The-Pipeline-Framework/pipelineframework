@@ -42,6 +42,9 @@ export function validatePrivatePoll(page) {
     }
     return normalized
   })
+  if (new Set(options).size !== options.length) {
+    fail(page, 'social.poll.options must not contain duplicates')
+  }
   const preferred = requireString(page, poll.preferred, 'social.poll.preferred')
   if (!options.includes(preferred)) {
     fail(page, 'social.poll.preferred must exactly match one option')
@@ -63,7 +66,12 @@ function normalizeFaq(page) {
   }
   const question = requireString(page, faq.question, 'faq.question')
   const added = requireString(page, faq.added, 'faq.added')
-  if (!ISO_DATE.test(added) || Number.isNaN(Date.parse(`${added}T00:00:00Z`))) {
+  const parsedAdded = Date.parse(`${added}T00:00:00Z`)
+  if (
+    !ISO_DATE.test(added)
+    || Number.isNaN(parsedAdded)
+    || new Date(parsedAdded).toISOString().slice(0, 10) !== added
+  ) {
     fail(page, `faq.added must be a valid ISO date: "${added}"`)
   }
 

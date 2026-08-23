@@ -18,9 +18,9 @@ social:
     question: "What makes I/O visible enough?"
     options:
       - "A TODO: retry later"
-      - "The word async in"
+      - "The word async in the method"
       - "Explicit typed boundary"
-      - "A dashboard discovered during"
+      - "A dashboard found mid-incident"
     preferred: "Explicit typed boundary"
 fortune:
   quote: "I/O is not clearer because it is injected; it is clearer because someone owns its consequences."

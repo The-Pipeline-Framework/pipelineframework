@@ -17,8 +17,8 @@ social:
   poll:
     question: "What makes a pipeline more than a method chain?"
     options:
-      - "Indentation, but with"
-      - "A fluent API wearing"
+      - "Indentation, but with branding"
+      - "A fluent API wearing a lanyard"
       - "Typed flow contract"
       - "More arrows per deployable"
     preferred: "Typed flow contract"

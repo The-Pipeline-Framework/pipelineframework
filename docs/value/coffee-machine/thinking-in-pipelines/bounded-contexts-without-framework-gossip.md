@@ -18,9 +18,9 @@ social:
     question: "What should cross a bounded-context boundary?"
     options:
       - "The entire internal object"
-      - "A shared base class,"
+      - "A shared base class, naturally"
       - "Explicit typed boundary"
-      - "A spreadsheet maintained by"
+      - "A spreadsheet curated by Dave"
     preferred: "Explicit typed boundary"
 fortune:
   quote: "A handoff is healthy when the receiver owns the contract, not the sender’s implementation."

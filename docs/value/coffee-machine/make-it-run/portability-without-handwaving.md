@@ -45,7 +45,7 @@ tags:
 
 `CalculatePrice` should not learn HTTP because production uses REST or Lambda because somebody wants functions. That is useful portability. Claiming REST, gRPC, LOCAL, containers, and functions behave identically is hand-waving with billing consequences. Each target needs a compiler path, generated adapter, lifecycle, and representative test that actually exists.
 
-The boundaries remain real. LOCAL, REST, and GRPC are transport modes with different invocation behavior. A function-style deployment is a platform or deployment pattern, not another transport mode. Latency, startup, concurrency, credentials, and operational limits still vary. TPF makes these choices explicit so the generated adapter and runtime contract can match the intended environment.
+The boundaries remain real. LOCAL, REST, and gRPC are transport modes with different invocation behavior. A function-style deployment is a platform or deployment pattern, not another transport mode. Latency, startup, concurrency, credentials, and operational limits still vary. TPF makes these choices explicit so the generated adapter and runtime contract can match the intended environment.
 
 This allows a team to begin locally, deploy a supported container runtime to Kubernetes, or select a function platform for a suitable entry point without rewriting the core. It does not justify a claim of parity where tests, bindings, or runtime support do not exist. Honest portability is specific about which semantic guarantees travel and which operational characteristics must be revalidated.
 

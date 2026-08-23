@@ -10,15 +10,17 @@ const statements = computed(() => frontmatter.value.coffeeMachine?.personas || [
 
 <template>
   <section v-if="statements.length" class="coffee-misconceptions" aria-labelledby="coffee-misconceptions-title">
-    <h2 id="coffee-misconceptions-title">Three coffee-machine misconceptions</h2>
-    <div class="coffee-misconceptions__grid">
+    <h2 id="coffee-misconceptions-title">
+      {{ statements.length }} coffee-machine misconception{{ statements.length === 1 ? '' : 's' }}
+    </h2>
+    <div class="coffee-misconceptions-grid">
       <article
         v-for="(statement, index) in statements"
         :key="`${statement.persona}-${index}`"
         class="coffee-persona-card"
         :style="{ '--coffee-accent': personaById.get(statement.persona)?.accent }"
       >
-        <div class="coffee-persona-card__identity">
+        <div class="coffee-persona-card-identity">
           <span aria-hidden="true">{{ personaById.get(statement.persona)?.icon }}</span>
           <strong>{{ personaById.get(statement.persona)?.name }}</strong>
         </div>

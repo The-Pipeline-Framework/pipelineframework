@@ -17,8 +17,8 @@ social:
   poll:
     question: "What makes an application service worth modeling as a pipeline?"
     options:
-      - "A method name containing"
-      - "Four injected clients and"
+      - "A method name containing Flow"
+      - "Four clients and a trench coat"
       - "Typed business flow"
       - "A new folder for each verb"
     preferred: "Typed business flow"

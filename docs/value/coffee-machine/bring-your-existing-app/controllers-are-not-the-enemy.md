@@ -18,7 +18,7 @@ social:
     question: "What should a controller own?"
     options:
       - "Every rule that arrives"
-      - "The whole distributed"
+      - "The whole distributed system"
       - "Typed business flow"
       - "Nothing; delete the web"
     preferred: "Typed business flow"

@@ -44,7 +44,7 @@ tags:
 
 ## The real explanation
 
-Use the cheapest honest test. A pricing rule needs direct Java. A bad mapper should fail contract compilation. A Stripe connector needs protocol-shaped tests. A durable Await or real Kafka acknowledgement may justify focused infrastructure. Booting PostgreSQL, Kafka, and half the company to test `isEligible()` is test panic with containers.
+Use the cheapest honest test. A pricing rule needs direct Java. An incompatible mapper type or shape should fail contract compilation; a mapper that compiles while putting `billingAddress` into `shippingAddress` needs a dedicated mapper test. A Stripe connector needs protocol-shaped tests. A durable Await or real Kafka acknowledgement may justify focused infrastructure. Booting PostgreSQL, Kafka, and half the company to test `isEligible()` is test panic with containers.
 
 This is not a pyramid argument by geometry. It is an argument by failure mode. Test the cheap deterministic behavior cheaply; test the risky boundary where it actually exists; avoid booting infrastructure for a rule that is just arithmetic. A small number of high-value end-to-end paths can then prove topology without becoming the only feedback mechanism.
 

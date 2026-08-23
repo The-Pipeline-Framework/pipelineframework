@@ -18,7 +18,7 @@ social:
     question: "What should happen to the monolith first?"
     options:
       - "Split every package"
-      - "Rename it legacy and"
+      - "Rename it legacy and panic"
       - "Explicit typed boundary"
       - "Add a service mesh"
     preferred: "Explicit typed boundary"

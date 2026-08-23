@@ -31,7 +31,7 @@ watch(faqId, randomizeQuote)
         <li v-for="faq in related" :key="faq.id"><a :href="faq.route">{{ faq.question }}</a></li>
       </ul>
     </section>
-    <section v-if="quote" class="coffee-faq-footer__quote">
+    <section v-if="quote" class="coffee-faq-footer-quote">
       <h2>Another thought over coffee</h2>
       <blockquote>“{{ quote.quote }}”</blockquote>
       <a :href="quote.route">Open the conversation</a>

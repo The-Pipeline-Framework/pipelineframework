@@ -20,7 +20,7 @@ social:
       - "An open session and optimism"
       - "Every table in the schema"
       - "Typed flow contract"
-      - "A proxy with a"
+      - "A proxy with a surprise query"
     preferred: "Typed flow contract"
 fortune:
   quote: "Lazy loading is not evil; it is simply a very expensive way to keep a boundary implicit."

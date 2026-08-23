@@ -17,10 +17,10 @@ social:
   poll:
     question: "Where should retry and transport policy live?"
     options:
-      - "In whichever service found"
+      - "In whichever service found it"
       - "In a 900-line Utils"
       - "Typed business flow"
-      - "In the sprint retrospective,"
+      - "In the sprint retrospective"
     preferred: "Typed business flow"
 fortune:
   quote: "A business decision should not have to learn the dialect of every system that carries it."

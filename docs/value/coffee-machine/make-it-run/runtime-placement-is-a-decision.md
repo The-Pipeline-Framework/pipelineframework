@@ -46,7 +46,7 @@ tags:
 
 If PDF rendering needs ten times the memory of order validation, or Fulfillment belongs to another team with its own lifecycle, a runtime boundary may earn its cost. If two steps merely sit in different packages, sending them over HTTP gives the package structure latency and a pager. Runtime placement is a production decision, not diagram feng shui.
 
-TPF treats transport and platform as orthogonal dimensions. GRPC, REST, and LOCAL are transport modes. Function-style and container-oriented deployments are platform or deployment choices. A flow may be local today, gain a remote boundary tomorrow, or use a function pattern for a particular entry point. The business semantics should remain coherent while the generated adapters and runtime mapping reflect the chosen placement.
+TPF treats transport and platform as orthogonal dimensions. gRPC, REST, and LOCAL are transport modes. Function-style and container-oriented deployments are platform or deployment choices. A flow may be local today, gain a remote boundary tomorrow, or use a function pattern for a particular entry point. The business semantics should remain coherent while the generated adapters and runtime mapping reflect the chosen placement.
 
 The right placement emerges from trade-offs. Co-locate work that needs low latency, shared state, or simple operation. Split work that has separate ownership, security, scaling, availability, or failure isolation needs. Place a high-volume connector where it can be operated without forcing unrelated business behavior to scale with it. Do not split merely because an internal step looks important on a diagram.
 

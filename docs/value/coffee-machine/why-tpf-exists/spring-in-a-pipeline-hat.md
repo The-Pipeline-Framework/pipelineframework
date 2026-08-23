@@ -17,10 +17,10 @@ social:
   poll:
     question: "What is TPF actually trying to own?"
     options:
-      - "Spring annotations, but in"
-      - "The office workflow for"
+      - "Spring annotations in YAML"
+      - "The office workflow for hats"
       - "Typed business flow"
-      - "A new reason to"
+      - "A new reason to add a starter"
     preferred: "Typed business flow"
 fortune:
   quote: "Spring assembles the house; TPF is interested in the load-bearing path through it."
