@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -97,6 +98,22 @@ class PipelineStepOrdererTest {
 
         List<Object> ordered = orderer.applyConfiguredOrder(
             List.of(second, first),
+            List.of(ConfiguredStep.class.getName(), OtherConfiguredStep.class.getName()));
+
+        assertEquals(List.of(first, second), ordered);
+    }
+
+    @Test
+    void ignoresNullStepEntriesBeforeResolvingRuntimeClassNames() {
+        ConfiguredStep first = new ConfiguredStep();
+        OtherConfiguredStep second = new OtherConfiguredStep();
+        List<Object> steps = new ArrayList<>();
+        steps.add(second);
+        steps.add(null);
+        steps.add(first);
+
+        List<Object> ordered = orderer.applyConfiguredOrder(
+            steps,
             List.of(ConfiguredStep.class.getName(), OtherConfiguredStep.class.getName()));
 
         assertEquals(List.of(first, second), ordered);

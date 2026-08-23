@@ -30,7 +30,9 @@ class ModelContextRoleEnricher {
             return handleRuntimeMappedStepModule(baseModels);
         }
         boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
-        if (!ctx.isPluginHost() && !hasOrchestrator && !colocatedPlugins) {
+        boolean hasConfiguredColocatedAspect = colocatedPlugins
+            && ctx.getAspectModels().stream().anyMatch(this::hasPluginImplementation);
+        if (!ctx.isPluginHost() && !hasOrchestrator && !hasConfiguredColocatedAspect) {
             return List.of();
         }
 

@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +20,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.pipelineframework.config.pipeline.*;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -115,25 +119,49 @@ public class PipelineOrderMetadataGenerator {
         if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)) {
             return List.of();
         }
-        List<String> expanded = new ArrayList<>();
-        int functionalIndex = 0;
+        Map<String, Deque<GeneratedStepGroup>> groupsByFunctionalStep = new LinkedHashMap<>();
+        List<String> pendingBefore = new ArrayList<>();
+        GeneratedStepGroup current = null;
         for (PipelineStepModel model : clientModels) {
             if (model.sideEffect()) {
-                expanded.add(ClientStepClassNames.className(model, ctx.getTransportMode()));
-            } else {
-                if (functionalIndex >= orderedFunctionalSteps.size()) {
-                    throw new IllegalStateException(
-                        "Generated aspect order contains more functional models than the authored pipeline order");
+                String sideEffect = ClientStepClassNames.className(model, ctx.getTransportMode());
+                if (model.aspectPosition().filter(position -> position == AspectPosition.BEFORE_STEP).isPresent()
+                    || current == null) {
+                    pendingBefore.add(sideEffect);
+                } else {
+                    current.after().add(sideEffect);
                 }
-                expanded.add(orderedFunctionalSteps.get(functionalIndex++));
+            } else {
+                String functionalStep = ClientStepClassNames.className(model, ctx.getTransportMode());
+                current = new GeneratedStepGroup(List.copyOf(pendingBefore), functionalStep, new ArrayList<>());
+                pendingBefore.clear();
+                groupsByFunctionalStep.computeIfAbsent(functionalStep, ignored -> new ArrayDeque<>()).add(current);
             }
         }
-        if (functionalIndex != orderedFunctionalSteps.size()) {
+        if (!pendingBefore.isEmpty()) {
+            throw new IllegalStateException("Generated aspect order ends with before-step side effects without a functional step");
+        }
+
+        List<String> expanded = new ArrayList<>();
+        for (String functionalStep : orderedFunctionalSteps) {
+            Deque<GeneratedStepGroup> groups = groupsByFunctionalStep.get(functionalStep);
+            if (groups == null || groups.isEmpty()) {
+                throw new IllegalStateException(
+                    "Generated aspect order has no functional model for authored step " + functionalStep);
+            }
+            GeneratedStepGroup group = groups.removeFirst();
+            expanded.addAll(group.before());
+            expanded.add(group.functional());
+            expanded.addAll(group.after());
+        }
+        if (groupsByFunctionalStep.values().stream().anyMatch(groups -> !groups.isEmpty())) {
             throw new IllegalStateException(
-                "Generated aspect order contains " + functionalIndex + " functional models but the authored order contains "
-                    + orderedFunctionalSteps.size());
+                "Generated aspect order contains more functional models than the authored pipeline order");
         }
         return List.copyOf(new LinkedHashSet<>(expanded));
+    }
+
+    private record GeneratedStepGroup(List<String> before, String functional, List<String> after) {
     }
 
     /**
