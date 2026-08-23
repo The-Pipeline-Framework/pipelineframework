@@ -138,6 +138,96 @@ class PipelineOrderMetadataGeneratorTest {
     }
 
     @Test
+    void localAuthoredFacadeKeepsItsGeneratedBeforeStepAspect() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-local-authored-facade");
+        Path moduleDir = tempDir.resolve("module-local-authored-facade");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            steps:
+              - name: Prepare
+                service: com.example.PrepareService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel before = localModel(
+            "ObserveInput", "PersistenceInputSideEffectService", true, AspectPosition.BEFORE_STEP);
+        PipelineStepModel functional = localModelBuilder("Prepare", "PrepareService", false)
+            .serviceClassName(ClassName.get("com.example", "PreparePipelineFacade"))
+            .build();
+        ctx.setStepModels(List.of(before, functional));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+                "com.example.pipeline.PersistenceInputSideEffectLocalClientStep",
+                "com.example.PreparePipelineFacade"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
+    void reorderedLocalAuthoredFacadesUseRetainedYamlIdentity() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-reordered-local-authored-facades");
+        Path moduleDir = tempDir.resolve("module-reordered-local-authored-facades");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            steps:
+              - name: Second
+                service: com.example.SecondService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+              - name: First
+                service: com.example.FirstService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel first = localModelBuilder("First", "FirstService", false)
+            .serviceClassName(ClassName.get("com.example", "OpaqueAlphaPipelineFacade"))
+            .build();
+        PipelineStepModel second = localModelBuilder("Second", "SecondService", false)
+            .serviceClassName(ClassName.get("com.example", "OpaqueBetaPipelineFacade"))
+            .build();
+        ctx.setStepModels(List.of(first, second));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+                "com.example.OpaqueBetaPipelineFacade",
+                "com.example.OpaqueAlphaPipelineFacade"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
     void reorderedFunctionalStepsRetainTheirOwnBeforeAndAfterSideEffects() throws IOException {
         Path classOutput = tempDir.resolve("class-output-reordered-aspects");
         Path moduleDir = tempDir.resolve("module-reordered-aspects");
