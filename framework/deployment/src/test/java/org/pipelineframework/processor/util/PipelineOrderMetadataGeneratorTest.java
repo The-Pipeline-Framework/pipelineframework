@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -92,6 +93,129 @@ class PipelineOrderMetadataGeneratorTest {
             "com.example.pipeline.ProcessLocalClientStep",
             "com.example.pipeline.PersistenceValueSideEffectLocalClientStep"),
             order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
+    void localOrderUsesGeneratedBeforeAndAfterAspectClientClasses() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-local-aspects");
+        Path moduleDir = tempDir.resolve("module-local-aspects");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            steps:
+              - name: Prepare
+                service: com.example.PrepareService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(true);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel functional = localModel("Prepare", "PrepareService", false);
+        PipelineStepModel before = localModel("ObserveInput", "PersistenceInputSideEffectService", true);
+        PipelineStepModel after = localModel("ObserveOutput", "PersistenceOutputSideEffectService", true);
+        ctx.setStepModels(List.of(before, functional, after));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+                "com.example.pipeline.PersistenceInputSideEffectLocalClientStep",
+                "com.example.pipeline.PrepareLocalClientStep",
+                "com.example.pipeline.PersistenceOutputSideEffectLocalClientStep"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
+    void reorderedFunctionalStepsRetainTheirOwnBeforeAndAfterSideEffects() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-reordered-aspects");
+        Path moduleDir = tempDir.resolve("module-reordered-aspects");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            steps:
+              - name: Second
+                service: com.example.SecondService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+              - name: First
+                service: com.example.FirstService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(true);
+        ctx.setModuleDir(moduleDir);
+        ctx.setStepModels(List.of(
+            localModel("ObserveFirstInput", "PersistenceFirstInputSideEffectService", true, AspectPosition.BEFORE_STEP),
+            localModel("First", "FirstService", false),
+            localModel("ObserveFirstOutput", "PersistenceFirstOutputSideEffectService", true, AspectPosition.AFTER_STEP),
+            localModel("ObserveSecondInput", "PersistenceSecondInputSideEffectService", true, AspectPosition.BEFORE_STEP),
+            localModel("Second", "SecondService", false),
+            localModel("ObserveSecondOutput", "PersistenceSecondOutputSideEffectService", true, AspectPosition.AFTER_STEP)));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+                "com.example.pipeline.PersistenceSecondInputSideEffectLocalClientStep",
+                "com.example.pipeline.SecondLocalClientStep",
+                "com.example.pipeline.PersistenceSecondOutputSideEffectLocalClientStep",
+                "com.example.pipeline.PersistenceFirstInputSideEffectLocalClientStep",
+                "com.example.pipeline.FirstLocalClientStep",
+                "com.example.pipeline.PersistenceFirstOutputSideEffectLocalClientStep"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    private static PipelineStepModel localModel(String serviceName, String generatedName, boolean sideEffect) {
+        return localModelBuilder(serviceName, generatedName, sideEffect).build();
+    }
+
+    private static PipelineStepModel localModel(
+            String serviceName, String generatedName, boolean sideEffect, AspectPosition aspectPosition) {
+        return localModelBuilder(serviceName, generatedName, sideEffect)
+            .aspectPosition(aspectPosition)
+            .build();
+    }
+
+    private static PipelineStepModel.Builder localModelBuilder(
+            String serviceName, String generatedName, boolean sideEffect) {
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(generatedName)
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("com.example", serviceName))
+            .inputMapping(new TypeMapping(
+                ClassName.get("com.example", "Input"), ClassName.get("com.example.proto", "Input"), false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("com.example", "Output"), ClassName.get("com.example.proto", "Output"), false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(sideEffect);
     }
 
     @Test
