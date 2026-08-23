@@ -79,7 +79,11 @@ public class PipelineOrderMetadataGenerator {
             return;
         }
 
-        List<String> ordered = orderByYamlSteps(functionalSteps, config.steps());
+        Map<String, String> yamlIdentityByExecutionStep = ctx.isOrchestratorGenerated()
+            ? Map.of()
+            : resolveLocalYamlIdentities(ctx);
+        List<String> ordered = orderByYamlSteps(
+            functionalSteps, config.steps(), yamlIdentityByExecutionStep);
         if (ordered.isEmpty()) {
             return;
         }
@@ -309,6 +313,17 @@ public class PipelineOrderMetadataGenerator {
         return new ArrayList<>(ordered);
     }
 
+    private Map<String, String> resolveLocalYamlIdentities(PipelineCompilationContext ctx) {
+        Map<String, String> identities = new LinkedHashMap<>();
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            if (model.sideEffect() || model.serviceClassName() == null) {
+                continue;
+            }
+            identities.putIfAbsent(localExecutionStepName(model), model.serviceName());
+        }
+        return identities;
+    }
+
     private String localExecutionStepName(PipelineStepModel model) {
         if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
             return specialLocalClientStepName(model, "AwaitClientStep");
@@ -418,7 +433,10 @@ public class PipelineOrderMetadataGenerator {
         };
     }
 
-    private List<String> orderByYamlSteps(List<String> availableSteps, List<PipelineYamlStep> yamlSteps) {
+    private List<String> orderByYamlSteps(
+            List<String> availableSteps,
+            List<PipelineYamlStep> yamlSteps,
+            Map<String, String> yamlIdentityByExecutionStep) {
         List<String> remaining = new ArrayList<>(availableSteps);
         List<String> ordered = new ArrayList<>();
         for (PipelineYamlStep step : yamlSteps) {
@@ -429,17 +447,33 @@ public class PipelineOrderMetadataGenerator {
             if (token.isBlank()) {
                 continue;
             }
-            String match = selectBestMatch(remaining, token);
-            if (match != null) {
-                ordered.add(match);
-                remaining.remove(match);
+            Optional<String> match = selectIdentityMatch(remaining, token, yamlIdentityByExecutionStep);
+            if (match.isEmpty()) {
+                match = selectBestMatch(remaining, token);
+            }
+            if (match.isPresent()) {
+                ordered.add(match.get());
+                remaining.remove(match.get());
             }
         }
         ordered.addAll(remaining);
         return ordered;
     }
 
-    private String selectBestMatch(List<String> candidates, String token) {
+    private Optional<String> selectIdentityMatch(
+            List<String> candidates,
+            String token,
+            Map<String, String> yamlIdentityByExecutionStep) {
+        for (String candidate : candidates) {
+            String yamlIdentity = yamlIdentityByExecutionStep.get(candidate);
+            if (yamlIdentity != null && toClassToken(yamlIdentity).equals(token)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> selectBestMatch(List<String> candidates, String token) {
         String best = null;
         int bestLength = Integer.MAX_VALUE;
         for (String candidate : candidates) {
@@ -452,7 +486,7 @@ public class PipelineOrderMetadataGenerator {
                 bestLength = normalized.length();
             }
         }
-        return best;
+        return Optional.ofNullable(best);
     }
 
     /**
