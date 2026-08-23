@@ -59,11 +59,20 @@ class CommandPolicyValidatorTest {
     }
 
     @Test
-    void rejectsDeferredOrUnsupportedGuaranteesWithActionableDiagnostics() {
+    void acceptsDeclaredRetryRedriveAndRejectsUnsupportedGuaranteesWithActionableDiagnostics() {
         IllegalArgumentException retry = assertThrows(IllegalArgumentException.class,
             () -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
                 true, false, false, Optional.empty(), Optional.empty(), Optional.empty(), false)));
-        assertEquals("command policy for provider acme.search operation write.document requires retry/redrive, but stable-ID redispatch is deferred to #545", retry.getMessage());
+        assertEquals("command policy for provider acme.search operation write.document requires retry/redrive support",
+            retry.getMessage());
+
+        ConnectorOperationDescriptor retryCapable = new ConnectorOperationDescriptor(
+            "write.retryable", ConnectorOperationKind.COMMAND, 1, Optional.empty(),
+            Optional.of(new CommandCapabilities(
+                true, true, true, CommandExecutionPosture.AUTOMATED,
+                CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true, Set.of("ticket"))));
+        assertDoesNotThrow(() -> CommandPolicyValidator.validate(provider, retryCapable, new CommandPolicy(
+            true, true, false, Optional.empty(), Optional.empty(), Optional.empty(), false)));
 
         IllegalArgumentException blocking = assertThrows(IllegalArgumentException.class,
             () -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(

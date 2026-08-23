@@ -135,8 +135,16 @@ non-identifier value shapes, but the provider remains responsible for classifyin
 kind as safe for durable storage.
 
 An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
-`FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
-blocking execution or bounded framework-managed concurrency.
+Ordinary admission never redispatches a `FAILED_RETRYABLE` record. A caller may deliberately use
+`CommandStepSupport.retry(...)`; a retry-capable effect store then atomically appends and claims one
+new attempt under the same logical `CommandId`. `DLQ`, `AMBIGUOUS`, and `USER_ACTION_REQUIRED`
+remain barriers. Native commands do not run with framework-managed blocking execution or bounded
+framework-managed concurrency.
+
+The stable `CommandId` remains the provider idempotency identity across attempts. Legacy connectors
+receive the individual `attemptId` on `CommandRequest`; native operations receive both values through
+`CommandInvocation.dispatchIdentity()`. Attempt IDs are diagnostic dispatch identities, not new
+logical effects and not provider idempotency keys.
 
 ## Native Provider Queries
 
