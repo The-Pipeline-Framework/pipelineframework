@@ -29,6 +29,14 @@ tpf-mcp-bridge lives in a separate repo now. It holds the MCP bridge and the tem
 
 For planning, PR slicing, architecture tradeoffs, roadmap shaping, or docs IA strategy, read `AGENTS.planning.md`. For ordinary implementation work, use this file plus the smallest relevant local context.
 
+Before making or reviewing an architectural change, read `docs/decisions/`. It is the
+Repowise-compatible catalogue of durable TPF semantic ownership and distinctions. Keep
+it current in the same change whenever a PR adds a semantic capability, moves
+responsibility between abstractions, changes an authority or identity, or invalidates a
+recorded decision. Use one accepted/draft/deprecated ADR per coherent choice; add a
+successor rather than erasing superseded rationale. Exact syntax and transient support
+limits remain in current source, tests, and feature documentation.
+
 ## Canonical Terms
 
 Load `AGENTS.glossary.md` when terminology, docs wording, transport/platform naming, architecture explanations, or public-facing copy matters.
@@ -140,6 +148,7 @@ Unit tests use `*Test` with Surefire. Integration tests use `*IT` with Failsafe.
 
 Canonical docs live under top-level route directories:
 
+- Architectural decisions and rationale: `docs/decisions/`
 - Architecture and concepts: `docs/design/`
 - Implementation and usage: `docs/develop/`
 - Runtime topology and deployment mechanics: `docs/deploy/`
@@ -159,6 +168,27 @@ Use Repowise first for orientation and discovery before broad repo search, but t
 Do not refresh or rebuild Repowise automatically unless explicitly requested.
 Repowise may point at a canonical indexed checkout, not the active worktree.
 Verify conclusions against source before editing.
+
+### Change The Semantic Owner Boldly
+
+Do not treat dependency count, churn, or centrality as reasons to avoid the abstraction
+that semantically owns a concept. TPF is actively evolving; high-impact types and runtime
+seams are often the correct place for a cross-cutting change.
+
+Impact analysis identifies compatibility obligations and required tests. It must not
+force a sibling helper, facade, codec, adapter, or parallel execution path merely to
+minimise touched files. Before creating one, ask:
+
+1. Which existing abstraction semantically owns the concept?
+2. Would adding the capability there make the model more coherent?
+3. Is the sidecar only avoiding migration or test work?
+4. Will it leave two representations or execution paths for one concept?
+
+Prefer changing the owning abstraction cleanly, including a breaking change when
+appropriate, over preserving accidental structure through additive compatibility
+layers. Additive change is not automatically safer. Prefer simplification, semantic
+consolidation, migration, and deletion; preserve compatibility when an actual
+compatibility promise exists.
 
 For planning, PR slicing, roadmap, or architecture tradeoff work, load `AGENTS.planning.md`. For implementation work, read only the source files needed for the current decision and run the smallest validation command that proves the claim.
 

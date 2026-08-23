@@ -42,6 +42,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/design/'},
+            {text: 'Architectural Decisions', link: '/decisions/'},
             {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
             {text: 'State Model', link: '/design/state-model'},
             {text: 'Application Structure', link: '/design/application-structure'},
