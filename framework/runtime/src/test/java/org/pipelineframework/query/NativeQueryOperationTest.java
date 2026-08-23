@@ -32,6 +32,7 @@ import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.connector.TestConnectorBindingRegistries;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import org.pipelineframework.mapper.Mapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -79,6 +80,41 @@ class NativeQueryOperationTest {
 
         assertEquals(first, replayed);
         assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
+    void mapsExternalRepresentationBeforeCanonicalCaptureAndReplay() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "mapped-execution", 3));
+        operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "MEDIUM"));
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
+        AtomicInteger mappings = new AtomicInteger();
+        Mapper<CanonicalSnapshot, Snapshot> mapper = new Mapper<>() {
+            @Override
+            public CanonicalSnapshot fromExternal(Snapshot external) {
+                mappings.incrementAndGet();
+                return new CanonicalSnapshot(external.customerId(), external.risk());
+            }
+
+            @Override
+            public Snapshot toExternal(CanonicalSnapshot domain) {
+                return new Snapshot(domain.customerId(), domain.risk());
+            }
+        };
+
+        CanonicalSnapshot first = support.queryOneToOne(
+                descriptor, new Lookup("customer-1"), CanonicalSnapshot.class, Snapshot.class, mapper)
+            .await().atMost(Duration.ofSeconds(2));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        CanonicalSnapshot replayed = replayWithoutProvider.queryOneToOne(
+                descriptor, new Lookup("customer-1"), CanonicalSnapshot.class, Snapshot.class, mapper)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(first, replayed);
+        assertEquals(new CanonicalSnapshot("customer-1", "MEDIUM"), replayed);
+        assertEquals(1, mappings.get());
+        assertEquals(1, operation.invocations.get());
+        assertEquals(Snapshot.class, operation.outputType);
     }
 
     @Test
@@ -286,6 +322,9 @@ class NativeQueryOperationTest {
     }
 
     public record Snapshot(String customerId, String risk) {
+    }
+
+    public record CanonicalSnapshot(String customerId, String risk) {
     }
 
     public static final class FakeProvider implements ConnectorProvider<Void> {
