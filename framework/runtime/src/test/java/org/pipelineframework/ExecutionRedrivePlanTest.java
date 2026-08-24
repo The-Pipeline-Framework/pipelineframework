@@ -123,6 +123,6 @@ class ExecutionRedrivePlanTest {
         "",
         ExecutionRedriveIntent.REPLAY,
         4,
-        "archive:invoice-1");
+        java.util.Optional.of("archive:invoice-1"));
   }
 }

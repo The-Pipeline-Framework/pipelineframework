@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
@@ -43,15 +44,15 @@ class ClaimedSegmentCommandRetryTest {
             "",
             ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
             5,
-            "archive:confirmation-7");
+            Optional.of("archive:confirmation-7"));
 
         TransitionCommandEnvelope envelope = ClaimedSegment.from(record)
             .transitionCommand("input", new JsonTransitionPayloadCodec());
 
         assertEquals(2, envelope.currentStepIndex());
         assertEquals(5, envelope.redriveStepIndex());
-        assertEquals("archive:confirmation-7", envelope.redriveCommandId());
-        assertEquals("archive:confirmation-7",
+        assertEquals(Optional.of("archive:confirmation-7"), envelope.redriveCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"),
             envelope.toCommand(new JsonTransitionPayloadCodec()).redriveCommandId());
     }
 }

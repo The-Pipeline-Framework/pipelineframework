@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.command.CommandRetryTestAccess;
 
@@ -37,7 +38,7 @@ class TransitionFailureEnvelopeTest {
         (TransitionWorkerFailureException) envelope.toException();
 
     assertEquals(3, envelope.failedStepIndex());
-    assertEquals("archive:confirmation-7", envelope.failedCommandId());
-    assertEquals("archive:confirmation-7", decoded.failedCommandId());
+    assertEquals(Optional.of("archive:confirmation-7"), envelope.failedCommandId());
+    assertEquals(Optional.of("archive:confirmation-7"), decoded.failedCommandId());
   }
 }

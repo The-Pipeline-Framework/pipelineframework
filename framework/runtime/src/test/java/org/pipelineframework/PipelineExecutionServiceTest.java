@@ -332,7 +332,7 @@ class PipelineExecutionServiceTest {
             "input",
             ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
             0,
-            "archive:confirmation-7");
+            Optional.of("archive:confirmation-7"));
         var payload = codec.encode("input");
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             worker,

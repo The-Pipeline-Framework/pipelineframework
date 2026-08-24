@@ -328,14 +328,14 @@ class QueueAsyncFailureMatrixTest {
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-command", 5L, 0);
         when(executionStateStore.markTerminalFailure(
             anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(),
-            anyInt(), anyString(), anyLong()))
+            anyInt(), any(), anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(record)));
         when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
         RuntimeException failure = new TransitionFailureEnvelope(
             IllegalStateException.class.getName(),
             "archive failed",
             6,
-            "archive:confirmation-7").toException();
+            Optional.of("archive:confirmation-7")).toException();
 
         failureHandler.handleExecutionFailure(
             record,
@@ -354,7 +354,7 @@ class QueueAsyncFailureMatrixTest {
             eq("TransitionWorkerFailureException"),
             anyString(),
             eq(6),
-            eq("archive:confirmation-7"),
+            eq(Optional.of("archive:confirmation-7")),
             anyLong());
     }
 

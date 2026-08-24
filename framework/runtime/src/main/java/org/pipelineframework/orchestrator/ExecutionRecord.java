@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import java.util.Optional;
 /**
  * Durable execution state record used by async orchestration.
  */
@@ -33,16 +34,17 @@ public record ExecutionRecord<I, R>(
     String circuitIdentity,
     ExecutionRedriveIntent redriveIntent,
     int failedStepIndex,
-    String failedCommandId
+    Optional<String> failedCommandId
 ) {
     public ExecutionRecord {
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        failedCommandId = Optional.ofNullable(failedCommandId).orElseGet(Optional::empty);
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
             if (failedStepIndex < 0) {
                 throw new IllegalArgumentException(
                     "deliberate Command retry requires a retained failed root step");
             }
-            if (failedCommandId == null || failedCommandId.isBlank()) {
+            if (failedCommandId.filter(value -> !value.isBlank()).isEmpty()) {
                 throw new IllegalArgumentException(
                     "deliberate Command retry requires the exact failed logical Command identity");
             }
@@ -85,7 +87,7 @@ public record ExecutionRecord<I, R>(
             leaseExpiresEpochMs, nextDueEpochMs, lastTransitionKey, inputPayload, awaitUnitId,
             resultPayload, errorCode, errorMessage, createdAtEpochMs, updatedAtEpochMs, ttlEpochS,
             firstCircuitDeferredAtEpochMs, circuitDeferralCount, circuitIdentity, redriveIntent,
-            failedStepIndex, null);
+            failedStepIndex, Optional.empty());
     }
 
     /** Compatibility constructor for records persisted before explicit redrive intent existed. */
@@ -121,7 +123,7 @@ public record ExecutionRecord<I, R>(
             status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
             lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
             createdAtEpochMs, updatedAtEpochMs, ttlEpochS, firstCircuitDeferredAtEpochMs,
-            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1, null);
+            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
     }
 
     /** Compatibility constructor for records persisted before circuit deferral metadata existed. */

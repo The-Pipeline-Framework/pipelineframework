@@ -59,7 +59,7 @@ class ExecutionFailureHandler {
     FailureClassification classification = classifyFailure(failure);
     Throwable classifiedFailure = classification.classifiedThrowable();
     int failedStepIndex = failedStepIndex(failure);
-    String failedCommandId = failedCommandId(failure);
+    Optional<String> failedCommandId = failedCommandId(failure);
     boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
 
@@ -262,14 +262,13 @@ class ExecutionFailureHandler {
         .orElse(-1);
   }
 
-  private static String failedCommandId(Throwable failure) {
+  private static Optional<String> failedCommandId(Throwable failure) {
     if (failure == null) {
-      return null;
+      return Optional.empty();
     }
     return findThrowable(failure, TransitionWorkerFailureException.class)
-        .map(TransitionWorkerFailureException::failedCommandId)
-        .filter(value -> value != null && !value.isBlank())
-        .orElse(null);
+        .flatMap(TransitionWorkerFailureException::failedCommandId)
+        .filter(value -> !value.isBlank());
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {

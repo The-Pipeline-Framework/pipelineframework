@@ -282,7 +282,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     ) {
         return markTerminalFailure(
             tenantId, executionId, expectedVersion, finalStatus, transitionKey,
-            errorCode, errorMessage, -1, null, nowEpochMs);
+            errorCode, errorMessage, -1, Optional.empty(), nowEpochMs);
     }
 
     @Override
@@ -299,7 +299,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     ) {
         return markTerminalFailure(
             tenantId, executionId, expectedVersion, finalStatus, transitionKey,
-            errorCode, errorMessage, failedStepIndex, null, nowEpochMs);
+            errorCode, errorMessage, failedStepIndex, Optional.empty(), nowEpochMs);
     }
 
     @Override
@@ -312,7 +312,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         int failedStepIndex,
-        String failedCommandId,
+        Optional<String> failedCommandId,
         long nowEpochMs
     ) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
@@ -1104,7 +1104,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         int failedStepIndex,
-        String failedCommandId,
+        Optional<String> failedCommandId,
         long nowEpochMs
     ) {
         Map<String, String> names = Map.ofEntries(
@@ -1134,9 +1134,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry(":now", avN(nowEpochMs)),
             Map.entry(":one", avN(1)),
             Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()))));
-        if (failedCommandId != null && !failedCommandId.isBlank()) {
-            values.put(":failedCommand", avS(failedCommandId));
-        }
+        failedCommandId.filter(value -> !value.isBlank())
+            .ifPresent(value -> values.put(":failedCommand", avS(value)));
 
         UpdateItemRequest request = UpdateItemRequest.builder()
             .tableName(executionTable())
@@ -1408,7 +1407,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(CIRCUIT_DEFERRAL_COUNT, avN(record.circuitDeferralCount()));
         item.put(REDRIVE_INTENT, avS(record.redriveIntent().name()));
         item.put(FAILED_STEP_INDEX, avN(record.failedStepIndex()));
-        putIfPresent(item, FAILED_COMMAND_ID, record.failedCommandId());
+        record.failedCommandId().ifPresent(value -> putIfPresent(item, FAILED_COMMAND_ID, value));
         putIfPresent(item, LEASE_OWNER, record.leaseOwner());
         putIfPresent(item, LAST_TRANSITION_KEY, record.lastTransitionKey());
         putInputPayload(item, record, inputCanonicalTypeId);
@@ -1709,7 +1708,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         int failedStepIndex = item.containsKey(FAILED_STEP_INDEX)
             ? (int) readLong(item, FAILED_STEP_INDEX)
             : -1;
-        String failedCommandId = readString(item, FAILED_COMMAND_ID);
+        Optional<String> failedCommandId = Optional.ofNullable(readString(item, FAILED_COMMAND_ID))
+            .filter(value -> !value.isBlank());
         ExecutionRecord<Object, Object> stored = new ExecutionRecord<>(
             tenantId,
             executionId,

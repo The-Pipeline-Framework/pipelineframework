@@ -264,6 +264,6 @@ class QueueAsyncRedriveFlowTest {
         "",
         ExecutionRedriveIntent.REPLAY,
         4,
-        "archive:invoice-1");
+        Optional.of("archive:invoice-1"));
   }
 }

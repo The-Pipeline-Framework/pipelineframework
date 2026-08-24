@@ -499,7 +499,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs) {
         return markTerminalFailure(
             tenantId, executionId, expectedVersion, finalStatus, transitionKey,
-            errorCode, errorMessage, -1, null, nowEpochMs);
+            errorCode, errorMessage, -1, Optional.empty(), nowEpochMs);
     }
 
     @Override
@@ -515,7 +515,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs) {
         return markTerminalFailure(
             tenantId, executionId, expectedVersion, finalStatus, transitionKey,
-            errorCode, errorMessage, failedStepIndex, null, nowEpochMs);
+            errorCode, errorMessage, failedStepIndex, Optional.empty(), nowEpochMs);
     }
 
     @Override
@@ -528,7 +528,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         int failedStepIndex,
-        String failedCommandId,
+        Optional<String> failedCommandId,
         long nowEpochMs) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
             return Uni.createFrom().item(Optional.empty());

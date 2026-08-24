@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Portable command sent across the transition-worker seam.
@@ -23,7 +24,7 @@ import java.util.Objects;
  * @param payload encoded input payload
  * @param redriveIntent explicit terminal-redrive intent
  * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
- * @param redriveCommandId exact logical Command effect targeted by deliberate retry, or {@code null}
+ * @param redriveCommandId exact logical Command effect targeted by deliberate retry
  */
 public record TransitionCommandEnvelope(
     String tenantId,
@@ -43,7 +44,7 @@ public record TransitionCommandEnvelope(
     String payload,
     ExecutionRedriveIntent redriveIntent,
     int redriveStepIndex,
-    String redriveCommandId
+    Optional<String> redriveCommandId
 ) {
     public TransitionCommandEnvelope(
         String tenantId,
@@ -64,7 +65,7 @@ public record TransitionCommandEnvelope(
     ) {
         this(tenantId, executionId, pipelineId, contractVersion, releaseVersion, currentStepIndex,
             stopBeforeStepIndex, attempt, resultShape, executionVersion, transitionKey, traceId,
-            payloadTypeId, payloadEncoding, payload, ExecutionRedriveIntent.REPLAY, -1, null);
+            payloadTypeId, payloadEncoding, payload, ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
     }
 
     public TransitionCommandEnvelope(
@@ -100,7 +101,7 @@ public record TransitionCommandEnvelope(
             payload,
             ExecutionRedriveIntent.REPLAY,
             -1,
-            null);
+            Optional.empty());
     }
 
     public TransitionCommandEnvelope {
@@ -134,18 +135,19 @@ public record TransitionCommandEnvelope(
         Objects.requireNonNull(payloadEncoding, "payloadEncoding");
         Objects.requireNonNull(payload, "payload");
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        redriveCommandId = Optional.ofNullable(redriveCommandId).orElseGet(Optional::empty);
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
             throw new IllegalArgumentException(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
         }
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
-            && (redriveCommandId == null || redriveCommandId.isBlank())) {
+            && redriveCommandId.filter(value -> !value.isBlank()).isEmpty()) {
             throw new IllegalArgumentException(
                 "redriveCommandId must identify the exact logical effect for deliberate Command retry");
         }
         if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
             redriveStepIndex = -1;
-            redriveCommandId = null;
+            redriveCommandId = Optional.empty();
         }
     }
 

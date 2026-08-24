@@ -799,14 +799,14 @@ class DynamoExecutionStateStoreTest {
                 "FATAL",
                 "Fatal error",
                 13,
-                "archive:confirmation-7",
+                Optional.of("archive:confirmation-7"),
                 now)
             .await().indefinitely();
 
         assertTrue(result.isPresent());
         assertEquals(ExecutionStatus.FAILED, result.get().status());
         assertEquals(13, result.get().failedStepIndex());
-        assertEquals("archive:confirmation-7", result.get().failedCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"), result.get().failedCommandId());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             request.updateExpression().contains("#failedStep = :failedStep")
                 && request.updateExpression().contains("#failedCommand = :failedCommand")
@@ -905,7 +905,7 @@ class DynamoExecutionStateStoreTest {
 
         assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, result.redriveIntent());
         assertEquals(4, result.failedStepIndex());
-        assertEquals("archive:confirmation-7", result.failedCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"), result.failedCommandId());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             request.updateExpression().contains("#redriveIntent = :redriveIntent")
                 && request.expressionAttributeValues().get(":redriveIntent").s()

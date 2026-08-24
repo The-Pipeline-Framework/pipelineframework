@@ -91,7 +91,7 @@ class ExecutionStateStoreTest {
                 "Error",
                 "msg",
                 4,
-                "archive:confirmation-7",
+                Optional.of("archive:confirmation-7"),
                 System.currentTimeMillis())
             .await().indefinitely());
     }

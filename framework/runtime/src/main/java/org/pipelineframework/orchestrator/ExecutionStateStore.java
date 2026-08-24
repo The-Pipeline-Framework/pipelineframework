@@ -300,9 +300,9 @@ public interface ExecutionStateStore {
         String errorCode,
         String errorMessage,
         int failedStepIndex,
-        String failedCommandId,
+        Optional<String> failedCommandId,
         long nowEpochMs) {
-        if (failedCommandId != null && !failedCommandId.isBlank()) {
+        if (failedCommandId.flatMap(value -> value.isBlank() ? Optional.empty() : Optional.of(value)).isPresent()) {
             return Uni.createFrom().failure(new UnsupportedOperationException(
                 "Execution state store does not preserve exact failed Command identity"));
         }

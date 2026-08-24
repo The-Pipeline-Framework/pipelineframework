@@ -228,11 +228,11 @@ class InMemoryExecutionStateStoreTest {
                 "COMMAND_FAILED_RETRYABLE",
                 "retryable command failure",
                 4,
-                "archive:confirmation-7",
+                Optional.of("archive:confirmation-7"),
                 now + 1)
             .await().indefinitely().orElseThrow();
         assertEquals(4, failed.failedStepIndex());
-        assertEquals("archive:confirmation-7", failed.failedCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"), failed.failedCommandId());
 
         ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
                 "tenant-a",
@@ -245,7 +245,7 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely().orElseThrow();
         assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, redriven.redriveIntent());
         assertEquals(4, redriven.failedStepIndex());
-        assertEquals("archive:confirmation-7", redriven.failedCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"), redriven.failedCommandId());
 
         ExecutionRecord<Object, Object> claimed = store.claimLease(
                 "tenant-a",
@@ -256,7 +256,7 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely().orElseThrow();
         assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, claimed.redriveIntent());
         assertEquals(4, claimed.failedStepIndex());
-        assertEquals("archive:confirmation-7", claimed.failedCommandId());
+        assertEquals(Optional.of("archive:confirmation-7"), claimed.failedCommandId());
     }
 
     @Test

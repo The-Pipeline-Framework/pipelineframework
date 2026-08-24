@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.Objects;
+import java.util.Optional;
 import org.pipelineframework.command.CommandRetryableEffectException;
 import org.pipelineframework.step.NonRetryableException;
 
@@ -10,24 +11,25 @@ import org.pipelineframework.step.NonRetryableException;
  * @param failureClass failure class name
  * @param message failure message
  * @param failedStepIndex failed pipeline step index, or {@code -1} when unavailable
- * @param failedCommandId exact retryable logical Command effect, or {@code null}
+ * @param failedCommandId exact retryable logical Command effect
  */
 public record TransitionFailureEnvelope(
     String failureClass,
     String message,
     int failedStepIndex,
-    String failedCommandId
+    Optional<String> failedCommandId
 ) {
     public TransitionFailureEnvelope {
         Objects.requireNonNull(failureClass, "failureClass");
+        failedCommandId = Optional.ofNullable(failedCommandId).orElseGet(Optional::empty);
     }
 
     public TransitionFailureEnvelope(String failureClass, String message) {
-        this(failureClass, message, -1, null);
+        this(failureClass, message, -1, Optional.empty());
     }
 
     public TransitionFailureEnvelope(String failureClass, String message, int failedStepIndex) {
-        this(failureClass, message, failedStepIndex, null);
+        this(failureClass, message, failedStepIndex, Optional.empty());
     }
 
     public static TransitionFailureEnvelope from(Throwable failure) {
@@ -37,8 +39,7 @@ public record TransitionFailureEnvelope(
             java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
             -1,
             CommandRetryableEffectException.find(failure)
-                .map(CommandRetryableEffectException::commandId)
-                .orElse(null));
+                .map(CommandRetryableEffectException::commandId));
     }
 
     public static TransitionFailureEnvelope from(Throwable failure, int failedStepIndex) {
@@ -48,8 +49,7 @@ public record TransitionFailureEnvelope(
             java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
             failedStepIndex,
             CommandRetryableEffectException.find(failure)
-                .map(CommandRetryableEffectException::commandId)
-                .orElse(null));
+                .map(CommandRetryableEffectException::commandId));
     }
 
     public RuntimeException toException() {
