@@ -11,6 +11,20 @@ Keep the core pure. Connect to reality.
 
 You write focused Java transformations such as "validate this payment", "enrich this record", "parse this document", or "call this existing operator". TPF keeps those transformations isolated from persistence, transport, replay, observability, retries, await boundaries, connectors, and deployment concerns.
 
+## AI-Assisted TPF Authoring
+
+TPF ships a dedicated [`tpf-authoring` Agent Skill](.agents/skills/tpf-authoring/SKILL.md) for building business applications with the framework. It teaches an AI coding agent which TPF primitive owns data flow, external observations, side effects, suspension, replay, placement, and configuration—so ordinary Java or workflow-engine patterns do not displace the framework's typed application model. The skill is self-contained and directs the agent to versioned documentation, resolved dependency sources, examples, and compiler diagnostics for exact framework details.
+
+Install the skill from this repository with GitHub's skill tooling, or ask Codex to install it directly:
+
+```bash
+gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring
+```
+
+```text
+$skill-installer install https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/.agents/skills/tpf-authoring
+```
+
 Quarkus is the mature production runtime today. Spring support has started behind the same semantic model with limited local/REST unary smoke coverage; it is not production parity yet. See [Spring support status](https://pipelineframework.org/develop/spring-support) for the current boundary.
 
 ## What TPF Means by Pipeline

@@ -7,7 +7,7 @@ description: Design, author, or migrate applications built with The Pipeline Fra
 
 Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation, a support matrix, or guidance for maintaining TPF itself.
 
-> This Skill defines architectural priors. Current repository source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing an application workaround.
+> This Skill defines architectural priors. Version-matched framework source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing an application workaround.
 
 ## The TPF shape
 
@@ -95,14 +95,14 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 - Read [execution-and-replay.md](references/execution-and-replay.md) for Query/Command/Await, connectors, aspects, persistence/cache/capture/effects, resilience, retry/DLQ, or checkpoint handoff.
 - Read [deployment-and-packaging.md](references/deployment-and-packaging.md) for configuration lifetime, telemetry, runtime placement, transport/platform, generated artifacts, bootstrap, testing, or single-unit packaging.
 
-Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. Read the relevant record under `docs/decisions/` only when application docs leave the owning TPF primitive or an important trade-off unclear. Examples prove compatibility; they may contain historical or application-specific residue. Repowise is an index and archaeological lead, never authority.
+Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` governs TPF maintenance; it is not application-authoring documentation. Examples prove compatibility, but may contain historical or application-specific residue.
 
 ## Before you implement
 
 1. Identify the data, effect, observation, and suspension involved.
 2. Classify each dependency using the TPF shape above.
 3. Inspect `pipeline.yaml` and the current typed state first.
-4. Load only the relevant reference; search current docs/source/examples/tests for the primitive.
+4. Load only the relevant reference; establish the application's pinned TPF version, then search matching-version docs/source/examples/tests for the primitive.
 5. Draft or update `pipeline.yaml` and canonical types before inventing infrastructure.
 6. Compile and inspect generated diagnostics and artifacts.
 7. Only then write the smallest authored Java needed.
