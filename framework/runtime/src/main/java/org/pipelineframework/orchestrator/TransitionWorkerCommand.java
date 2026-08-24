@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Decoded command passed to the in-process transition worker.
@@ -16,6 +17,7 @@ import java.util.Objects;
  * @param inputPayload materialized input payload for this transition
  * @param redriveIntent explicit terminal-redrive intent
  * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
+ * @param redriveCommandId exact logical Command effect targeted by deliberate retry
  */
 public record TransitionWorkerCommand(
     String tenantId,
@@ -28,7 +30,8 @@ public record TransitionWorkerCommand(
     String transitionKey,
     Object inputPayload,
     ExecutionRedriveIntent redriveIntent,
-    int redriveStepIndex
+    int redriveStepIndex,
+    Optional<String> redriveCommandId
 ) {
     public TransitionWorkerCommand(
         String tenantId,
@@ -42,7 +45,7 @@ public record TransitionWorkerCommand(
         Object inputPayload
     ) {
         this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
-            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1);
+            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
     }
 
     public TransitionWorkerCommand(
@@ -66,7 +69,8 @@ public record TransitionWorkerCommand(
             transitionKey,
             inputPayload,
             ExecutionRedriveIntent.REPLAY,
-            -1);
+            -1,
+            Optional.empty());
     }
 
     public TransitionWorkerCommand(
@@ -78,7 +82,8 @@ public record TransitionWorkerCommand(
         long executionVersion,
         String transitionKey,
         Object inputPayload,
-        ExecutionRedriveIntent redriveIntent
+        ExecutionRedriveIntent redriveIntent,
+        Optional<String> redriveCommandId
     ) {
         this(
             tenantId,
@@ -91,7 +96,8 @@ public record TransitionWorkerCommand(
             transitionKey,
             inputPayload,
             redriveIntent,
-            redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1);
+            redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1,
+            redriveCommandId);
     }
 
     public TransitionWorkerCommand {
@@ -114,12 +120,19 @@ public record TransitionWorkerCommand(
             throw new IllegalArgumentException("transitionKey must not be blank");
         }
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        redriveCommandId = Optional.ofNullable(redriveCommandId).orElseGet(Optional::empty);
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
             throw new IllegalArgumentException(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
         }
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+            && redriveCommandId.filter(value -> !value.isBlank()).isEmpty()) {
+            throw new IllegalArgumentException(
+                "redriveCommandId must identify the exact logical effect for deliberate Command retry");
+        }
         if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
             redriveStepIndex = -1;
+            redriveCommandId = Optional.empty();
         }
     }
 }

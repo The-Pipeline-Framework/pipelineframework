@@ -785,6 +785,7 @@ class DynamoExecutionStateStoreTest {
         Map<String, AttributeValue> failedItem = new HashMap<>(
             executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED));
         failedItem.put("failed_step_index", AttributeValue.builder().n("13").build());
+        failedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
 
         when(client.updateItem(any(UpdateItemRequest.class)))
             .thenReturn(UpdateItemResponse.builder().attributes(failedItem).build());
@@ -798,15 +799,20 @@ class DynamoExecutionStateStoreTest {
                 "FATAL",
                 "Fatal error",
                 13,
+                Optional.of("archive:confirmation-7"),
                 now)
             .await().indefinitely();
 
         assertTrue(result.isPresent());
         assertEquals(ExecutionStatus.FAILED, result.get().status());
         assertEquals(13, result.get().failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.get().failedCommandId());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             request.updateExpression().contains("#failedStep = :failedStep")
-                && "13".equals(request.expressionAttributeValues().get(":failedStep").n())));
+                && request.updateExpression().contains("#failedCommand = :failedCommand")
+                && "13".equals(request.expressionAttributeValues().get(":failedStep").n())
+                && "archive:confirmation-7".equals(
+                    request.expressionAttributeValues().get(":failedCommand").s())));
     }
 
     @Test
@@ -883,6 +889,7 @@ class DynamoExecutionStateStoreTest {
         queuedItem.put("redrive_intent", AttributeValue.builder()
             .s(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name()).build());
         queuedItem.put("failed_step_index", AttributeValue.builder().n("4").build());
+        queuedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
         when(client.updateItem(any(UpdateItemRequest.class)))
             .thenReturn(UpdateItemResponse.builder().attributes(queuedItem).build());
 
@@ -898,6 +905,7 @@ class DynamoExecutionStateStoreTest {
 
         assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, result.redriveIntent());
         assertEquals(4, result.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.failedCommandId());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             request.updateExpression().contains("#redriveIntent = :redriveIntent")
                 && request.expressionAttributeValues().get(":redriveIntent").s()

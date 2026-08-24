@@ -122,6 +122,7 @@ class ExecutionRedrivePlanTest {
         0,
         "",
         ExecutionRedriveIntent.REPLAY,
-        4);
+        4,
+        java.util.Optional.of("archive:invoice-1"));
   }
 }

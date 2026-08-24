@@ -10,6 +10,8 @@ import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -85,7 +87,8 @@ class TransitionCommandEnvelopeTest {
             "command-retry:exec-1:6",
             new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
             ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
-            5);
+            5,
+            Optional.of("archive:payment-1"));
 
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             command,
@@ -101,6 +104,26 @@ class TransitionCommandEnvelopeTest {
         assertEquals(3, decoded.currentStepIndex());
         assertEquals(5, envelope.redriveStepIndex());
         assertEquals(5, decoded.redriveStepIndex());
+        assertEquals(Optional.of("archive:payment-1"), envelope.redriveCommandId());
+        assertEquals(Optional.of("archive:payment-1"), decoded.redriveCommandId());
+    }
+
+    @Test
+    void intentAwareWorkerConstructorCarriesExactRetryCommandIdentity() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            3,
+            0,
+            ExecutionResultShape.SINGLE,
+            7L,
+            "command-retry:exec-1:6",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            Optional.of("archive:payment-1"));
+
+        assertEquals(3, command.redriveStepIndex());
+        assertEquals(Optional.of("archive:payment-1"), command.redriveCommandId());
     }
 
     @Test

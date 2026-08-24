@@ -237,8 +237,10 @@ public class CommandStepSupport {
                     return Uni.createFrom().failure(new NonRetryableException(
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
-                request.executionContext().claimRecordedCommandRetry(
-                    request.commandId(), record.currentAttempt().attemptId());
+                CommandRetryExecutionScope.claimRecorded(
+                    request.executionContext().currentStepIndex(),
+                    request.commandId(),
+                    record.currentAttempt().attemptId());
                 @SuppressWarnings("unchecked")
                 O recorded = (O) record.output();
                 CommandRecordedDuplicateMarker.mark(recorded);
@@ -253,11 +255,15 @@ public class CommandStepSupport {
             if (record.status() == CommandEffectStatus.FAILED_RETRYABLE) {
                 CommandRequest<I> retryRequest = request;
                 boolean admittedRetry = deliberateRetry;
-                if (!admittedRetry && request.executionContext().claimCommandRetry(request.commandId())) {
+                Optional<String> admittedAttempt = admittedRetry
+                    ? Optional.empty()
+                    : CommandRetryExecutionScope.claimAttempt(
+                        request.executionContext().currentStepIndex(), request.commandId());
+                if (admittedAttempt.isPresent()) {
                     retryRequest = new CommandRequest<>(
                         request.descriptor(),
                         request.commandId(),
-                        request.executionContext().commandRetryAttemptId(request.commandId()),
+                        admittedAttempt.orElseThrow(),
                         request.input(),
                         request.executionContext(),
                         request.config());
@@ -277,7 +283,8 @@ public class CommandStepSupport {
                             store, retryRequest, retryRequest.descriptor().nativeSelector().orElseThrow(), true)
                         : executeLegacy(store, retryRequest, true);
                 }
-                return Uni.createFrom().failure(new CommandRetryableOutcomeException(recordedOutcomeCode(record)));
+                return Uni.createFrom().failure(CommandRetryableEffectException.mark(
+                    request.commandId(), new CommandRetryableOutcomeException(recordedOutcomeCode(record))));
             }
             if (record.status() == CommandEffectStatus.DLQ
                 || record.status() == CommandEffectStatus.AMBIGUOUS
@@ -310,6 +317,8 @@ public class CommandStepSupport {
         long effectStartNanos = CommandEffectMetrics.startNanos();
         return beginDispatch(store, request, deliberateRetry)
             .onItem().<O>transformToUni(ignored -> this.<I, O>dispatchLegacyConnector(operation, request)
+                .onFailure(failure -> !isNonRetryable(failure))
+                .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
                 .onItem().transformToUni(output -> store.markSucceeded(
                         request.executionContext().tenantId(),
                         request.commandId(),
@@ -378,8 +387,12 @@ public class CommandStepSupport {
                 .onItem().transformToUni(dispatched -> dispatchNative(operation, request, selector, boundConfiguration)
                     .onFailure(CommandStepSupport::isCancellation)
                     .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of()))
+                    .onFailure(failure -> !isNonRetryable(failure))
+                    .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
                     .onItem().transformToUni(outcome -> applyNativeOutcome(
                         store, request, selector, snapshot, operation.capabilities(), selector.policy(), outcome, effectStartNanos))
+                    .onFailure(CommandRetryableOutcomeException.class)
+                    .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
                     .onFailure().call(failure -> isTypedOutcomeFailure(failure)
                         ? Uni.createFrom().voidItem()
                         : recordFailure(
@@ -589,7 +602,15 @@ public class CommandStepSupport {
     }
 
     private static boolean isTypedOutcomeFailure(Throwable failure) {
-        return failure instanceof CommandOutcomeException || failure instanceof CommandRetryableOutcomeException;
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof CommandOutcomeException || current instanceof CommandRetryableOutcomeException) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            current = cause == current ? null : cause;
+        }
+        return false;
     }
 
     private static String recordedOutcomeCode(CommandEffectRecord record) {

@@ -177,7 +177,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitDeferralCount(),
                     current.circuitIdentity(),
                     current.redriveIntent(),
-                    current.failedStepIndex());
+                    current.failedStepIndex(),
+                    current.failedCommandId());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
             }
@@ -498,7 +499,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs) {
         return markTerminalFailure(
             tenantId, executionId, expectedVersion, finalStatus, transitionKey,
-            errorCode, errorMessage, -1, nowEpochMs);
+            errorCode, errorMessage, -1, Optional.empty(), nowEpochMs);
     }
 
     @Override
@@ -511,6 +512,23 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         int failedStepIndex,
+        long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, failedStepIndex, Optional.empty(), nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        Optional<String> failedCommandId,
         long nowEpochMs) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
             return Uni.createFrom().item(Optional.empty());
@@ -550,7 +568,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitDeferralCount(),
                     current.circuitIdentity(),
                     ExecutionRedriveIntent.REPLAY,
-                    failedStepIndex);
+                    failedStepIndex,
+                    failedCommandId);
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -622,7 +641,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitDeferralCount(),
                     current.circuitIdentity(),
                     resolvedIntent,
-                    current.failedStepIndex());
+                    current.failedStepIndex(),
+                    current.failedCommandId());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
