@@ -10,6 +10,7 @@ import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 
 class ClaimedSegmentCommandRetryTest {
 
@@ -48,11 +49,13 @@ class ClaimedSegmentCommandRetryTest {
 
         TransitionCommandEnvelope envelope = ClaimedSegment.from(record)
             .transitionCommand("input", new JsonTransitionPayloadCodec());
+        TransitionWorkerCommand decoded = envelope.toCommand(new JsonTransitionPayloadCodec());
 
         assertEquals(2, envelope.currentStepIndex());
         assertEquals(5, envelope.redriveStepIndex());
         assertEquals(Optional.of("archive:confirmation-7"), envelope.redriveCommandId());
-        assertEquals(Optional.of("archive:confirmation-7"),
-            envelope.toCommand(new JsonTransitionPayloadCodec()).redriveCommandId());
+        assertEquals(2, decoded.currentStepIndex());
+        assertEquals(5, decoded.redriveStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), decoded.redriveCommandId());
     }
 }
