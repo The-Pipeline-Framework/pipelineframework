@@ -1,6 +1,7 @@
 package org.pipelineframework;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Internal failure marker that retains the pipeline step which produced a transition failure.
@@ -18,7 +19,7 @@ final class PipelineStepExecutionFailure extends RuntimeException {
 
   static Throwable at(int stepIndex, Throwable failure) {
     Objects.requireNonNull(failure, "failure");
-    return find(failure) != null
+    return find(failure).isPresent()
         ? failure
         : new PipelineStepExecutionFailure(stepIndex, failure);
   }
@@ -30,27 +31,28 @@ final class PipelineStepExecutionFailure extends RuntimeException {
   }
 
   static int stepIndex(Throwable failure) {
-    PipelineStepExecutionFailure indexed = find(failure);
-    return indexed == null ? -1 : indexed.stepIndex;
+    return find(failure)
+        .map(indexed -> indexed.stepIndex)
+        .orElse(-1);
   }
 
   static Throwable source(Throwable failure) {
     Objects.requireNonNull(failure, "failure");
-    PipelineStepExecutionFailure indexed = find(failure);
-    return indexed != null && indexed.getCause() != null
-        ? indexed.getCause()
-        : failure;
+    return find(failure)
+        .map(Throwable::getCause)
+        .orElse(failure);
   }
 
-  private static PipelineStepExecutionFailure find(Throwable failure) {
+  private static Optional<PipelineStepExecutionFailure> find(Throwable failure) {
+    Objects.requireNonNull(failure, "failure");
     Throwable current = failure;
     while (current != null) {
       if (current.getClass() == PipelineStepExecutionFailure.class) {
-        return (PipelineStepExecutionFailure) current;
+        return Optional.of((PipelineStepExecutionFailure) current);
       }
       Throwable cause = current.getCause();
       current = cause == current ? null : cause;
     }
-    return null;
+    return Optional.empty();
   }
 }
