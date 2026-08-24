@@ -240,11 +240,11 @@ class ExecutionFailureHandler {
       Throwable classified = new IllegalStateException("Unknown failure");
       return new FailureClassification(false, classified);
     }
-    Throwable nonRetryable = findThrowable(failure, NonRetryableException.class);
+    NonRetryableException nonRetryable = findThrowable(failure, NonRetryableException.class);
     if (nonRetryable != null) {
       return new FailureClassification(false, nonRetryable);
     }
-    Throwable controlFlow = findThrowable(failure, PipelineControlFlowException.class);
+    PipelineControlFlowException controlFlow = findThrowable(failure, PipelineControlFlowException.class);
     if (controlFlow != null) {
       return new FailureClassification(false, controlFlow);
     }
@@ -255,17 +255,15 @@ class ExecutionFailureHandler {
     if (failure == null) {
       return -1;
     }
-    Throwable indexed = findThrowable(failure, TransitionWorkerFailureException.class);
-    return indexed instanceof TransitionWorkerFailureException workerFailure
-        ? workerFailure.failedStepIndex()
-        : -1;
+    TransitionWorkerFailureException indexed = findThrowable(failure, TransitionWorkerFailureException.class);
+    return indexed == null ? -1 : indexed.failedStepIndex();
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {
     if (failure == null) {
       return Optional.empty();
     }
-    CircuitOpenException open = (CircuitOpenException) findThrowable(failure, CircuitOpenException.class);
+    CircuitOpenException open = findThrowable(failure, CircuitOpenException.class);
     if (open != null) {
       return Optional.of(new CircuitDeferral(
           open.circuitOpen().identity().value(),
@@ -273,7 +271,7 @@ class ExecutionFailureHandler {
           open.getMessage(),
           open.circuitOpen().notBefore().toEpochMilli()));
     }
-    CircuitProtectionUnavailableException unavailable = (CircuitProtectionUnavailableException) findThrowable(
+    CircuitProtectionUnavailableException unavailable = findThrowable(
         failure, CircuitProtectionUnavailableException.class);
     if (unavailable != null) {
       return Optional.of(new CircuitDeferral(
@@ -285,7 +283,7 @@ class ExecutionFailureHandler {
     return Optional.empty();
   }
 
-  private static Throwable findThrowable(Throwable failure, Class<? extends Throwable> targetType) {
+  private static <T extends Throwable> T findThrowable(Throwable failure, Class<T> targetType) {
     java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
     java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     queue.add(failure);
@@ -295,7 +293,7 @@ class ExecutionFailureHandler {
         continue;
       }
       if (targetType.isInstance(current)) {
-        return current;
+        return targetType.cast(current);
       }
       Throwable cause = current.getCause();
       if (cause != null && cause != current) {

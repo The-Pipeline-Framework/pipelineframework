@@ -40,8 +40,8 @@ final class PipelineStepExecutionFailure extends RuntimeException {
   private static PipelineStepExecutionFailure find(Throwable failure) {
     Throwable current = failure;
     while (current != null) {
-      if (current instanceof PipelineStepExecutionFailure indexed) {
-        return indexed;
+      if (current.getClass() == PipelineStepExecutionFailure.class) {
+        return (PipelineStepExecutionFailure) current;
       }
       Throwable cause = current.getCause();
       current = cause == current ? null : cause;
