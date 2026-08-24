@@ -16,6 +16,7 @@ import java.util.Objects;
  * @param inputPayload materialized input payload for this transition
  * @param redriveIntent explicit terminal-redrive intent
  * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
+ * @param redriveCommandId exact logical Command effect targeted by deliberate retry, or {@code null}
  */
 public record TransitionWorkerCommand(
     String tenantId,
@@ -28,7 +29,8 @@ public record TransitionWorkerCommand(
     String transitionKey,
     Object inputPayload,
     ExecutionRedriveIntent redriveIntent,
-    int redriveStepIndex
+    int redriveStepIndex,
+    String redriveCommandId
 ) {
     public TransitionWorkerCommand(
         String tenantId,
@@ -42,7 +44,7 @@ public record TransitionWorkerCommand(
         Object inputPayload
     ) {
         this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
-            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1);
+            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1, null);
     }
 
     public TransitionWorkerCommand(
@@ -66,7 +68,8 @@ public record TransitionWorkerCommand(
             transitionKey,
             inputPayload,
             ExecutionRedriveIntent.REPLAY,
-            -1);
+            -1,
+            null);
     }
 
     public TransitionWorkerCommand(
@@ -91,7 +94,8 @@ public record TransitionWorkerCommand(
             transitionKey,
             inputPayload,
             redriveIntent,
-            redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1);
+            redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1,
+            null);
     }
 
     public TransitionWorkerCommand {
@@ -118,8 +122,14 @@ public record TransitionWorkerCommand(
             throw new IllegalArgumentException(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
         }
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+            && (redriveCommandId == null || redriveCommandId.isBlank())) {
+            throw new IllegalArgumentException(
+                "redriveCommandId must identify the exact logical effect for deliberate Command retry");
+        }
         if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
             redriveStepIndex = -1;
+            redriveCommandId = null;
         }
     }
 }

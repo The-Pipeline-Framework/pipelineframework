@@ -32,10 +32,60 @@ public record ExecutionRecord<I, R>(
     int circuitDeferralCount,
     String circuitIdentity,
     ExecutionRedriveIntent redriveIntent,
-    int failedStepIndex
+    int failedStepIndex,
+    String failedCommandId
 ) {
     public ExecutionRecord {
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
+            if (failedStepIndex < 0) {
+                throw new IllegalArgumentException(
+                    "deliberate Command retry requires a retained failed root step");
+            }
+            if (failedCommandId == null || failedCommandId.isBlank()) {
+                throw new IllegalArgumentException(
+                    "deliberate Command retry requires the exact failed logical Command identity");
+            }
+        }
+    }
+
+    /** Compatibility constructor for records created before exact failed Command identity was retained. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        String circuitIdentity,
+        ExecutionRedriveIntent redriveIntent,
+        int failedStepIndex
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion,
+            resultShape, status, version, currentStepIndex, attempt, leaseOwner,
+            leaseExpiresEpochMs, nextDueEpochMs, lastTransitionKey, inputPayload, awaitUnitId,
+            resultPayload, errorCode, errorMessage, createdAtEpochMs, updatedAtEpochMs, ttlEpochS,
+            firstCircuitDeferredAtEpochMs, circuitDeferralCount, circuitIdentity, redriveIntent,
+            failedStepIndex, null);
     }
 
     /** Compatibility constructor for records persisted before explicit redrive intent existed. */
@@ -71,7 +121,7 @@ public record ExecutionRecord<I, R>(
             status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
             lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
             createdAtEpochMs, updatedAtEpochMs, ttlEpochS, firstCircuitDeferredAtEpochMs,
-            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1);
+            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1, null);
     }
 
     /** Compatibility constructor for records persisted before circuit deferral metadata existed. */
@@ -239,6 +289,7 @@ public record ExecutionRecord<I, R>(
             circuitDeferralCount,
             circuitIdentity,
             redriveIntent,
-            failedStepIndex);
+            failedStepIndex,
+            failedCommandId);
     }
 }

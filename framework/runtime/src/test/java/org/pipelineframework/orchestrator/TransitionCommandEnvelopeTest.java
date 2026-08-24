@@ -85,7 +85,8 @@ class TransitionCommandEnvelopeTest {
             "command-retry:exec-1:6",
             new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
             ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
-            5);
+            5,
+            "archive:payment-1");
 
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             command,
@@ -101,6 +102,8 @@ class TransitionCommandEnvelopeTest {
         assertEquals(3, decoded.currentStepIndex());
         assertEquals(5, envelope.redriveStepIndex());
         assertEquals(5, decoded.redriveStepIndex());
+        assertEquals("archive:payment-1", envelope.redriveCommandId());
+        assertEquals("archive:payment-1", decoded.redriveCommandId());
     }
 
     @Test

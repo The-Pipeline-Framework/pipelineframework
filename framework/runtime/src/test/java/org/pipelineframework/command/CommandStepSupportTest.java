@@ -74,6 +74,7 @@ class CommandStepSupportTest {
   @AfterEach
   void clearContext() {
     PipelineExecutionContextHolder.clear();
+    CommandRetryTestAccess.clear();
     if (meterProvider != null) {
       meterProvider.shutdown();
     }
@@ -395,14 +396,13 @@ class CommandStepSupportTest {
             descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
             .await().atMost(Duration.ofSeconds(5)));
 
-    PipelineExecutionContext retryContext = executionRetryContext();
-    PipelineExecutionContextHolder.set(retryContext);
+    installExecutionRetry("cmd-doc-1");
 
     assertThrows(IllegalStateException.class,
         () -> support.<CommandInput, CommandOutput>execute(
             descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
             .await().atMost(Duration.ofSeconds(5)));
-    PipelineExecutionContextHolder.set(executionRetryContext());
+    installExecutionRetry("cmd-doc-1");
     assertThrows(CommandRetryableOutcomeException.class,
         () -> support.<CommandInput, CommandOutput>execute(
             descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
@@ -429,19 +429,18 @@ class CommandStepSupportTest {
             descriptor, new StaticCommandIdGenerator(), new CommandInput("needs-retry"))
             .await().atMost(Duration.ofSeconds(5)));
 
-    PipelineExecutionContext retryContext = executionRetryContext();
-    PipelineExecutionContextHolder.set(retryContext);
+    installExecutionRetry("cmd-needs-retry");
     support.<CommandInput, CommandOutput>execute(
         descriptor, new StaticCommandIdGenerator(), new CommandInput("already-done"))
         .await().atMost(Duration.ofSeconds(5));
-    org.junit.jupiter.api.Assertions.assertFalse(retryContext.commandRetryClaimed());
+    assertThrows(IllegalStateException.class, CommandRetryTestAccess::requireConsumed);
 
     connector.failure = null;
     support.<CommandInput, CommandOutput>execute(
         descriptor, new StaticCommandIdGenerator(), new CommandInput("needs-retry"))
         .await().atMost(Duration.ofSeconds(5));
 
-    assertTrue(retryContext.commandRetryClaimed());
+    CommandRetryTestAccess.requireConsumed();
     assertEquals(3, connector.calls.get());
     CommandEffectRecord retried = store.find("tenant", "cmd-needs-retry")
         .await().atMost(Duration.ofSeconds(5)).orElseThrow();
@@ -459,30 +458,79 @@ class CommandStepSupportTest {
             .await().atMost(Duration.ofSeconds(5)));
 
     connector.failure = null;
-    PipelineExecutionContext firstWorker = executionRetryContext();
-    PipelineExecutionContextHolder.set(firstWorker);
+    installExecutionRetry("cmd-doc-1");
     support.<CommandInput, CommandOutput>execute(
         descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
         .await().atMost(Duration.ofSeconds(5));
 
-    PipelineExecutionContext recoveredWorker = executionRetryContext();
-    PipelineExecutionContextHolder.set(recoveredWorker);
+    installExecutionRetry("cmd-doc-1");
     support.<CommandInput, CommandOutput>execute(
         descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
         .await().atMost(Duration.ofSeconds(5));
 
-    assertTrue(recoveredWorker.commandRetryClaimed());
-    recoveredWorker.requireCommandRetryClaimed();
+    CommandRetryTestAccess.requireConsumed();
     assertEquals(2, connector.calls.get());
   }
 
-  private static PipelineExecutionContext executionRetryContext() {
-    return PipelineExecutionContext.forCommandRetry(
-        "tenant",
-        "exec-1",
-        4,
-        4,
-        "exec-1:4:2");
+  @Test
+  void exactRetryTargetIsStableWithParallelFailuresAndReversedTraversal() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("provider unavailable");
+    Uni<?> firstPair = Uni.combine().all().unis(
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-a"))
+            .onFailure().recoverWithNull(),
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-b"))
+            .onFailure().recoverWithNull())
+        .discardItems();
+    firstPair.await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = null;
+    installExecutionRetry("cmd-parallel-b");
+    assertThrows(CommandRetryableOutcomeException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-a"))
+            .await().atMost(Duration.ofSeconds(5)));
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-b"))
+        .await().atMost(Duration.ofSeconds(5));
+    CommandRetryTestAccess.requireConsumed();
+
+    connector.failure = new IllegalStateException("provider unavailable");
+    Uni.combine().all().unis(
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-a"))
+            .onFailure().recoverWithNull(),
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-b"))
+            .onFailure().recoverWithNull())
+        .discardItems().await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = null;
+    installExecutionRetry("cmd-reverse-b");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-b"))
+        .await().atMost(Duration.ofSeconds(5));
+    assertThrows(CommandRetryableOutcomeException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-a"))
+            .await().atMost(Duration.ofSeconds(5)));
+    CommandRetryTestAccess.requireConsumed();
+
+    assertEquals(1, store.find("tenant", "cmd-parallel-a").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(2, store.find("tenant", "cmd-parallel-b").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(1, store.find("tenant", "cmd-reverse-a").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(2, store.find("tenant", "cmd-reverse-b").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+  }
+
+  private static void installExecutionRetry(String commandId) {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    CommandRetryTestAccess.install(4, commandId, "exec-1:4:2");
   }
 
   @Test

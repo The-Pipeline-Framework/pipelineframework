@@ -290,6 +290,27 @@ public interface ExecutionStateStore {
             errorCode, errorMessage, nowEpochMs);
     }
 
+    /** Marks an execution terminal while retaining both resume and logical Command identities. */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        String failedCommandId,
+        long nowEpochMs) {
+        if (failedCommandId != null && !failedCommandId.isBlank()) {
+            return Uni.createFrom().failure(new UnsupportedOperationException(
+                "Execution state store does not preserve exact failed Command identity"));
+        }
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, failedStepIndex, nowEpochMs);
+    }
+
     /**
      * Re-queues a terminal execution for operator-controlled re-drive.
      *

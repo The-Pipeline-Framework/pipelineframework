@@ -40,6 +40,12 @@ record ExecutionRedrivePlan(
           "Execution " + previous.executionId()
               + " does not retain a failed Command step eligible for deliberate retry");
     }
+    if (intent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+        && (previous.failedCommandId() == null || previous.failedCommandId().isBlank())) {
+      throw new IllegalStateException(
+          "Execution " + previous.executionId()
+              + " does not retain the failed logical Command effect identity");
+    }
   }
 
   static ExecutionRedrivePlan from(

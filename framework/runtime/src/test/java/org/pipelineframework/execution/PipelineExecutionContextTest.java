@@ -1,9 +1,12 @@
 package org.pipelineframework.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,27 +94,15 @@ class PipelineExecutionContextTest {
     }
 
     @Test
-    void commandRetryAdmissionCanBeClaimedOnlyOnceAcrossStepViews() {
-        PipelineExecutionContext root = PipelineExecutionContext.forCommandRetry(
-            "tenant-1", "exec-abc", 0, 2, "command-retry:exec-abc:7");
-        PipelineExecutionContext target = root.atStep(2);
+    void applicationExecutionContextExposesOnlyImmutableGeneralIdentity() {
+        Set<String> components = Arrays.stream(PipelineExecutionContext.class.getRecordComponents())
+            .map(component -> component.getName())
+            .collect(java.util.stream.Collectors.toSet());
 
-        assertTrue(target.commandRetryTargetsCurrentStep());
-        assertTrue(target.claimCommandRetry("archive:invoice-1"));
-        org.junit.jupiter.api.Assertions.assertFalse(
-            root.atStep(2).claimCommandRetry("notify:invoice-1"));
-        assertTrue(root.commandRetryClaimed());
-        assertEquals(
-            target.commandRetryAttemptId("archive:invoice-1"),
-            root.atStep(2).commandRetryAttemptId("archive:invoice-1"));
-    }
-
-    @Test
-    void unclaimedCommandRetryFailsCompletionValidation() {
-        PipelineExecutionContext context = PipelineExecutionContext.forCommandRetry(
-            "tenant-1", "exec-abc", 2, 2, "command-retry:exec-abc:7");
-
-        assertThrows(IllegalStateException.class, context::requireCommandRetryClaimed);
+        assertEquals(Set.of("tenantId", "executionId", "currentStepIndex"), components);
+        assertFalse(Arrays.stream(PipelineExecutionContext.class.getMethods())
+            .map(java.lang.reflect.Method::getName)
+            .anyMatch(name -> name.toLowerCase(java.util.Locale.ROOT).contains("retry")));
     }
 
     @Test

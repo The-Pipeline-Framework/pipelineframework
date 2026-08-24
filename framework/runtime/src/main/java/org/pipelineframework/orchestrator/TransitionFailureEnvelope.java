@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.Objects;
+import org.pipelineframework.command.CommandRetryableEffectException;
 import org.pipelineframework.step.NonRetryableException;
 
 /**
@@ -9,18 +10,24 @@ import org.pipelineframework.step.NonRetryableException;
  * @param failureClass failure class name
  * @param message failure message
  * @param failedStepIndex failed pipeline step index, or {@code -1} when unavailable
+ * @param failedCommandId exact retryable logical Command effect, or {@code null}
  */
 public record TransitionFailureEnvelope(
     String failureClass,
     String message,
-    int failedStepIndex
+    int failedStepIndex,
+    String failedCommandId
 ) {
     public TransitionFailureEnvelope {
         Objects.requireNonNull(failureClass, "failureClass");
     }
 
     public TransitionFailureEnvelope(String failureClass, String message) {
-        this(failureClass, message, -1);
+        this(failureClass, message, -1, null);
+    }
+
+    public TransitionFailureEnvelope(String failureClass, String message, int failedStepIndex) {
+        this(failureClass, message, failedStepIndex, null);
     }
 
     public static TransitionFailureEnvelope from(Throwable failure) {
@@ -28,7 +35,10 @@ public record TransitionFailureEnvelope(
         return new TransitionFailureEnvelope(
             failure.getClass().getName(),
             java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
-            -1);
+            -1,
+            CommandRetryableEffectException.find(failure)
+                .map(CommandRetryableEffectException::commandId)
+                .orElse(null));
     }
 
     public static TransitionFailureEnvelope from(Throwable failure, int failedStepIndex) {
@@ -36,7 +46,10 @@ public record TransitionFailureEnvelope(
         return new TransitionFailureEnvelope(
             failure.getClass().getName(),
             java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
-            failedStepIndex);
+            failedStepIndex,
+            CommandRetryableEffectException.find(failure)
+                .map(CommandRetryableEffectException::commandId)
+                .orElse(null));
     }
 
     public RuntimeException toException() {
@@ -44,7 +57,8 @@ public record TransitionFailureEnvelope(
             return new NonRetryableException(message == null || message.isBlank() ? failureClass : message);
         }
         String suffix = message == null || message.isBlank() ? "" : ": " + message;
-        return new TransitionWorkerFailureException(failureClass + suffix, failedStepIndex);
+        return new TransitionWorkerFailureException(
+            failureClass + suffix, failedStepIndex, failedCommandId);
     }
 
     private boolean isNonRetryableFailureClass() {

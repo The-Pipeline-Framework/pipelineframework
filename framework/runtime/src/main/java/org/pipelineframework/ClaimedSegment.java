@@ -48,7 +48,8 @@ record ClaimedSegment(
         transitionKey,
         payload,
         record.redriveIntent(),
-        record.failedStepIndex());
+        record.failedStepIndex(),
+        record.failedCommandId());
     SerializedTransitionPayload encodedPayload = payloadCodec.encode(payload);
     return TransitionCommandEnvelope.from(
         command,

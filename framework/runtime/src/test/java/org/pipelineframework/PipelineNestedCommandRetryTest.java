@@ -17,6 +17,8 @@ import org.pipelineframework.awaitable.AwaitContinuationMode;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
+import org.pipelineframework.command.CommandRetryTestAccess;
+import org.pipelineframework.command.CommandRetryableEffectException;
 import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.execution.PipelineExecutionContext;
@@ -35,6 +37,7 @@ class PipelineNestedCommandRetryTest {
     void clearContext() {
         AwaitExecutionContextHolder.clear();
         PipelineExecutionContextHolder.clear();
+        CommandRetryTestAccess.clear();
     }
 
     @Test
@@ -46,8 +49,8 @@ class PipelineNestedCommandRetryTest {
             AwaitContinuationMode.DURABLE_HANDOFF,
             TerminalOutputOwnership.COORDINATOR,
             Map.of()));
-        PipelineExecutionContextHolder.set(PipelineExecutionContext.forCommandRetry(
-            "tenant", "execution", 0, 0, "command-retry:execution:2"));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 0));
+        CommandRetryTestAccess.install(0, "archive:invoice", "command-retry:execution:2");
         AtomicInteger commandCalls = new AtomicInteger();
         StepOneToOne<String, String> nested = PipelineInvocationSteps.oneToOne(
             runner,
@@ -60,6 +63,7 @@ class PipelineNestedCommandRetryTest {
 
         assertEquals("invoice:prepared:command", result.collect().first().await().atMost(Duration.ofSeconds(5)));
         assertEquals(1, commandCalls.get());
+        CommandRetryTestAccess.requireConsumed();
     }
 
     @Test
@@ -84,6 +88,8 @@ class PipelineNestedCommandRetryTest {
             () -> result.collect().first().await().atMost(Duration.ofSeconds(15)));
 
         assertEquals(0, PipelineStepExecutionFailure.stepIndex(failure), failureChain(failure));
+        assertEquals("archive:invoice", CommandRetryableEffectException.find(failure)
+            .orElseThrow(() -> new AssertionError(failureChain(failure))).commandId());
     }
 
     private static final class PrefixStep extends ConfigurableStep implements StepOneToOne<String, String> {
@@ -111,8 +117,7 @@ class PipelineNestedCommandRetryTest {
         public Uni<String> applyOneToOne(String input) {
             PipelineExecutionContext context = PipelineExecutionContextHolder.get().orElseThrow();
             assertEquals(0, context.currentStepIndex());
-            assertTrue(context.commandRetryTargetsCurrentStep());
-            assertTrue(context.claimCommandRetry("archive:invoice"));
+            assertTrue(CommandRetryTestAccess.claimAttempt(0, "archive:invoice").isPresent());
             calls.incrementAndGet();
             return Uni.createFrom().item(input + ":command");
         }
@@ -134,7 +139,8 @@ class PipelineNestedCommandRetryTest {
 
         @Override
         public Uni<String> applyOneToOne(String input) {
-            return Uni.createFrom().failure(new IllegalStateException("command failed"));
+            return Uni.createFrom().failure(CommandRetryTestAccess.retryableFailure(
+                "archive:invoice", new IllegalStateException("command failed")));
         }
     }
 

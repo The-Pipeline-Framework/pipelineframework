@@ -59,6 +59,7 @@ class ExecutionFailureHandler {
     FailureClassification classification = classifyFailure(failure);
     Throwable classifiedFailure = classification.classifiedThrowable();
     int failedStepIndex = failedStepIndex(failure);
+    String failedCommandId = failedCommandId(failure);
     boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
 
@@ -98,7 +99,7 @@ class ExecutionFailureHandler {
         ? executionStateStore.markTerminalFailure(
             record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
             transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(),
-            failedStepIndex, now)
+            failedStepIndex, failedCommandId, now)
         : executionStateStore.markTerminalFailure(
             record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
             transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(), now);
@@ -259,6 +260,16 @@ class ExecutionFailureHandler {
     return findThrowable(failure, TransitionWorkerFailureException.class)
         .map(TransitionWorkerFailureException::failedStepIndex)
         .orElse(-1);
+  }
+
+  private static String failedCommandId(Throwable failure) {
+    if (failure == null) {
+      return null;
+    }
+    return findThrowable(failure, TransitionWorkerFailureException.class)
+        .map(TransitionWorkerFailureException::failedCommandId)
+        .filter(value -> value != null && !value.isBlank())
+        .orElse(null);
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {

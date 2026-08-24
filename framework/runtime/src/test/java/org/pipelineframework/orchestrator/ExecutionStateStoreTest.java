@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExecutionStateStoreTest {
 
@@ -75,6 +76,24 @@ class ExecutionStateStoreTest {
         assertNotNull(store.markTerminalFailure("tenant1", "exec1", 1L, ExecutionStatus.FAILED, "key1", "Error", "msg", now));
         assertNotNull(store.redriveTerminalExecution("tenant1", "exec1", 1L, true, "redrive", now));
         assertNotNull(store.findDueExecutions(now, 10));
+    }
+
+    @Test
+    void legacyTerminalFailureStoreFailsClosedForExactCommandIdentity() {
+        ExecutionStateStore store = new TestExecutionStateStore();
+
+        assertThrows(UnsupportedOperationException.class, () -> store.markTerminalFailure(
+                "tenant1",
+                "exec1",
+                1L,
+                ExecutionStatus.FAILED,
+                "key1",
+                "Error",
+                "msg",
+                4,
+                "archive:confirmation-7",
+                System.currentTimeMillis())
+            .await().indefinitely());
     }
 
     private static class TestExecutionStateStore implements ExecutionStateStore {

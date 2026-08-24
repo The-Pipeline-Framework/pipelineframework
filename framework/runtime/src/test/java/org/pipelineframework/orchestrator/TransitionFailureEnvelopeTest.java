@@ -3,6 +3,7 @@ package org.pipelineframework.orchestrator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.command.CommandRetryTestAccess;
 
 class TransitionFailureEnvelopeTest {
 
@@ -24,5 +25,19 @@ class TransitionFailureEnvelopeTest {
     TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(new IllegalStateException());
 
     assertEquals("", envelope.message());
+  }
+
+  @Test
+  void preservesExactRetryableCommandAcrossPortableFailureRoundTrip() {
+    Throwable retryable = CommandRetryTestAccess.retryableFailure(
+        "archive:confirmation-7", new IllegalStateException("archive failed"));
+
+    TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(retryable, 3);
+    TransitionWorkerFailureException decoded =
+        (TransitionWorkerFailureException) envelope.toException();
+
+    assertEquals(3, envelope.failedStepIndex());
+    assertEquals("archive:confirmation-7", envelope.failedCommandId());
+    assertEquals("archive:confirmation-7", decoded.failedCommandId());
   }
 }
