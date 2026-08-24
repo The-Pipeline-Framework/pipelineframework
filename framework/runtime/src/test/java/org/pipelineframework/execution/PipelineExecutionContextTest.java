@@ -82,12 +82,36 @@ class PipelineExecutionContextTest {
     }
 
     @Test
-    void contextIsARecord() {
+    void contextsWithTheSameExecutionIdentityAreEqual() {
         PipelineExecutionContext ctx1 = new PipelineExecutionContext("tenant-1", "exec-abc", 2);
         PipelineExecutionContext ctx2 = new PipelineExecutionContext("tenant-1", "exec-abc", 2);
 
         assertEquals(ctx1, ctx2);
         assertEquals(ctx1.hashCode(), ctx2.hashCode());
+    }
+
+    @Test
+    void commandRetryAdmissionCanBeClaimedOnlyOnceAcrossStepViews() {
+        PipelineExecutionContext root = PipelineExecutionContext.forCommandRetry(
+            "tenant-1", "exec-abc", 0, 2, "command-retry:exec-abc:7");
+        PipelineExecutionContext target = root.atStep(2);
+
+        assertTrue(target.commandRetryTargetsCurrentStep());
+        assertTrue(target.claimCommandRetry("archive:invoice-1"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+            root.atStep(2).claimCommandRetry("notify:invoice-1"));
+        assertTrue(root.commandRetryClaimed());
+        assertEquals(
+            target.commandRetryAttemptId("archive:invoice-1"),
+            root.atStep(2).commandRetryAttemptId("archive:invoice-1"));
+    }
+
+    @Test
+    void unclaimedCommandRetryFailsCompletionValidation() {
+        PipelineExecutionContext context = PipelineExecutionContext.forCommandRetry(
+            "tenant-1", "exec-abc", 2, 2, "command-retry:exec-abc:7");
+
+        assertThrows(IllegalStateException.class, context::requireCommandRetryClaimed);
     }
 
     @Test

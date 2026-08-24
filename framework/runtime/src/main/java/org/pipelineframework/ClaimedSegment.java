@@ -41,11 +41,14 @@ record ClaimedSegment(
         record.tenantId(),
         record.executionId(),
         record.currentStepIndex(),
+        -1,
         record.attempt(),
         record.resultShape(),
         record.version(),
         transitionKey,
-        payload);
+        payload,
+        record.redriveIntent(),
+        record.failedStepIndex());
     SerializedTransitionPayload encodedPayload = payloadCodec.encode(payload);
     return TransitionCommandEnvelope.from(
         command,

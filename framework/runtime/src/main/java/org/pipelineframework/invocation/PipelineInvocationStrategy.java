@@ -6,6 +6,8 @@ import java.util.function.LongConsumer;
 
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.telemetry.PipelineRunContextHolder;
 
@@ -14,6 +16,10 @@ interface PipelineInvocationStrategy {
     PipelineContext pipelineContext();
 
     AwaitExecutionContext awaitContext();
+
+    default Optional<PipelineExecutionContext> executionContext() {
+        return Optional.empty();
+    }
 
     default Optional<PipelineRunContext> runContext() {
         return Optional.empty();
@@ -37,6 +43,7 @@ interface PipelineInvocationStrategy {
 final class StepInvocationStrategy implements PipelineInvocationStrategy {
     private final PipelineContext pipelineContext;
     private final AwaitExecutionContext awaitContext;
+    private final Optional<PipelineExecutionContext> executionContext;
     private final Optional<PipelineRunContext> runContext;
     private final Optional<PipelineInvocationContext> invocationContext;
 
@@ -44,6 +51,7 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
             Optional<PipelineInvocationContext> invocationContext) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
+        this.executionContext = PipelineExecutionContextHolder.get();
         this.runContext = PipelineRunContextHolder.get();
         this.invocationContext = Objects.requireNonNull(invocationContext, "invocationContext must not be null");
     }
@@ -56,6 +64,11 @@ final class StepInvocationStrategy implements PipelineInvocationStrategy {
     @Override
     public AwaitExecutionContext awaitContext() {
         return awaitContext;
+    }
+
+    @Override
+    public Optional<PipelineExecutionContext> executionContext() {
+        return executionContext;
     }
 
     @Override

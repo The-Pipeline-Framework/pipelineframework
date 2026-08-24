@@ -20,6 +20,15 @@ policy. A recorded successful effect may be returned without redispatch. Ambiguo
 success remains protected unless provider idempotency, reconciliation, or explicit policy
 makes redispatch safe under the same logical effect identity.
 
+Ordinary execution re-drive is not authorization to retry a retained effect. Deliberate
+Command retry is an explicit control-plane intent that resumes the failed execution at
+its resumable step. The retained `FAILED_RETRYABLE` logical effect claims that admission;
+successful effects encountered earlier during deterministic composition do not. The Command runtime still asks `CommandEffectStore` to
+atomically append and claim the next attempt; the execution control plane cannot reset,
+delete, or otherwise manufacture effect state.
+One admitted execution retry deterministically identifies one logical effect attempt, so worker
+recovery cannot turn the same admission into additional attempts.
+
 This decision governs `framework/runtime-core` Command contracts,
 `framework/runtime` Command execution, Command connectors, and effect stores.
 
@@ -33,3 +42,5 @@ logical identity and recorded authority can prevent unsafe accidental redispatch
 - Generic cache and typed persistence cannot authorize an external effect.
 - Provider idempotency keys align with logical Command identity.
 - Retry/redrive support must preserve effect identity and reject unsafe unsupported paths.
+- Execution stores must preserve deliberate retry intent until the targeted transition is
+  claimed; effect stores remain the sole authority for whether another attempt is legal.

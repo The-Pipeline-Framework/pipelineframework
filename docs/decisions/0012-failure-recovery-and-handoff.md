@@ -24,6 +24,13 @@ downstream pipeline owns execution retry, DLQ, and lifecycle. Retry and redrive 
 the execution, observation, effect, correlation, or handoff identity appropriate to the
 boundary rather than manufacturing a new business act.
 
+An ordinary terminal execution re-drive replays execution and does not authorize a new
+external-effect attempt. Retrying a retained `FAILED_RETRYABLE` Command effect requires
+an explicit Command-retry admission intent. That intent is durable execution metadata for
+the retained failed resumable step; one `FAILED_RETRYABLE` logical effect may claim it.
+`CommandEffectStore` independently authorizes and records the new attempt under the
+unchanged logical effect identity.
+
 This decision governs failure contracts in `framework/runtime-core`, recovery and
 queue-async coordination in `framework/runtime`, checkpoint connectors, and runtime tests.
 

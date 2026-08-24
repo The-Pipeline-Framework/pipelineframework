@@ -73,6 +73,37 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void preservesDeliberateCommandRetryIntentAcrossEnvelopeRoundTrip() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            3,
+            -1,
+            0,
+            ExecutionResultShape.SINGLE,
+            7L,
+            "command-retry:exec-1:6",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            5);
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+        TransitionWorkerCommand decoded = envelope.toCommand(payloadCodec);
+
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, envelope.redriveIntent());
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, decoded.redriveIntent());
+        assertEquals(3, decoded.currentStepIndex());
+        assertEquals(5, envelope.redriveStepIndex());
+        assertEquals(5, decoded.redriveStepIndex());
+    }
+
+    @Test
     void defaultTransitionWorkerCommandRunsToPipelineEnd() {
         TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
             ExecutionInputShape.UNI,

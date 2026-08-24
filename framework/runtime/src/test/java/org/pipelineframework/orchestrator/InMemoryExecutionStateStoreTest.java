@@ -207,6 +207,55 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void deliberateCommandRetryIntentSurvivesAdmissionAndLeaseClaim() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-command-retry",
+                    "payload",
+                    ExecutionResultShape.SINGLE,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> failed = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                ExecutionStatus.FAILED,
+                "transition",
+                "COMMAND_FAILED_RETRYABLE",
+                "retryable command failure",
+                4,
+                now + 1)
+            .await().indefinitely().orElseThrow();
+        assertEquals(4, failed.failedStepIndex());
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                failed.version(),
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "command-retry:" + created.record().executionId() + ":" + failed.version(),
+                now + 2)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, redriven.redriveIntent());
+        assertEquals(4, redriven.failedStepIndex());
+
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a",
+                created.record().executionId(),
+                "worker-1",
+                now + 3,
+                30_000L)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, claimed.redriveIntent());
+        assertEquals(4, claimed.failedStepIndex());
+    }
+
+    @Test
     void redriveTerminalExecutionRejectsStaleVersionAndNonTerminalStatus() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

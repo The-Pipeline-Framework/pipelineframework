@@ -175,7 +175,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.redriveIntent(),
+                    current.failedStepIndex());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
             }
@@ -494,6 +496,22 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, -1, nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        long nowEpochMs) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
             return Uni.createFrom().item(Optional.empty());
         }
@@ -530,7 +548,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    ExecutionRedriveIntent.REPLAY,
+                    failedStepIndex);
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -545,6 +565,26 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         boolean allowFailed,
         String transitionKey,
         long nowEpochMs) {
+        return redriveTerminalExecution(
+            tenantId,
+            executionId,
+            expectedVersion,
+            allowFailed,
+            ExecutionRedriveIntent.REPLAY,
+            transitionKey,
+            nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String transitionKey,
+        long nowEpochMs) {
+        ExecutionRedriveIntent resolvedIntent = Objects.requireNonNull(intent, "intent must not be null");
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
@@ -580,7 +620,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    resolvedIntent,
+                    current.failedStepIndex());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }

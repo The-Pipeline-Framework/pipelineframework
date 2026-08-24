@@ -14,6 +14,8 @@ import java.util.Objects;
  * @param executionVersion claimed execution record version
  * @param transitionKey idempotency key for the claimed transition
  * @param inputPayload materialized input payload for this transition
+ * @param redriveIntent explicit terminal-redrive intent
+ * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
  */
 public record TransitionWorkerCommand(
     String tenantId,
@@ -24,8 +26,25 @@ public record TransitionWorkerCommand(
     ExecutionResultShape resultShape,
     long executionVersion,
     String transitionKey,
-    Object inputPayload
+    Object inputPayload,
+    ExecutionRedriveIntent redriveIntent,
+    int redriveStepIndex
 ) {
+    public TransitionWorkerCommand(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        int stopBeforeStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        Object inputPayload
+    ) {
+        this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
+            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1);
+    }
+
     public TransitionWorkerCommand(
         String tenantId,
         String executionId,
@@ -45,7 +64,34 @@ public record TransitionWorkerCommand(
             resultShape,
             executionVersion,
             transitionKey,
-            inputPayload);
+            inputPayload,
+            ExecutionRedriveIntent.REPLAY,
+            -1);
+    }
+
+    public TransitionWorkerCommand(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        Object inputPayload,
+        ExecutionRedriveIntent redriveIntent
+    ) {
+        this(
+            tenantId,
+            executionId,
+            currentStepIndex,
+            -1,
+            attempt,
+            resultShape,
+            executionVersion,
+            transitionKey,
+            inputPayload,
+            redriveIntent,
+            redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1);
     }
 
     public TransitionWorkerCommand {
@@ -66,6 +112,14 @@ public record TransitionWorkerCommand(
         }
         if (transitionKey == null || transitionKey.isBlank()) {
             throw new IllegalArgumentException("transitionKey must not be blank");
+        }
+        redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
+            throw new IllegalArgumentException(
+                "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
+        }
+        if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
+            redriveStepIndex = -1;
         }
     }
 }

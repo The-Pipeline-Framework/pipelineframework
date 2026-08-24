@@ -30,8 +30,50 @@ public record ExecutionRecord<I, R>(
     long ttlEpochS,
     long firstCircuitDeferredAtEpochMs,
     int circuitDeferralCount,
-    String circuitIdentity
+    String circuitIdentity,
+    ExecutionRedriveIntent redriveIntent,
+    int failedStepIndex
 ) {
+    public ExecutionRecord {
+        redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+    }
+
+    /** Compatibility constructor for records persisted before explicit redrive intent existed. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        String circuitIdentity
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion, resultShape,
+            status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
+            lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
+            createdAtEpochMs, updatedAtEpochMs, ttlEpochS, firstCircuitDeferredAtEpochMs,
+            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1);
+    }
+
     /** Compatibility constructor for records persisted before circuit deferral metadata existed. */
     public ExecutionRecord(
         String tenantId,
@@ -195,6 +237,8 @@ public record ExecutionRecord<I, R>(
             ttlEpochS,
             firstCircuitDeferredAtEpochMs,
             circuitDeferralCount,
-            circuitIdentity);
+            circuitIdentity,
+            redriveIntent,
+            failedStepIndex);
     }
 }

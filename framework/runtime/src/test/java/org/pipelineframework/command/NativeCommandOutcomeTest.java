@@ -25,8 +25,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.connector.CommandCapabilities;
 import org.pipelineframework.connector.CommandConfirmation;
 import org.pipelineframework.connector.CommandDispatchIdentity;
@@ -82,12 +82,12 @@ class NativeCommandOutcomeTest {
 
     @AfterEach
     void clearContext() {
-        AwaitExecutionContextHolder.clear();
+        PipelineExecutionContextHolder.clear();
     }
 
     @Test
     void recordsSuccessWithOnlyDeclaredSafeReferencesAndReplaysWithoutResolvingProvider() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done",
             new CommandConfirmation(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, false),
@@ -125,7 +125,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void routesThroughNamedBindingAndActivatesItOnlyForLiveDispatch() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         NativeProvider prototype = new NativeProvider();
         ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
             List.of(new ConnectorBindingDefinition(
@@ -159,7 +159,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void rejectsBindingWhoseRuntimeProviderDoesNotMatchTheSelector() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
             List.of(new ConnectorBindingDefinition(
                 ConnectorBindingName.of("work"),
@@ -187,7 +187,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void mapsInsufficientAchievedConfirmationToNonRetryableBarriers() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done", CommandConfirmation.none(), Set.of(), List.of());
         CommandPolicy machinePolicy = new CommandPolicy(
@@ -224,7 +224,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void recordsSuccessWhenTheAchievedConfirmationSatisfiesPolicy() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done",
             new CommandConfirmation(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true),
@@ -254,7 +254,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void deliberateNativeRetryKeepsLogicalIdentityAndChangesAttemptIdentity() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-1", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution-1", 1));
         operation.outcome = new CommandOutcome.RetryableFailure<>("temporarily-unavailable", List.of());
         assertThrows(CommandRetryableOutcomeException.class, () -> support.<String, String>execute(
             descriptor(), (ignored, input) -> "stable-retry", "input")
@@ -262,7 +262,7 @@ class NativeCommandOutcomeTest {
 
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done", CommandConfirmation.none(), Set.of(), List.of());
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-2", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution-2", 1));
         assertEquals("done", support.<String, String>retry(
             descriptor(), (ignored, input) -> "stable-retry", "input")
             .await().atMost(Duration.ofSeconds(5)));
@@ -281,14 +281,14 @@ class NativeCommandOutcomeTest {
 
     @Test
     void deliberateNativeRetryRequiresProviderCapabilityBeforeCreatingAnAttempt() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-1", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution-1", 1));
         operation.retryRedriveSupported = false;
         operation.outcome = new CommandOutcome.RetryableFailure<>("temporarily-unavailable", List.of());
         assertThrows(CommandRetryableOutcomeException.class, () -> support.<String, String>execute(
             descriptor(), (ignored, input) -> "unsupported-retry", "input")
             .await().atMost(Duration.ofSeconds(5)));
 
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-2", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution-2", 1));
         IllegalStateException rejected = assertThrows(IllegalStateException.class,
             () -> support.<String, String>retry(
                 descriptor(), (ignored, input) -> "unsupported-retry", "input")
@@ -302,7 +302,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void deliberateRetryDoesNotCrossAmbiguousOutcomeBarrier() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.Ambiguous<>("submission-unknown", List.of());
         assertThrows(CommandOutcomeException.class, () -> support.<String, String>execute(
             descriptor(), (ignored, input) -> "ambiguous-retry", "input")
@@ -321,7 +321,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void rejectsInvalidConfigurationBeforeCreatingAnEffectOrInvokingTheProvider() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> support.<String, String>execute(
             descriptor(Map.of("unknown", "value")), (ignored, input) -> "invalid-config", "input")
@@ -334,7 +334,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void rejectsAnUnknownNativeOperationBeforeCreatingAnEffect() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         InMemoryCommandEffectStore missingStore = new InMemoryCommandEffectStore();
         CommandStepSupport missingProviderSupport = new CommandStepSupport(
             new ConnectorRegistry(List.of()), List.of(missingStore), queueAsyncConfig());
@@ -348,7 +348,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void rejectsAStoreWithoutNativeOutcomeSupportBeforeItCreatesAnEffect() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         CommandEffectStore legacyStore = mock(CommandEffectStore.class);
         when(legacyStore.find("tenant", "unsupported-store")).thenReturn(io.smallrye.mutiny.Uni.createFrom().item(Optional.empty()));
         CommandStepSupport legacyStoreSupport = new CommandStepSupport(
@@ -373,7 +373,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void excludesUndeclaredReferencesAndHumanInstructionsFromDurableOutcomeJson() throws Exception {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.UserActionRequired<>(
             "approval-required",
             "operator-only-secret-instruction",
@@ -399,7 +399,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void rejectsBlockingNativeProvidersBeforeCreatingAnEffect() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         CommandStepSupport blockingSupport = new CommandStepSupport(
             new ConnectorRegistry(List.of(new NativeProvider(operation, new ConnectorExecutionCapabilities(
                 ConnectorExecutionStyle.BLOCKING, ConnectorConcurrencyScope.PROVIDER_MANAGED)))),
@@ -415,7 +415,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void normalizesProviderThrowsWrappedFailuresAndNullResults() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         IllegalArgumentException immediate = new IllegalArgumentException("immediate-provider-bug");
         operation.immediateFailure = immediate;
         IllegalArgumentException observedImmediate = assertThrows(IllegalArgumentException.class, () -> support.<String, String>execute(
@@ -452,7 +452,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void mapsCancelledProviderStagesToAnAmbiguousBarrier() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         CompletableFuture<CommandOutcome<String>> cancelled = new CompletableFuture<>();
         cancelled.cancel(false);
         operation.stageOverride = cancelled;
@@ -470,7 +470,7 @@ class NativeCommandOutcomeTest {
 
     @Test
     void serializesProviderVersionAndReadsLegacyRecordsWithoutNativeSnapshots() throws Exception {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done", CommandConfirmation.none(), Set.of(), List.of());
         support.<String, String>execute(descriptor(), (ignored, input) -> "serialized-native", "input")
@@ -496,7 +496,7 @@ class NativeCommandOutcomeTest {
     }
 
     private void assertOutcome(CommandOutcome<String> outcome, CommandEffectStatus status, Class<? extends Throwable> type) {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         operation.outcome = outcome;
         String commandId = "stable-" + status.name().toLowerCase(Locale.ROOT);
         int invocationsBefore = operation.invocations;
