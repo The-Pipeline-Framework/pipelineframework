@@ -2,23 +2,24 @@ package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.vertx.RunOnVertxContext;
-import io.quarkus.test.vertx.UniAsserter;
-import io.smallrye.mutiny.Uni;
-import org.hibernate.reactive.mutiny.Mutiny;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.QueryInvocation;
+import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.query.QueryRequest;
@@ -27,34 +28,26 @@ import org.pipelineframework.query.QueryStepDescriptor;
 @QuarkusTest
 class JpaQueryConnectorQuarkusTest {
     @Inject
-    Mutiny.SessionFactory sessionFactory;
+    EntityManagerFactory entityManagerFactory;
 
     @Inject
     JpaQueryConnector connector;
 
     @Test
-    @RunOnVertxContext
-    void loadsProjectedRecordFromDeclarativeJpaQuery(UniAsserter asserter) {
-        asserter.execute(() -> sessionFactory.withTransaction((session, tx) ->
-            session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
-                .replaceWithVoid()
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-1", "HIGH", 91)))));
+    void loadsProjectedRecordFromDeclarativeJpaQuery() {
+        replaceWith(new CustomerRiskEntity("customer-1", "HIGH", 91));
 
-        asserter.assertThat(
-            () -> Uni.createFrom().completionStage(connector.queryOne(
+        CustomerRiskFacts facts = connector.queryOne(
                 new QueryRequest<>(descriptor(), new CustomerRiskLookup("customer-1")),
-                CustomerRiskFacts.class)),
-            facts -> assertEquals(new CustomerRiskFacts("customer-1", "HIGH", 91), facts));
+                CustomerRiskFacts.class).toCompletableFuture().join();
+
+        assertEquals(new CustomerRiskFacts("customer-1", "HIGH", 91), facts);
     }
 
     @Test
-    @RunOnVertxContext
     @SuppressWarnings("unchecked")
-    void nativeOperationUsesInvocationOutputTypeAndReturnsSemanticOutcome(UniAsserter asserter) {
-        asserter.execute(() -> sessionFactory.withTransaction((session, tx) ->
-            session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
-                .replaceWithVoid()
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-native", "HIGH", 93)))));
+    void nativeOperationUsesInvocationOutputTypeAndReturnsSemanticOutcome() {
+        replaceWith(new CustomerRiskEntity("customer-native", "HIGH", 93));
 
         QueryOperation<Object, JpaFindOneConfiguration, Object> operation =
             (QueryOperation<Object, JpaFindOneConfiguration, Object>) connector.operations().stream()
@@ -62,16 +55,17 @@ class JpaQueryConnectorQuarkusTest {
                 .filter(candidate -> "find.one".equals(candidate.id()))
                 .findFirst()
                 .orElseThrow();
+        assertEquals(QueryCacheability.CACHEABLE, operation.capabilities().cacheability());
         JpaFindOneConfiguration configuration = nativeConfiguration();
-        asserter.assertThat(
-            () -> Uni.createFrom().completionStage(operation.query(new QueryInvocation<>(
+        QueryOutcome<Object> outcome = operation.query(new QueryInvocation<>(
                 new CustomerRiskLookup("customer-native"),
                 configuration,
                 (Class<Object>) (Class<?>) CustomerRiskFacts.class,
-                ConnectorExecutionContext.empty()))),
-            outcome -> assertEquals(
-                new CustomerRiskFacts("customer-native", "HIGH", 93),
-                assertInstanceOf(QueryOutcome.Found.class, outcome).output()));
+                ConnectorExecutionContext.empty())).toCompletableFuture().join();
+
+        assertEquals(
+            new CustomerRiskFacts("customer-native", "HIGH", 93),
+            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
     }
 
     private static JpaFindOneConfiguration nativeConfiguration() {
@@ -85,37 +79,49 @@ class JpaQueryConnectorQuarkusTest {
     }
 
     @Test
-    @RunOnVertxContext
-    void duplicateRowsFailWithoutLimit(UniAsserter asserter) {
-        asserter.execute(() -> sessionFactory.withTransaction((session, tx) ->
-            session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
-                .replaceWithVoid()
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-duplicate", "HIGH", 91)))
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-duplicate", "MEDIUM", 72)))));
+    void duplicateRowsFailWithoutLimit() {
+        replaceWith(
+            new CustomerRiskEntity("customer-duplicate", "HIGH", 91),
+            new CustomerRiskEntity("customer-duplicate", "MEDIUM", 72));
 
-        asserter.assertFailedWith(
-            () -> Uni.createFrom().completionStage(connector.queryOne(
+        CompletionException failure = assertThrows(CompletionException.class, () -> connector.queryOne(
                 new QueryRequest<>(descriptor(), new CustomerRiskLookup("customer-duplicate")),
-                CustomerRiskFacts.class)),
-            IllegalStateException.class);
+                CustomerRiskFacts.class).toCompletableFuture().join());
+
+        assertInstanceOf(IllegalStateException.class, failure.getCause());
     }
 
     @Test
-    @RunOnVertxContext
-    void orderByLimitReturnsLatestMatchingRow(UniAsserter asserter) {
-        asserter.execute(() -> sessionFactory.withTransaction((session, tx) ->
-            session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
-                .replaceWithVoid()
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "LOW", 45, "ACTIVE", 1, null)))
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "MEDIUM", 85, "ACTIVE", 2, null)))
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "HIGH", 91, "ACTIVE", 3, null)))
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "CRITICAL", 99, "INACTIVE", 3, null)))));
+    void orderByLimitReturnsLatestMatchingRow() {
+        replaceWith(
+            new CustomerRiskEntity("customer-latest", "LOW", 45, "ACTIVE", 1, null),
+            new CustomerRiskEntity("customer-latest", "MEDIUM", 85, "ACTIVE", 2, null),
+            new CustomerRiskEntity("customer-latest", "HIGH", 91, "ACTIVE", 3, null),
+            new CustomerRiskEntity("customer-latest", "CRITICAL", 99, "INACTIVE", 3, null));
 
-        asserter.assertThat(
-            () -> Uni.createFrom().completionStage(connector.queryOne(
+        CustomerRiskFacts facts = connector.queryOne(
                 new QueryRequest<>(latestActiveRiskDescriptor(), new CustomerRiskLookup("customer-latest", 80)),
-                CustomerRiskFacts.class)),
-            facts -> assertEquals(new CustomerRiskFacts("customer-latest", "HIGH", 91), facts));
+                CustomerRiskFacts.class).toCompletableFuture().join();
+
+        assertEquals(new CustomerRiskFacts("customer-latest", "HIGH", 91), facts);
+    }
+
+    private void replaceWith(CustomerRiskEntity... entities) {
+        EntityManager entityManager = entityManagerFactory.createEntityManager();
+        var transaction = entityManager.getTransaction();
+        try {
+            transaction.begin();
+            entityManager.createQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate();
+            for (CustomerRiskEntity entity : entities) {
+                entityManager.persist(entity);
+            }
+            transaction.commit();
+        } finally {
+            if (transaction.isActive()) {
+                transaction.rollback();
+            }
+            entityManager.close();
+        }
     }
 
     private static QueryStepDescriptor descriptor() {

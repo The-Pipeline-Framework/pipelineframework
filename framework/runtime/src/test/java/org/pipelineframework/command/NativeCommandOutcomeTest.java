@@ -29,6 +29,7 @@ import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.connector.CommandCapabilities;
 import org.pipelineframework.connector.CommandConfirmation;
+import org.pipelineframework.connector.CommandDispatchIdentity;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandOperation;
@@ -249,6 +250,73 @@ class NativeCommandOutcomeTest {
             CommandEffectStatus.AMBIGUOUS, CommandOutcomeException.class);
         assertOutcome(new CommandOutcome.UserActionRequired<>("approve-in-browser", "Approve the submission in the provider console", List.of()),
             CommandEffectStatus.USER_ACTION_REQUIRED, CommandOutcomeException.class);
+    }
+
+    @Test
+    void deliberateNativeRetryKeepsLogicalIdentityAndChangesAttemptIdentity() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-1", 1));
+        operation.outcome = new CommandOutcome.RetryableFailure<>("temporarily-unavailable", List.of());
+        assertThrows(CommandRetryableOutcomeException.class, () -> support.<String, String>execute(
+            descriptor(), (ignored, input) -> "stable-retry", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+
+        operation.outcome = new CommandOutcome.Succeeded<>(
+            "done", CommandConfirmation.none(), Set.of(), List.of());
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-2", 1));
+        assertEquals("done", support.<String, String>retry(
+            descriptor(), (ignored, input) -> "stable-retry", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+
+        assertEquals(2, operation.invocations);
+        assertEquals(2, operation.dispatchIdentities.size());
+        assertEquals("stable-retry", operation.dispatchIdentities.get(0).commandId());
+        assertEquals("stable-retry", operation.dispatchIdentities.get(1).commandId());
+        assertFalse(operation.dispatchIdentities.get(0).attemptId()
+            .equals(operation.dispatchIdentities.get(1).attemptId()));
+        CommandEffectRecord record = store.find("tenant", "stable-retry")
+            .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+        assertEquals(List.of(CommandEffectStatus.FAILED_RETRYABLE, CommandEffectStatus.SUCCEEDED),
+            record.attempts().stream().map(CommandEffectAttemptRecord::status).toList());
+    }
+
+    @Test
+    void deliberateNativeRetryRequiresProviderCapabilityBeforeCreatingAnAttempt() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-1", 1));
+        operation.retryRedriveSupported = false;
+        operation.outcome = new CommandOutcome.RetryableFailure<>("temporarily-unavailable", List.of());
+        assertThrows(CommandRetryableOutcomeException.class, () -> support.<String, String>execute(
+            descriptor(), (ignored, input) -> "unsupported-retry", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution-2", 1));
+        IllegalStateException rejected = assertThrows(IllegalStateException.class,
+            () -> support.<String, String>retry(
+                descriptor(), (ignored, input) -> "unsupported-retry", "input")
+                .await().atMost(Duration.ofSeconds(5)));
+
+        assertTrue(rejected.getMessage().contains("does not support deliberate retry/redrive"));
+        assertEquals(1, operation.invocations);
+        assertEquals(1, store.find("tenant", "unsupported-retry")
+            .await().atMost(Duration.ofSeconds(5)).orElseThrow().attempts().size());
+    }
+
+    @Test
+    void deliberateRetryDoesNotCrossAmbiguousOutcomeBarrier() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "execution", 1));
+        operation.outcome = new CommandOutcome.Ambiguous<>("submission-unknown", List.of());
+        assertThrows(CommandOutcomeException.class, () -> support.<String, String>execute(
+            descriptor(), (ignored, input) -> "ambiguous-retry", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+
+        CommandOutcomeException rejected = assertThrows(CommandOutcomeException.class,
+            () -> support.<String, String>retry(
+                descriptor(), (ignored, input) -> "ambiguous-retry", "input")
+                .await().atMost(Duration.ofSeconds(5)));
+
+        assertEquals(CommandEffectStatus.AMBIGUOUS, rejected.status());
+        assertEquals(1, operation.invocations);
+        assertEquals(1, store.find("tenant", "ambiguous-retry")
+            .await().atMost(Duration.ofSeconds(5)).orElseThrow().attempts().size());
     }
 
     @Test
@@ -530,6 +598,8 @@ class NativeCommandOutcomeTest {
         private RuntimeException immediateFailure;
         private CompletionStage<CommandOutcome<String>> stageOverride;
         private boolean returnNullStage;
+        private boolean retryRedriveSupported = true;
+        private final List<CommandDispatchIdentity> dispatchIdentities = new java.util.ArrayList<>();
 
         @Override
         public String id() {
@@ -554,6 +624,7 @@ class NativeCommandOutcomeTest {
                 return CompletableFuture.failedFuture(new AssertionError("provider should not be invoked during successful replay"));
             }
             invocations++;
+            dispatchIdentities.add(invocation.dispatchIdentity().orElseThrow());
             if (immediateFailure != null) {
                 throw immediateFailure;
             }
@@ -570,9 +641,9 @@ class NativeCommandOutcomeTest {
             return ConnectorConfigSchema.record(OperationConfig.class, "acme.search.write.document", 1);
         }
 
-        private static CommandCapabilities declaredCapabilities() {
+        private CommandCapabilities declaredCapabilities() {
             return new CommandCapabilities(
-                false, true, true, CommandExecutionPosture.AUTOMATED,
+                retryRedriveSupported, true, true, CommandExecutionPosture.AUTOMATED,
                 CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true, Set.of("ticket"));
         }
     }

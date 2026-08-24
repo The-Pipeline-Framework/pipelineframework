@@ -2,7 +2,9 @@
 
 Model typed application flows, runtime shape, connectors, and design-time boundaries.
 
-[Data Architecture](/design/data-architecture/index) for types definition and input/output flows
+- [Data Architecture](/design/data-architecture/index) for types definition and input/output flows
+- [Architectural Decisions](/decisions/) records the durable
+  ownership rules and distinctions that should survive implementation changes.
 
 ## Connectors and boundaries
 

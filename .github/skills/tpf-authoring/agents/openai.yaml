@@ -1,0 +1,3 @@
+interface:
+  display_name: "TPF Authoring"
+  short_description: "Author TPF-native typed applications"

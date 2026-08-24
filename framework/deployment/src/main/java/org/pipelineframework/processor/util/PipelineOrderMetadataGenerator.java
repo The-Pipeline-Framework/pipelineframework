@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +20,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.pipelineframework.config.pipeline.*;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -75,12 +79,19 @@ public class PipelineOrderMetadataGenerator {
             return;
         }
 
-        List<String> ordered = orderByYamlSteps(functionalSteps, config.steps());
+        Map<String, String> yamlIdentityByExecutionStep = ctx.isOrchestratorGenerated()
+            ? Map.of()
+            : resolveLocalYamlIdentities(ctx);
+        List<String> ordered = orderByYamlSteps(
+            functionalSteps, config.steps(), yamlIdentityByExecutionStep);
         if (ordered.isEmpty()) {
             return;
         }
 
-        List<String> expanded = PipelineOrderExpander.expand(ordered, config, null);
+        List<String> expanded = weaveGeneratedSideEffects(ctx, ordered);
+        if (expanded.isEmpty()) {
+            expanded = PipelineOrderExpander.expand(ordered, config, null);
+        }
         if (expanded == null || expanded.isEmpty()) {
             return;
         }
@@ -102,6 +113,61 @@ public class PipelineOrderMetadataGenerator {
                 writer.write(gson.toJson(metadata));
             }
         }
+    }
+
+    private List<String> weaveGeneratedSideEffects(
+            PipelineCompilationContext ctx, List<String> orderedFunctionalSteps) {
+        List<PipelineStepModel> clientModels = ctx.getStepModels().stream()
+            .filter(model -> model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT)
+            .toList();
+        if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)) {
+            return List.of();
+        }
+        Map<String, Deque<GeneratedStepGroup>> groupsByFunctionalStep = new LinkedHashMap<>();
+        List<String> pendingBefore = new ArrayList<>();
+        GeneratedStepGroup current = null;
+        for (PipelineStepModel model : clientModels) {
+            if (model.sideEffect()) {
+                String sideEffect = ClientStepClassNames.className(model, ctx.getTransportMode());
+                if (model.aspectPosition().filter(position -> position == AspectPosition.BEFORE_STEP).isPresent()
+                    || current == null) {
+                    pendingBefore.add(sideEffect);
+                } else {
+                    current.after().add(sideEffect);
+                }
+            } else {
+                String functionalStep = ctx.isOrchestratorGenerated()
+                    ? ClientStepClassNames.className(model, ctx.getTransportMode())
+                    : localExecutionStepName(model);
+                current = new GeneratedStepGroup(List.copyOf(pendingBefore), functionalStep, new ArrayList<>());
+                pendingBefore.clear();
+                groupsByFunctionalStep.computeIfAbsent(functionalStep, ignored -> new ArrayDeque<>()).add(current);
+            }
+        }
+        if (!pendingBefore.isEmpty()) {
+            throw new IllegalStateException("Generated aspect order ends with before-step side effects without a functional step");
+        }
+
+        List<String> expanded = new ArrayList<>();
+        for (String functionalStep : orderedFunctionalSteps) {
+            Deque<GeneratedStepGroup> groups = groupsByFunctionalStep.get(functionalStep);
+            if (groups == null || groups.isEmpty()) {
+                throw new IllegalStateException(
+                    "Generated aspect order has no functional model for authored step " + functionalStep);
+            }
+            GeneratedStepGroup group = groups.removeFirst();
+            expanded.addAll(group.before());
+            expanded.add(group.functional());
+            expanded.addAll(group.after());
+        }
+        if (groupsByFunctionalStep.values().stream().anyMatch(groups -> !groups.isEmpty())) {
+            throw new IllegalStateException(
+                "Generated aspect order contains more functional models than the authored pipeline order");
+        }
+        return List.copyOf(new LinkedHashSet<>(expanded));
+    }
+
+    private record GeneratedStepGroup(List<String> before, String functional, List<String> after) {
     }
 
     /**
@@ -242,29 +308,40 @@ public class PipelineOrderMetadataGenerator {
             if (model.sideEffect() || model.serviceClassName() == null) {
                 continue;
             }
-            if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "QueryClientStep");
-                continue;
-            }
-            if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
-                ordered.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "DynamicOperationClientStep");
-                continue;
-            }
-            ordered.add(model.serviceClassName().canonicalName());
+            ordered.add(localExecutionStepName(model));
         }
         return new ArrayList<>(ordered);
+    }
+
+    private Map<String, String> resolveLocalYamlIdentities(PipelineCompilationContext ctx) {
+        Map<String, String> identities = new LinkedHashMap<>();
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            if (model.sideEffect() || model.serviceClassName() == null) {
+                continue;
+            }
+            identities.putIfAbsent(localExecutionStepName(model), model.serviceName());
+        }
+        return identities;
+    }
+
+    private String localExecutionStepName(PipelineStepModel model) {
+        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "AwaitClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "CommandClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "QueryClientStep");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP)) {
+            return specialLocalClientStepName(model, "DynamicOperationClientStep");
+        }
+        return model.serviceClassName().canonicalName();
+    }
+
+    private String specialLocalClientStepName(PipelineStepModel model, String suffix) {
+        return model.servicePackage() + ".pipeline." + stripTrailingService(model.generatedName()) + suffix;
     }
 
     private Set<String> resolveGeneratedOrderSteps(PipelineCompilationContext ctx) {
@@ -356,7 +433,10 @@ public class PipelineOrderMetadataGenerator {
         };
     }
 
-    private List<String> orderByYamlSteps(List<String> availableSteps, List<PipelineYamlStep> yamlSteps) {
+    private List<String> orderByYamlSteps(
+            List<String> availableSteps,
+            List<PipelineYamlStep> yamlSteps,
+            Map<String, String> yamlIdentityByExecutionStep) {
         List<String> remaining = new ArrayList<>(availableSteps);
         List<String> ordered = new ArrayList<>();
         for (PipelineYamlStep step : yamlSteps) {
@@ -367,17 +447,33 @@ public class PipelineOrderMetadataGenerator {
             if (token.isBlank()) {
                 continue;
             }
-            String match = selectBestMatch(remaining, token);
-            if (match != null) {
-                ordered.add(match);
-                remaining.remove(match);
+            Optional<String> match = selectIdentityMatch(remaining, token, yamlIdentityByExecutionStep);
+            if (match.isEmpty()) {
+                match = selectBestMatch(remaining, token);
+            }
+            if (match.isPresent()) {
+                ordered.add(match.get());
+                remaining.remove(match.get());
             }
         }
         ordered.addAll(remaining);
         return ordered;
     }
 
-    private String selectBestMatch(List<String> candidates, String token) {
+    private Optional<String> selectIdentityMatch(
+            List<String> candidates,
+            String token,
+            Map<String, String> yamlIdentityByExecutionStep) {
+        for (String candidate : candidates) {
+            String yamlIdentity = yamlIdentityByExecutionStep.get(candidate);
+            if (yamlIdentity != null && toClassToken(yamlIdentity).equals(token)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> selectBestMatch(List<String> candidates, String token) {
         String best = null;
         int bestLength = Integer.MAX_VALUE;
         for (String candidate : candidates) {
@@ -390,7 +486,7 @@ public class PipelineOrderMetadataGenerator {
                 bestLength = normalized.length();
             }
         }
-        return best;
+        return Optional.ofNullable(best);
     }
 
     /**

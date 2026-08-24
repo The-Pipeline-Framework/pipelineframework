@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,52 @@ class PipelineStepOrdererTest {
                 List.of(first.getClass().getName(), second.getClass().getName())));
 
         assertEquals(List.of(first, second), ordered);
+    }
+
+    @Test
+    void appliesConfiguredOrderToCdiClientProxySubclasses() {
+        ConfiguredStep first = new ConfiguredStep_ClientProxy();
+        OtherConfiguredStep second = new OtherConfiguredStep_ClientProxy();
+
+        List<Object> ordered = orderer.applyConfiguredOrder(
+            List.of(second, first),
+            List.of(ConfiguredStep.class.getName(), OtherConfiguredStep.class.getName()));
+
+        assertEquals(List.of(first, second), ordered);
+    }
+
+    @Test
+    void ignoresNullStepEntriesBeforeResolvingRuntimeClassNames() {
+        ConfiguredStep first = new ConfiguredStep();
+        OtherConfiguredStep second = new OtherConfiguredStep();
+        List<Object> steps = new ArrayList<>();
+        steps.add(second);
+        steps.add(null);
+        steps.add(first);
+
+        List<Object> ordered = orderer.applyConfiguredOrder(
+            steps,
+            List.of(ConfiguredStep.class.getName(), OtherConfiguredStep.class.getName()));
+
+        assertEquals(List.of(first, second), ordered);
+    }
+
+    private static class ConfiguredStep {
+    }
+
+    private static class ConfiguredStep_Subclass extends ConfiguredStep {
+    }
+
+    private static final class ConfiguredStep_ClientProxy extends ConfiguredStep_Subclass {
+    }
+
+    private static class OtherConfiguredStep {
+    }
+
+    private static class OtherConfiguredStep_Subclass extends OtherConfiguredStep {
+    }
+
+    private static final class OtherConfiguredStep_ClientProxy extends OtherConfiguredStep_Subclass {
     }
 
     private static <T> T withContextClassLoader(Path root, java.util.concurrent.Callable<T> callable) {

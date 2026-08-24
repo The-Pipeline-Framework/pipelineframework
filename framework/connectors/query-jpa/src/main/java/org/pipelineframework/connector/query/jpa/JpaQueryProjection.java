@@ -12,6 +12,9 @@ final class JpaQueryProjection {
         if (entity == null) {
             throw new IllegalArgumentException("query entity row must not be null");
         }
+        if (outputType.isInstance(entity)) {
+            return outputType.cast(entity);
+        }
         if (!outputType.isRecord()) {
             throw new IllegalArgumentException("JPA query output must be a Java record in v1: " + outputType.getName());
         }

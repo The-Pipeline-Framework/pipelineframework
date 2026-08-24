@@ -28,8 +28,8 @@ public final class CommandPolicyValidator {
             throw new IllegalArgumentException(subject
                 + " declares blocking execution, which requires framework-managed execution deferred to #577");
         }
-        if (policy.requireRetryRedrive()) {
-            throw new IllegalArgumentException(subject + " requires retry/redrive, but stable-ID redispatch is deferred to #545");
+        if (policy.requireRetryRedrive() && !command.retryRedriveSupported()) {
+            throw new IllegalArgumentException(subject + " requires retry/redrive support");
         }
         if (policy.requireIdempotency() && !command.providerIdempotencySupported()) {
             throw new IllegalArgumentException(subject + " requires provider idempotency support");

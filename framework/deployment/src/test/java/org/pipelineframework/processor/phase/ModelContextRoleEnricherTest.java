@@ -3,6 +3,7 @@ package org.pipelineframework.processor.phase;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.element.Element;
 
@@ -38,8 +39,40 @@ class ModelContextRoleEnricherTest {
     @Test
     void enrichReturnsEmptyWhenNoPluginHostAndNoOrchestrator() {
         PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setAspectModels(List.of());
         List<PipelineStepModel> result = enricher.enrich(ctx, List.of(step("ProcessAService", false)));
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void enrichesConfiguredLocalOrchestratorBeforeItsGeneratedTypeEntersTheRound() {
+        PipelineCompilationContext ctx = new PipelineCompilationContext(
+            mock(ProcessingEnvironment.class), mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setAspectModels(List.of(new PipelineAspectModel(
+            "persistence",
+            AspectScope.GLOBAL,
+            AspectPosition.AFTER_STEP,
+            Map.of(
+                "pluginImplementationClass", "com.example.PersistencePlugin",
+                "enabledTargets", List.of("LOCAL_CLIENT_STEP")))));
+
+        List<PipelineStepModel> result = enricher.enrich(
+            ctx,
+            List.of(step("ProcessAnalyseInvoiceQueryClientStep", false).toBuilder()
+                .inputMapping(new TypeMapping(
+                    ClassName.get("com.example", "AnalysisRequest"),
+                    ClassName.get("com.example.proto", "AnalysisRequest"), false))
+                .outputMapping(new TypeMapping(
+                    ClassName.get("com.example", "ReviewReady"),
+                    ClassName.get("com.example.proto", "ReviewReady"), false))
+                .build()));
+
+        assertTrue(result.stream().anyMatch(model -> model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER));
+        assertTrue(result.stream().anyMatch(model -> model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT));
     }
 
     @Test

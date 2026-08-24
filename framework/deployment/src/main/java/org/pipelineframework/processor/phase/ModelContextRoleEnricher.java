@@ -23,16 +23,19 @@ class ModelContextRoleEnricher {
             return List.of();
         }
 
-        boolean hasOrchestrator = ctx.getRoundEnv() != null
-            && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty();
+        boolean hasOrchestrator = ctx.isOrchestratorGenerated()
+            || (ctx.getRoundEnv() != null
+                && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty());
         if (isRuntimeMappedStepModule(ctx, hasOrchestrator)) {
             return handleRuntimeMappedStepModule(baseModels);
         }
-        if (!ctx.isPluginHost() && !hasOrchestrator) {
+        boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
+        boolean hasConfiguredColocatedAspect = colocatedPlugins
+            && ctx.getAspectModels().stream().anyMatch(this::hasPluginImplementation);
+        if (!ctx.isPluginHost() && !hasOrchestrator && !hasConfiguredColocatedAspect) {
             return List.of();
         }
 
-        boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
         if (ctx.isPluginHost() && !colocatedPlugins) {
             return handlePluginHostDistributed(ctx, baseModels);
         }
