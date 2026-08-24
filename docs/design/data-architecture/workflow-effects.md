@@ -386,16 +386,8 @@ Cold storage is not an architectural embarrassment.
 
 It is the natural lifecycle of immutable history.
 
-And TPF's historical data has unusually strong context available to it:
+And TPF's data architecture is unusually friendly to long-term replay. Immutable typed values can be interpreted alongside generated contract hashes, step and type identities, durable execution and release identity, timestamps, and `PayloadReference` provenance.
 
-```text
-release identity
-contract hash
-execution identity
-step identity
-type identity
-timestamp
-payload provenance
-```
+Those facts live on different current surfaces; persistence does not automatically wrap every business value in one historical envelope. A production archive therefore needs an archive schema and restore contract that retain the context it needs, map stored representations back to canonical types, and keep referenced payloads resolvable.
 
-That can make archived pipeline history considerably more useful than unstructured application logs.
+That is an implementation obligation, not an architectural impediment. TPF does not yet prescribe one universal archive format, but its data architecture makes restorable history a coherent extension rather than a forensic reconstruction from unstructured application logs.
