@@ -70,6 +70,7 @@ import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 import org.pipelineframework.invocation.PipelineInvocationContext;
+import org.pipelineframework.command.CommandStep;
 
 @ApplicationScoped
 class PipelineStepExecutor {
@@ -166,6 +167,14 @@ class PipelineStepExecutor {
         java.util.Optional<PipelineInvocationContext> invocationContext,
         BranchExecutionTracker branchExecutionTracker) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
+        if (awaitContextSnapshot != null
+            && awaitContextSnapshot.targetsCurrentStepForCommandRetry()
+            && !(resolvedStep instanceof CommandStep)) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Deliberate Command retry targeted non-Command step "
+                    + resolvedStep.getClass().getName()
+                    + " at index " + awaitContextSnapshot.currentStepIndex()));
+        }
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
             : ("$root".equals(definitionId)

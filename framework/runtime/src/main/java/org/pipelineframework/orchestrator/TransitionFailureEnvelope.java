@@ -8,18 +8,32 @@ import org.pipelineframework.step.NonRetryableException;
  *
  * @param failureClass failure class name
  * @param message failure message
+ * @param failedStepIndex failed pipeline step index, or {@code -1} when unavailable
  */
 public record TransitionFailureEnvelope(
     String failureClass,
-    String message
+    String message,
+    int failedStepIndex
 ) {
     public TransitionFailureEnvelope {
         Objects.requireNonNull(failureClass, "failureClass");
     }
 
+    public TransitionFailureEnvelope(String failureClass, String message) {
+        this(failureClass, message, -1);
+    }
+
     public static TransitionFailureEnvelope from(Throwable failure) {
         Objects.requireNonNull(failure, "failure");
-        return new TransitionFailureEnvelope(failure.getClass().getName(), failure.getMessage());
+        return new TransitionFailureEnvelope(failure.getClass().getName(), failure.getMessage(), -1);
+    }
+
+    public static TransitionFailureEnvelope from(Throwable failure, int failedStepIndex) {
+        Objects.requireNonNull(failure, "failure");
+        return new TransitionFailureEnvelope(
+            failure.getClass().getName(),
+            failure.getMessage(),
+            failedStepIndex);
     }
 
     public RuntimeException toException() {
@@ -27,7 +41,7 @@ public record TransitionFailureEnvelope(
             return new NonRetryableException(message == null || message.isBlank() ? failureClass : message);
         }
         String suffix = message == null || message.isBlank() ? "" : ": " + message;
-        return new TransitionWorkerFailureException(failureClass + suffix);
+        return new TransitionWorkerFailureException(failureClass + suffix, failedStepIndex);
     }
 
     private boolean isNonRetryableFailureClass() {

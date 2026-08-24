@@ -16,6 +16,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.TransitionWorkerFailureException;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
@@ -57,6 +58,7 @@ class ExecutionFailureHandler {
     int nextAttempt = record.attempt() + 1;
     FailureClassification classification = classifyFailure(failure);
     Throwable classifiedFailure = classification.classifiedThrowable();
+    int failedStepIndex = failedStepIndex(failure);
     boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
 
@@ -92,15 +94,15 @@ class ExecutionFailureHandler {
           });
     }
 
-    return executionStateStore.markTerminalFailure(
-            record.tenantId(),
-            record.executionId(),
-            record.version(),
-            ExecutionStatus.FAILED,
-            transitionKey,
-            classifiedFailure.getClass().getSimpleName(),
-            classifiedFailure.getMessage(),
-            now)
+    Uni<Optional<ExecutionRecord<Object, Object>>> terminalUpdate = failedStepIndex >= 0
+        ? executionStateStore.markTerminalFailure(
+            record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
+            transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(),
+            failedStepIndex, now)
+        : executionStateStore.markTerminalFailure(
+            record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
+            transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(), now);
+    return terminalUpdate
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
             return Uni.createFrom().voidItem();
@@ -247,6 +249,13 @@ class ExecutionFailureHandler {
       return new FailureClassification(false, controlFlow);
     }
     return new FailureClassification(true, failure);
+  }
+
+  private static int failedStepIndex(Throwable failure) {
+    Throwable indexed = findThrowable(failure, TransitionWorkerFailureException.class);
+    return indexed instanceof TransitionWorkerFailureException workerFailure
+        ? workerFailure.failedStepIndex()
+        : -1;
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {

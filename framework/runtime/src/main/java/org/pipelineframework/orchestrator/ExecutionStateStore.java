@@ -273,6 +273,24 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Marks an execution terminal while retaining the pipeline step that actually failed.
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, nowEpochMs);
+    }
+
+    /**
      * Re-queues a terminal execution for operator-controlled re-drive.
      *
      * @param tenantId tenant identifier
@@ -290,6 +308,29 @@ public interface ExecutionStateStore {
         boolean allowFailed,
         String transitionKey,
         long nowEpochMs);
+
+    /**
+     * Re-queues a terminal execution with an explicit redrive intent.
+     *
+     * <p>Stores that have not added durable intent support remain compatible with ordinary
+     * {@link ExecutionRedriveIntent#REPLAY} redrives, but must fail rather than silently discard
+     * deliberate Command retry intent.</p>
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String transitionKey,
+        long nowEpochMs) {
+        if (intent == null || intent == ExecutionRedriveIntent.REPLAY) {
+            return redriveTerminalExecution(
+                tenantId, executionId, expectedVersion, allowFailed, transitionKey, nowEpochMs);
+        }
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support durable deliberate Command retry intent"));
+    }
 
     /**
      * Finds executions due for dispatch.

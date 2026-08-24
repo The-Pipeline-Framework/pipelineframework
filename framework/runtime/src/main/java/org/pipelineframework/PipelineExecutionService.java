@@ -508,7 +508,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
           return awaitCoordinator.suspensionSnapshot(suspended)
               .onItem().transform(TransitionResultEnvelope::waiting);
         })
-        .onFailure().recoverWithItem(TransitionResultEnvelope::failed);
+        .onFailure().recoverWithItem(failure -> TransitionResultEnvelope.failed(
+            PipelineStepExecutionFailure.source(failure),
+            PipelineStepExecutionFailure.stepIndex(failure)));
   }
 
   private java.util.Optional<String> validateCommandIdentity(
@@ -599,7 +601,15 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             command.executionId(),
             command.currentStepIndex(),
             continuationMode,
-            terminalOutputOwnership));
+            terminalOutputOwnership,
+            java.util.Map.of(),
+            command.redriveIntent(),
+            command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+                ? command.redriveStepIndex()
+                : -1,
+            command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+                ? command.transitionKey()
+                : null));
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {

@@ -21,6 +21,8 @@ import java.util.Objects;
  * @param payloadTypeId encoded input payload type id
  * @param payloadEncoding encoded input payload encoding
  * @param payload encoded input payload
+ * @param redriveIntent explicit terminal-redrive intent
+ * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
  */
 public record TransitionCommandEnvelope(
     String tenantId,
@@ -37,8 +39,32 @@ public record TransitionCommandEnvelope(
     String traceId,
     String payloadTypeId,
     String payloadEncoding,
-    String payload
+    String payload,
+    ExecutionRedriveIntent redriveIntent,
+    int redriveStepIndex
 ) {
+    public TransitionCommandEnvelope(
+        String tenantId,
+        String executionId,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        int currentStepIndex,
+        int stopBeforeStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        String traceId,
+        String payloadTypeId,
+        String payloadEncoding,
+        String payload
+    ) {
+        this(tenantId, executionId, pipelineId, contractVersion, releaseVersion, currentStepIndex,
+            stopBeforeStepIndex, attempt, resultShape, executionVersion, transitionKey, traceId,
+            payloadTypeId, payloadEncoding, payload, ExecutionRedriveIntent.REPLAY, -1);
+    }
+
     public TransitionCommandEnvelope(
         String tenantId,
         String executionId,
@@ -69,7 +95,9 @@ public record TransitionCommandEnvelope(
             traceId,
             payloadTypeId,
             payloadEncoding,
-            payload);
+            payload,
+            ExecutionRedriveIntent.REPLAY,
+            -1);
     }
 
     public TransitionCommandEnvelope {
@@ -102,6 +130,14 @@ public record TransitionCommandEnvelope(
         Objects.requireNonNull(payloadTypeId, "payloadTypeId");
         Objects.requireNonNull(payloadEncoding, "payloadEncoding");
         Objects.requireNonNull(payload, "payload");
+        redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
+            throw new IllegalArgumentException(
+                "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
+        }
+        if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
+            redriveStepIndex = -1;
+        }
     }
 
     public static TransitionCommandEnvelope from(
@@ -145,7 +181,9 @@ public record TransitionCommandEnvelope(
             traceId,
             encodedPayload.payloadTypeId(),
             encodedPayload.payloadEncoding(),
-            encodedPayload.payload());
+            encodedPayload.payload(),
+            command.redriveIntent(),
+            command.redriveStepIndex());
     }
 
     public TransitionWorkerCommand toCommand(TransitionPayloadCodec codec) {
@@ -159,7 +197,9 @@ public record TransitionCommandEnvelope(
             resultShape,
             executionVersion,
             transitionKey,
-            codec.decode(serializedPayload()));
+            codec.decode(serializedPayload()),
+            redriveIntent,
+            redriveStepIndex);
     }
 
     public SerializedTransitionPayload serializedPayload() {

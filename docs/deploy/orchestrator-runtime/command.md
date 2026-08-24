@@ -92,7 +92,7 @@ The generated command step calls these pieces. Application code does not call th
 | Connector succeeds | Output is recorded and returned. |
 | Same command id already succeeded with `RETURN_RECORDED` | Stored output is returned; the connector is not called again. |
 | Connector throws a retryable failure | The current attempt is marked `FAILED_RETRYABLE`. Ordinary admission does not redispatch it. |
-| Caller deliberately retries a retryable effect | The store atomically appends one attempt under the same command id and dispatches through the ordinary provider path. |
+| Control plane deliberately retries a failed Command execution | The store atomically appends one attempt under the same command id and dispatches through the ordinary provider path. |
 | Connector throws a non-retryable failure | Effect is marked terminal/DLQ. |
 
 The external system still needs an idempotency key or deterministic external id. TPF can avoid repeat dispatch after success is recorded, but it cannot make a third-party system exactly-once.
@@ -102,6 +102,9 @@ Command-step configuration is immutable application configuration passed to the 
 Completed commands with `RETURN_RECORDED` replay their stored output without recalling the connector.
 Queue-Async does not automatically retry failed effects. Deliberate retry is admitted only for
 `FAILED_RETRYABLE`; terminal, ambiguous, in-flight, and user-action barriers are preserved.
+The configured execution store must preserve deliberate retry intent, and the configured
+`CommandEffectStore` must advertise retry-attempt history support. Older implementations fail this
+operation rather than silently emulating it or discarding attempt identity.
 
 ## Related Docs
 

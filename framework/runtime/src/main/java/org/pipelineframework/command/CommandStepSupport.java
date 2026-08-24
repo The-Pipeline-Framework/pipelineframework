@@ -215,16 +215,21 @@ public class CommandStepSupport {
                 "Command id generator " + descriptor.commandIdGenerator()
                     + " returned a command id with leading or trailing whitespace"));
         }
-        CommandRequest<I> request = new CommandRequest<>(
-            descriptor,
-            commandId,
-            input,
-            context,
-            descriptor.config());
+        boolean contextAdmittedRetry = context.claimCommandRetry(commandId);
+        CommandRequest<I> request = contextAdmittedRetry
+            ? new CommandRequest<>(
+                descriptor,
+                commandId,
+                context.commandRetryAttemptId(commandId),
+                input,
+                context,
+                descriptor.config())
+            : new CommandRequest<>(descriptor, commandId, input, context, descriptor.config());
+        boolean admittedDeliberateRetry = deliberateRetry || contextAdmittedRetry;
         CommandEffectStore store = selectStore();
         return store.find(context.tenantId(), request.commandId())
             .onItem().transformToUni(existing -> handleExistingOrExecute(
-                existing, store, request, deliberateRetry));
+                existing, store, request, admittedDeliberateRetry));
     }
 
     private <I, O> Uni<O> handleExistingOrExecute(
@@ -254,6 +259,10 @@ public class CommandStepSupport {
             }
             if (record.status() == CommandEffectStatus.FAILED_RETRYABLE) {
                 if (deliberateRetry) {
+                    if (record.currentAttempt().attemptId().equals(request.attemptId())) {
+                        return Uni.createFrom().failure(new CommandRetryableOutcomeException(
+                            "retry-admission-already-attempted"));
+                    }
                     if (!store.supportsRetryAttempts()) {
                         return Uni.createFrom().failure(new UnsupportedOperationException(
                             "deliberate Command retry requires a CommandEffectStore that persists attempt history"));
@@ -613,12 +622,7 @@ public class CommandStepSupport {
         if (context == null) {
             throw new IllegalStateException("Command step executed without queue-async execution context.");
         }
-        return new AwaitExecutionContext(
-            context.tenantId(),
-            context.executionId(),
-            context.currentStepIndex(),
-            context.continuationMode(),
-            context.terminalOutputOwnership());
+        return context;
     }
 
     private LegacyCommandConnectorProvider.LegacyCommandOperation requireLegacyOperation(String command) {

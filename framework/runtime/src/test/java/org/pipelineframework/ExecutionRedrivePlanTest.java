@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 
@@ -41,6 +42,32 @@ class ExecutionRedrivePlanTest {
     assertEquals(2L, plan.expectedVersion());
     assertEquals("retry failed", plan.normalizedReason());
     assertEquals("redrive:exec-1:2", plan.transitionKey());
+  }
+
+  @Test
+  void failedCommandRetryUsesDistinctIntentAndTransitionIdentity() {
+    ExecutionRecord<Object, Object> record = record(ExecutionStatus.FAILED, 2L);
+
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(
+        record,
+        null,
+        true,
+        ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+        "retry command");
+
+    assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, plan.intent());
+    assertEquals("command-retry:exec-1:2", plan.transitionKey());
+  }
+
+  @Test
+  void commandRetryIntentRequiresFailedExecutionAndExplicitFailedAdmission() {
+    ExecutionRecord<Object, Object> dlq = record(ExecutionStatus.DLQ, 2L);
+    ExecutionRecord<Object, Object> failed = record(ExecutionStatus.FAILED, 2L);
+
+    assertThrows(IllegalStateException.class, () -> ExecutionRedrivePlan.from(
+        dlq, null, true, ExecutionRedriveIntent.RETRY_FAILED_COMMAND, "retry command"));
+    assertThrows(IllegalStateException.class, () -> ExecutionRedrivePlan.from(
+        failed, null, false, ExecutionRedriveIntent.RETRY_FAILED_COMMAND, "retry command"));
   }
 
   @Test
@@ -89,6 +116,11 @@ class ExecutionRedrivePlanTest {
         null,
         1L,
         1L,
-        99999999L);
+        99999999L,
+        0L,
+        0,
+        "",
+        ExecutionRedriveIntent.REPLAY,
+        4);
   }
 }

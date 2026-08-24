@@ -13,6 +13,7 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
@@ -55,6 +56,17 @@ class QueueAsyncRedriveFlow {
       Long expectedVersion,
       boolean allowFailed,
       String reason) {
+    return redrive(
+        tenantId, executionId, expectedVersion, allowFailed, ExecutionRedriveIntent.REPLAY, reason);
+  }
+
+  Uni<ExecutionRedriveResult> redrive(
+      String tenantId,
+      String executionId,
+      Long expectedVersion,
+      boolean allowFailed,
+      ExecutionRedriveIntent intent,
+      String reason) {
     return Uni.createFrom().deferred(() -> {
       if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
         return Uni.createFrom().failure(new IllegalStateException(
@@ -73,6 +85,7 @@ class QueueAsyncRedriveFlow {
               optional,
               expectedVersion,
               allowFailed,
+              intent,
               reason,
               now));
     });
@@ -84,19 +97,32 @@ class QueueAsyncRedriveFlow {
       Optional<ExecutionRecord<Object, Object>> optional,
       Long expectedVersion,
       boolean allowFailed,
+      ExecutionRedriveIntent intent,
       String reason,
       long now) {
     if (optional.isEmpty()) {
       return Uni.createFrom().failure(new NotFoundException("Execution not found: " + executionId));
     }
-    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(optional.get(), expectedVersion, allowFailed, reason);
-    return executionStateStore.redriveTerminalExecution(
-            tenantId,
-            executionId,
-            plan.expectedVersion(),
-            plan.allowFailed(),
-            plan.transitionKey(),
-            now)
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(
+        optional.get(), expectedVersion, allowFailed, intent, reason);
+    Uni<Optional<ExecutionRecord<Object, Object>>> admitted =
+        plan.intent() == ExecutionRedriveIntent.REPLAY
+            ? executionStateStore.redriveTerminalExecution(
+                tenantId,
+                executionId,
+                plan.expectedVersion(),
+                plan.allowFailed(),
+                plan.transitionKey(),
+                now)
+            : executionStateStore.redriveTerminalExecution(
+                tenantId,
+                executionId,
+                plan.expectedVersion(),
+                plan.allowFailed(),
+                plan.intent(),
+                plan.transitionKey(),
+                now);
+    return admitted
         .onItem().transformToUni(redriven -> redriven
             .map(record -> enqueue(plan, record))
             .orElseGet(() -> Uni.createFrom().failure(new IllegalStateException(

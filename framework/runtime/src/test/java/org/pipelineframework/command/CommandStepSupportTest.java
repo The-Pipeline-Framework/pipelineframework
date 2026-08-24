@@ -35,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
@@ -389,6 +390,50 @@ class CommandStepSupportTest {
     CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
     assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.status());
     assertEquals(1, record.attempts().size());
+  }
+
+  @Test
+  void targetedExecutionRedriveAdmitsExactlyOneRetryThroughOrdinaryExecutePath() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    AwaitExecutionContext retryContext = executionRetryContext();
+    AwaitExecutionContextHolder.set(retryContext);
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    AwaitExecutionContextHolder.set(executionRetryContext());
+    assertThrows(CommandRetryableOutcomeException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals(2, connector.calls.get());
+    CommandEffectRecord record = store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(2, record.attempts().size());
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.attempts().get(0).status());
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.attempts().get(1).status());
+  }
+
+  private static AwaitExecutionContext executionRetryContext() {
+    return new AwaitExecutionContext(
+        "tenant",
+        "exec-2",
+        4,
+        org.pipelineframework.awaitable.AwaitContinuationMode.LIVE_IF_SUPPORTED,
+        org.pipelineframework.awaitable.TerminalOutputOwnership.TRANSITION_WORKER,
+        Map.of(),
+        ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+        4,
+        "exec-2:4:2");
   }
 
   @Test

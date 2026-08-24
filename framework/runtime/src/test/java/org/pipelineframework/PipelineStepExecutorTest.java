@@ -45,10 +45,12 @@ import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CacheKeyTarget;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.service.ReactiveStreamingService;
@@ -120,6 +122,78 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals("a-done", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void deliberateCommandRetryRejectsNonCommandAtTargetStep() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AwaitExecutionContext retryContext = retryContext(2);
+
+        Object result = executor.applyStep(
+            new SuffixOneToOneStep("-done"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            retryContext);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+        assertTrue(error.getMessage().contains("targeted non-Command step"));
+    }
+
+    @Test
+    void deliberateCommandRetryAllowsGeneratedCommandMarkerAtTargetStep() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AwaitExecutionContext retryContext = retryContext(2);
+
+        Object result = executor.applyStep(
+            new CommandIdentityStep(),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            null,
+            null,
+            retryContext);
+
+        assertEquals("a", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void deliberateCommandRetryAllowsNonCommandBeforeTargetStep() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AwaitExecutionContext retryContext = retryContext(1, 2);
+
+        Object result = executor.applyStep(
+            new SuffixOneToOneStep("-done"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            null,
+            null,
+            retryContext);
+
+        assertEquals("a-done", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    private static AwaitExecutionContext retryContext(int stepIndex) {
+        return retryContext(stepIndex, stepIndex);
+    }
+
+    private static AwaitExecutionContext retryContext(int stepIndex, int targetStepIndex) {
+        return new AwaitExecutionContext(
+            "tenant",
+            "execution",
+            stepIndex,
+            org.pipelineframework.awaitable.AwaitContinuationMode.LIVE_IF_SUPPORTED,
+            org.pipelineframework.awaitable.TerminalOutputOwnership.TRANSITION_WORKER,
+            java.util.Map.of(),
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            targetStepIndex);
     }
 
     @Test
@@ -1530,6 +1604,14 @@ class PipelineStepExecutorTest {
 
         int invocations() {
             return invocations.get();
+        }
+    }
+
+    static final class CommandIdentityStep extends ConfigurableStep
+        implements StepOneToOne<String, String>, CommandStep {
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            return Uni.createFrom().item(input);
         }
     }
 

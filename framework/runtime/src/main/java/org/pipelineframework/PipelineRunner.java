@@ -326,7 +326,10 @@ public class PipelineRunner implements AutoCloseable {
                         PipelineTracingSupport.capture(
                             telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
-                                : telemetryContext.span().getSpanContext()));
+                                : telemetryContext.span().getSpanContext()),
+                        awaitContext.redriveIntent(),
+                        awaitContext.redriveStepIndex(),
+                        awaitContext.redriveAdmissionKey());
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
@@ -338,7 +341,7 @@ public class PipelineRunner implements AutoCloseable {
                     logger.debugf("Implements: %s", iface.getName());
                 }
 
-                return stepExecutor.applyStep(
+                Object applied = stepExecutor.applyStep(
                     step,
                     value,
                     parallelismPolicy,
@@ -351,6 +354,13 @@ public class PipelineRunner implements AutoCloseable {
                     definitionTerminalStepIndex,
                     java.util.Optional.of(invocationContext),
                     branchExecutionTracker);
+                if (applied instanceof io.smallrye.mutiny.Uni<?> uni) {
+                    return uni.onFailure().transform(failure -> PipelineStepExecutionFailure.at(index, failure));
+                }
+                if (applied instanceof io.smallrye.mutiny.Multi<?> multi) {
+                    return multi.onFailure().transform(failure -> PipelineStepExecutionFailure.at(index, failure));
+                }
+                return applied;
             },
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index))));
 
