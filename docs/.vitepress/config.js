@@ -55,15 +55,6 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/design/'},
             {text: 'Architectural Decisions', link: '/decisions/'},
-            {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
-            {text: 'State Model', link: '/design/state-model'},
-            {text: 'Data Architecture', link: '/design/data-architecture'},
-            {text: 'Application Structure', link: '/design/application-structure'},
-            {text: 'Common Module Structure', link: '/design/common-module-structure'},
-            {text: 'Operators', link: '/design/operators'},
-            {text: 'Execution Safety', link: '/design/execution-safety'},
-            {text: 'Await Boundaries', link: '/design/await-boundaries'},
-            {text: 'Object Ingest', link: '/design/object-ingest'},
             {
                 text: 'Data Architecture',
                 link: '/design/data-architecture/',
@@ -75,6 +66,14 @@ const mainSidebar = [
                     {text: 'Effects and comparisons', link: '/design/data-architecture/workflow-effects'}
                 ]
             },
+            {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
+            {text: 'State Model', link: '/design/state-model'},
+            {text: 'Application Structure', link: '/design/application-structure'},
+            {text: 'Common Module Structure', link: '/design/common-module-structure'},
+            {text: 'Operators', link: '/design/operators'},
+            {text: 'Execution Safety', link: '/design/execution-safety'},
+            {text: 'Await Boundaries', link: '/design/await-boundaries'},
+            {text: 'Object Ingest', link: '/design/object-ingest'},
             {
                 text: 'JPA Query Connector',
                 link: '/design/jpa-query-connector/',
