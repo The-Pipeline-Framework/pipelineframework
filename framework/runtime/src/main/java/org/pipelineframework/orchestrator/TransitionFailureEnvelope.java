@@ -25,14 +25,17 @@ public record TransitionFailureEnvelope(
 
     public static TransitionFailureEnvelope from(Throwable failure) {
         Objects.requireNonNull(failure, "failure");
-        return new TransitionFailureEnvelope(failure.getClass().getName(), failure.getMessage(), -1);
+        return new TransitionFailureEnvelope(
+            failure.getClass().getName(),
+            java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
+            -1);
     }
 
     public static TransitionFailureEnvelope from(Throwable failure, int failedStepIndex) {
         Objects.requireNonNull(failure, "failure");
         return new TransitionFailureEnvelope(
             failure.getClass().getName(),
-            failure.getMessage(),
+            java.util.Optional.ofNullable(failure.getMessage()).orElse(""),
             failedStepIndex);
     }
 

@@ -433,7 +433,7 @@ class CommandStepSupportTest {
         Map.of(),
         ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
         4,
-        "exec-2:4:2");
+        java.util.Optional.of("exec-2:4:2"));
   }
 
   @Test

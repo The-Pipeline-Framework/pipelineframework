@@ -10,7 +10,8 @@ public class TransitionWorkerFailureException extends RuntimeException {
     private final int failedStepIndex;
 
     public TransitionWorkerFailureException(String message) {
-        this(message, null, -1);
+        super(message);
+        this.failedStepIndex = -1;
     }
 
     public TransitionWorkerFailureException(String message, Throwable cause) {
@@ -18,7 +19,8 @@ public class TransitionWorkerFailureException extends RuntimeException {
     }
 
     public TransitionWorkerFailureException(String message, int failedStepIndex) {
-        this(message, null, failedStepIndex);
+        super(message);
+        this.failedStepIndex = failedStepIndex;
     }
 
     public TransitionWorkerFailureException(String message, Throwable cause, int failedStepIndex) {

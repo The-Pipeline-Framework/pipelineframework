@@ -42,6 +42,14 @@ public final class PipelineInvocationSteps {
     private PipelineInvocationSteps() {
     }
 
+    /** Returns whether a generated step is a local pipeline-composition adapter. */
+    public static boolean isInvocationStep(Object step) {
+        return step instanceof InvocationStep;
+    }
+
+    private interface InvocationStep {
+    }
+
     public static <I, O> StepOneToOne<I, O> oneToOne(
         PipelineRunner runner,
         List<Object> linkedChildSteps
@@ -148,7 +156,7 @@ public final class PipelineInvocationSteps {
     }
 
     private static final class OneToOneInvocationStep<I, O> extends ConfigurableStep
-        implements StepOneToOne<I, O> {
+        implements StepOneToOne<I, O>, InvocationStep {
 
         private final PipelineRunner runner;
         private final String definitionId;
@@ -218,7 +226,7 @@ public final class PipelineInvocationSteps {
     }
 
     private static final class OneToManyInvocationStep<I, O> extends ConfigurableStep
-        implements StepOneToMany<I, O> {
+        implements StepOneToMany<I, O>, InvocationStep {
 
         private final PipelineRunner runner;
         private final String definitionId;
@@ -248,7 +256,7 @@ public final class PipelineInvocationSteps {
     }
 
     private static final class ManyToOneInvocationStep<I, O> extends ConfigurableStep
-        implements ManyToOne<I, O> {
+        implements ManyToOne<I, O>, InvocationStep {
 
         private final PipelineRunner runner;
         private final String definitionId;
@@ -277,7 +285,7 @@ public final class PipelineInvocationSteps {
     }
 
     private static final class ManyToManyInvocationStep<I, O> extends ConfigurableStep
-        implements StepManyToMany<I, O> {
+        implements StepManyToMany<I, O>, InvocationStep {
 
         private final PipelineRunner runner;
         private final String definitionId;

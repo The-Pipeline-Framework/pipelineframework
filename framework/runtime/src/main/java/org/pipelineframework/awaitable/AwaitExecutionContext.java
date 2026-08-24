@@ -2,6 +2,7 @@ package org.pipelineframework.awaitable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,7 +20,7 @@ public final class AwaitExecutionContext {
     private final Map<String, Object> traceMetadata;
     private final ExecutionRedriveIntent redriveIntent;
     private final int redriveStepIndex;
-    private final String redriveAdmissionKey;
+    private final Optional<String> redriveAdmissionKey;
     private final Set<String> claimedCommandRetries = ConcurrentHashMap.newKeySet();
     private int currentStepIndex;
 
@@ -33,7 +34,7 @@ public final class AwaitExecutionContext {
             Map.of(),
             ExecutionRedriveIntent.REPLAY,
             -1,
-            null);
+            Optional.empty());
     }
 
     /**
@@ -53,7 +54,7 @@ public final class AwaitExecutionContext {
         TerminalOutputOwnership terminalOutputOwnership
     ) {
         this(tenantId, executionId, currentStepIndex, continuationMode, terminalOutputOwnership, Map.of(),
-            ExecutionRedriveIntent.REPLAY, -1, null);
+            ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
     }
 
     public AwaitExecutionContext(
@@ -65,7 +66,7 @@ public final class AwaitExecutionContext {
         Map<String, Object> traceMetadata
     ) {
         this(tenantId, executionId, currentStepIndex, continuationMode, terminalOutputOwnership, traceMetadata,
-            ExecutionRedriveIntent.REPLAY, -1, null);
+            ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
     }
 
     public AwaitExecutionContext(
@@ -88,8 +89,8 @@ public final class AwaitExecutionContext {
             redriveIntent,
             redriveStepIndex,
             redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
-                ? "legacy-command-retry:" + executionId + ":" + redriveStepIndex
-                : null);
+                ? Optional.of("legacy-command-retry:" + executionId + ":" + redriveStepIndex)
+                : Optional.empty());
     }
 
     public AwaitExecutionContext(
@@ -101,7 +102,7 @@ public final class AwaitExecutionContext {
         Map<String, Object> traceMetadata,
         ExecutionRedriveIntent redriveIntent,
         int redriveStepIndex,
-        String redriveAdmissionKey
+        Optional<String> redriveAdmissionKey
     ) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
@@ -124,12 +125,16 @@ public final class AwaitExecutionContext {
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < 0) {
             throw new IllegalArgumentException("redriveStepIndex must be non-negative for deliberate Command retry");
         }
+        Optional<String> resolvedAdmissionKey = java.util.Objects.requireNonNull(
+            redriveAdmissionKey, "redriveAdmissionKey must not be null");
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
-            && (redriveAdmissionKey == null || redriveAdmissionKey.isBlank())) {
+            && resolvedAdmissionKey.filter(key -> !key.isBlank()).isEmpty()) {
             throw new IllegalArgumentException("redriveAdmissionKey must not be blank for deliberate Command retry");
         }
         this.redriveStepIndex = redriveIntent == ExecutionRedriveIntent.REPLAY ? -1 : redriveStepIndex;
-        this.redriveAdmissionKey = redriveIntent == ExecutionRedriveIntent.REPLAY ? null : redriveAdmissionKey;
+        this.redriveAdmissionKey = redriveIntent == ExecutionRedriveIntent.REPLAY
+            ? Optional.empty()
+            : resolvedAdmissionKey;
     }
 
     public String tenantId() {
@@ -174,7 +179,7 @@ public final class AwaitExecutionContext {
         return redriveStepIndex;
     }
 
-    public String redriveAdmissionKey() {
+    public Optional<String> redriveAdmissionKey() {
         return redriveAdmissionKey;
     }
 
@@ -199,7 +204,7 @@ public final class AwaitExecutionContext {
             throw new IllegalStateException("No deliberate Command retry targets the current step");
         }
         UUID identity = UUID.nameUUIDFromBytes(
-            (redriveAdmissionKey + "\u0000" + commandId).getBytes(StandardCharsets.UTF_8));
+            (redriveAdmissionKey.orElseThrow() + "\u0000" + commandId).getBytes(StandardCharsets.UTF_8));
         return "attempt-" + identity;
     }
 

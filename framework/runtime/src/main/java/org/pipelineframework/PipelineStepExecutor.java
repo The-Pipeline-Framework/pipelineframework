@@ -169,7 +169,9 @@ class PipelineStepExecutor {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         if (awaitContextSnapshot != null
             && awaitContextSnapshot.targetsCurrentStepForCommandRetry()
-            && !(resolvedStep instanceof CommandStep)) {
+            && !(resolvedStep instanceof CommandStep)
+            && "$root".equals(definitionId)
+            && !org.pipelineframework.invocation.PipelineInvocationSteps.isInvocationStep(resolvedStep)) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "Deliberate Command retry targeted non-Command step "
                     + resolvedStep.getClass().getName()

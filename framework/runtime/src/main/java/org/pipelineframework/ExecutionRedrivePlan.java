@@ -1,6 +1,7 @@
 package org.pipelineframework;
 
 import java.util.Objects;
+import java.util.OptionalLong;
 
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
@@ -43,7 +44,7 @@ record ExecutionRedrivePlan(
 
   static ExecutionRedrivePlan from(
       ExecutionRecord<Object, Object> previous,
-      Long expectedVersion,
+      OptionalLong expectedVersion,
       boolean allowFailed,
       String reason) {
     return from(previous, expectedVersion, allowFailed, ExecutionRedriveIntent.REPLAY, reason);
@@ -51,13 +52,14 @@ record ExecutionRedrivePlan(
 
   static ExecutionRedrivePlan from(
       ExecutionRecord<Object, Object> previous,
-      Long expectedVersion,
+      OptionalLong expectedVersion,
       boolean allowFailed,
       ExecutionRedriveIntent intent,
       String reason) {
     Objects.requireNonNull(previous, "previous must not be null");
+    Objects.requireNonNull(expectedVersion, "expectedVersion must not be null");
     ExecutionRedriveIntent resolvedIntent = Objects.requireNonNull(intent, "intent must not be null");
-    long version = expectedVersion == null ? previous.version() : expectedVersion;
+    long version = expectedVersion.orElse(previous.version());
     String normalizedReason = normalizeReason(reason);
     String transitionKey = resolvedIntent == ExecutionRedriveIntent.REPLAY
         ? "redrive:" + previous.executionId() + ":" + version

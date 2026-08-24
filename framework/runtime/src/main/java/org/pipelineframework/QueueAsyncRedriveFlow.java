@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
@@ -67,6 +68,10 @@ class QueueAsyncRedriveFlow {
       boolean allowFailed,
       ExecutionRedriveIntent intent,
       String reason) {
+    ExecutionRedriveIntent resolvedIntent = intent == null ? ExecutionRedriveIntent.REPLAY : intent;
+    OptionalLong resolvedExpectedVersion = expectedVersion == null
+        ? OptionalLong.empty()
+        : OptionalLong.of(expectedVersion);
     return Uni.createFrom().deferred(() -> {
       if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
         return Uni.createFrom().failure(new IllegalStateException(
@@ -83,9 +88,9 @@ class QueueAsyncRedriveFlow {
               resolvedTenant,
               executionId,
               optional,
-              expectedVersion,
+              resolvedExpectedVersion,
               allowFailed,
-              intent,
+              resolvedIntent,
               reason,
               now));
     });
@@ -95,7 +100,7 @@ class QueueAsyncRedriveFlow {
       String tenantId,
       String executionId,
       Optional<ExecutionRecord<Object, Object>> optional,
-      Long expectedVersion,
+      OptionalLong expectedVersion,
       boolean allowFailed,
       ExecutionRedriveIntent intent,
       String reason,

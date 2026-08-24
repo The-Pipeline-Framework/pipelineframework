@@ -20,6 +20,11 @@ final class PipelineStepExecutionFailure extends RuntimeException {
         : new PipelineStepExecutionFailure(stepIndex, failure);
   }
 
+  /** Records the resumable root step while discarding any nested definition-local index. */
+  static Throwable atRoot(int stepIndex, Throwable failure) {
+    return new PipelineStepExecutionFailure(stepIndex, source(failure));
+  }
+
   static int stepIndex(Throwable failure) {
     PipelineStepExecutionFailure indexed = find(failure);
     return indexed == null ? -1 : indexed.stepIndex;

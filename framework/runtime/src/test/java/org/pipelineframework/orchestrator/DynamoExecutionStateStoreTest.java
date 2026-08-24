@@ -726,7 +726,8 @@ class DynamoExecutionStateStoreTest {
         assertEquals("Request timeout", result.get().errorMessage());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             !request.updateExpression().contains("#resume")
-                && !request.updateExpression().contains("#awaitInteraction")));
+                && !request.updateExpression().contains("#awaitInteraction")
+                && "redrive_intent".equals(request.expressionAttributeNames().get("#redriveIntent"))));
     }
 
     @Test

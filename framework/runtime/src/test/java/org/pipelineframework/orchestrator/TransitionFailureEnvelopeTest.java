@@ -18,4 +18,11 @@ class TransitionFailureEnvelopeTest {
     assertEquals(13, envelope.failedStepIndex());
     assertEquals(13, failure.failedStepIndex());
   }
+
+  @Test
+  void normalizesMissingThrowableMessage() {
+    TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(new IllegalStateException());
+
+    assertEquals("", envelope.message());
+  }
 }

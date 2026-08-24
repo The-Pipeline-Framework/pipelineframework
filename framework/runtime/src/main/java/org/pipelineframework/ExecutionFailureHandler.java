@@ -252,6 +252,9 @@ class ExecutionFailureHandler {
   }
 
   private static int failedStepIndex(Throwable failure) {
+    if (failure == null) {
+      return -1;
+    }
     Throwable indexed = findThrowable(failure, TransitionWorkerFailureException.class);
     return indexed instanceof TransitionWorkerFailureException workerFailure
         ? workerFailure.failedStepIndex()

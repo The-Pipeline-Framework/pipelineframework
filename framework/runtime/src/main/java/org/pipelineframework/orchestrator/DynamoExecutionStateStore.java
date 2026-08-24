@@ -987,6 +987,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#resultReference", RESULT_PAYLOAD_REFERENCE),
             Map.entry("#leaseOwner", LEASE_OWNER),
             Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#redriveIntent", REDRIVE_INTENT),
             Map.entry("#updated", UPDATED_AT_EPOCH_MS),
             Map.entry("#ttl", TTL_EPOCH_S));
         Map<String, AttributeValue> values = Map.ofEntries(

@@ -608,8 +608,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
                 ? command.redriveStepIndex()
                 : -1,
             command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND
-                ? command.transitionKey()
-                : null));
+                ? java.util.Optional.of(command.transitionKey())
+                : java.util.Optional.empty()));
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {
