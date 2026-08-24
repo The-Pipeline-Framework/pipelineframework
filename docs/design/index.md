@@ -2,6 +2,9 @@
 
 Model typed application flows, runtime shape, connectors, and design-time boundaries.
 
+- [Architectural Decisions](/decisions/) records the durable
+  ownership rules and distinctions that should survive implementation changes.
+
 ## Connectors and boundaries
 
 - [Await Boundaries](/design/await-boundaries) for deferred external completion.

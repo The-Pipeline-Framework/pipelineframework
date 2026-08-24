@@ -39,7 +39,7 @@ import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmToolProposal;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
 
-/** LangChain4j adapter that observes one tool proposal and never invokes a tool executor. */
+/** LangChain4j/Ollama adapter that observes one model decision and never invokes a tool executor. */
 @ApplicationScoped
 @Unremovable
 public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProvider {
@@ -141,7 +141,7 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         private LlmToolProposal decideNativeCompletion(LlmTurnRequest request) {
             LlmToolDefinition completion = directCompletion(request.tools()).orElseThrow(() ->
                 new IllegalArgumentException(
-                    "Ollama native structured output requires one direct 'complete' alternative"));
+                    "Native structured output requires one direct 'complete' alternative"));
             ToolSpecification specification = tool(completion);
             ResponseFormat responseFormat = ResponseFormat.builder()
                 .type(ResponseFormatType.JSON)

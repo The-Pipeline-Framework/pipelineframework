@@ -416,7 +416,7 @@ public class PipelineProtoGenerator {
         builder.append("option java_outer_classname = \"PipelineTypes\";\n\n");
         boolean first = true;
         if (usesPayloadReference(safeMessages)) {
-            renderPayloadReferenceMessage(builder);
+            PayloadReferenceProtoSchema.renderMessages(builder);
             first = false;
         }
         List<String> messageNames = new ArrayList<>(safeMessages.keySet());
@@ -645,34 +645,6 @@ public class PipelineProtoGenerator {
             }
         }
         return false;
-    }
-
-    private void renderPayloadReferenceMessage(StringBuilder builder) {
-        builder.append("message ConnectorPayloadOrigin {\n");
-        builder.append("  string binding_name = 1;\n");
-        builder.append("  string provider_id = 2;\n");
-        builder.append("  string operation_id = 3;\n");
-        builder.append("  string operation_kind = 4;\n");
-        builder.append("  int32 operation_major_version = 5;\n");
-        builder.append("  int32 provider_major_version = 6;\n");
-        builder.append("  bool has_configuration = 7;\n");
-        builder.append("  string configuration_schema_id = 8;\n");
-        builder.append("  int32 configuration_schema_version = 9;\n");
-        builder.append("  string configuration_digest = 10;\n");
-        builder.append("  repeated string connection_references = 11;\n");
-        builder.append("}\n\n");
-        builder.append("message PayloadReference {\n");
-        builder.append("  string provider = 1;\n");
-        builder.append("  string container = 2;\n");
-        builder.append("  string key = 3;\n");
-        builder.append("  string content_type = 4;\n");
-        builder.append("  string codec = 5;\n");
-        builder.append("  string checksum = 6;\n");
-        builder.append("  int64 size_bytes = 7;\n");
-        builder.append("  string version = 8;\n");
-        builder.append("  map<string, string> metadata = 9;\n");
-        builder.append("  ConnectorPayloadOrigin connector_origin = 10;\n");
-        builder.append("}\n");
     }
 
     /**

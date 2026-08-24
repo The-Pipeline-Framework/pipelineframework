@@ -1,6 +1,7 @@
 package org.pipelineframework.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -13,8 +14,12 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -87,6 +92,9 @@ class CommandStepSupportTest {
     CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
     assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
     assertSame(output, record.output());
+    assertEquals(1, record.attempts().size());
+    assertEquals(1, record.currentAttempt().attemptNumber());
+    assertEquals(CommandEffectStatus.SUCCEEDED, record.currentAttempt().status());
     assertTransitionCount("pending", 1);
     assertTransitionCount("dispatching", 1);
     assertTransitionCount("succeeded", 1);
@@ -363,7 +371,7 @@ class CommandStepSupportTest {
   }
 
   @Test
-  void failedRetryableEffectCannotCurrentlyBeRedispatchedWithSameCommandId() {
+  void ordinaryAdmissionDoesNotRetryFailedEffect() {
     AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
     connector.failure = new IllegalStateException("opensearch unavailable");
 
@@ -380,6 +388,173 @@ class CommandStepSupportTest {
     assertEquals(1, connector.calls.get());
     CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
     assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.status());
+    assertEquals(1, record.attempts().size());
+  }
+
+  @Test
+  void deliberateRetryAppendsOneAttemptAndPreservesFailedHistory() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    CommandEffectRecord failed = store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    String firstAttemptId = failed.currentAttempt().attemptId();
+
+    connector.failure = null;
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-2", 4));
+    CommandOutput output = support.<CommandInput, CommandOutput>retry(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    assertEquals("cmd-doc-1", output.commandId);
+    assertEquals(2, connector.calls.get());
+    CommandEffectRecord succeeded = store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(CommandEffectStatus.SUCCEEDED, succeeded.status());
+    assertEquals(2, succeeded.attempts().size());
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, succeeded.attempts().get(0).status());
+    assertEquals("opensearch unavailable", succeeded.attempts().get(0).errorMessage());
+    assertEquals(CommandEffectStatus.SUCCEEDED, succeeded.attempts().get(1).status());
+    assertEquals(2, succeeded.attempts().get(1).attemptNumber());
+    assertEquals("exec-2", succeeded.attempts().get(1).executionId());
+    assertNotEquals(firstAttemptId, succeeded.attempts().get(1).attemptId());
+    assertEquals(List.of("cmd-doc-1", "cmd-doc-1"), connector.commandIds);
+    assertNotEquals(connector.attemptIds.get(0), connector.attemptIds.get(1));
+  }
+
+  @Test
+  void retryAdmissionUsesLogicalIdentityAfterPersistedInputRehydration() throws Exception {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    CommandEffectRecord failed = store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    String json = org.pipelineframework.config.pipeline.PipelineJson.mapper().writeValueAsString(failed);
+    CommandEffectRecord rehydrated = org.pipelineframework.config.pipeline.PipelineJson.mapper()
+        .readValue(json, CommandEffectRecord.class);
+    CommandRequest<CommandInput> retry = new CommandRequest<>(
+        descriptor,
+        "cmd-doc-1",
+        new CommandInput("doc-1"),
+        new AwaitExecutionContext("tenant", "exec-2", 4),
+        descriptor.config());
+
+    assertNotEquals(retry.input(), rehydrated.input());
+    assertEquals(2, rehydrated.appendRetryAttempt(retry, System.currentTimeMillis()).attempts().size());
+  }
+
+  @Test
+  void concurrentDeliberateRetriesClaimOnlyOneNewAttempt() {
+    BarrierRetryStore concurrentStore = new BarrierRetryStore();
+    RecordingConnector concurrentConnector = new RecordingConnector();
+    CommandStepSupport concurrentSupport = new CommandStepSupport(
+        List.of(concurrentConnector),
+        List.of(concurrentStore),
+        config(OrchestratorMode.QUEUE_ASYNC));
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    concurrentConnector.failure = new IllegalStateException("opensearch unavailable");
+    assertThrows(IllegalStateException.class,
+        () -> concurrentSupport.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    concurrentConnector.failure = null;
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      CompletableFuture<Object> first = retryConcurrently(executor, concurrentSupport, "retry-exec-1");
+      CompletableFuture<Object> second = retryConcurrently(executor, concurrentSupport, "retry-exec-2");
+      CompletableFuture.allOf(first, second).join();
+
+      assertEquals(2, concurrentConnector.calls.get(), "initial dispatch plus exactly one retry dispatch");
+      CommandEffectRecord record = concurrentStore.find("tenant", "cmd-doc-1")
+          .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+      assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
+      assertEquals(2, record.attempts().size());
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void deliberateRetryOfSucceededEffectReturnsRecordedWithoutDispatch() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    CommandInput input = new CommandInput("doc-1");
+    support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), input)
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandOutput replay = support.<CommandInput, CommandOutput>retry(
+        descriptor, new StaticCommandIdGenerator(), input).await().atMost(Duration.ofSeconds(5));
+
+    assertEquals(Boolean.TRUE, replay.recordedDuplicate);
+    assertEquals(1, connector.calls.get());
+    assertEquals(1, store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow().attempts().size());
+  }
+
+  @Test
+  void deliberateRetryOfTerminalFailureIsRejectedWithoutDispatch() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new NonRetryableException("invalid index document");
+    assertThrows(NonRetryableException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    connector.failure = null;
+
+    CommandOutcomeException rejected = assertThrows(CommandOutcomeException.class,
+        () -> support.<CommandInput, CommandOutput>retry(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals(CommandEffectStatus.DLQ, rejected.status());
+    assertEquals(1, connector.calls.get());
+    assertEquals(1, store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow().attempts().size());
+  }
+
+  private CompletableFuture<Object> retryConcurrently(
+      ExecutorService executor,
+      CommandStepSupport retrySupport,
+      String executionId
+  ) {
+    return CompletableFuture.supplyAsync(() -> {
+      AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", executionId, 4));
+      try {
+        return retrySupport.<CommandInput, CommandOutput>retry(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5));
+      } catch (RuntimeException failure) {
+        return failure;
+      } finally {
+        AwaitExecutionContextHolder.clear();
+      }
+    }, executor);
+  }
+
+  private static final class BarrierRetryStore extends InMemoryCommandEffectStore {
+    private final CountDownLatch retryClaims = new CountDownLatch(2);
+
+    @Override
+    public Uni<CommandEffectRecord> createRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+      retryClaims.countDown();
+      try {
+        if (!retryClaims.await(5, TimeUnit.SECONDS)) {
+          return Uni.createFrom().failure(new IllegalStateException("concurrent retry claim barrier timed out"));
+        }
+      } catch (InterruptedException failure) {
+        Thread.currentThread().interrupt();
+        return Uni.createFrom().failure(failure);
+      }
+      return super.createRetryAttempt(request, nowEpochMs);
+    }
   }
 
   @Test
@@ -494,6 +669,8 @@ class CommandStepSupportTest {
   static class RecordingConnector implements CommandConnector<CommandInput, CommandOutput> {
     final AtomicInteger calls = new AtomicInteger();
     final AtomicReference<AwaitExecutionContext> lastExecutionContext = new AtomicReference<>();
+    final List<String> commandIds = new CopyOnWriteArrayList<>();
+    final List<String> attemptIds = new CopyOnWriteArrayList<>();
     RuntimeException failure;
 
     @Override
@@ -504,6 +681,8 @@ class CommandStepSupportTest {
     @Override
     public Uni<CommandOutput> execute(CommandRequest<CommandInput> request) {
       calls.incrementAndGet();
+      commandIds.add(request.commandId());
+      attemptIds.add(request.attemptId());
       lastExecutionContext.set(request.executionContext());
       if (failure != null) {
         return Uni.createFrom().failure(failure);

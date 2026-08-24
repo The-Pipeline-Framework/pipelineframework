@@ -119,7 +119,7 @@ The compiler emits the canonical v3 catalogue into the release contract. At runt
 
 Model aliases are untrusted observations. TPF looks up the exact compiled alias and constructs `binding + operation` from the catalogue; it never copies a provider or operation identity supplied inside model arguments.
 
-`structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas for the compiled alternatives fails before inference. The LangChain4j/Ollama adapter uses Ollama's native JSON Schema response format for a single direct `complete` alternative; multi-alternative tool selection is not claimed as natively schema-enforced. `OPTIONAL` is an explicit best-effort mode for prompt-guided tool selection; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
+`structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas for the compiled alternatives fails before inference. The LangChain4j adapter uses the selected provider's native JSON Schema response format for a single direct `complete` alternative; multi-alternative tool selection is not claimed as natively schema-enforced. `OPTIONAL` is an explicit best-effort mode for prompt-guided tool selection; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
 
 ## Invoke one proposal
 
@@ -147,7 +147,7 @@ The application maps the generic observation into its own state in a later Mappe
 
 ## Adapter boundary
 
-Add the LangChain4j adapter for Ollama:
+Add the LangChain4j adapter:
 
 ```xml
 <dependency>
@@ -157,8 +157,20 @@ Add the LangChain4j adapter for Ollama:
 </dependency>
 ```
 
-LangChain4j/Ollama runtime tuning is configured through ordinary runtime
-properties rather than the portable connector binding:
+The original `llm.query` provider uses Ollama:
+
+```yaml
+connectors:
+  local-model:
+    provider: llm.query
+    version: 1
+    config:
+      model: qwen3:8b
+      baseUrl: http://localhost:11434
+```
+
+Ollama runtime tuning is configured through ordinary runtime properties rather
+than the portable connector binding:
 
 ```properties
 pipeline.llm.langchain4j.ollama.request-timeout=PT30S
@@ -169,6 +181,31 @@ The timeout must be a positive ISO-8601 duration. These properties retain the
 adapter's prior defaults when omitted. The adapter disables LangChain4j's
 internal retries so one TPF Query execution cannot silently become multiple
 model inferences; retry policy remains owned by the pipeline execution.
+
+OpenAI-compatible chat-completion providers use the same portable Query
+contract and media mapping:
+
+```yaml
+connectors:
+  hosted-model:
+    provider: llm.query.openai.compatible
+    version: 1
+    config:
+      model: google/gemini-3.1-flash-lite
+      baseUrl: https://openrouter.ai/api/v1
+```
+
+The API key is a runtime secret and must not be placed in the connector binding:
+
+```properties
+pipeline.llm.langchain4j.openai-compatible.api-key=${OPENROUTER_API_KEY}
+pipeline.llm.langchain4j.openai-compatible.request-timeout=PT60S
+```
+
+The key is required only when an `llm.query.openai.compatible` binding starts.
+Missing credentials and non-positive timeouts fail before inference.
+Applications should pin a model whose provider advertises native JSON Schema
+support when `structuredOutputSchema` remains `REQUIRED`.
 
 The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
 

@@ -24,7 +24,8 @@ public record StepBranchingDescriptor(
     List<BranchVariantIdentity> inputVariants,
     List<BranchVariantIdentity> acceptedVariants,
     List<BranchVariantIdentity> producedVariants,
-    boolean terminal
+    boolean terminal,
+    boolean afterStepObserver
 ) {
 
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
@@ -54,7 +55,26 @@ public record StepBranchingDescriptor(
     ) {
         this(index, stepName, runtimeStepClass, inputRuntimeClassName, inputRuntimeType,
             acceptedContracts, acceptedRuntimeClassNames, acceptedRuntimeTypes,
-            List.of(), List.of(), List.of(), terminal);
+            List.of(), List.of(), List.of(), terminal, false);
+    }
+
+    public StepBranchingDescriptor(
+        int index,
+        String stepName,
+        String runtimeStepClass,
+        String inputRuntimeClassName,
+        Class<?> inputRuntimeType,
+        List<String> acceptedContracts,
+        List<String> acceptedRuntimeClassNames,
+        List<Class<?>> acceptedRuntimeTypes,
+        List<BranchVariantIdentity> inputVariants,
+        List<BranchVariantIdentity> acceptedVariants,
+        List<BranchVariantIdentity> producedVariants,
+        boolean terminal
+    ) {
+        this(index, stepName, runtimeStepClass, inputRuntimeClassName, inputRuntimeType,
+            acceptedContracts, acceptedRuntimeClassNames, acceptedRuntimeTypes,
+            inputVariants, acceptedVariants, producedVariants, terminal, false);
     }
 
     public boolean accepts(Object item) {

@@ -86,6 +86,34 @@ class AwaitStepDescriptorFactoryTest {
     }
 
     @Test
+    void authoredV3JavaTypesWithoutGeneratedProtobufUseTheirCanonicalIdentity() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.authored-v3.yaml");
+        Files.writeString(explicit, v3PipelineYaml()
+            .replace("org.pipelineframework.awaitable.fixture", "org.pipelineframework.awaitable.authoredfixture"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+
+            assertEquals(
+                "org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord",
+                descriptor.inputType());
+            assertEquals(
+                "org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus",
+                descriptor.outputType());
+            assertEquals(descriptor.inputType(), descriptor.transportInputType());
+            assertEquals(descriptor.outputType(), descriptor.transportOutputType());
+            var input = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord("record-1");
+            assertEquals(input, descriptor.inputToTransport().apply(input));
+            var output = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus("APPROVED");
+            assertEquals(output, descriptor.outputFromTransport().apply(output));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
     void legacyDescriptorOverloadRejectsConflictingCachedTransportIdentity() throws Exception {
         Path explicit = tempDir.resolve("pipeline.yaml");
         Files.writeString(explicit, pipelineYaml("kafka", """
