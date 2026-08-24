@@ -357,6 +357,9 @@ public class PipelineRunner implements AutoCloseable {
                     definitionTerminalStepIndex,
                     java.util.Optional.of(invocationContext),
                     branchExecutionTracker);
+                if (awaitContextSnapshot == null) {
+                    return applied;
+                }
                 if (applied instanceof io.smallrye.mutiny.Uni<?> uni) {
                     return uni.onFailure().transform(failure -> rootInvocation
                         ? PipelineStepExecutionFailure.atRoot(index, failure)

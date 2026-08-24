@@ -64,6 +64,13 @@ class PipelineNestedCommandRetryTest {
 
     @Test
     void nestedFailureRetainsResumableRootStepIndex() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant",
+            "execution",
+            0,
+            AwaitContinuationMode.DURABLE_HANDOFF,
+            TerminalOutputOwnership.COORDINATOR,
+            Map.of()));
         StepOneToOne<String, String> nested = PipelineInvocationSteps.oneToOne(
             runner,
             "child-definition",
