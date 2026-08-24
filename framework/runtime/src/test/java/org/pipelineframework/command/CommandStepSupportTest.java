@@ -479,10 +479,10 @@ class CommandStepSupportTest {
   private static PipelineExecutionContext executionRetryContext() {
     return PipelineExecutionContext.forCommandRetry(
         "tenant",
-        "exec-2",
+        "exec-1",
         4,
         4,
-        "exec-2:4:2");
+        "exec-1:4:2");
   }
 
   @Test

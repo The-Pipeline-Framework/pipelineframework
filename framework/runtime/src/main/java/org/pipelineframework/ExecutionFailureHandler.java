@@ -240,13 +240,14 @@ class ExecutionFailureHandler {
       Throwable classified = new IllegalStateException("Unknown failure");
       return new FailureClassification(false, classified);
     }
-    NonRetryableException nonRetryable = findThrowable(failure, NonRetryableException.class);
-    if (nonRetryable != null) {
-      return new FailureClassification(false, nonRetryable);
+    Optional<NonRetryableException> nonRetryable = findThrowable(failure, NonRetryableException.class);
+    if (nonRetryable.isPresent()) {
+      return new FailureClassification(false, nonRetryable.orElseThrow());
     }
-    PipelineControlFlowException controlFlow = findThrowable(failure, PipelineControlFlowException.class);
-    if (controlFlow != null) {
-      return new FailureClassification(false, controlFlow);
+    Optional<PipelineControlFlowException> controlFlow = findThrowable(
+        failure, PipelineControlFlowException.class);
+    if (controlFlow.isPresent()) {
+      return new FailureClassification(false, controlFlow.orElseThrow());
     }
     return new FailureClassification(true, failure);
   }
@@ -255,35 +256,40 @@ class ExecutionFailureHandler {
     if (failure == null) {
       return -1;
     }
-    TransitionWorkerFailureException indexed = findThrowable(failure, TransitionWorkerFailureException.class);
-    return indexed == null ? -1 : indexed.failedStepIndex();
+    return findThrowable(failure, TransitionWorkerFailureException.class)
+        .map(TransitionWorkerFailureException::failedStepIndex)
+        .orElse(-1);
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {
     if (failure == null) {
       return Optional.empty();
     }
-    CircuitOpenException open = findThrowable(failure, CircuitOpenException.class);
-    if (open != null) {
+    Optional<CircuitOpenException> open = findThrowable(failure, CircuitOpenException.class);
+    if (open.isPresent()) {
+      CircuitOpenException circuitOpen = open.orElseThrow();
       return Optional.of(new CircuitDeferral(
-          open.circuitOpen().identity().value(),
+          circuitOpen.circuitOpen().identity().value(),
           "circuit_open",
-          open.getMessage(),
-          open.circuitOpen().notBefore().toEpochMilli()));
+          circuitOpen.getMessage(),
+          circuitOpen.circuitOpen().notBefore().toEpochMilli()));
     }
-    CircuitProtectionUnavailableException unavailable = findThrowable(
+    Optional<CircuitProtectionUnavailableException> unavailable = findThrowable(
         failure, CircuitProtectionUnavailableException.class);
-    if (unavailable != null) {
+    if (unavailable.isPresent()) {
+      CircuitProtectionUnavailableException protectionUnavailable = unavailable.orElseThrow();
       return Optional.of(new CircuitDeferral(
-          unavailable.protection().identity().value(),
+          protectionUnavailable.protection().identity().value(),
           "circuit_protection_unavailable",
-          unavailable.getMessage(),
-          unavailable.protection().notBefore().toEpochMilli()));
+          protectionUnavailable.getMessage(),
+          protectionUnavailable.protection().notBefore().toEpochMilli()));
     }
     return Optional.empty();
   }
 
-  private static <T extends Throwable> T findThrowable(Throwable failure, Class<T> targetType) {
+  private static <T extends Throwable> Optional<T> findThrowable(
+      Throwable failure, Class<T> targetType) {
+    java.util.Objects.requireNonNull(failure, "failure");
     java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
     java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     queue.add(failure);
@@ -293,7 +299,7 @@ class ExecutionFailureHandler {
         continue;
       }
       if (targetType.isInstance(current)) {
-        return targetType.cast(current);
+        return Optional.of(targetType.cast(current));
       }
       Throwable cause = current.getCause();
       if (cause != null && cause != current) {
@@ -312,7 +318,7 @@ class ExecutionFailureHandler {
         }
       }
     }
-    return null;
+    return Optional.empty();
   }
 
   record FailureClassification(boolean retryable, Throwable classifiedThrowable) {
