@@ -55,6 +55,17 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/design/'},
             {text: 'Architectural Decisions', link: '/decisions/'},
+            {
+                text: 'Data Architecture',
+                link: '/design/data-architecture/',
+                collapsed: true,
+                items: [
+                    {text: 'Immutable Dataflow', link: '/design/data-architecture/'},
+                    {text: 'Data coupling', link: '/design/data-architecture/carry-data-computation'},
+                    {text: 'Query and Command', link: '/design/data-architecture/query-command'},
+                    {text: 'Effects and comparisons', link: '/design/data-architecture/workflow-effects'}
+                ]
+            },
             {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
             {text: 'State Model', link: '/design/state-model'},
             {text: 'Application Structure', link: '/design/application-structure'},
