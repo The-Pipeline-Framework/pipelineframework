@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.connector.CommandOperation;
 import org.pipelineframework.connector.ConnectorOperation;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
@@ -125,7 +125,7 @@ class LegacyCommandConnectorProviderTest {
             "step-1", command, String.class.getName(), String.class.getName(), "test.generator",
             CommandDuplicatePolicy.RETURN_RECORDED, config);
         return new CommandRequest<>(
-            descriptor, "command-1", "input", new AwaitExecutionContext("tenant", "execution", 3), config);
+            descriptor, "command-1", "input", new PipelineExecutionContext("tenant", "execution", 3), config);
     }
 
     private static <T> T await(CompletionStage<T> stage) {

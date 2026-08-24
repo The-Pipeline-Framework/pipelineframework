@@ -22,10 +22,11 @@ makes redispatch safe under the same logical effect identity.
 
 Ordinary execution re-drive is not authorization to retry a retained effect. Deliberate
 Command retry is an explicit control-plane intent that resumes the failed execution at
-its current Command step. The Command runtime still asks `CommandEffectStore` to
+its resumable step. The retained `FAILED_RETRYABLE` logical effect claims that admission;
+successful effects encountered earlier during deterministic composition do not. The Command runtime still asks `CommandEffectStore` to
 atomically append and claim the next attempt; the execution control plane cannot reset,
 delete, or otherwise manufacture effect state.
-One admitted execution retry deterministically identifies one effect attempt, so worker
+One admitted execution retry deterministically identifies one logical effect attempt, so worker
 recovery cannot turn the same admission into additional attempts.
 
 This decision governs `framework/runtime-core` Command contracts,

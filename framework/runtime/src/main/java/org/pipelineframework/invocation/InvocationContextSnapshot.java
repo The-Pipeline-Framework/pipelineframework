@@ -16,6 +16,7 @@ import org.pipelineframework.telemetry.PipelineRunContextHolder;
 final class InvocationContextSnapshot {
     private final PipelineContext pipelineContext;
     private final AwaitExecutionContext awaitContext;
+    private final Optional<PipelineExecutionContext> executionContext;
     private final Optional<PipelineRunContext> runContext;
     private final boolean inheritRunContext;
     private final Optional<PipelineInvocationContext> invocationContext;
@@ -39,8 +40,26 @@ final class InvocationContextSnapshot {
         boolean inheritRunContext,
         Optional<PipelineInvocationContext> invocationContext
     ) {
+        this(
+            pipelineContext,
+            awaitContext,
+            Optional.empty(),
+            runContext,
+            inheritRunContext,
+            invocationContext);
+    }
+
+    InvocationContextSnapshot(
+        PipelineContext pipelineContext,
+        AwaitExecutionContext awaitContext,
+        Optional<PipelineExecutionContext> executionContext,
+        Optional<PipelineRunContext> runContext,
+        boolean inheritRunContext,
+        Optional<PipelineInvocationContext> invocationContext
+    ) {
         this.pipelineContext = pipelineContext;
         this.awaitContext = awaitContext;
+        this.executionContext = Objects.requireNonNull(executionContext, "executionContext must not be null");
         this.runContext = Objects.requireNonNull(runContext, "runContext must not be null");
         this.inheritRunContext = inheritRunContext;
         this.invocationContext = Objects.requireNonNull(invocationContext, "invocationContext must not be null");
@@ -79,14 +98,18 @@ final class InvocationContextSnapshot {
         }
         if (awaitContext != null) {
             AwaitExecutionContextHolder.set(awaitContext);
-            PipelineExecutionContextHolder.set(new PipelineExecutionContext(
-                awaitContext.tenantId(),
-                awaitContext.executionId(),
-                awaitContext.currentStepIndex()));
         } else {
             AwaitExecutionContextHolder.clear();
-            PipelineExecutionContextHolder.clear();
         }
+        Optional<PipelineExecutionContext> resolvedExecution = executionContext
+            .map(context -> awaitContext == null ? context : context.atStep(awaitContext.currentStepIndex()));
+        if (resolvedExecution.isEmpty() && awaitContext != null) {
+            resolvedExecution = Optional.of(new PipelineExecutionContext(
+                awaitContext.tenantId(), awaitContext.executionId(), awaitContext.currentStepIndex()));
+        }
+        resolvedExecution.ifPresentOrElse(
+            PipelineExecutionContextHolder::set,
+            PipelineExecutionContextHolder::clear);
         if (!inheritRunContext) {
             runContext.ifPresentOrElse(PipelineRunContextHolder::set, PipelineRunContextHolder::clear);
         }

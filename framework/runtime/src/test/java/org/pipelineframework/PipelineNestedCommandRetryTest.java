@@ -10,7 +10,6 @@ import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -20,8 +19,9 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.config.StepConfig;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.invocation.PipelineInvocationSteps;
-import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
 
@@ -34,6 +34,7 @@ class PipelineNestedCommandRetryTest {
     @AfterEach
     void clearContext() {
         AwaitExecutionContextHolder.clear();
+        PipelineExecutionContextHolder.clear();
     }
 
     @Test
@@ -44,10 +45,9 @@ class PipelineNestedCommandRetryTest {
             0,
             AwaitContinuationMode.DURABLE_HANDOFF,
             TerminalOutputOwnership.COORDINATOR,
-            Map.of(),
-            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
-            0,
-            Optional.of("command-retry:execution:2")));
+            Map.of()));
+        PipelineExecutionContextHolder.set(PipelineExecutionContext.forCommandRetry(
+            "tenant", "execution", 0, 0, "command-retry:execution:2"));
         AtomicInteger commandCalls = new AtomicInteger();
         StepOneToOne<String, String> nested = PipelineInvocationSteps.oneToOne(
             runner,
@@ -96,16 +96,22 @@ class PipelineNestedCommandRetryTest {
     private static final class RetryClaimingCommandStep extends ConfigurableStep
         implements StepOneToOne<String, String>, CommandStep {
         private final AtomicInteger calls;
+        private final StepConfig noRetry = new StepConfig().retryLimit(0);
 
         private RetryClaimingCommandStep(AtomicInteger calls) {
             this.calls = calls;
         }
 
         @Override
+        public StepConfig effectiveConfig() {
+            return noRetry;
+        }
+
+        @Override
         public Uni<String> applyOneToOne(String input) {
-            AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+            PipelineExecutionContext context = PipelineExecutionContextHolder.get().orElseThrow();
             assertEquals(0, context.currentStepIndex());
-            assertTrue(context.targetsCurrentStepForCommandRetry());
+            assertTrue(context.commandRetryTargetsCurrentStep());
             assertTrue(context.claimCommandRetry("archive:invoice"));
             calls.incrementAndGet();
             return Uni.createFrom().item(input + ":command");

@@ -847,7 +847,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression(
                 "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
                     "#awaitUnit = :awaitUnit, #leaseExpires = :zero, #updated = :now " +
-                    "REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")
+                    "REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner, #redriveIntent")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)

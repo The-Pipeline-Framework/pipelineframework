@@ -2,7 +2,7 @@ package org.pipelineframework.command;
 
 import java.util.Map;
 
-import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContext;
 
 /**
  * Connector-facing command execution request.
@@ -12,14 +12,14 @@ public record CommandRequest<I>(
     String commandId,
     String attemptId,
     I input,
-    AwaitExecutionContext executionContext,
+    PipelineExecutionContext executionContext,
     Map<String, Object> config
 ) {
     public CommandRequest(
         CommandDescriptor descriptor,
         String commandId,
         I input,
-        AwaitExecutionContext executionContext,
+        PipelineExecutionContext executionContext,
         Map<String, Object> config
     ) {
         this(descriptor, commandId, newAttemptId(), input, executionContext, config);

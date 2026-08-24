@@ -178,6 +178,24 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void markAwaitCompletedClearsRedriveIntent() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            client, mockConfig("tpf_execution", "tpf_execution_key"));
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(Map.of()).build());
+
+        store.markAwaitCompleted(
+            "tenant-a", "execution-a", "await-unit", 3, System.currentTimeMillis())
+            .await().indefinitely();
+
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#redriveIntent")
+                && "redrive_intent".equals(
+                    request.expressionAttributeNames().get("#redriveIntent"))));
+    }
+
+    @Test
     void legacyInputWritePreservesExternalPayloadMetadata() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));

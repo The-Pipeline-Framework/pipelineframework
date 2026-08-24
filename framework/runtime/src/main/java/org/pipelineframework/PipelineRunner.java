@@ -329,10 +329,7 @@ public class PipelineRunner implements AutoCloseable {
                         PipelineTracingSupport.capture(
                             telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
-                                : telemetryContext.span().getSpanContext()),
-                        awaitContext.redriveIntent(),
-                        awaitContext.redriveStepIndex(),
-                        awaitContext.redriveAdmissionKey());
+                                : telemetryContext.span().getSpanContext()));
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));

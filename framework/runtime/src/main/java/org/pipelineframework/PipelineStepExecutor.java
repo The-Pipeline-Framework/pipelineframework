@@ -45,8 +45,8 @@ import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.cache.QueryNotFoundCacheEntry;
-import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.connector.QueryCacheability;
+import org.pipelineframework.command.CommandStep;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
@@ -70,7 +70,6 @@ import org.pipelineframework.telemetry.PipelineRunContextHolder;
 import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 import org.pipelineframework.invocation.PipelineInvocationContext;
-import org.pipelineframework.command.CommandStep;
 
 @ApplicationScoped
 class PipelineStepExecutor {
@@ -167,16 +166,6 @@ class PipelineStepExecutor {
         java.util.Optional<PipelineInvocationContext> invocationContext,
         BranchExecutionTracker branchExecutionTracker) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
-        if (awaitContextSnapshot != null
-            && awaitContextSnapshot.targetsCurrentStepForCommandRetry()
-            && !(resolvedStep instanceof CommandStep)
-            && "$root".equals(definitionId)
-            && !org.pipelineframework.invocation.PipelineInvocationSteps.isInvocationStep(resolvedStep)) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Deliberate Command retry targeted non-Command step "
-                    + resolvedStep.getClass().getName()
-                    + " at index " + awaitContextSnapshot.currentStepIndex()));
-        }
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
             : ("$root".equals(definitionId)
