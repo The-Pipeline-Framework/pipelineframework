@@ -238,7 +238,6 @@ public class CommandStepSupport {
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
                 CommandRetryExecutionScope.claimRecorded(
-                    request.executionContext().currentStepIndex(),
                     request.commandId(),
                     record.currentAttempt().attemptId());
                 @SuppressWarnings("unchecked")
@@ -257,8 +256,7 @@ public class CommandStepSupport {
                 boolean admittedRetry = deliberateRetry;
                 Optional<String> admittedAttempt = admittedRetry
                     ? Optional.empty()
-                    : CommandRetryExecutionScope.claimAttempt(
-                        request.executionContext().currentStepIndex(), request.commandId());
+                    : CommandRetryExecutionScope.claimAttempt(request.commandId());
                 if (admittedAttempt.isPresent()) {
                     retryRequest = new CommandRequest<>(
                         request.descriptor(),

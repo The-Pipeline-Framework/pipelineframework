@@ -528,9 +528,28 @@ class CommandStepSupportTest {
         .orElseThrow().attempts().size());
   }
 
+  @Test
+  void retryCommandIdentityIsIndependentFromTheRootResumeStep() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 13));
+    connector.failure = new IllegalStateException("provider unavailable");
+    assertThrows(IllegalStateException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("nested-command"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    connector.failure = null;
+    CommandRetryTestAccess.install("cmd-nested-command", "exec-1:21:2");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("nested-command"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandRetryTestAccess.requireConsumed();
+    assertEquals(2, connector.calls.get());
+  }
+
   private static void installExecutionRetry(String commandId) {
     PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
-    CommandRetryTestAccess.install(4, commandId, "exec-1:4:2");
+    CommandRetryTestAccess.install(commandId, "exec-1:4:2");
   }
 
   @Test

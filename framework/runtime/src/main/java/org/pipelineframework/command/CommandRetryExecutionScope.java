@@ -25,12 +25,8 @@ public final class CommandRetryExecutionScope {
         return new Snapshot(RuntimeAdapters.executionContext(CONTEXT_KEY, Admission.class));
     }
 
-    public static AdmissionHandle installRetry(
-        int targetStepIndex,
-        String targetCommandId,
-        String admissionKey
-    ) {
-        Admission admission = new Admission(targetStepIndex, targetCommandId, admissionKey);
+    public static AdmissionHandle installRetry(String targetCommandId, String admissionKey) {
+        Admission admission = new Admission(targetCommandId, admissionKey);
         RuntimeAdapters.setExecutionContext(
             CONTEXT_KEY,
             admission);
@@ -50,15 +46,15 @@ public final class CommandRetryExecutionScope {
         }
     }
 
-    static Optional<String> claimAttempt(int stepIndex, String commandId) {
+    static Optional<String> claimAttempt(String commandId) {
         return current()
-            .filter(admission -> admission.claim(stepIndex, commandId))
+            .filter(admission -> admission.claim(commandId))
             .map(Admission::attemptId);
     }
 
-    static boolean claimRecorded(int stepIndex, String commandId, String attemptId) {
+    static boolean claimRecorded(String commandId, String attemptId) {
         return current()
-            .filter(admission -> admission.claimRecorded(stepIndex, commandId, attemptId))
+            .filter(admission -> admission.claimRecorded(commandId, attemptId))
             .isPresent();
     }
 
@@ -88,36 +84,30 @@ public final class CommandRetryExecutionScope {
     }
 
     private static final class Admission {
-        private final int targetStepIndex;
         private final String targetCommandId;
         private final String attemptId;
         private final AtomicBoolean consumed = new AtomicBoolean();
 
-        private Admission(int targetStepIndex, String targetCommandId, String admissionKey) {
-            if (targetStepIndex < 0) {
-                throw new IllegalArgumentException("targetStepIndex must be non-negative");
-            }
+        private Admission(String targetCommandId, String admissionKey) {
             if (targetCommandId == null || targetCommandId.isBlank()) {
                 throw new IllegalArgumentException("targetCommandId must not be blank");
             }
             if (admissionKey == null || admissionKey.isBlank()) {
                 throw new IllegalArgumentException("admissionKey must not be blank");
             }
-            this.targetStepIndex = targetStepIndex;
             this.targetCommandId = targetCommandId;
             UUID identity = UUID.nameUUIDFromBytes(
                 (admissionKey + "\u0000" + targetCommandId).getBytes(StandardCharsets.UTF_8));
             this.attemptId = "attempt-" + identity;
         }
 
-        private boolean claim(int stepIndex, String commandId) {
-            return targetStepIndex == stepIndex
-                && targetCommandId.equals(commandId)
+        private boolean claim(String commandId) {
+            return targetCommandId.equals(commandId)
                 && consumed.compareAndSet(false, true);
         }
 
-        private boolean claimRecorded(int stepIndex, String commandId, String recordedAttemptId) {
-            return attemptId.equals(recordedAttemptId) && claim(stepIndex, commandId);
+        private boolean claimRecorded(String commandId, String recordedAttemptId) {
+            return attemptId.equals(recordedAttemptId) && claim(commandId);
         }
 
         private String attemptId() {
@@ -130,8 +120,7 @@ public final class CommandRetryExecutionScope {
         private void requireConsumed() {
             if (!consumed.get()) {
                 throw new IllegalStateException(
-                    "Deliberate Command retry did not encounter logical effect " + targetCommandId
-                        + " at step " + targetStepIndex);
+                    "Deliberate Command retry did not encounter logical effect " + targetCommandId);
             }
         }
     }
