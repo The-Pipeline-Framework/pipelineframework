@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.8.1-SNAPSHOT</version>
+        <version>26.8.1</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -126,11 +126,11 @@
                         </goals>
                         <configuration>
                             <target>
-                                <delete dir="${project.build.outputDirectory}"/>
-                                <delete dir="${project.build.testOutputDirectory}"/>
-                                <delete dir="${project.build.directory}/classes-pipeline"/>
-                                <delete dir="${project.build.directory}/generated-sources/annotations"/>
-                                <delete dir="${project.build.directory}/generated-sources/pipeline"/>
+                                <delete dir="${project.build.outputDirectory}" />
+                                <delete dir="${project.build.testOutputDirectory}" />
+                                <delete dir="${project.build.directory}/classes-pipeline" />
+                                <delete dir="${project.build.directory}/generated-sources/annotations" />
+                                <delete dir="${project.build.directory}/generated-sources/pipeline" />
                             </target>
                         </configuration>
                     </execution>
