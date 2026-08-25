@@ -28,12 +28,18 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
-      - name: Deploy to Maven Central
+      - name: Resolve immutable release identity
+        id: release
         run: |
-          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
           VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
           test "${GITHUB_REF_NAME#v}" = "$VERSION"
           case "$VERSION" in *-SNAPSHOT) exit 1;; esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Maven Central
+        run: |
+          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
           ./mvnw -B -f framework/pom.xml clean deploy -Pcentral-publishing -DskipTests --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
@@ -46,3 +52,16 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
+
+      - name: Publish exact-version author MCP knowledge
+        env:
+          GH_TOKEN: ${{ secrets.TPF_MCP_DISPATCH_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          jq -n \
+            --arg version "$VERSION" \
+            --arg tag "$GITHUB_REF_NAME" \
+            --arg framework_commit "$RELEASE_COMMIT" \
+            '{ref:"main",inputs:{version:$version,tag:$tag,framework_commit:$framework_commit}}' \
+            | gh api --method POST repos/The-Pipeline-Framework/tpf-mcp-bridge/actions/workflows/publish-knowledge.yml/dispatches --input -
