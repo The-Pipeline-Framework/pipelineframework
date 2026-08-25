@@ -18,7 +18,7 @@ TPF ships a dedicated [`tpf-authoring` Agent Skill](.agents/skills/tpf-authoring
 Install the skill from this repository with GitHub's skill tooling, or ask Codex to install it directly:
 
 ```bash
-gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring
+gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-hidden-dirs
 ```
 
 ```text

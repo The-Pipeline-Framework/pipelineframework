@@ -13,8 +13,8 @@ property list to memorize. Classify the setting before choosing YAML, a build op
 | Lifetime/owner | Examples | Authoring rule |
 | --- | --- | --- |
 | portable pipeline semantics | canonical types, steps, cardinality, branching, Query/Command/Await intent, connector operation choice | author in `pipeline.yaml`; do not hide in runtime properties |
-| build-time generation | transport/platform generation inputs, Java bindings, generated REST/client paths, typed telemetry metadata, provider availability to the processor | changing it requires regeneration/rebuild; runtime config cannot create missing code or metadata |
-| runtime framework policy | concurrency, backpressure, retry, circuit admission, cache, persistence/materialization provider choice, background execution, Await adapter plumbing, health | select/tune the framework shell; do not inject into business steps |
+| build-time generation and validation | transport/platform generation inputs, Java bindings, generated REST/client paths, typed telemetry metadata, provider availability to the processor, the `pipeline.parallelism` processor option | changing it requires regeneration/rebuild; changing the processor option requires recompilation so ordering and thread-safety diagnostics are revalidated; runtime config cannot create missing code or metadata |
+| runtime framework policy | `pipeline.parallelism`, concurrency, backpressure, retry, circuit admission, cache, persistence/materialization provider choice, background execution, Await adapter plumbing, health | changing runtime configuration changes execution behavior; select/tune the framework shell and do not inject it into business steps |
 | deployment/provider wiring | endpoints, brokers, buckets/tables, credentials/secret references, exporters and backends | keep outside portable contracts and supply through the current runtime/deployment mechanism |
 | invocation business data | customer/order/provider request facts that vary per item | carry as typed pipeline input, not connector or application configuration |
 
@@ -23,6 +23,14 @@ transport/boundary in YAML while runtime properties enable and tune the concrete
 adapter. Materialization policy declares that a value is stored out of line; runtime
 configuration selects and tunes its repository. Neither changes what the authored
 service means.
+
+`pipeline.parallelism` deliberately spans the build/runtime boundary.
+`PipelineSemanticAnalysisPhase` reads the processor option to issue ordering and
+thread-safety diagnostics, so changing that build-time value requires recompilation.
+At runtime, `PipelineConfigInitializer` loads the configured policy,
+`PipelineParallelismPolicyResolver` resolves it, and `PipelineRunner` applies it to
+execution; changing the runtime setting changes execution behavior without generating
+a different pipeline contract.
 
 Prefer framework/global defaults. Add a per-step or exact generated-boundary override
 only for a real operational exception. Use the boundary identity emitted by generated

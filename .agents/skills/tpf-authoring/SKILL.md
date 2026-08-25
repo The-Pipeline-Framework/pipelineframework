@@ -95,14 +95,22 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 - Read [execution-and-replay.md](references/execution-and-replay.md) for Query/Command/Await, connectors, aspects, persistence/cache/capture/effects, resilience, retry/DLQ, or checkpoint handoff.
 - Read [deployment-and-packaging.md](references/deployment-and-packaging.md) for configuration lifetime, telemetry, runtime placement, transport/platform, generated artifacts, bootstrap, testing, or single-unit packaging.
 
-Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` governs TPF maintenance; it is not application-authoring documentation. Examples prove compatibility, but may contain historical or application-specific residue.
+Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
+
+When the TPF Author MCP tools are available, use `tpf_versions` to confirm that the
+application's exact pinned TPF release is supported, then use version-exact
+`tpf_search`, `tpf_context`, and `tpf_source` evidence. Never substitute `latest`, a
+different patch, or a different minor line. If the tools or pinned release are not
+available, search the matching tagged documentation, source, examples, and tests
+directly. The Skill remains the architectural prior; MCP results supply release-exact
+evidence rather than replacing that model.
 
 ## Before you implement
 
 1. Identify the data, effect, observation, and suspension involved.
 2. Classify each dependency using the TPF shape above.
 3. Inspect `pipeline.yaml` and the current typed state first.
-4. Load only the relevant reference; establish the application's pinned TPF version, then search matching-version docs/source/examples/tests for the primitive.
+4. Load only the relevant reference; establish the application's pinned TPF version, then search matching-version MCP evidence when available and matching-version docs/source/examples/tests for the primitive.
 5. Draft or update `pipeline.yaml` and canonical types before inventing infrastructure.
 6. Compile and inspect generated diagnostics and artifacts.
 7. Only then write the smallest authored Java needed.
