@@ -66,7 +66,7 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
                   echo "MAVEN_ARGS leaked into project-version evaluation" >&2
                   exit 42
                 fi
-                printf '27.7.2-SNAPSHOT\\n'
+                printf '26.8.1-SNAPSHOT\\n'
                 """);
         assertTrue(fakeMaven.toFile().setExecutable(true));
 
@@ -87,7 +87,7 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
 
         assertTrue(process.waitFor(10, TimeUnit.SECONDS));
         assertEquals(0, process.exitValue(), output);
-        assertEquals("27.7.2-SNAPSHOT", output.strip());
+        assertEquals("26.8.1-SNAPSHOT", output.strip());
     }
 
     @Test
