@@ -135,11 +135,17 @@ non-identifier value shapes, but the provider remains responsible for classifyin
 kind as safe for durable storage.
 
 An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
-Ordinary admission never redispatches a `FAILED_RETRYABLE` record. A caller may deliberately use
-`CommandStepSupport.retry(...)`; a retry-capable effect store then atomically appends and claims one
-new attempt under the same logical `CommandId`. `DLQ`, `AMBIGUOUS`, and `USER_ACTION_REQUIRED`
-remain barriers. Native commands do not run with framework-managed blocking execution or bounded
-framework-managed concurrency.
+Ordinary admission and ordinary execution re-drive never redispatch a `FAILED_RETRYABLE` record.
+The queue-async control plane may deliberately re-drive a failed execution with
+`RETRY_FAILED_COMMAND` intent. The execution resumes from its persisted current-step input through
+the normal generated Command client, which consumes that intent only at the targeted Command step.
+`CommandStepSupport.retry(...)` remains the lower-level runtime primitive: a retry-capable effect
+store atomically appends and claims one new attempt under the same logical `CommandId`. `DLQ`,
+`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers. Native commands do not run with
+framework-managed blocking execution or bounded framework-managed concurrency.
+The transition identity and logical `CommandId` derive a stable attempt identity for that
+one admission. If the transition worker is recovered after the attempt has already failed,
+the same admission reports the recorded retryable failure instead of appending another attempt.
 
 The stable `CommandId` remains the provider idempotency identity across attempts. Legacy connectors
 receive the individual `attemptId` on `CommandRequest`; native operations receive both values through

@@ -14,6 +14,7 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionDecision;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
@@ -139,6 +140,74 @@ class QueueAsyncRedriveFlowTest {
   }
 
   @Test
+  void deliberateCommandRetryUsesIntentAwareAtomicStoreAdmission() {
+    ExecutionRecord<Object, Object> terminal = record(ExecutionStatus.FAILED, 4L, 2);
+    ExecutionRecord<Object, Object> redriven = record(ExecutionStatus.QUEUED, 5L, 3);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(Optional.of(terminal)));
+    when(executionStateStore.redriveTerminalExecution(
+            eq("tenant-1"),
+            eq("exec-1"),
+            eq(4L),
+            eq(true),
+            eq(ExecutionRedriveIntent.RETRY_FAILED_COMMAND),
+            eq("command-retry:exec-1:4"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(redriven)));
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+    ExecutionRedriveResult result = flow.redrive(
+            "tenant-1",
+            "exec-1",
+            null,
+            true,
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            "retry command")
+        .await().indefinitely();
+
+    assertEquals(ExecutionStatus.QUEUED, result.status());
+    verify(executionStateStore).redriveTerminalExecution(
+        eq("tenant-1"),
+        eq("exec-1"),
+        eq(4L),
+        eq(true),
+        eq(ExecutionRedriveIntent.RETRY_FAILED_COMMAND),
+        eq("command-retry:exec-1:4"),
+        anyLong());
+    verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+  }
+
+  @Test
+  void omittedIntentUsesOrdinaryReplayAdmission() {
+    ExecutionRecord<Object, Object> terminal = record(ExecutionStatus.DLQ, 4L, 2);
+    ExecutionRecord<Object, Object> redriven = record(ExecutionStatus.QUEUED, 5L, 3);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(Optional.of(terminal)));
+    when(executionStateStore.redriveTerminalExecution(
+            eq("tenant-1"),
+            eq("exec-1"),
+            eq(4L),
+            eq(false),
+            eq("redrive:exec-1:4"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(redriven)));
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+    ExecutionRedriveResult result = flow.redrive(
+            "tenant-1", "exec-1", null, false, null, "operator retry")
+        .await().indefinitely();
+
+    assertEquals(ExecutionStatus.QUEUED, result.status());
+    verify(executionStateStore).redriveTerminalExecution(
+        eq("tenant-1"),
+        eq("exec-1"),
+        eq(4L),
+        eq(false),
+        eq("redrive:exec-1:4"),
+        anyLong());
+  }
+
+  @Test
   void deniedAdmissionFailsBeforeStoreAccess() {
     when(admissionPolicy.admit(any()))
         .thenReturn(ControlPlaneAdmissionDecision.deny("TENANT_NOT_ALLOWED", "no"));
@@ -189,6 +258,12 @@ class QueueAsyncRedriveFlowTest {
         null,
         1L,
         1L,
-        99999999L);
+        99999999L,
+        0L,
+        0,
+        "",
+        ExecutionRedriveIntent.REPLAY,
+        4,
+        Optional.of("archive:invoice-1"));
   }
 }

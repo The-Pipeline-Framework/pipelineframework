@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import java.util.Optional;
 /**
  * Durable execution state record used by async orchestration.
  */
@@ -30,8 +31,101 @@ public record ExecutionRecord<I, R>(
     long ttlEpochS,
     long firstCircuitDeferredAtEpochMs,
     int circuitDeferralCount,
-    String circuitIdentity
+    String circuitIdentity,
+    ExecutionRedriveIntent redriveIntent,
+    int failedStepIndex,
+    Optional<String> failedCommandId
 ) {
+    public ExecutionRecord {
+        redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
+        failedCommandId = Optional.ofNullable(failedCommandId).orElseGet(Optional::empty);
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
+            if (failedStepIndex < 0) {
+                throw new IllegalArgumentException(
+                    "deliberate Command retry requires a retained failed root step");
+            }
+            if (failedCommandId.filter(value -> !value.isBlank()).isEmpty()) {
+                throw new IllegalArgumentException(
+                    "deliberate Command retry requires the exact failed logical Command identity");
+            }
+        }
+    }
+
+    /** Compatibility constructor for records created before exact failed Command identity was retained. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        String circuitIdentity,
+        ExecutionRedriveIntent redriveIntent,
+        int failedStepIndex
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion,
+            resultShape, status, version, currentStepIndex, attempt, leaseOwner,
+            leaseExpiresEpochMs, nextDueEpochMs, lastTransitionKey, inputPayload, awaitUnitId,
+            resultPayload, errorCode, errorMessage, createdAtEpochMs, updatedAtEpochMs, ttlEpochS,
+            firstCircuitDeferredAtEpochMs, circuitDeferralCount, circuitIdentity, redriveIntent,
+            failedStepIndex, Optional.empty());
+    }
+
+    /** Compatibility constructor for records persisted before explicit redrive intent existed. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        String circuitIdentity
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion, resultShape,
+            status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
+            lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
+            createdAtEpochMs, updatedAtEpochMs, ttlEpochS, firstCircuitDeferredAtEpochMs,
+            circuitDeferralCount, circuitIdentity, ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
+    }
+
     /** Compatibility constructor for records persisted before circuit deferral metadata existed. */
     public ExecutionRecord(
         String tenantId,
@@ -195,6 +289,9 @@ public record ExecutionRecord<I, R>(
             ttlEpochS,
             firstCircuitDeferredAtEpochMs,
             circuitDeferralCount,
-            circuitIdentity);
+            circuitIdentity,
+            redriveIntent,
+            failedStepIndex,
+            failedCommandId);
     }
 }

@@ -322,6 +322,42 @@ class QueueAsyncFailureMatrixTest {
         assertEquals("retry_exhausted", envelope.terminalReason());
     }
 
+    @Test
+    void terminalRetryableCommandFailurePersistsRootAndLogicalEffectIdentity() {
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-command", 5L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(),
+            anyInt(), any(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+        RuntimeException failure = new TransitionFailureEnvelope(
+            IllegalStateException.class.getName(),
+            "archive failed",
+            6,
+            Optional.of("archive:confirmation-7")).toException();
+
+        failureHandler.handleExecutionFailure(
+            record,
+            "exec-command:0:0",
+            failure,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3));
+
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-command"),
+            eq(5L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-command:0:0"),
+            eq("TransitionWorkerFailureException"),
+            anyString(),
+            eq(6),
+            eq(Optional.of("archive:confirmation-7")),
+            anyLong());
+    }
+
     private void configureRetryDefaults() {
         when(orchestratorConfig.maxRetries()).thenReturn(3);
         when(orchestratorConfig.retryDelay()).thenReturn(Duration.ofSeconds(5));

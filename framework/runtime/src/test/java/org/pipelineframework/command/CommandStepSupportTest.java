@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -33,8 +34,8 @@ import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
@@ -72,7 +73,8 @@ class CommandStepSupportTest {
 
   @AfterEach
   void clearContext() {
-    AwaitExecutionContextHolder.clear();
+    PipelineExecutionContextHolder.clear();
+    CommandRetryTestAccess.clear();
     if (meterProvider != null) {
       meterProvider.shutdown();
     }
@@ -81,7 +83,7 @@ class CommandStepSupportTest {
 
   @Test
   void recordsEffectAndReturnsConnectorOutput() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
 
     CommandOutput output = support
         .<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
@@ -103,13 +105,8 @@ class CommandStepSupportTest {
 
   @Test
   void preservesInvocationContextAcrossAsyncDescriptorResolution() {
-    AwaitExecutionContext expectedContext = new AwaitExecutionContext(
-        "async-tenant",
-        "async-exec",
-        7,
-        org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
-        org.pipelineframework.awaitable.TerminalOutputOwnership.COORDINATOR);
-    AwaitExecutionContextHolder.set(expectedContext);
+    PipelineExecutionContext expectedContext = new PipelineExecutionContext("async-tenant", "async-exec", 7);
+    PipelineExecutionContextHolder.set(expectedContext);
     AtomicReference<String> descriptorThread = new AtomicReference<>();
     ExecutorService descriptorExecutor = Executors.newSingleThreadExecutor(runnable -> {
       Thread thread = new Thread(runnable, "async-descriptor-loader");
@@ -131,12 +128,10 @@ class CommandStepSupportTest {
 
       assertEquals("cmd-async-context", output.commandId);
       assertEquals("async-descriptor-loader", descriptorThread.get());
-      AwaitExecutionContext connectorContext = connector.lastExecutionContext.get();
+      PipelineExecutionContext connectorContext = connector.lastExecutionContext.get();
       assertEquals(expectedContext.tenantId(), connectorContext.tenantId());
       assertEquals(expectedContext.executionId(), connectorContext.executionId());
       assertEquals(expectedContext.currentStepIndex(), connectorContext.currentStepIndex());
-      assertEquals(expectedContext.continuationMode(), connectorContext.continuationMode());
-      assertEquals(expectedContext.terminalOutputOwnership(), connectorContext.terminalOutputOwnership());
     } finally {
       descriptorExecutor.shutdownNow();
     }
@@ -163,7 +158,7 @@ class CommandStepSupportTest {
 
   @Test
   void rejectsNullAsyncDescriptorItem() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
 
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
         () -> support.<CommandInput, CommandOutput>execute(
@@ -177,7 +172,7 @@ class CommandStepSupportTest {
 
   @Test
   void returnRecordedDuplicateDoesNotReissueConnector() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandInput input = new CommandInput("doc-1");
 
     support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), input)
@@ -192,7 +187,7 @@ class CommandStepSupportTest {
 
   @Test
   void failDuplicatePolicyDoesNotReturnRecordedOutput() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandInput input = new CommandInput("doc-1");
     CommandDescriptor failDuplicate = new CommandDescriptor(
         descriptor.stepId(),
@@ -216,12 +211,12 @@ class CommandStepSupportTest {
 
   @Test
   void inProgressDuplicateEmitsDuplicateMetric() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandRequest<CommandInput> request = new CommandRequest<>(
         descriptor,
         "cmd-doc-1",
         new CommandInput("doc-1"),
-        new AwaitExecutionContext("tenant", "exec-1", 4),
+        new PipelineExecutionContext("tenant", "exec-1", 4),
         Map.of());
     store.createPending(request, System.currentTimeMillis()).await().atMost(Duration.ofSeconds(5));
 
@@ -245,7 +240,7 @@ class CommandStepSupportTest {
 
   @Test
   void failsWhenOrchestratorModeIsNotQueueAsync() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandStepSupport syncSupport = new CommandStepSupport(
         List.of(connector),
         List.of(store),
@@ -263,7 +258,7 @@ class CommandStepSupportTest {
 
   @Test
   void rejectsMultipleEffectStores() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandStepSupport duplicateStoreSupport = new CommandStepSupport(
         List.of(connector),
         List.of(store, new InMemoryCommandEffectStore()),
@@ -282,7 +277,7 @@ class CommandStepSupportTest {
 
   @Test
   void rejectsAnUnregisteredCommandAfterEffectLookup() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandEffectStore effectStore = mock(CommandEffectStore.class);
     CommandStepSupport missingConnectorSupport = new CommandStepSupport(
         List.of(),
@@ -312,7 +307,7 @@ class CommandStepSupportTest {
 
   @Test
   void preservesNullLegacyConnectorResults() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandConnector<CommandInput, CommandOutput> nullConnector = new CommandConnector<>() {
       @Override
       public String command() {
@@ -339,7 +334,7 @@ class CommandStepSupportTest {
 
   @Test
   void rejectsCommandIdWithLeadingOrTrailingWhitespace() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
 
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
         () -> support.<CommandInput, CommandOutput>execute(
@@ -354,7 +349,7 @@ class CommandStepSupportTest {
 
   @Test
   void retryableConnectorFailureRecordsRetryableFailure() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new IllegalStateException("opensearch unavailable");
 
     IllegalStateException error = assertThrows(IllegalStateException.class,
@@ -372,7 +367,7 @@ class CommandStepSupportTest {
 
   @Test
   void ordinaryAdmissionDoesNotRetryFailedEffect() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new IllegalStateException("opensearch unavailable");
 
     assertThrows(IllegalStateException.class,
@@ -392,8 +387,155 @@ class CommandStepSupportTest {
   }
 
   @Test
+  void targetedExecutionRedriveAdmitsExactlyOneRetryThroughOrdinaryExecutePath() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    installExecutionRetry("cmd-doc-1");
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    installExecutionRetry("cmd-doc-1");
+    assertThrows(CommandRetryableOutcomeException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals(2, connector.calls.get());
+    CommandEffectRecord record = store.find("tenant", "cmd-doc-1")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(2, record.attempts().size());
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.attempts().get(0).status());
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.attempts().get(1).status());
+  }
+
+  @Test
+  void recordedSuccessBeforeRetryableEffectDoesNotConsumeExecutionRetryAdmission() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("already-done"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = new IllegalStateException("opensearch unavailable");
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("needs-retry"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    installExecutionRetry("cmd-needs-retry");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("already-done"))
+        .await().atMost(Duration.ofSeconds(5));
+    assertThrows(IllegalStateException.class, CommandRetryTestAccess::requireConsumed);
+
+    connector.failure = null;
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("needs-retry"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandRetryTestAccess.requireConsumed();
+    assertEquals(3, connector.calls.get());
+    CommandEffectRecord retried = store.find("tenant", "cmd-needs-retry")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(List.of(CommandEffectStatus.FAILED_RETRYABLE, CommandEffectStatus.SUCCEEDED),
+        retried.attempts().stream().map(CommandEffectAttemptRecord::status).toList());
+  }
+
+  @Test
+  void recordedSuccessFromTheSameRetryAdmissionSatisfiesRecoveredExecution() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    connector.failure = null;
+    installExecutionRetry("cmd-doc-1");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    installExecutionRetry("cmd-doc-1");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandRetryTestAccess.requireConsumed();
+    assertEquals(2, connector.calls.get());
+  }
+
+  @Test
+  void exactRetryTargetIsStableWithParallelFailuresAndReversedTraversal() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("provider unavailable");
+    Uni<?> firstPair = Uni.combine().all().unis(
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-a"))
+            .onFailure().recoverWithNull(),
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-b"))
+            .onFailure().recoverWithNull())
+        .discardItems();
+    firstPair.await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = null;
+    installExecutionRetry("cmd-parallel-b");
+    assertThrows(CommandRetryableOutcomeException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-a"))
+            .await().atMost(Duration.ofSeconds(5)));
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("parallel-b"))
+        .await().atMost(Duration.ofSeconds(5));
+    CommandRetryTestAccess.requireConsumed();
+
+    connector.failure = new IllegalStateException("provider unavailable");
+    Uni.combine().all().unis(
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-a"))
+            .onFailure().recoverWithNull(),
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-b"))
+            .onFailure().recoverWithNull())
+        .discardItems().await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = null;
+    installExecutionRetry("cmd-reverse-b");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-b"))
+        .await().atMost(Duration.ofSeconds(5));
+    assertThrows(CommandRetryableOutcomeException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("reverse-a"))
+            .await().atMost(Duration.ofSeconds(5)));
+    CommandRetryTestAccess.requireConsumed();
+
+    assertEquals(1, store.find("tenant", "cmd-parallel-a").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(2, store.find("tenant", "cmd-parallel-b").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(1, store.find("tenant", "cmd-reverse-a").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(2, store.find("tenant", "cmd-reverse-b").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+  }
+
+  private static void installExecutionRetry(String commandId) {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    CommandRetryTestAccess.install(4, commandId, "exec-1:4:2");
+  }
+
+  @Test
   void deliberateRetryAppendsOneAttemptAndPreservesFailedHistory() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new IllegalStateException("opensearch unavailable");
 
     assertThrows(IllegalStateException.class,
@@ -405,7 +547,7 @@ class CommandStepSupportTest {
     String firstAttemptId = failed.currentAttempt().attemptId();
 
     connector.failure = null;
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-2", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-2", 4));
     CommandOutput output = support.<CommandInput, CommandOutput>retry(
         descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
         .await().atMost(Duration.ofSeconds(5));
@@ -428,7 +570,7 @@ class CommandStepSupportTest {
 
   @Test
   void retryAdmissionUsesLogicalIdentityAfterPersistedInputRehydration() throws Exception {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new IllegalStateException("opensearch unavailable");
     assertThrows(IllegalStateException.class,
         () -> support.<CommandInput, CommandOutput>execute(
@@ -444,7 +586,7 @@ class CommandStepSupportTest {
         descriptor,
         "cmd-doc-1",
         new CommandInput("doc-1"),
-        new AwaitExecutionContext("tenant", "exec-2", 4),
+        new PipelineExecutionContext("tenant", "exec-2", 4),
         descriptor.config());
 
     assertNotEquals(retry.input(), rehydrated.input());
@@ -459,7 +601,7 @@ class CommandStepSupportTest {
         List.of(concurrentConnector),
         List.of(concurrentStore),
         config(OrchestratorMode.QUEUE_ASYNC));
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     concurrentConnector.failure = new IllegalStateException("opensearch unavailable");
     assertThrows(IllegalStateException.class,
         () -> concurrentSupport.<CommandInput, CommandOutput>execute(
@@ -485,7 +627,7 @@ class CommandStepSupportTest {
 
   @Test
   void deliberateRetryOfSucceededEffectReturnsRecordedWithoutDispatch() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandInput input = new CommandInput("doc-1");
     support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), input)
         .await().atMost(Duration.ofSeconds(5));
@@ -501,7 +643,7 @@ class CommandStepSupportTest {
 
   @Test
   void deliberateRetryOfTerminalFailureIsRejectedWithoutDispatch() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new NonRetryableException("invalid index document");
     assertThrows(NonRetryableException.class,
         () -> support.<CommandInput, CommandOutput>execute(
@@ -526,7 +668,7 @@ class CommandStepSupportTest {
       String executionId
   ) {
     return CompletableFuture.supplyAsync(() -> {
-      AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", executionId, 4));
+      PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", executionId, 4));
       try {
         return retrySupport.<CommandInput, CommandOutput>retry(
             descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
@@ -534,7 +676,7 @@ class CommandStepSupportTest {
       } catch (RuntimeException failure) {
         return failure;
       } finally {
-        AwaitExecutionContextHolder.clear();
+        PipelineExecutionContextHolder.clear();
       }
     }, executor);
   }
@@ -559,7 +701,7 @@ class CommandStepSupportTest {
 
   @Test
   void nonRetryableConnectorFailureRecordsDlq() {
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     connector.failure = new NonRetryableException("invalid index document");
 
     NonRetryableException error = assertThrows(NonRetryableException.class,
@@ -668,7 +810,7 @@ class CommandStepSupportTest {
 
   static class RecordingConnector implements CommandConnector<CommandInput, CommandOutput> {
     final AtomicInteger calls = new AtomicInteger();
-    final AtomicReference<AwaitExecutionContext> lastExecutionContext = new AtomicReference<>();
+    final AtomicReference<PipelineExecutionContext> lastExecutionContext = new AtomicReference<>();
     final List<String> commandIds = new CopyOnWriteArrayList<>();
     final List<String> attemptIds = new CopyOnWriteArrayList<>();
     RuntimeException failure;

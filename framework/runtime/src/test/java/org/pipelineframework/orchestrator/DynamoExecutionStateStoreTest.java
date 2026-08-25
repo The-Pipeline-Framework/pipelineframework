@@ -178,6 +178,24 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void markAwaitCompletedClearsRedriveIntent() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            client, mockConfig("tpf_execution", "tpf_execution_key"));
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(Map.of()).build());
+
+        store.markAwaitCompleted(
+            "tenant-a", "execution-a", "await-unit", 3, System.currentTimeMillis())
+            .await().indefinitely();
+
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#redriveIntent")
+                && "redrive_intent".equals(
+                    request.expressionAttributeNames().get("#redriveIntent"))));
+    }
+
+    @Test
     void legacyInputWritePreservesExternalPayloadMetadata() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
@@ -726,7 +744,8 @@ class DynamoExecutionStateStoreTest {
         assertEquals("Request timeout", result.get().errorMessage());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             !request.updateExpression().contains("#resume")
-                && !request.updateExpression().contains("#awaitInteraction")));
+                && !request.updateExpression().contains("#awaitInteraction")
+                && "redrive_intent".equals(request.expressionAttributeNames().get("#redriveIntent"))));
     }
 
     @Test
@@ -763,7 +782,10 @@ class DynamoExecutionStateStoreTest {
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;
-        Map<String, AttributeValue> failedItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED);
+        Map<String, AttributeValue> failedItem = new HashMap<>(
+            executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED));
+        failedItem.put("failed_step_index", AttributeValue.builder().n("13").build());
+        failedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
 
         when(client.updateItem(any(UpdateItemRequest.class)))
             .thenReturn(UpdateItemResponse.builder().attributes(failedItem).build());
@@ -776,11 +798,21 @@ class DynamoExecutionStateStoreTest {
                 "exec-1:0:0",
                 "FATAL",
                 "Fatal error",
+                13,
+                Optional.of("archive:confirmation-7"),
                 now)
             .await().indefinitely();
 
         assertTrue(result.isPresent());
         assertEquals(ExecutionStatus.FAILED, result.get().status());
+        assertEquals(13, result.get().failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.get().failedCommandId());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#failedStep = :failedStep")
+                && request.updateExpression().contains("#failedCommand = :failedCommand")
+                && "13".equals(request.expressionAttributeValues().get(":failedStep").n())
+                && "archive:confirmation-7".equals(
+                    request.expressionAttributeValues().get(":failedCommand").s())));
     }
 
     @Test
@@ -838,6 +870,46 @@ class DynamoExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void deliberateCommandRetryPersistsIntentWithAtomicTerminalUpdate() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> queuedItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.QUEUED));
+        queuedItem.put("attempt", AttributeValue.builder().n("3").build());
+        queuedItem.put("redrive_intent", AttributeValue.builder()
+            .s(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name()).build());
+        queuedItem.put("failed_step_index", AttributeValue.builder().n("4").build());
+        queuedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(queuedItem).build());
+
+        ExecutionRecord<Object, Object> result = store.redriveTerminalExecution(
+                "tenant-a",
+                "exec-1",
+                2L,
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "command-retry:exec-1:2",
+                now)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, result.redriveIntent());
+        assertEquals(4, result.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.failedCommandId());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#redriveIntent = :redriveIntent")
+                && request.expressionAttributeValues().get(":redriveIntent").s()
+                    .equals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name())));
     }
 
     @Test

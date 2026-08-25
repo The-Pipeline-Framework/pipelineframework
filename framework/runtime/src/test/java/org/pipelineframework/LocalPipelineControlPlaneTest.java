@@ -13,6 +13,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
@@ -129,6 +130,48 @@ class LocalPipelineControlPlaneTest {
 
     assertEquals(result, actual);
     verify(queueAsyncCoordinator).redriveExecution("tenant-1", "exec-5", 7L, true, "operator retry");
+  }
+
+  @Test
+  void deliberateCommandRetryDelegatesIntentToCoordinator() {
+    ExecutionRedriveResult result = new ExecutionRedriveResult(
+        "tenant-1",
+        "exec-5",
+        ExecutionStatus.FAILED,
+        ExecutionStatus.QUEUED,
+        8L,
+        2,
+        3,
+        "pipeline-a",
+        "contract-a",
+        "release-a",
+        100L);
+    when(queueAsyncCoordinator.redriveExecution(
+            "tenant-1",
+            "exec-5",
+            7L,
+            true,
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            "retry command"))
+        .thenReturn(Uni.createFrom().item(result));
+
+    ExecutionRedriveResult actual = controlPlane.redriveExecution(
+            "tenant-1",
+            "exec-5",
+            7L,
+            true,
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            "retry command")
+        .await().indefinitely();
+
+    assertEquals(result, actual);
+    verify(queueAsyncCoordinator).redriveExecution(
+        "tenant-1",
+        "exec-5",
+        7L,
+        true,
+        ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+        "retry command");
   }
 
   private static AwaitInteractionRecord awaitRecord(String tenantId, String executionId, String interactionId) {

@@ -1,9 +1,11 @@
 package org.pipelineframework.execution;
 
-/**
- * Framework-managed execution scope for steps that need durable pipeline identity.
- */
-public record PipelineExecutionContext(String tenantId, String executionId, int currentStepIndex) {
+/** Framework-managed execution scope for steps that need durable pipeline identity. */
+public record PipelineExecutionContext(
+    String tenantId,
+    String executionId,
+    int currentStepIndex
+) {
     public PipelineExecutionContext {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
@@ -14,5 +16,9 @@ public record PipelineExecutionContext(String tenantId, String executionId, int 
         if (currentStepIndex < 0) {
             throw new IllegalArgumentException("currentStepIndex must be non-negative");
         }
+    }
+
+    public PipelineExecutionContext atStep(int stepIndex) {
+        return new PipelineExecutionContext(tenantId, executionId, stepIndex);
     }
 }

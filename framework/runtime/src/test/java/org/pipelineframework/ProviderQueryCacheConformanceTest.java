@@ -240,6 +240,7 @@ class ProviderQueryCacheConformanceTest {
                 .queryOneToOne(descriptor, new QueryInput("input"), QueryOutput.class)
                 .await().atMost(Duration.ofSeconds(2));
             assertEquals(new QueryOutput("provider-input"), captured);
+            PipelineExecutionContextHolder.clear();
             seedBindings.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
             operation.invocations.set(0);
             operation.starts.set(0);

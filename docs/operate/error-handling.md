@@ -49,6 +49,31 @@ Content-Type: application/json
 
 The operation re-queues the durable `ExecutionRecord` for the same execution id. It does not consume, delete, or replay from DLQ messages. DLQ messages remain triage and audit evidence.
 
+That default request is ordinary execution replay. It never authorizes redispatch of a
+retained Command effect. To deliberately retry the retained failed Command step, submit a
+failed-execution re-drive with explicit intent:
+
+```http
+POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "expectedVersion": 12,
+  "reason": "SharePoint dependency restored",
+  "allowFailed": true,
+  "intent": "RETRY_FAILED_COMMAND"
+}
+```
+
+Admission fails unless the execution is `FAILED`, retains the actual failed step index, and the
+selected execution store supports durable retry intent. Replay resumes from the persisted segment
+input; the transition fails before invoking the target if that retained failed step is not a Command.
+At Command dispatch,
+`CommandEffectStore` must still contain a safely retryable `FAILED_RETRYABLE` effect and
+must atomically claim the next attempt. Success, terminal failure, in-flight, ambiguous,
+and user-action-required effects are never redispatched by this operation.
+
 ## Execution DLQ Envelope (Terminal Details)
 
 Execution DLQ entries include standard fields for triage across REST, gRPC, local, and function-style execution:

@@ -7,10 +7,10 @@ import jakarta.inject.Inject;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.command.CommandEffectStatus;
 import org.pipelineframework.command.InMemoryCommandEffectStore;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.pipeline.service.pipeline.ProcessObservedOperationCommandClientStep;
 
 @QuarkusTest
@@ -24,7 +24,8 @@ class GeneratedCommandStepProbeTest {
 
     @Test
     void generatedCommandStepCompletesBelowTheQueueAsyncTransitionBoundary() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("probe-tenant", "probe-execution", 0));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext(
+            "probe-tenant", "probe-execution", 0));
         ObservedOperationCommand input = new ObservedOperationCommand(
             "probe-success", ObservedOperationCommand.Behavior.SUCCESS);
 
@@ -39,6 +40,6 @@ class GeneratedCommandStepProbeTest {
 
     @AfterEach
     void clearContext() {
-        AwaitExecutionContextHolder.clear();
+        PipelineExecutionContextHolder.clear();
     }
 }

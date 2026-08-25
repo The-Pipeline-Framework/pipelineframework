@@ -72,15 +72,26 @@ public class HostedExecutionAdminResource {
         HostedExecutionRedriveRequest effectiveRequest = request == null
             ? new HostedExecutionRedriveRequest(null, null, false)
             : request;
-        return controlPlane.redriveExecution(
+        Uni<ExecutionRedriveResult> redrive = effectiveRequest.intent() == ExecutionRedriveIntent.REPLAY
+            ? controlPlane.redriveExecution(
                 tenantId,
                 executionId,
                 effectiveRequest.expectedVersion(),
                 effectiveRequest.allowFailed(),
                 effectiveRequest.reason())
+            : controlPlane.redriveExecution(
+                tenantId,
+                executionId,
+                effectiveRequest.expectedVersion(),
+                effectiveRequest.allowFailed(),
+                effectiveRequest.intent(),
+                effectiveRequest.reason());
+        return redrive
             .onItem().transform(result -> Response.ok(result).build())
             .onFailure(NotFoundException.class).recoverWithItem(failure ->
                 Response.status(Response.Status.NOT_FOUND).entity(failure.getMessage()).build())
+            .onFailure(UnsupportedOperationException.class).recoverWithItem(failure ->
+                Response.status(Response.Status.NOT_IMPLEMENTED).entity(failure.getMessage()).build())
             .onFailure(IllegalStateException.class).recoverWithItem(failure ->
                 Response.status(Response.Status.CONFLICT).entity(failure.getMessage()).build())
             .onFailure(IllegalArgumentException.class).recoverWithItem(failure ->

@@ -16,6 +16,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.TransitionWorkerFailureException;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
@@ -57,6 +58,8 @@ class ExecutionFailureHandler {
     int nextAttempt = record.attempt() + 1;
     FailureClassification classification = classifyFailure(failure);
     Throwable classifiedFailure = classification.classifiedThrowable();
+    int failedStepIndex = failedStepIndex(failure);
+    Optional<String> failedCommandId = failedCommandId(failure);
     boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
 
@@ -92,15 +95,15 @@ class ExecutionFailureHandler {
           });
     }
 
-    return executionStateStore.markTerminalFailure(
-            record.tenantId(),
-            record.executionId(),
-            record.version(),
-            ExecutionStatus.FAILED,
-            transitionKey,
-            classifiedFailure.getClass().getSimpleName(),
-            classifiedFailure.getMessage(),
-            now)
+    Uni<Optional<ExecutionRecord<Object, Object>>> terminalUpdate = failedStepIndex >= 0
+        ? executionStateStore.markTerminalFailure(
+            record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
+            transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(),
+            failedStepIndex, failedCommandId, now)
+        : executionStateStore.markTerminalFailure(
+            record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED,
+            transitionKey, classifiedFailure.getClass().getSimpleName(), classifiedFailure.getMessage(), now);
+    return terminalUpdate
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
             return Uni.createFrom().voidItem();
@@ -238,42 +241,65 @@ class ExecutionFailureHandler {
       Throwable classified = new IllegalStateException("Unknown failure");
       return new FailureClassification(false, classified);
     }
-    Throwable nonRetryable = findThrowable(failure, NonRetryableException.class);
-    if (nonRetryable != null) {
-      return new FailureClassification(false, nonRetryable);
+    Optional<NonRetryableException> nonRetryable = findThrowable(failure, NonRetryableException.class);
+    if (nonRetryable.isPresent()) {
+      return new FailureClassification(false, nonRetryable.orElseThrow());
     }
-    Throwable controlFlow = findThrowable(failure, PipelineControlFlowException.class);
-    if (controlFlow != null) {
-      return new FailureClassification(false, controlFlow);
+    Optional<PipelineControlFlowException> controlFlow = findThrowable(
+        failure, PipelineControlFlowException.class);
+    if (controlFlow.isPresent()) {
+      return new FailureClassification(false, controlFlow.orElseThrow());
     }
     return new FailureClassification(true, failure);
+  }
+
+  private static int failedStepIndex(Throwable failure) {
+    if (failure == null) {
+      return -1;
+    }
+    return findThrowable(failure, TransitionWorkerFailureException.class)
+        .map(TransitionWorkerFailureException::failedStepIndex)
+        .orElse(-1);
+  }
+
+  private static Optional<String> failedCommandId(Throwable failure) {
+    if (failure == null) {
+      return Optional.empty();
+    }
+    return findThrowable(failure, TransitionWorkerFailureException.class)
+        .flatMap(TransitionWorkerFailureException::failedCommandId)
+        .filter(value -> !value.isBlank());
   }
 
   private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {
     if (failure == null) {
       return Optional.empty();
     }
-    CircuitOpenException open = (CircuitOpenException) findThrowable(failure, CircuitOpenException.class);
-    if (open != null) {
+    Optional<CircuitOpenException> open = findThrowable(failure, CircuitOpenException.class);
+    if (open.isPresent()) {
+      CircuitOpenException circuitOpen = open.orElseThrow();
       return Optional.of(new CircuitDeferral(
-          open.circuitOpen().identity().value(),
+          circuitOpen.circuitOpen().identity().value(),
           "circuit_open",
-          open.getMessage(),
-          open.circuitOpen().notBefore().toEpochMilli()));
+          circuitOpen.getMessage(),
+          circuitOpen.circuitOpen().notBefore().toEpochMilli()));
     }
-    CircuitProtectionUnavailableException unavailable = (CircuitProtectionUnavailableException) findThrowable(
+    Optional<CircuitProtectionUnavailableException> unavailable = findThrowable(
         failure, CircuitProtectionUnavailableException.class);
-    if (unavailable != null) {
+    if (unavailable.isPresent()) {
+      CircuitProtectionUnavailableException protectionUnavailable = unavailable.orElseThrow();
       return Optional.of(new CircuitDeferral(
-          unavailable.protection().identity().value(),
+          protectionUnavailable.protection().identity().value(),
           "circuit_protection_unavailable",
-          unavailable.getMessage(),
-          unavailable.protection().notBefore().toEpochMilli()));
+          protectionUnavailable.getMessage(),
+          protectionUnavailable.protection().notBefore().toEpochMilli()));
     }
     return Optional.empty();
   }
 
-  private static Throwable findThrowable(Throwable failure, Class<? extends Throwable> targetType) {
+  private static <T extends Throwable> Optional<T> findThrowable(
+      Throwable failure, Class<T> targetType) {
+    java.util.Objects.requireNonNull(failure, "failure");
     java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
     java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     queue.add(failure);
@@ -283,7 +309,7 @@ class ExecutionFailureHandler {
         continue;
       }
       if (targetType.isInstance(current)) {
-        return current;
+        return Optional.of(targetType.cast(current));
       }
       Throwable cause = current.getCause();
       if (cause != null && cause != current) {
@@ -302,7 +328,7 @@ class ExecutionFailureHandler {
         }
       }
     }
-    return null;
+    return Optional.empty();
   }
 
   record FailureClassification(boolean retryable, Throwable classifiedThrowable) {

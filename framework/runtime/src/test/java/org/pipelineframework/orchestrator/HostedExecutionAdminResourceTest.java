@@ -125,4 +125,74 @@ class HostedExecutionAdminResourceTest {
         assertEquals(result, assertInstanceOf(ExecutionRedriveResult.class, response.getEntity()));
         verify(controlPlane).redriveExecution(TENANT_ID, EXECUTION_ID, 7L, true, "operator retry");
     }
+
+    @Test
+    void deliberateCommandRetryDelegatesExplicitIntent() {
+        ExecutionRedriveResult result = new ExecutionRedriveResult(
+            TENANT_ID,
+            EXECUTION_ID,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.QUEUED,
+            8L,
+            2,
+            3,
+            "pipeline-a",
+            "contract-a",
+            "release-a",
+            100L);
+        when(controlPlane.redriveExecution(
+                TENANT_ID,
+                EXECUTION_ID,
+                7L,
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "retry command"))
+            .thenReturn(Uni.createFrom().item(result));
+
+        Response response = resource.redrive(
+                TENANT_ID,
+                EXECUTION_ID,
+                AUTH,
+                new HostedExecutionRedriveRequest(
+                    7L,
+                    "retry command",
+                    true,
+                    ExecutionRedriveIntent.RETRY_FAILED_COMMAND))
+            .await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+        verify(controlPlane).redriveExecution(
+            TENANT_ID,
+            EXECUTION_ID,
+            7L,
+            true,
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            "retry command");
+    }
+
+    @Test
+    void unsupportedDeliberateRetryStoreReturnsNotImplemented() {
+        when(controlPlane.redriveExecution(
+                TENANT_ID,
+                EXECUTION_ID,
+                7L,
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "retry command"))
+            .thenReturn(Uni.createFrom().failure(new UnsupportedOperationException(
+                "Execution state store does not support durable deliberate Command retry intent")));
+
+        Response response = resource.redrive(
+                TENANT_ID,
+                EXECUTION_ID,
+                AUTH,
+                new HostedExecutionRedriveRequest(
+                    7L,
+                    "retry command",
+                    true,
+                    ExecutionRedriveIntent.RETRY_FAILED_COMMAND))
+            .await().indefinitely();
+
+        assertEquals(501, response.getStatus());
+    }
 }

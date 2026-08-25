@@ -2,9 +2,7 @@ package org.pipelineframework.awaitable;
 
 import java.util.Map;
 
-/**
- * Internal queue-async execution context used by generated await steps.
- */
+/** Internal queue-async execution context used by generated await steps. */
 public final class AwaitExecutionContext {
     private final String tenantId;
     private final String executionId;
@@ -14,24 +12,10 @@ public final class AwaitExecutionContext {
     private int currentStepIndex;
 
     public AwaitExecutionContext(String tenantId, String executionId, int currentStepIndex) {
-        this(
-            tenantId,
-            executionId,
-            currentStepIndex,
-            AwaitContinuationMode.LIVE_IF_SUPPORTED,
-            TerminalOutputOwnership.TRANSITION_WORKER,
-            Map.of());
+        this(tenantId, executionId, currentStepIndex, AwaitContinuationMode.LIVE_IF_SUPPORTED,
+            TerminalOutputOwnership.TRANSITION_WORKER, Map.of());
     }
 
-    /**
-     * Creates a queue-async context.
-     *
-     * @param tenantId tenant identifier
-     * @param executionId execution identifier
-     * @param currentStepIndex current pipeline step index
-     * @param continuationMode whether an await may use a live completion window
-     * @param terminalOutputOwnership side of the transition boundary that publishes terminal output
-     */
     public AwaitExecutionContext(
         String tenantId,
         String executionId,
@@ -64,44 +48,21 @@ public final class AwaitExecutionContext {
         this.currentStepIndex = currentStepIndex;
         this.continuationMode = java.util.Objects.requireNonNull(continuationMode, "continuationMode must not be null");
         this.terminalOutputOwnership = java.util.Objects.requireNonNull(
-            terminalOutputOwnership,
-            "terminalOutputOwnership must not be null");
+            terminalOutputOwnership, "terminalOutputOwnership must not be null");
         this.traceMetadata = Map.copyOf(java.util.Objects.requireNonNull(traceMetadata, "traceMetadata must not be null"));
     }
 
-    public String tenantId() {
-        return tenantId;
-    }
+    public String tenantId() { return tenantId; }
 
-    public String executionId() {
-        return executionId;
-    }
+    public String executionId() { return executionId; }
 
-    public int currentStepIndex() {
-        return currentStepIndex;
-    }
+    public int currentStepIndex() { return currentStepIndex; }
 
-    /**
-     * Returns the await continuation mode for this transition.
-     *
-     * @return continuation mode
-     */
-    public AwaitContinuationMode continuationMode() {
-        return continuationMode;
-    }
+    public AwaitContinuationMode continuationMode() { return continuationMode; }
 
-    /**
-     * Returns which side of the boundary owns terminal object publication.
-     *
-     * @return terminal output owner
-     */
-    public TerminalOutputOwnership terminalOutputOwnership() {
-        return terminalOutputOwnership;
-    }
+    public TerminalOutputOwnership terminalOutputOwnership() { return terminalOutputOwnership; }
 
-    public Map<String, Object> traceMetadata() {
-        return traceMetadata;
-    }
+    public Map<String, Object> traceMetadata() { return traceMetadata; }
 
     public void currentStepIndex(int currentStepIndex) {
         if (currentStepIndex < 0) {

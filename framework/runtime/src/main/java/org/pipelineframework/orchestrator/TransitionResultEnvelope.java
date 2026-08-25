@@ -174,6 +174,17 @@ public record TransitionResultEnvelope(
             TransitionFailureEnvelope.from(failure));
     }
 
+    public static TransitionResultEnvelope failed(Throwable failure, int failedStepIndex) {
+        return new TransitionResultEnvelope(
+            TransitionWorkerOutcome.FAILED,
+            List.of(),
+            null,
+            TransitionFailureEnvelope.from(failure, failedStepIndex),
+            null,
+            false,
+            false);
+    }
+
     /**
      * Decodes completed output payloads.
      *

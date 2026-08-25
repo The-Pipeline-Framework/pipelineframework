@@ -315,12 +315,15 @@ public class PipelineRunner implements AutoCloseable {
             startStepIndex,
             stopBeforeStepIndex,
             (step, value, index) -> {
+                int executionStepIndex = rootInvocation || awaitContext == null
+                    ? index
+                    : awaitContext.currentStepIndex();
                 AwaitExecutionContext awaitContextSnapshot = awaitContext == null
                     ? null
                     : new AwaitExecutionContext(
                         awaitContext.tenantId(),
                         awaitContext.executionId(),
-                        index,
+                        executionStepIndex,
                         awaitContext.continuationMode(),
                         awaitContext.terminalOutputOwnership(),
                         PipelineTracingSupport.capture(
@@ -338,7 +341,7 @@ public class PipelineRunner implements AutoCloseable {
                     logger.debugf("Implements: %s", iface.getName());
                 }
 
-                return stepExecutor.applyStep(
+                Object applied = stepExecutor.applyStep(
                     step,
                     value,
                     parallelismPolicy,
@@ -351,6 +354,20 @@ public class PipelineRunner implements AutoCloseable {
                     definitionTerminalStepIndex,
                     java.util.Optional.of(invocationContext),
                     branchExecutionTracker);
+                if (awaitContextSnapshot == null) {
+                    return applied;
+                }
+                if (applied instanceof io.smallrye.mutiny.Uni<?> uni) {
+                    return uni.onFailure().transform(failure -> rootInvocation
+                        ? PipelineStepExecutionFailure.atRoot(index, failure)
+                        : PipelineStepExecutionFailure.at(index, failure));
+                }
+                if (applied instanceof io.smallrye.mutiny.Multi<?> multi) {
+                    return multi.onFailure().transform(failure -> rootInvocation
+                        ? PipelineStepExecutionFailure.atRoot(index, failure)
+                        : PipelineStepExecutionFailure.at(index, failure));
+                }
+                return applied;
             },
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index))));
 
