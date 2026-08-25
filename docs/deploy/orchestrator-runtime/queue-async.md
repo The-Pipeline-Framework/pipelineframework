@@ -8,7 +8,7 @@ For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Perfor
 
 ## Durable Execution
 
-Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.
+Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a coordinator worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.
 
 The in-memory execution, await, and event providers are also supported for a single-process,
 attended `QUEUE_ASYNC` application. They preserve the queue-async and await lifecycle while that
@@ -43,13 +43,24 @@ Think about `QUEUE_ASYNC` in terms of safe re-execution:
 |---|---|---|---|
 | Crash before async work is accepted | Nothing yet | Caller retries submission | duplicate submissions |
 | Crash after acceptance but before completion | Stored execution row and due-work timing | a worker can claim the execution later and run it again | repeated business invocation |
-| Worker dies while holding a lease | Stored execution row remains; lease expires | another worker can claim the execution and rerun it | at-least-once step execution |
+| Coordinator worker dies while holding a lease | Stored execution row remains; lease expires | another coordinator worker can claim the execution and rerun it | at-least-once step execution |
+| Remote REST caller deadline expires | Execution is `REMOTE_OUTCOME_UNKNOWN`; worker disposition is not known | automatic retry is suppressed | reconcile the prior invocation before explicit re-drive |
 | Crash after downstream side effect but before commit | downstream side effect may already have happened | TPF may rerun the same work item | idempotent external calls |
 | Terminal failure after retries are exhausted | terminal status and failure details | execution moves to DLQ or failure state | replay or operator investigation process |
 
 The important boundary is this: TPF makes the orchestrator state crash-surviving, but your business-side effects must still be safe when the same work is attempted again.
 
 Use [Command Steps](/deploy/orchestrator-runtime/command) when the external side effect itself should be a managed pipeline boundary with a deterministic command id, effect log, duplicate policy, and recorded output replay.
+
+## Remote Transition Deadlines
+
+A remote transition worker is a stateless data-plane executor for one bounded continuation. The coordinator owns the execution record, lease, retry policy, re-drive, and result/status authority. A worker availability heartbeat proves that a worker is registered and recently healthy; it does not prove the disposition of a particular transition invocation.
+
+An eligible portable live Await transition can legitimately run longer than ordinary request/reply work. For REST transition workers, TPF emits one `remote_transition_deadline_warning` log event at 75% of the configured request deadline. The warning identifies the execution, attempt, transition key, protocol, target, elapsed time, and deadline; it does not include payload data. A slow transition is not considered failed by that warning.
+
+If the REST caller reaches its request deadline, TPF records the execution as `REMOTE_OUTCOME_UNKNOWN`. That means the caller did not receive a result and TPF has no authoritative evidence that the remote worker stopped. The execution is excluded from automatic sweep, lease claim, and retry; `HttpTimeoutException` is not treated as worker death. The coordinator logs `remote_transition_outcome_unknown` with `decision=automatic_retry_suppressed`.
+
+`REMOTE_OUTCOME_UNKNOWN` does not provide transparent mid-transition takeover, result recovery, or live-stream resurrection. An operator may use the existing explicit failed-execution re-drive path only after independently confirming that the original worker invocation completed, was cancelled, or is otherwise no longer able to make effects. That re-drive is a new attempt and still needs normal idempotency safeguards. A durable remote-attempt result/ownership protocol is a separate capability, not a worker-local cache.
 
 ## Re-execution, Re-entrancy, And Idempotency
 
@@ -125,7 +136,8 @@ Recovery points:
 
 1. crash before commit: queue redelivery replays the transition.
 2. crash after commit before next enqueue: due sweeper re-dispatches.
-3. worker death while leased: lease expiry allows takeover.
+3. coordinator worker death while leased: lease expiry allows takeover.
+4. a remote REST caller deadline: the execution is parked as `REMOTE_OUTCOME_UNKNOWN`; no automatic takeover is attempted.
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
 

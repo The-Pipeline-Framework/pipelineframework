@@ -46,6 +46,27 @@ class ExecutionRedrivePlanTest {
   }
 
   @Test
+  void remoteOutcomeUnknownRequiresExplicitReplayAdmission() {
+    ExecutionRecord<Object, Object> record = record(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, 2L);
+
+    IllegalStateException error = assertThrows(
+        IllegalStateException.class,
+        () -> ExecutionRedrivePlan.from(record, OptionalLong.empty(), false, "retry"));
+
+    assertEquals("Execution exec-1 cannot be re-driven from status REMOTE_OUTCOME_UNKNOWN", error.getMessage());
+
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(
+        record,
+        OptionalLong.empty(),
+        true,
+        ExecutionRedriveIntent.REPLAY,
+        "confirmed disposition");
+
+    assertEquals(ExecutionRedriveIntent.REPLAY, plan.intent());
+    assertEquals("redrive:exec-1:2", plan.transitionKey());
+  }
+
+  @Test
   void failedCommandRetryUsesDistinctIntentAndTransitionIdentity() {
     ExecutionRecord<Object, Object> record = record(ExecutionStatus.FAILED, 2L);
 

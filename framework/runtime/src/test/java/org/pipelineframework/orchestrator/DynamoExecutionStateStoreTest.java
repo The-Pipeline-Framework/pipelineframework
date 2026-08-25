@@ -555,6 +555,37 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void marksRemoteOutcomeUnknownWithoutMakingTheExecutionDue() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder()
+                .attributes(executionItem("tenant-a", "exec-remote", "key-remote", ttl,
+                    ExecutionStatus.REMOTE_OUTCOME_UNKNOWN))
+                .build());
+
+        ExecutionRecord<Object, Object> parked = store.markRemoteOutcomeUnknown(
+                "tenant-a",
+                "exec-remote",
+                4L,
+                "exec-remote:2:1",
+                "REMOTE_OUTCOME_UNKNOWN",
+                "remote REST outcome is unknown",
+                now)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, parked.status());
+        ArgumentCaptor<UpdateItemRequest> request = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(request.capture());
+        assertTrue(request.getValue().updateExpression().contains("#status = :outcomeUnknown"));
+        assertEquals(Long.toString(Long.MAX_VALUE),
+            request.getValue().expressionAttributeValues().get(":nextDue").n());
+    }
+
+    @Test
     void markSucceededPreservesCanonicalResultItemIdentity() throws Exception {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");

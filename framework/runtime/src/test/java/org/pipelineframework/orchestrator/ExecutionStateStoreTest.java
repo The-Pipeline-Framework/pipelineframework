@@ -71,6 +71,7 @@ class ExecutionStateStoreTest {
         assertNotNull(store.markAwaitCompleted("tenant1", "exec1", "unit1", 2, now));
         assertNotNull(store.markAwaitItemContinuationsCompleted("tenant1", "exec1", "unit1", 2, "input", now));
         assertNotNull(store.scheduleRetry("tenant1", "exec1", 1L, 2, now + 5000, "key1", "Error", "msg", now));
+        assertNotNull(store.markRemoteOutcomeUnknown("tenant1", "exec1", 1L, "key1", "Error", "msg", now));
         assertNotNull(store.deferCircuit(
             "tenant1", "exec1", 1L, now + 5000, "key1", "pricing", "circuit_open", "msg", now, 1, now));
         assertNotNull(store.markTerminalFailure("tenant1", "exec1", 1L, ExecutionStatus.FAILED, "key1", "Error", "msg", now));
@@ -149,6 +150,13 @@ class ExecutionStateStoreTest {
         public Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
             String tenantId, String executionId, long expectedVersion, int nextAttempt,
             long nextDueEpochMs, String transitionKey, String errorCode, String errorMessage, long nowEpochMs) {
+            return Uni.createFrom().item(Optional.of(createTestRecord()));
+        }
+
+        @Override
+        public Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+            String tenantId, String executionId, long expectedVersion, String transitionKey,
+            String errorCode, String errorMessage, long nowEpochMs) {
             return Uni.createFrom().item(Optional.of(createTestRecord()));
         }
 

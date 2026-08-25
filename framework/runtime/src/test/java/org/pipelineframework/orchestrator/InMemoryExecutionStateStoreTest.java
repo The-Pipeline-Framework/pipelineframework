@@ -117,6 +117,44 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void remoteOutcomeUnknownIsNotAutomaticallyDueOrClaimableButCanBeExplicitlyRedriven() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-remote-unknown", "payload", ExecutionResultShape.SINGLE, now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a", created.record().executionId(), "worker-1", now, 1_000)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> parked = store.markRemoteOutcomeUnknown(
+                "tenant-a",
+                claimed.executionId(),
+                claimed.version(),
+                "transition-remote-unknown",
+                "REMOTE_OUTCOME_UNKNOWN",
+                "remote REST outcome is unknown",
+                now + 1)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, parked.status());
+        assertEquals(claimed.attempt(), parked.attempt());
+        assertTrue(store.findDueExecutions(now + 2_000, 10).await().indefinitely().isEmpty());
+        assertTrue(store.claimLease("tenant-a", parked.executionId(), "worker-2", now + 2_000, 1_000)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a", parked.executionId(), parked.version(), false, "redrive", now + 2)
+            .await().indefinitely().isEmpty());
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a", parked.executionId(), parked.version(), true, "redrive", now + 2)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionStatus.QUEUED, redriven.status());
+        assertEquals(parked.attempt() + 1, redriven.attempt());
+    }
+
+    @Test
     void redriveTerminalExecutionQueuesDlqAndPreservesPinnedIdentity() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
