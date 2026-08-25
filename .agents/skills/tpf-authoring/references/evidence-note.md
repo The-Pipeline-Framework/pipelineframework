@@ -172,4 +172,5 @@ That doctrine came from current deployment docs, mapping code/tests, and example
 - The skill-creator `quick_validate.py` entrypoint could not import its undeclared
   `PyYAML` dependency in the available Python runtimes. The same frontmatter key/name/
   description/TODO checks were run with the available Ruby YAML parser and passed.
-- No Maven verification or CodeRabbit review was run, as requested.
+- No Maven verification was run, as requested. A CodeRabbit review was requested but
+  could not be completed because the service was rate-limited.
