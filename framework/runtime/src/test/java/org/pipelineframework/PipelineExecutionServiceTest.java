@@ -315,9 +315,9 @@ class PipelineExecutionServiceTest {
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
         when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(1)))
             .thenAnswer(invocation -> {
-                assertTrue(CommandRetryTestAccess.claimAttempt(0, "notify:other").isEmpty());
+                assertTrue(CommandRetryTestAccess.claimAttempt("notify:other").isEmpty());
                 attemptIds.add(CommandRetryTestAccess.claimAttempt(
-                    0, "archive:confirmation-7").orElseThrow());
+                    "archive:confirmation-7").orElseThrow());
                 return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
             });
         TransitionWorkerCommand worker = new TransitionWorkerCommand(

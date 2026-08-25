@@ -50,7 +50,7 @@ class PipelineNestedCommandRetryTest {
             TerminalOutputOwnership.COORDINATOR,
             Map.of()));
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 0));
-        CommandRetryTestAccess.install(0, "archive:invoice", "command-retry:execution:2");
+        CommandRetryTestAccess.install("archive:invoice", "command-retry:execution:2");
         AtomicInteger commandCalls = new AtomicInteger();
         StepOneToOne<String, String> nested = PipelineInvocationSteps.oneToOne(
             runner,
@@ -117,7 +117,7 @@ class PipelineNestedCommandRetryTest {
         public Uni<String> applyOneToOne(String input) {
             PipelineExecutionContext context = PipelineExecutionContextHolder.get().orElseThrow();
             assertEquals(0, context.currentStepIndex());
-            assertTrue(CommandRetryTestAccess.claimAttempt(0, "archive:invoice").isPresent());
+            assertTrue(CommandRetryTestAccess.claimAttempt("archive:invoice").isPresent());
             calls.incrementAndGet();
             return Uni.createFrom().item(input + ":command");
         }

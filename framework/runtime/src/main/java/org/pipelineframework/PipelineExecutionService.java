@@ -606,7 +606,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         final CommandRetryExecutionScope.AdmissionHandle commandRetryAdmission;
         if (command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
           commandRetryAdmission = CommandRetryExecutionScope.installRetry(
-              command.redriveStepIndex(), command.redriveCommandId().orElseThrow(), command.transitionKey());
+              command.redriveCommandId().orElseThrow(), command.transitionKey());
         } else {
           CommandRetryExecutionScope.clear();
           commandRetryAdmission = null;

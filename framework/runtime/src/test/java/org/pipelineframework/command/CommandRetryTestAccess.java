@@ -9,12 +9,12 @@ public final class CommandRetryTestAccess {
     private CommandRetryTestAccess() {
     }
 
-    public static void install(int stepIndex, String commandId, String admissionKey) {
-        HANDLE.set(CommandRetryExecutionScope.installRetry(stepIndex, commandId, admissionKey));
+    public static void install(String commandId, String admissionKey) {
+        HANDLE.set(CommandRetryExecutionScope.installRetry(commandId, admissionKey));
     }
 
-    public static Optional<String> claimAttempt(int stepIndex, String commandId) {
-        return CommandRetryExecutionScope.claimAttempt(stepIndex, commandId);
+    public static Optional<String> claimAttempt(String commandId) {
+        return CommandRetryExecutionScope.claimAttempt(commandId);
     }
 
     public static void requireConsumed() {
