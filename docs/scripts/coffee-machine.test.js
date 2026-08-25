@@ -6,6 +6,7 @@ import {
 } from '../.vitepress/coffee-machine/content-model.js'
 import {
   assertPublicProjection,
+  isCoffeeMachinePage,
   stripAuthorOnlyFrontmatter
 } from '../.vitepress/coffee-machine/visibility-policy.js'
 import {
@@ -49,6 +50,12 @@ test('the real Coffee Machine corpus builds a public-safe dataset', async () => 
 test('author-only frontmatter is stripped recursively as one visibility class', () => {
   const frontmatter = { title: 'Public', social: { poll: { question: 'Private' }, future: { campaign: 'Private' } } }
   assert.deepEqual(stripAuthorOnlyFrontmatter(frontmatter), { title: 'Public' })
+})
+
+test('Coffee Machine visibility applies to current and versioned pages', () => {
+  assert.equal(isCoffeeMachinePage('value/coffee-machine/testing/example.md'), true)
+  assert.equal(isCoffeeMachinePage('versions/v26.8.1/value/coffee-machine/testing/example.md'), true)
+  assert.equal(isCoffeeMachinePage('versions/v26.8.1/value/overview.md'), false)
 })
 
 test('public projection rejects private field names', () => {

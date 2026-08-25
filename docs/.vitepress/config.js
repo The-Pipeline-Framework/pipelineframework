@@ -16,7 +16,7 @@
 
 import {defineConfig} from 'vitepress'
 import {withMermaid} from "vitepress-plugin-mermaid"
-import {stripAuthorOnlyFrontmatter} from './coffee-machine/visibility-policy.js'
+import {isCoffeeMachinePage, stripAuthorOnlyFrontmatter} from './coffee-machine/visibility-policy.js'
 
 // Use withMermaid to wrap the entire configuration - this enables GitHub-style mermaid code blocks
 // Note: This adds significant size to the bundle due to Mermaid's dependencies
@@ -571,7 +571,7 @@ export default withMermaid(
     },
 
     transformPageData: (pageData, { siteConfig }) => {
-        if (pageData.relativePath.startsWith('value/coffee-machine/')) {
+        if (isCoffeeMachinePage(pageData.relativePath)) {
             stripAuthorOnlyFrontmatter(pageData.frontmatter)
         }
 

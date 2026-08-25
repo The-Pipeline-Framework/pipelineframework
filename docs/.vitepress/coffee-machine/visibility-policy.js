@@ -1,5 +1,9 @@
 export const AUTHOR_ONLY_FRONTMATTER_KEYS = Object.freeze(['social'])
 
+export function isCoffeeMachinePage(relativePath) {
+  return /^(?:versions\/v\d+\.\d+(?:\.\d+)?\/)?value\/coffee-machine\//.test(relativePath)
+}
+
 export function stripAuthorOnlyFrontmatter(frontmatter) {
   if (!frontmatter || typeof frontmatter !== 'object') {
     return frontmatter
