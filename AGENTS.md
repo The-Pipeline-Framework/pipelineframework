@@ -248,7 +248,7 @@ Prefer Repowise MCP context over broad grep, but do not call every Repowise tool
 Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-08-26 (commit 9c29853ba). Confidence: 100%.
 ### How to work in this repo
 
-- **Trust the index.** `verified: true` means the bytes were checked against the live tree, so never re-read those lines. Re-read only on `bounds: "approximate"`, `_meta.stale_warning`, `search_method: "bm25"` or `confidence: "low"`; `index_behind: true` alone is informational.
+- **Trust the index for orientation.** `verified: true` means the indexed bytes were checked against the live tree, but the index is not edit authority: read the corresponding content from the active worktree immediately before editing it. For orientation and other read-only work, re-read indexed content on `bounds: "approximate"`, `_meta.stale_warning`, `search_method: "bm25"` or `confidence: "low"`; `index_behind: true` alone is informational.
 - **Pre-edit, not instead-of-edit.** These tools decide *which* files to read and edit. Reading a file before you edit it is correct and expected.
 - **Noisy commands** (tests, builds, `git log`/`diff`, searches, listings): prefer `repowise distill <cmd>`, the same command with its exit code preserved and errors-first output. A `[repowise#<ref>: N lines omitted]` marker is recoverable via `repowise expand <ref>` (add `-q <regex>` to filter); never re-run the command to see omitted output.
 - **Recording a decision** you had to reason out: `repowise decision add --title T --decision D` records it without prompting and prints the id (`--format json` to parse it back). It lands `proposed`, for a person to confirm.
@@ -258,9 +258,9 @@ Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-08-26 (commit 9c
 | Tool | When and why |
 |------|--------------|
 | `get_answer(question)` | First call for any how/where/why question. Cite `confidence: "high"` or `grounding: "extracted"` directly; `degraded` means judge by `retrieval_quality`. `symbol_bodies` has live bodies. |
-| `get_context(targets=[...])` | Triage card for files/modules/symbols: docs, signatures, hotspot, fix history. No source bytes — `include=["skeleton"]` for the whole file verified, `["callers"|"decisions"]` for depth. Batch targets. |
+| `get_context(targets=[...])` | Triage card for files/modules/symbols: docs, signatures, hotspot, fix history. No source bytes — `include=["skeleton"]` for the whole file verified, `["callers"]` or `["decisions"]` for depth. Batch targets. |
 | `get_symbol(id)` | **Follow-up, not an entry point** — one verified body for an id a prior response named (`path.py::Name`, `path.py:140-180`, `repowise#<hex>`). Never walk a file symbol by symbol; Read it. |
-| `search_codebase(query)` | Hybrid search, auto-routed by query shape; force with `mode=symbol|path|concept|hybrid`. A hit whose `sources` are `[fts]` only has no semantic agreement, so verify it. |
+| `search_codebase(query)` | Hybrid search, auto-routed by query shape; force with `mode=symbol`, `path`, `concept`, or `hybrid`. A hit whose `sources` are `[fts]` only has no semantic agreement, so verify it. |
 | `get_why(query, targets?)` | Why the code is shaped this way: decision records, git archaeology, rationale comments. Call before a refactor or a pattern divergence. |
 | `get_risk(targets, changed_files?)` | What history says about touching these files. PR mode (`changed_files`) leads with a `directive`: read `will_break` / `missing_cochanges` / `missing_tests` / `tests_to_run` first. |
 | `get_change_risk(revspec, extensions?, exclude_patterns?)` | Defect score for a whole commit or `base..head` range, from its diff on the live checkout. Lead with `risk_percentile`. Scores a range; `get_risk` scores paths. |
@@ -308,8 +308,8 @@ Critical files:
 ### Standing decisions (ask `get_why` before diverging)
 - Await owns durable suspension — Transport adapters may vary, but durable interaction correctness must not vary with them
 - Change the semantic owner boldly — Avoiding the owning abstraction can reduce a diff while increasing permanent conceptual
-surface and
+  surface and compatibility burden.
 - Command owns logical external effects — Exactly-once cannot be manufactured after an unknowable third-party result, but stable
-logical ident
+  logical identity and recorded authority can prevent unsafe accidental redispatch.
 
 <!-- REPOWISE_AGENTS:END -->
