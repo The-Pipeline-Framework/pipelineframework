@@ -200,7 +200,7 @@ class DiscoveryConfigLoaderTest {
                 output: PaymentOutcome
             """);
 
-        var config = loader.loadTemplateConfig(yaml, null);
+        var config = loader.loadTemplateConfig(yaml, messager);
 
         assertNotNull(config);
         assertEquals(3, config.version());
