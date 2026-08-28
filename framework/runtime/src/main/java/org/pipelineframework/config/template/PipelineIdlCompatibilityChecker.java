@@ -140,6 +140,12 @@ public final class PipelineIdlCompatibilityChecker {
             before.forEach((name, field) -> {
                 if (!after.containsKey(name)) {
                     String subject = "Removing field " + entry.getKey() + "." + name;
+                    findings.add(finding(subject, PipelineCompatibilityDimension.NORMALIZED_IDL,
+                        PipelineCompatibilityImpact.BREAKING, "the normalized record shape removes the field"));
+                    findings.add(finding(subject, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        PipelineCompatibilityImpact.COMPATIBLE,
+                        "old readers ignore the retired tag and new readers preserve it as an unknown field; "
+                            + "reservation policy is reported separately"));
                     findings.add(finding(subject, PipelineCompatibilityDimension.CANONICAL_DATA,
                         PipelineCompatibilityImpact.BREAKING, "old payloads contain a field rejected by the new closed record schema"));
                     findings.add(finding(subject, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,

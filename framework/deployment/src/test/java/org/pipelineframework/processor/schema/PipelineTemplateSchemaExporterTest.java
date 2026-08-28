@@ -164,6 +164,8 @@ class PipelineTemplateSchemaExporterTest {
             .findFirst().orElseThrow();
         assertContains(repeatedField.getAsJsonArray("required"), "name");
         assertContains(repeatedField.getAsJsonArray("required"), "repeated");
+        assertTrue(repeatedField.getAsJsonObject("properties").has("presence"));
+        assertTrue(repeatedField.getAsJsonObject("properties").has("nullability"));
         assertFalse(repeatedField.get("additionalProperties").getAsBoolean());
         JsonObject logicalReference = definitions.getAsJsonObject("logicalContractReference");
         assertEquals(3, logicalReference.getAsJsonArray("oneOf").size());

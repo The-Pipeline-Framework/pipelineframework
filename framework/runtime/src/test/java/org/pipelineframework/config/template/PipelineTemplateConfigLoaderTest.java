@@ -1769,6 +1769,39 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void compactFieldMarkersDoNotRewriteUnrelatedYamlScalars() throws Exception {
+        Path configPath = tempDir.resolve("field-marker-scope.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "[nickname?, string?]"
+            basePackage: com.example.fields
+            transport: GRPC
+            connectors:
+              model:
+                provider: llm.query
+                version: 1
+                config:
+                  types:
+                    nested:
+                      fields:
+                        - "[example?, string?]"
+            types:
+              Customer:
+                fields:
+                  - [nickname?, string?]
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Customer, output: Customer }]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.Field field = ((PipelineTemplateTypeDefinition.RecordType)
+            config.typeModel().definitions().get("Customer")).fields().getFirst();
+
+        assertEquals("[nickname?, string?]", config.appName());
+        assertEquals(PipelineFieldPresence.OPTIONAL, field.presence());
+        assertEquals(PipelineFieldNullability.NULLABLE, field.nullability());
+    }
+
+    @Test
     void rejectsAmbiguousAndLegacyV3RepeatedFieldForms() throws Exception {
         Path both = tempDir.resolve("v3-repeated-both.yaml");
         Files.writeString(both, repeatedFieldTemplate("type: LineItem\nrepeated: LineItem"));

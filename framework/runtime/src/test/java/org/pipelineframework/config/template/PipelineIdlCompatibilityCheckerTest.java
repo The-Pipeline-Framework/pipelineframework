@@ -327,6 +327,20 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
+    void classifiesRemovedFieldsAcrossEveryCompatibilitySurface() {
+        PipelineIdlSnapshot.TypeSnapshot baseline = recordWith(field(1, "id",
+            PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));
+
+        PipelineIdlCompatibilityReport report = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(baseline), v3Snapshot(recordWith()));
+
+        assertTrue(has(report, PipelineCompatibilityDimension.NORMALIZED_IDL, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(report, PipelineCompatibilityDimension.PROTOBUF_WIRE, PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(has(report, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(report, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE, PipelineCompatibilityImpact.BREAKING));
+    }
+
+    @Test
     void classifiesPresenceAndNullabilityTransitionsWithoutCollapsingAxes() {
         PipelineIdlSnapshot.TypeSnapshot strict = recordWith(field(1, "value",
             PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));

@@ -60,6 +60,9 @@ public class PipelineTemplateConfigLoader {
         "(?m)(\\[\\s*)([A-Za-z_][A-Za-z0-9_]*\\?)(\\s*,)");
     private static final Pattern V3_COMPACT_NULLABLE_TYPE = Pattern.compile(
         "(?m)(,\\s*)([A-Za-z_][A-Za-z0-9_.:-]*\\?)(\\s*\\])");
+    private static final Pattern YAML_TYPES_BLOCK = Pattern.compile("^types\\s*:\\s*(?:#.*)?$");
+    private static final Pattern YAML_FIELDS_BLOCK = Pattern.compile("^fields\\s*:(.*)$");
+    private static final Pattern YAML_COMPACT_FIELD_ITEM = Pattern.compile("^-\\s*\\[");
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
@@ -929,6 +932,65 @@ public class PipelineTemplateConfigLoader {
         if (!V3_DOCUMENT.matcher(source).find()) {
             return source;
         }
+        StringBuilder normalized = new StringBuilder(source.length());
+        int typesIndent = -1;
+        int typeIndent = -1;
+        int memberIndent = -1;
+        int fieldsIndent = -1;
+        for (String line : source.split("(?<=\\n)", -1)) {
+            String content = line.stripLeading();
+            String structural = content.stripTrailing();
+            if (structural.isBlank() || structural.startsWith("#")) {
+                normalized.append(line);
+                continue;
+            }
+            int indent = line.length() - content.length();
+            if (typesIndent < 0) {
+                if (indent == 0 && YAML_TYPES_BLOCK.matcher(structural).matches()) {
+                    typesIndent = indent;
+                }
+                normalized.append(line);
+                continue;
+            }
+            if (indent <= typesIndent) {
+                typesIndent = -1;
+                typeIndent = -1;
+                memberIndent = -1;
+                fieldsIndent = -1;
+                normalized.append(line);
+                continue;
+            }
+            if (typeIndent < 0 || indent <= typeIndent) {
+                typeIndent = indent;
+                memberIndent = -1;
+                fieldsIndent = -1;
+                normalized.append(line);
+                continue;
+            }
+            if (fieldsIndent >= 0 && indent > fieldsIndent) {
+                normalized.append(YAML_COMPACT_FIELD_ITEM.matcher(structural).find()
+                    ? normalizeV3FieldTuple(line)
+                    : line);
+                continue;
+            }
+            fieldsIndent = -1;
+            if (memberIndent < 0 || indent < memberIndent) {
+                memberIndent = indent;
+            }
+            java.util.regex.Matcher fields = YAML_FIELDS_BLOCK.matcher(structural);
+            if (indent == memberIndent && fields.matches()) {
+                fieldsIndent = indent;
+                normalized.append(fields.group(1).stripLeading().startsWith("[")
+                    ? normalizeV3FieldTuple(line)
+                    : line);
+            } else {
+                normalized.append(line);
+            }
+        }
+        return normalized.toString();
+    }
+
+    private String normalizeV3FieldTuple(String source) {
         String namesQuoted = V3_COMPACT_OPTIONAL_NAME.matcher(source).replaceAll("$1\"$2\"$3");
         return V3_COMPACT_NULLABLE_TYPE.matcher(namesQuoted).replaceAll("$1\"$2\"$3");
     }

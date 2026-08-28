@@ -2477,7 +2477,9 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["name", "repeated"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
-            "repeated": { "$ref": "#/$defs/v3TypeReference" }
+            "repeated": { "$ref": "#/$defs/v3TypeReference" },
+            "presence": { "enum": ["required", "optional"] },
+            "nullability": { "enum": ["non_null", "nullable"] }
           },
           "additionalProperties": false
         },
