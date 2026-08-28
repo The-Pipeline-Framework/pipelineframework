@@ -293,6 +293,10 @@ input type remains `PreparationDecision`. The projector must be a public concret
 with a public no-argument constructor. Raw, wildcard, unresolved, or incompatible
 generic arguments fail compilation.
 
+When `accepts` selects only some union alternatives, the omitted alternatives do not
+invoke the Await step. They bypass it and continue unchanged through the ordinary v3
+pipeline flow.
+
 The `java` block is optional for a v3 Await boundary because these Java types are
 inferred from the compiler-owned semantic model and projector. If supplied, both
 `java.input` and `java.output` are required and must agree with that inference. A Java
