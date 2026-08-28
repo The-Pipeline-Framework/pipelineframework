@@ -32,6 +32,7 @@ final class PipelineJavaDomainRenderer {
     private static final String ADAPTER_NAME = "PipelineDomainProtoAdapters";
     private static final String VALIDATION_NAME = "PipelineDomainValidation";
     private static final String PAYLOAD_REFERENCE = "org.pipelineframework.repository.PayloadReference";
+    private final PipelineTemplateJavaScalarTypes javaScalarTypes = new PipelineTemplateJavaScalarTypes();
 
     List<RenderedSource> render(PipelineGenerationPlan plan) {
         validate(plan);
@@ -549,26 +550,7 @@ final class PipelineJavaDomainRenderer {
         if (!(resolved instanceof PipelineTemplateTypeReference.Scalar scalar)) {
             throw new IllegalStateException("Version 3 Java domain target does not support generic or map type references.");
         }
-        return switch (scalar.name()) {
-            case "string" -> "String";
-            case "bool" -> "Boolean";
-            case "int32" -> "Integer";
-            case "int64" -> "Long";
-            case "float32" -> "Float";
-            case "float64" -> "Double";
-            case "decimal" -> "java.math.BigDecimal";
-            case "uuid" -> "java.util.UUID";
-            case "timestamp" -> "java.time.Instant";
-            case "datetime" -> "java.time.LocalDateTime";
-            case "date" -> "java.time.LocalDate";
-            case "duration" -> "java.time.Duration";
-            case "bytes" -> "com.google.protobuf.ByteString";
-            case "currency" -> "java.util.Currency";
-            case "uri" -> "java.net.URI";
-            case "path" -> "java.nio.file.Path";
-            case "payload_ref" -> PAYLOAD_REFERENCE;
-            default -> throw new IllegalStateException("Unsupported version 3 Java scalar '" + scalar.name() + "'.");
-        };
+        return javaScalarTypes.typeName(scalar.name());
     }
 
     private String toProtoExpression(PipelineTemplateTypeReference reference, String expression, PipelineTemplateTypeModel model) {

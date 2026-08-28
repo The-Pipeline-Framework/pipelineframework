@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.pipelineframework.config.template.PipelineTemplateMaterialization;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 
 import static javax.tools.Diagnostic.Kind.ERROR;
 import static org.mockito.ArgumentMatchers.contains;
@@ -27,7 +29,7 @@ class PipelineStepContractValidatorTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);
         when(processing.getMessager()).thenReturn(messager);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, null);
+        PipelineCompilationContext context = context(processing);
         context.setPipelineTemplateConfig(configWithInputContract());
 
         new PipelineStepContractValidator().validate(context, List.of(
@@ -42,7 +44,7 @@ class PipelineStepContractValidatorTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);
         when(processing.getMessager()).thenReturn(messager);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, null);
+        PipelineCompilationContext context = context(processing);
         context.setPipelineTemplateConfig(configWithInputContract());
 
         new PipelineStepContractValidator().validate(context, List.of(
@@ -50,6 +52,28 @@ class PipelineStepContractValidatorTest {
             model("Second", "Shared", "FinalOutput")));
 
         verify(messager, never()).printMessage(eq(ERROR), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void defersNonAdjacentCompatibilityToAuthoritativeBranchPlan() {
+        ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
+        Messager messager = mock(Messager.class);
+        when(processing.getMessager()).thenReturn(messager);
+        PipelineCompilationContext context = context(processing);
+        context.setPipelineTemplateConfig(configWithInputContract());
+        PipelineBranchingPlan branchPlan = mock(PipelineBranchingPlan.class);
+        when(branchPlan.branchAware()).thenReturn(true);
+        context.setBranchingPlan(branchPlan);
+
+        new PipelineStepContractValidator().validate(context, List.of(
+            model("First", "Input", "Union"),
+            model("Narrowed", "AcceptedVariant", "FinalOutput")));
+
+        verify(messager, never()).printMessage(eq(ERROR), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    private PipelineCompilationContext context(ProcessingEnvironment processing) {
+        return new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
     }
 
     private PipelineTemplateConfig configWithInputContract() {

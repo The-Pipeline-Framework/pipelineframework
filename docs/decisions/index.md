@@ -23,6 +23,7 @@ authoritative for exact syntax and release support.
 | [0012](./0012-failure-recovery-and-handoff.md) | Keep business outcomes, item rejection, runtime recovery, effects, and handoff ownership distinct. |
 | [0013](./0013-change-the-semantic-owner-boldly.md) | Change the owning abstraction coherently; impact determines rigor, not semantic placement. |
 | [0014](./0014-remote-transition-outcome-uncertainty.md) | Keep remote caller timeout ambiguity under durable coordinator authority. |
+| [0015](./0015-branch-routing-owns-await-projector-input.md) | Let v3 branch routing determine the typed request passed to an Await completion projector. |
 
 ## Maintenance
 

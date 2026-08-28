@@ -72,7 +72,10 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         validateProviderHints(ctx);
         validateFunctionPlatformConstraints(ctx);
         validateYamlDrivenSteps(ctx);
-        ctx.setBranchingPlan(new PipelineBranchRoutingPlanner().plan(ctx).orElseGet(PipelineBranchingPlan::disabled));
+        if (ctx.getBranchingPlan() == null) {
+            ctx.setBranchingPlan(new PipelineBranchRoutingPlanner().plan(ctx)
+                .orElseGet(PipelineBranchingPlan::disabled));
+        }
         new PipelineCompositionLinkingPhase().link(ctx);
 
         // Analyze streaming shapes and other semantic properties

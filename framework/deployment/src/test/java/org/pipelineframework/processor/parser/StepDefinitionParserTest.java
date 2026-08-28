@@ -482,6 +482,62 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void v3AwaitMayDeferJavaBindingsToSemanticCompilation() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: Test
+            basePackage: com.example
+            types:
+              Decision: { fields: [[id, string]] }
+              Result: { fields: [[id, string]] }
+            steps:
+              - name: Clarify
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: Decision
+                output: Result
+                timeout: PT10M
+                await:
+                  correlation: { strategy: interactionId }
+                  transport: { type: interaction-api }
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertNull(steps.getFirst().inputType());
+        assertNull(steps.getFirst().outputType());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
+    }
+
+    @Test
+    void v3AwaitRejectsPartialExplicitJavaBinding() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: Test
+            basePackage: com.example
+            types:
+              Decision: { fields: [[id, string]] }
+              Result: { fields: [[id, string]] }
+            steps:
+              - name: Clarify
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: Decision
+                output: Result
+                java: { input: com.example.domain.Decision }
+                timeout: PT10M
+                await:
+                  correlation: { strategy: interactionId }
+                  transport: { type: interaction-api }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "await steps must declare both java.input and java.output together")), diagnostics.toString());
+    }
+
+    @Test
     void rejectsMalformedAwaitCompletionConfiguration() throws IOException {
         for (String completion : List.of(
             "completion: null",
