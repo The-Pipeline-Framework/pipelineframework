@@ -625,7 +625,16 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            if (inputType == null || outputType == null) {
+            boolean hasJavaInput = inputType != null;
+            boolean hasJavaOutput = outputType != null;
+            if (hasJavaInput != hasJavaOutput) {
+                String message = "Skipping step '" + name
+                    + "': await steps must declare both java.input and java.output together";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (version < 3 && !hasJavaInput) {
                 String message = "Skipping step '" + name + "': await steps must provide input and output types";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);

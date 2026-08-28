@@ -17,6 +17,7 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
+import org.pipelineframework.processor.awaitable.AwaitStepTypeBindingResolver;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.*;
 
@@ -30,16 +31,25 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private static final String DEFAULT_SERVICE_PACKAGE = "org.pipelineframework.pipeline.service";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
+    private final AwaitStepTypeBindingResolver awaitTypeBindings;
 
     /**
      * Creates a new ModelExtractionPhase.
      */
     public ModelExtractionPhase() {
-        this(new ModelContextRoleEnricher());
+        this(new ModelContextRoleEnricher(), new AwaitStepTypeBindingResolver());
     }
 
     ModelExtractionPhase(ModelContextRoleEnricher contextRoleEnricher) {
+        this(contextRoleEnricher, new AwaitStepTypeBindingResolver());
+    }
+
+    ModelExtractionPhase(
+        ModelContextRoleEnricher contextRoleEnricher,
+        AwaitStepTypeBindingResolver awaitTypeBindings
+    ) {
         this.contextRoleEnricher = Objects.requireNonNull(contextRoleEnricher, "contextRoleEnricher");
+        this.awaitTypeBindings = Objects.requireNonNull(awaitTypeBindings, "awaitTypeBindings");
     }
 
     /**
@@ -402,22 +412,35 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
-        if (stepDef.inputType() == null || stepDef.outputType() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Await step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
-                    + "declare java.input and java.output.");
-            return null;
+        boolean v3 = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            && config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
+        TypeName inputType;
+        TypeName outputType;
+        if (v3) {
+            Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> resolved =
+                awaitTypeBindings.resolve(ctx, stepDef);
+            if (resolved.isEmpty()) {
+                return null;
+            }
+            inputType = resolved.orElseThrow().inputType();
+            outputType = resolved.orElseThrow().outputType();
+        } else {
+            if (stepDef.inputType() == null || stepDef.outputType() == null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Await step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                        + "declare java.input and java.output.");
+                return null;
+            }
+            String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+                ? config.basePackage()
+                : null;
+            inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+            outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
         }
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
-
-        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
-            ? config.basePackage()
-            : null;
-        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
         String serviceName = toYamlServiceName(stepDef.name());
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);

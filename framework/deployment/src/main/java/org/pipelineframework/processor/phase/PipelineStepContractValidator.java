@@ -38,6 +38,7 @@ final class PipelineStepContractValidator {
             || models == null
             || models.size() < 2
             || (!config.steps().isEmpty() && models.size() != config.steps().size())
+            || (ctx.getBranchingPlan() != null && ctx.getBranchingPlan().branchAware())
             || ctx.getProcessingEnv() == null) {
             return;
         }

@@ -310,6 +310,10 @@ public final class PipelineBranchRoutingPlanner {
             registerContractRuntimeType(ctx, templateConfig, templateStep.inputTypeName(), stepDefinition.inputType(), contractRuntimeTypes);
             registerContractRuntimeType(ctx, templateConfig, templateStep.outputTypeName(), stepDefinition.outputType(), contractRuntimeTypes);
         }
+        if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            new V3JavaTypeResolver(templateConfig).allNamedTypes()
+                .forEach(contractRuntimeTypes::putIfAbsent);
+        }
         return contractRuntimeTypes;
     }
 

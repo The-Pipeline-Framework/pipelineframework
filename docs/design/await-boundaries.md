@@ -78,6 +78,37 @@ therefore rebuilds the descriptor and resumes from the already projected output;
 it does not ask the browser to echo trusted invoice state and does not call the
 projector again for normally admitted canonical completions.
 
+### Await on a union alternative
+
+In v3, `accepts` narrows an Await request exactly as it narrows an ordinary step:
+
+```yaml
+steps:
+  - name: Clarify
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PreparationDecision
+    accepts: [ClarificationRequired]
+    output: Prepared
+    timeout: PT8H
+    await:
+      correlation: { strategy: interactionId }
+      completion:
+        type: com.example.ClarificationAnswer
+        projector: com.example.ClarificationProjector
+      transport: { type: interaction-api }
+```
+
+Here the projector implements `AwaitCompletionProjector<ClarificationRequired,
+ClarificationAnswer, Prepared>`. The compiler proves all three generic arguments and
+generates the Await boundary with `ClarificationRequired` as its request type. If the
+step accepts multiple variants, or omits `accepts`, the projector input remains the
+declared `PreparationDecision` union.
+
+Alternatives not accepted by the Await continue through the ordinary v3 branch plan by
+identity. There is no Await-specific pass-through mapper and no implicit
+collection-to-stream or stream-to-collection conversion.
+
 ## Cardinality Shapes
 
 Cardinality defines what the pipeline is waiting for and what must be replayable after completion.

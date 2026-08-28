@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -44,6 +45,55 @@ import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineReference;
 
 class PipelineBranchRoutingPlannerTest {
+
+    @Test
+    void resolvesScalarAliasesToCanonicalJavaBoundaryTypes() {
+        PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(Map.of(
+            "Description", new PipelineTemplateTypeDefinition.AliasType(
+                "Description", new PipelineTemplateTypeReference.Scalar("string"))));
+        PipelineTemplateConfig config = new PipelineTemplateConfig(
+            3, "Alias", "com.example.alias", "LOCAL", PipelinePlatform.COMPUTE,
+            Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), null, null,
+            null, "Description", "Description", model);
+
+        assertEquals(ClassName.get("java.lang", "String"),
+            new V3JavaTypeResolver(config).resolve("Description").orElseThrow());
+    }
+
+    @Test
+    void preservesExplicitJavaBindingsAheadOfCanonicalV3Fallbacks() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        definitions.put("Request", new PipelineTemplateTypeDefinition.RecordType("Request", List.of()));
+        definitions.put("Accepted", new PipelineTemplateTypeDefinition.RecordType("Accepted", List.of()));
+        definitions.put("Rejected", new PipelineTemplateTypeDefinition.RecordType("Rejected", List.of()));
+        definitions.put("Result", new PipelineTemplateTypeDefinition.RecordType("Result", List.of()));
+        definitions.put("Decision", new PipelineTemplateTypeDefinition.UnionType("Decision", Map.of(
+            "accepted", new PipelineTemplateTypeDefinition.Variant(
+                "accepted", new PipelineTemplateTypeReference.Named("Accepted")),
+            "rejected", new PipelineTemplateTypeDefinition.Variant(
+                "rejected", new PipelineTemplateTypeReference.Named("Rejected")))));
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            3, "Explicit bindings", "com.example.generated", "LOCAL", PipelinePlatform.COMPUTE,
+            Map.of(), Map.of(), Map.of(), Map.of(),
+            List.of(
+                step("classify", "Request", "Decision", List.of(), false),
+                step("finish", "Decision", "Result", List.of("Accepted", "Rejected"), true)),
+            Map.of(), null, null, null, null, null, new PipelineTemplateTypeModel(definitions)));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classify", "com.example.service", "com.example.boundary.RequestInput",
+                "com.example.boundary.DecisionOutput"),
+            stepDefinition("finish", "com.example.service", "com.example.boundary.DecisionOutput",
+                "com.example.boundary.ResultOutput")));
+
+        Optional<PipelineBranchingPlan> plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertEquals(List.of(ClassName.get("com.example.boundary", "RequestInput")),
+            plan.orElseThrow().steps().getFirst().acceptedDomainTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
 
     private final PipelineBranchRoutingPlanner planner = new PipelineBranchRoutingPlanner();
 
