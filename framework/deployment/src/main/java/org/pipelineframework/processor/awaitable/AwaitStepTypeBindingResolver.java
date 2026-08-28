@@ -77,12 +77,16 @@ public final class AwaitStepTypeBindingResolver {
             return Optional.empty();
         }
 
-        Optional<CompletionConfig> completion = completionConfig(step.awaitConfig());
-        if (completion.isEmpty()) {
+        CompletionConfigResolution completion = completionConfig(ctx, step.name(), step.awaitConfig());
+        if (completion == CompletionConfigState.INVALID) {
+            return Optional.empty();
+        }
+        if (completion == CompletionConfigState.ABSENT) {
             return Optional.of(new AwaitStepTypeBinding(inferredInput.orElseThrow(), inferredOutput.orElseThrow()));
         }
         return validateProjector(ctx, step, authoredStep.orElseThrow(), javaTypes,
-            inferredInput.orElseThrow(), inferredOutput.orElseThrow(), completion.orElseThrow());
+            inferredInput.orElseThrow(), inferredOutput.orElseThrow(),
+            ((ResolvedCompletionConfig) completion).config());
     }
 
     private Optional<AwaitStepTypeBinding> validateProjector(
@@ -263,14 +267,35 @@ public final class AwaitStepTypeBindingResolver {
         return typeName instanceof ClassName className ? Optional.of(className) : Optional.empty();
     }
 
-    private Optional<CompletionConfig> completionConfig(Map<String, Object> awaitConfig) {
+    private CompletionConfigResolution completionConfig(
+        PipelineCompilationContext ctx,
+        String stepName,
+        Map<String, Object> awaitConfig
+    ) {
+        if (!awaitConfig.containsKey("completion")) {
+            return CompletionConfigState.ABSENT;
+        }
         Object value = awaitConfig.get("completion");
         if (!(value instanceof Map<?, ?> completion)) {
-            return Optional.empty();
+            error(ctx, "Await step '" + stepName + "' completion must be a map.");
+            return CompletionConfigState.INVALID;
         }
-        return Optional.of(new CompletionConfig(
-            String.valueOf(completion.get("type")),
-            String.valueOf(completion.get("projector"))));
+        for (String requiredKey : List.of("type", "projector")) {
+            if (!completion.containsKey(requiredKey)) {
+                error(ctx, "Await step '" + stepName
+                    + "' completion is missing required key '" + requiredKey + "'.");
+                return CompletionConfigState.INVALID;
+            }
+            Object configured = completion.get(requiredKey);
+            if (!(configured instanceof String text) || text.isBlank()) {
+                error(ctx, "Await step '" + stepName + "' completion key '"
+                    + requiredKey + "' must be a non-blank string.");
+                return CompletionConfigState.INVALID;
+            }
+        }
+        return new ResolvedCompletionConfig(new CompletionConfig(
+            (String) completion.get("type"),
+            (String) completion.get("projector")));
     }
 
     private Optional<AwaitStepTypeBinding> explicitBinding(StepDefinition step) {
@@ -284,5 +309,18 @@ public final class AwaitStepTypeBindingResolver {
     }
 
     private record CompletionConfig(String completionType, String projectorType) {
+    }
+
+    private sealed interface CompletionConfigResolution
+        permits CompletionConfigState, ResolvedCompletionConfig {
+    }
+
+    private enum CompletionConfigState implements CompletionConfigResolution {
+        ABSENT,
+        INVALID
+    }
+
+    private record ResolvedCompletionConfig(CompletionConfig config)
+        implements CompletionConfigResolution {
     }
 }

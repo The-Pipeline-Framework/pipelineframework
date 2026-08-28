@@ -80,7 +80,8 @@ projector again for normally admitted canonical completions.
 
 ### Await on a union alternative
 
-In v3, `accepts` narrows an Await request exactly as it narrows an ordinary step:
+In v3, `accepts` selects the union alternatives that invoke an Await step, just as it
+selects the alternatives that invoke an ordinary step:
 
 ```yaml
 steps:
@@ -105,8 +106,8 @@ generates the Await boundary with `ClarificationRequired` as its request type. I
 step accepts multiple variants, or omits `accepts`, the projector input remains the
 declared `PreparationDecision` union.
 
-Alternatives not accepted by the Await continue through the ordinary v3 branch plan by
-identity. There is no Await-specific pass-through mapper and no implicit
+Alternatives not accepted by the Await do not invoke it and continue unchanged through
+the ordinary v3 pipeline flow. There is no Await-specific pass-through mapper and no implicit
 collection-to-stream or stream-to-collection conversion.
 
 ## Cardinality Shapes

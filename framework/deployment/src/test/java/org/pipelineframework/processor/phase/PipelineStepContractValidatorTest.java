@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class PipelineStepContractValidatorTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);
         when(processing.getMessager()).thenReturn(messager);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, null);
+        PipelineCompilationContext context = context(processing);
         context.setPipelineTemplateConfig(configWithInputContract());
 
         new PipelineStepContractValidator().validate(context, List.of(
@@ -43,7 +44,7 @@ class PipelineStepContractValidatorTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);
         when(processing.getMessager()).thenReturn(messager);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, null);
+        PipelineCompilationContext context = context(processing);
         context.setPipelineTemplateConfig(configWithInputContract());
 
         new PipelineStepContractValidator().validate(context, List.of(
@@ -58,7 +59,7 @@ class PipelineStepContractValidatorTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);
         when(processing.getMessager()).thenReturn(messager);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, null);
+        PipelineCompilationContext context = context(processing);
         context.setPipelineTemplateConfig(configWithInputContract());
         PipelineBranchingPlan branchPlan = mock(PipelineBranchingPlan.class);
         when(branchPlan.branchAware()).thenReturn(true);
@@ -69,6 +70,10 @@ class PipelineStepContractValidatorTest {
             model("Narrowed", "AcceptedVariant", "FinalOutput")));
 
         verify(messager, never()).printMessage(eq(ERROR), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    private PipelineCompilationContext context(ProcessingEnvironment processing) {
+        return new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
     }
 
     private PipelineTemplateConfig configWithInputContract() {

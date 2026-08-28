@@ -423,7 +423,7 @@ Step `input` and `output` always name logical pipeline contracts. For an inspect
     output: com.example.domain.PaymentOutcome
 ```
 
-For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding. V3 Await is the exception: its generated boundary is inferred from the semantic branch plan and its typed completion projector as described above.
+For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding. V3 Await is the exception: its generated boundary is inferred from its semantic input/output types, `accepts`, and typed completion projector as described above.
 
 ::: tip Compilation visibility is topology-scoped
 Java-type and mapper discovery runs in the annotation-processing compilation unit currently being built. It sees only services and mappers on that module's compile classpath; sibling modules in the same repository are not automatically visible.

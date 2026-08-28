@@ -420,6 +420,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> resolved =
                 awaitTypeBindings.resolve(ctx, stepDef);
             if (resolved.isEmpty()) {
+                if (stepDef.inputType() == null && stepDef.outputType() == null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        "Await step '" + stepDef.name()
+                            + "' could not resolve compiler-owned Java input and output bindings.");
+                }
                 return null;
             }
             inputType = resolved.orElseThrow().inputType();

@@ -25,6 +25,7 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
@@ -51,10 +52,7 @@ class PipelineBranchRoutingPlannerTest {
         PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(Map.of(
             "Description", new PipelineTemplateTypeDefinition.AliasType(
                 "Description", new PipelineTemplateTypeReference.Scalar("string"))));
-        PipelineTemplateConfig config = new PipelineTemplateConfig(
-            3, "Alias", "com.example.alias", "LOCAL", PipelinePlatform.COMPUTE,
-            Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), null, null,
-            null, "Description", "Description", model);
+        PipelineTemplateConfig config = v3Config("Alias", "com.example.alias", List.of(), model);
 
         assertEquals(ClassName.get("java.lang", "String"),
             new V3JavaTypeResolver(config).resolve("Description").orElseThrow());
@@ -74,13 +72,12 @@ class PipelineBranchRoutingPlannerTest {
                 "accepted", new PipelineTemplateTypeReference.Named("Accepted")),
             "rejected", new PipelineTemplateTypeDefinition.Variant(
                 "rejected", new PipelineTemplateTypeReference.Named("Rejected")))));
-        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
-            3, "Explicit bindings", "com.example.generated", "LOCAL", PipelinePlatform.COMPUTE,
-            Map.of(), Map.of(), Map.of(), Map.of(),
+        ctx.setPipelineTemplateConfig(v3Config(
+            "Explicit bindings", "com.example.generated",
             List.of(
                 step("classify", "Request", "Decision", List.of(), false),
                 step("finish", "Decision", "Result", List.of("Accepted", "Rejected"), true)),
-            Map.of(), null, null, null, null, null, new PipelineTemplateTypeModel(definitions)));
+            new PipelineTemplateTypeModel(definitions)));
         ctx.setStepDefinitions(List.of(
             stepDefinition("classify", "com.example.service", "com.example.boundary.RequestInput",
                 "com.example.boundary.DecisionOutput"),
@@ -766,6 +763,22 @@ class PipelineBranchRoutingPlannerTest {
             ClassName.bestGuess(inputTypeName),
             ClassName.bestGuess(outputTypeName),
             StreamingShape.UNARY_UNARY);
+    }
+
+    private static PipelineTemplateConfig v3Config(
+        String appName,
+        String basePackage,
+        List<PipelineTemplateStep> steps,
+        PipelineTemplateTypeModel typeModel
+    ) {
+        PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
+        when(config.version()).thenReturn(3);
+        when(config.appName()).thenReturn(appName);
+        when(config.basePackage()).thenReturn(basePackage);
+        when(config.dialect()).thenReturn(PipelineTemplateDialect.V3);
+        when(config.steps()).thenReturn(steps);
+        when(config.typeModel()).thenReturn(typeModel);
+        return config;
     }
 
     private static String capitalize(String value) {

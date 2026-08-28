@@ -429,6 +429,29 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
+    void reportsCompilerOwnedV3AwaitBindingsThatCannotBeResolved() throws Exception {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        org.pipelineframework.config.template.PipelineTemplateConfig config = mock(
+            org.pipelineframework.config.template.PipelineTemplateConfig.class);
+        when(config.dialect()).thenReturn(
+            org.pipelineframework.config.template.PipelineTemplateDialect.V3);
+        when(config.steps()).thenReturn(List.of());
+        context.setPipelineTemplateConfig(config);
+        StepDefinition awaitStep = mock(StepDefinition.class);
+        when(awaitStep.kind()).thenReturn(StepKind.AWAIT);
+        when(awaitStep.name()).thenReturn("Unresolved Await");
+        context.setStepDefinitions(List.of(awaitStep));
+
+        phase.execute(context);
+
+        assertTrue(context.getStepModels().isEmpty());
+        verify(messager).printMessage(
+            javax.tools.Diagnostic.Kind.ERROR,
+            "Await step 'Unresolved Await' could not resolve compiler-owned Java input and output bindings.");
+    }
+
+    @Test
     void executePreservesDistinctDeploymentRolesForSameServiceName() throws Exception {
         ModelContextRoleEnricher roleDuplicatingEnricher = new ModelContextRoleEnricher() {
             @Override
