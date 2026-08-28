@@ -200,7 +200,7 @@ class DiscoveryConfigLoaderTest {
                 output: PaymentOutcome
             """);
 
-        var config = loader.loadTemplateConfig(yaml, messager);
+        var config = loader.loadTemplateConfig(yaml, null);
 
         assertNotNull(config);
         assertEquals(3, config.version());
@@ -232,7 +232,7 @@ class DiscoveryConfigLoaderTest {
                     urlConfigKey: tpf.remote-operators.charge-card.url
             """);
 
-        var config = loader.loadTemplateConfig(yaml, null);
+        var config = loader.loadTemplateConfig(yaml, messager);
 
         assertEquals(3, config.version());
         assertTrue(config.steps().getFirst().execution().isRemote());
