@@ -33,6 +33,11 @@ public final class PipelineIdlCompatibilityChecker {
      * @return a list of compatibility error messages; empty if there are no violations
      */
     public List<String> compare(PipelineIdlSnapshot baseline, PipelineIdlSnapshot current) {
+        return analyze(baseline, current).breakingMessages();
+    }
+
+    /** Compare normalized contracts and retain consequences for each compatibility surface. */
+    public PipelineIdlCompatibilityReport analyze(PipelineIdlSnapshot baseline, PipelineIdlSnapshot current) {
         Objects.requireNonNull(baseline, "baseline must not be null");
         Objects.requireNonNull(current, "current must not be null");
         List<String> errors = new ArrayList<>();
@@ -40,7 +45,117 @@ public final class PipelineIdlCompatibilityChecker {
         compareMessages(baseline.messages(), current.messages(), errors);
         compareUnions(baseline.unions(), current.unions(), errors);
         compareTypes(baseline.types(), current.types(), errors);
-        return List.copyOf(errors);
+        List<PipelineIdlCompatibilityFinding> findings = new ArrayList<>();
+        errors.forEach(error -> findings.add(finding("IDL", PipelineCompatibilityDimension.NORMALIZED_IDL,
+            PipelineCompatibilityImpact.BREAKING, error)));
+        analyzeFieldSemantics(baseline.types(), current.types(), findings);
+        return new PipelineIdlCompatibilityReport(findings);
+    }
+
+    private void analyzeFieldSemantics(
+        Map<String, PipelineIdlSnapshot.TypeSnapshot> baselineTypes,
+        Map<String, PipelineIdlSnapshot.TypeSnapshot> currentTypes,
+        List<PipelineIdlCompatibilityFinding> findings
+    ) {
+        for (Map.Entry<String, PipelineIdlSnapshot.TypeSnapshot> entry : currentTypes.entrySet()) {
+            PipelineIdlSnapshot.TypeSnapshot beforeType = baselineTypes.get(entry.getKey());
+            if (beforeType == null || !"record".equals(entry.getValue().kind())) { continue; }
+            Map<String, PipelineIdlSnapshot.TypeFieldSnapshot> before = new LinkedHashMap<>();
+            beforeType.fields().forEach(field -> before.put(field.name(), field));
+            Map<String, PipelineIdlSnapshot.TypeFieldSnapshot> after = new LinkedHashMap<>();
+            entry.getValue().fields().forEach(field -> after.put(field.name(), field));
+            after.forEach((name, field) -> {
+                String subject = "Adding field " + entry.getKey() + "." + name;
+                PipelineIdlSnapshot.TypeFieldSnapshot old = before.get(name);
+                if (old == null) {
+                    boolean canonicalBreaking = !field.repeated()
+                        && field.presence() == PipelineFieldPresence.REQUIRED;
+                    findings.add(finding(subject, PipelineCompatibilityDimension.NORMALIZED_IDL,
+                        canonicalBreaking ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.COMPATIBLE,
+                        canonicalBreaking
+                            ? "the previous normalized contract cannot produce the required member"
+                            : "the normalized contract adds an omittable member"));
+                    findings.add(finding(subject, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        PipelineCompatibilityImpact.COMPATIBLE, "a new protobuf tag is safe for old readers"));
+                    findings.add(finding(subject, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        canonicalBreaking ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.COMPATIBLE,
+                        canonicalBreaking
+                            ? "payloads produced by the previous contract do not contain this required field"
+                            : "previous payloads may omit this optional field"));
+                    findings.add(finding(subject, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the generated record constructor and component surface changes"));
+                    return;
+                }
+                if (old.presence() != field.presence()) {
+                    boolean narrowing = field.presence() == PipelineFieldPresence.REQUIRED;
+                    String change = entry.getKey() + "." + name + " presence " + old.presence() + " -> " + field.presence();
+                    findings.add(finding(change, PipelineCompatibilityDimension.NORMALIZED_IDL,
+                        narrowing ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.WIDENING,
+                        narrowing ? "presence is narrowed" : "presence is widened"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        narrowing ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.WIDENING,
+                        narrowing ? "existing payloads may omit the field" : "the new contract accepts an omitted field"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        PipelineCompatibilityImpact.COMPATIBLE, "the protobuf tag and value encoding are unchanged"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the generated domain representation changes"));
+                }
+                if (old.nullability() != field.nullability()) {
+                    boolean narrowing = field.nullability() == PipelineFieldNullability.NON_NULL;
+                    String change = entry.getKey() + "." + name + " nullability " + old.nullability() + " -> " + field.nullability();
+                    findings.add(finding(change, PipelineCompatibilityDimension.NORMALIZED_IDL,
+                        narrowing ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.WIDENING,
+                        narrowing ? "accepted values are narrowed" : "accepted values are widened"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        narrowing ? PipelineCompatibilityImpact.BREAKING : PipelineCompatibilityImpact.WIDENING,
+                        narrowing ? "existing payloads may contain explicit null" : "the new contract accepts explicit null"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        narrowing ? PipelineCompatibilityImpact.LOSSY : PipelineCompatibilityImpact.COMPATIBLE,
+                        narrowing
+                            ? "old explicit-null marker values are ignored and become an unselected value field"
+                            : "the value tag remains stable and a separate null-marker tag is added"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the generated domain representation changes"));
+                }
+                if (!Objects.equals(old.type(), field.type())) {
+                    String change = entry.getKey() + "." + name + " type " + old.type() + " -> " + field.type();
+                    findings.add(finding(change, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        PipelineCompatibilityImpact.REQUIRES_REVIEW,
+                        "wire compatibility depends on the old and new protobuf wire types"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        PipelineCompatibilityImpact.BREAKING, "existing values may not validate as the new canonical type"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the Java component type changes"));
+                }
+                if (old.repeated() != field.repeated()) {
+                    String change = entry.getKey() + "." + name + " repeated " + old.repeated() + " -> " + field.repeated();
+                    findings.add(finding(change, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                        PipelineCompatibilityImpact.LOSSY, "singular and repeated protobuf readers do not preserve equivalent cardinality"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        PipelineCompatibilityImpact.BREAKING, "canonical scalar and array shapes differ"));
+                    findings.add(finding(change, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the Java component changes between a value and List"));
+                }
+            });
+            before.forEach((name, field) -> {
+                if (!after.containsKey(name)) {
+                    String subject = "Removing field " + entry.getKey() + "." + name;
+                    findings.add(finding(subject, PipelineCompatibilityDimension.CANONICAL_DATA,
+                        PipelineCompatibilityImpact.BREAKING, "old payloads contain a field rejected by the new closed record schema"));
+                    findings.add(finding(subject, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
+                        PipelineCompatibilityImpact.BREAKING, "the generated record component is removed"));
+                }
+            });
+        }
+    }
+
+    private PipelineIdlCompatibilityFinding finding(
+        String subject,
+        PipelineCompatibilityDimension dimension,
+        PipelineCompatibilityImpact impact,
+        String explanation
+    ) {
+        return new PipelineIdlCompatibilityFinding(subject, dimension, impact, explanation);
     }
 
     private void compareTypes(
@@ -95,14 +210,45 @@ public final class PipelineIdlCompatibilityChecker {
                     errors.add("Type '" + typeName + "' removed field '" + baselineField.name()
                         + "' without reserving protobuf name and tag");
                 }
+                baselineField.nullMarkerNumber().ifPresent(marker -> {
+                    if (!current.reservedNumbers().contains(marker)) {
+                        errors.add("Type '" + typeName + "' removed field '" + baselineField.name()
+                            + "' without reserving its protobuf null marker tag");
+                    }
+                });
+                baselineField.nullMarkerProtoName().ifPresent(marker -> {
+                    if (!current.reservedNames().contains(marker)) {
+                        errors.add("Type '" + typeName + "' removed field '" + baselineField.name()
+                            + "' without reserving its protobuf null marker name");
+                    }
+                });
                 continue;
             }
             if (baselineField.number() != currentField.number()
                 || !Objects.equals(baselineField.protoName(), currentField.protoName())
                 || !Objects.equals(baselineField.type(), currentField.type())
-                || baselineField.repeated() != currentField.repeated()) {
+                || baselineField.repeated() != currentField.repeated()
+                || (baselineField.nullability() == PipelineFieldNullability.NULLABLE
+                    && currentField.nullability() == PipelineFieldNullability.NULLABLE
+                    && (!Objects.equals(baselineField.nullMarkerNumber(), currentField.nullMarkerNumber())
+                        || !Objects.equals(baselineField.nullMarkerProtoName(), currentField.nullMarkerProtoName())))) {
                 errors.add("Type '" + typeName + "' changed field '" + baselineField.name()
                     + "' protobuf identity or type");
+            }
+            if (baselineField.nullability() == PipelineFieldNullability.NULLABLE
+                && currentField.nullability() == PipelineFieldNullability.NON_NULL) {
+                baselineField.nullMarkerNumber().ifPresent(marker -> {
+                    if (!current.reservedNumbers().contains(marker)) {
+                        errors.add("Type '" + typeName + "' made field '" + baselineField.name()
+                            + "' non-nullable without reserving its protobuf null marker tag");
+                    }
+                });
+                baselineField.nullMarkerProtoName().ifPresent(marker -> {
+                    if (!current.reservedNames().contains(marker)) {
+                        errors.add("Type '" + typeName + "' made field '" + baselineField.name()
+                            + "' non-nullable without reserving its protobuf null marker name");
+                    }
+                });
             }
         }
         for (PipelineIdlSnapshot.TypeFieldSnapshot field : current.fields()) {
@@ -112,6 +258,16 @@ public final class PipelineIdlCompatibilityChecker {
             if (isReserved(field.protoName(), baseline.reservedNames(), current.reservedNames())) {
                 errors.add("Type '" + typeName + "' reused reserved protobuf field name '" + field.protoName() + "'");
             }
+            field.nullMarkerNumber().ifPresent(marker -> {
+                if (isReserved(marker, baseline.reservedNumbers(), current.reservedNumbers())) {
+                    errors.add("Type '" + typeName + "' reused reserved protobuf null marker tag " + marker);
+                }
+            });
+            field.nullMarkerProtoName().ifPresent(marker -> {
+                if (isReserved(marker, baseline.reservedNames(), current.reservedNames())) {
+                    errors.add("Type '" + typeName + "' reused reserved protobuf null marker name '" + marker + "'");
+                }
+            });
         }
     }
 

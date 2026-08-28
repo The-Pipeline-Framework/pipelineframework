@@ -58,6 +58,15 @@ public final class PipelineTemplateSchemaExporter {
         { "$ref": "#/$defs/logicalContractReference" }
       ]
     },
+    "v3NullableTypeReference": {
+      "type": "string",
+      "oneOf": [
+        { "enum": ["string?", "bool?", "int32?", "int64?", "float32?", "float64?", "decimal?", "uuid?", "timestamp?", "datetime?", "date?", "duration?", "bytes?", "currency?", "uri?", "path?", "payload_ref?"] },
+        { "pattern": "^[A-Z][A-Za-z0-9_]*\\\\?$" },
+        { "pattern": "^<[a-z][a-z0-9]*(?:\\\\.[a-z][a-z0-9]*)*\\\\.[A-Z][A-Za-z0-9_]*>\\\\?$" },
+        { "pattern": "^<[A-Z][A-Za-z0-9_]*>\\\\?$" }
+      ]
+    },
     "legacyJavaContract": {
       "type": "string",
       "deprecated": true,
@@ -2457,7 +2466,9 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["name", "type"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
-            "type": { "$ref": "#/$defs/v3TypeReference" }
+            "type": { "$ref": "#/$defs/v3TypeReference" },
+            "presence": { "enum": ["required", "optional"] },
+            "nullability": { "enum": ["non_null", "nullable"] }
           },
           "additionalProperties": false
         },
@@ -2474,7 +2485,10 @@ public final class PipelineTemplateSchemaExporter {
           "type": "array",
           "prefixItems": [
             { "type": "string", "minLength": 1 },
-            { "$ref": "#/$defs/v3TypeReference" }
+            { "oneOf": [
+              { "$ref": "#/$defs/v3TypeReference" },
+              { "$ref": "#/$defs/v3NullableTypeReference" }
+            ] }
           ],
           "minItems": 2,
           "maxItems": 2,

@@ -241,8 +241,18 @@ public record PipelineIdlSnapshot(
                     .sorted(Comparator.comparing(PipelineTemplateTypeDefinition.Field::name)).toList()) {
                     int number = allocator.allocate(unavailable);
                     unavailable.add(number);
+                    Optional<Integer> nullMarkerNumber = Optional.empty();
+                    Optional<String> nullMarkerProtoName = Optional.empty();
+                    String protoName = PipelineIdlStateResolver.toProtoFieldName(field.name());
+                    if (field.nullability() == PipelineFieldNullability.NULLABLE) {
+                        int markerNumber = allocator.allocate(unavailable);
+                        unavailable.add(markerNumber);
+                        nullMarkerNumber = Optional.of(markerNumber);
+                        nullMarkerProtoName = Optional.of(protoName + "_null");
+                    }
                     fields.add(new TypeFieldSnapshot(number, field.name(),
-                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name(), field.repeated()));
+                        protoName, field.type().name(), field.repeated(), field.presence(), field.nullability(),
+                        nullMarkerNumber, nullMarkerProtoName));
                 }
                 result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of(), List.of(), List.of(),
                     PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
@@ -363,14 +373,40 @@ public record PipelineIdlSnapshot(
         String name,
         String protoName,
         String type,
-        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated,
+        PipelineFieldPresence presence,
+        PipelineFieldNullability nullability,
+        Optional<Integer> nullMarkerNumber,
+        Optional<String> nullMarkerProtoName
     ) {
+        public TypeFieldSnapshot {
+            presence = presence == null ? PipelineFieldPresence.REQUIRED : presence;
+            nullability = nullability == null ? PipelineFieldNullability.NON_NULL : nullability;
+            nullMarkerNumber = nullMarkerNumber == null ? Optional.empty() : nullMarkerNumber;
+            nullMarkerProtoName = nullMarkerProtoName == null ? Optional.empty() : nullMarkerProtoName;
+            if (nullMarkerNumber.isPresent() != nullMarkerProtoName.isPresent()) {
+                throw new IllegalArgumentException("protobuf null marker number and name must be present together");
+            }
+        }
+
+        public TypeFieldSnapshot(int number, String name, String protoName, String type, boolean repeated,
+                                 PipelineFieldPresence presence, PipelineFieldNullability nullability) {
+            this(number, name, protoName, type, repeated, presence, nullability, Optional.empty(), Optional.empty());
+        }
+
         public TypeFieldSnapshot(int number, String name, String protoName, String type) {
-            this(number, name, protoName, type, false);
+            this(number, name, protoName, type, false,
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
+        }
+
+        public TypeFieldSnapshot(int number, String name, String protoName, String type, boolean repeated) {
+            this(number, name, protoName, type, repeated,
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
         }
 
         public TypeFieldSnapshot(int number, String name, String type) {
-            this(number, name, name, type, false);
+            this(number, name, name, type, false,
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
         }
     }
 
