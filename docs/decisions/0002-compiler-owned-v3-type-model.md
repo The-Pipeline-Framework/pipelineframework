@@ -18,6 +18,9 @@ identity, semantic and wire tags, compatibility, routing, composition checks, ha
 and generated contracts. Authors declare named records, nominal wrappers, intentional
 aliases, discriminated unions, and repeated fields. Unions plus `accepts` express typed
 branch applicability; Java `instanceof` routing does not replace compiler-known flow.
+Remote execution metadata selects an invocation boundary; it does not redefine the step's
+types. Remote steps therefore use the same v3 logical contracts and compiler-generated Java
+and wire representations as local pipeline execution.
 
 Repeated fields are finite ordered duplicate-preserving value shape. They do not imply
 streaming or fan-out, and TPF performs no implicit repeated-field/stream conversion.

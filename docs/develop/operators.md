@@ -3,7 +3,7 @@
 TPF supports two operator execution models:
 
 - local Java operators resolved at build time with `operator: fully.qualified.Class::method`
-- remote IDL v2 operators declared with `execution.mode: REMOTE`
+- remote v3 operators declared with `execution.mode: REMOTE`
 
 ## Minimal Example
 
@@ -58,24 +58,19 @@ explicit logical `input` declarations because their reachable predecessor contra
 Use the remote form when the executable code is outside the current Java build, but the step contract is still owned by the pipeline YAML.
 
 ```yaml
-version: 2
+version: 3
 
 types:
   ChargeRequest:
-    fields:
-      - [1, orderId, uuid]
+    fields: [[orderId, uuid]]
   ChargeResult:
-    fields:
-      - [1, paymentId, uuid]
+    fields: [[paymentId, uuid]]
 
 steps:
   - name: "Charge Card"
     cardinality: "ONE_TO_ONE"
     input: "ChargeRequest"
     output: "ChargeResult"
-    java:
-      input: com.example.domain.ChargeRequest
-      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"
@@ -134,14 +129,14 @@ When application domain types differ from operator I/O types, mapper coverage is
 - gRPC flow requires descriptor + mapper-compatible bindings.
 - Mapper fallback policies are configuration-driven; implicit conversion is not enabled by default.
 
-- Remote v2 operators use the step contract directly.
-- The generated adapter still uses the normal mapper model to bridge domain types to generated protobuf message types.
+- Remote v3 operators use the compiler-owned logical step contract directly.
+- The generated adapter uses the canonical generated Java and protobuf types for that contract.
 - It does not resolve a Java operator implementation.
 - It does not use the FUNCTION remote adapter’s `BytesValue` + JSON contract.
 
 ## Remote Operator Constraints
 
-- Remote operators are v2-only.
+- New remote operators use `version: 3` logical input and output contracts. Version 2 remains a temporary compatibility input until the v2 DSL removal.
 - Only `ONE_TO_ONE` is supported currently.
 - Remote operators are immediate request/response only; they do not persist durable waiting state or resume later from a correlated completion.
 - The generated adapter sends its HTTP `POST` to the fully configured target URL. If you use `execution.target.url`, include the full path to call. If you use `execution.target.urlConfigKey`, the configured value must also be the full target URL, including any path segment.

@@ -67,7 +67,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("llmCallable"));
         assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
-        assertTrue(definitions.has("v2Execution"));
+        assertTrue(definitions.has("stepExecution"));
         assertTrue(definitions.has("awaitTemplateStep"));
         assertTrue(definitions.has("materialization"));
         assertTrue(definitions.has("materializationAspect"));
@@ -195,6 +195,8 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject v3Step = definitions.getAsJsonObject("v3TemplateStep");
         assertContains(v3Step.getAsJsonArray("required"), "input");
         assertContains(v3Step.getAsJsonArray("required"), "output");
+        assertEquals("#/$defs/stepExecution",
+            v3Step.getAsJsonObject("properties").getAsJsonObject("execution").get("$ref").getAsString());
         JsonArray excluded = v3Step.getAsJsonArray("allOf").get(0).getAsJsonObject().getAsJsonObject("not")
             .getAsJsonArray("anyOf");
         assertTrue(excluded.asList().stream().map(JsonElement::getAsJsonObject)
@@ -378,13 +380,16 @@ class PipelineTemplateSchemaExporterTest {
     @Test
     void remoteExecutionProtocolEnumIncludesEnvelopeCompatibilityProtocol() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
-        JsonObject execution = definitions.getAsJsonObject("v2Execution");
+        JsonObject execution = definitions.getAsJsonObject("stepExecution");
         JsonArray protocols = execution.getAsJsonObject("properties")
             .getAsJsonObject("protocol")
             .getAsJsonArray("enum");
 
         assertContains(protocols, "PROTOBUF_HTTP_V1");
         assertContains(protocols, "ENVELOPE_HTTP_V1");
+        assertEquals(java.util.List.of("REMOTE"), execution.getAsJsonObject("properties")
+            .getAsJsonObject("mode").getAsJsonArray("enum").asList().stream()
+            .map(JsonElement::getAsString).toList());
     }
 
     @Test

@@ -206,6 +206,38 @@ class DiscoveryConfigLoaderTest {
         assertEquals(3, config.version());
     }
 
+    @Test
+    void loadTemplateConfig_allowsV3RemoteExecution() throws Exception {
+        Path yaml = tempDir.resolve("v3-remote-pipeline.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: RemoteV3
+            basePackage: com.example.remote
+            transport: REST
+            types:
+              ChargeRequest:
+                fields: [[orderId, uuid]]
+              ChargeResult:
+                fields: [[paymentId, uuid]]
+            steps:
+              - name: charge-card
+                cardinality: ONE_TO_ONE
+                input: ChargeRequest
+                output: ChargeResult
+                execution:
+                  mode: REMOTE
+                  operatorId: charge-card
+                  protocol: PROTOBUF_HTTP_V1
+                  target:
+                    urlConfigKey: tpf.remote-operators.charge-card.url
+            """);
+
+        var config = loader.loadTemplateConfig(yaml, null);
+
+        assertEquals(3, config.version());
+        assertTrue(config.steps().getFirst().execution().isRemote());
+    }
+
     private void assertTemplateConfigLoadFails(Path yamlPath, Messager msg) {
         Exception caught = assertThrows(Exception.class, () -> loader.loadTemplateConfig(yamlPath, msg));
         assertNotNull(caught, "An exception must be thrown instead of returning null");

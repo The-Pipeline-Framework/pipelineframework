@@ -1271,7 +1271,7 @@ public final class PipelineTemplateSchemaExporter {
         "$ref": "#/$defs/objectPublishTarget"
       }
     },
-    "v2Execution": {
+    "stepExecution": {
       "type": "object",
       "required": [
         "mode"
@@ -1280,7 +1280,6 @@ public final class PipelineTemplateSchemaExporter {
         "mode": {
           "type": "string",
           "enum": [
-            "LOCAL",
             "REMOTE"
           ]
         },
@@ -1571,7 +1570,7 @@ public final class PipelineTemplateSchemaExporter {
           "type": "boolean"
         },
         "execution": {
-          "$ref": "#/$defs/v2Execution"
+          "$ref": "#/$defs/stepExecution"
         },
         "id": {
           "type": "string",
@@ -2578,7 +2577,8 @@ public final class PipelineTemplateSchemaExporter {
       "properties": {
         "input": { "$ref": "#/$defs/logicalContractReference" },
         "output": { "$ref": "#/$defs/logicalContractReference" },
-        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } }
+        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } },
+        "execution": { "$ref": "#/$defs/stepExecution" }
       },
       "allOf": [
         {

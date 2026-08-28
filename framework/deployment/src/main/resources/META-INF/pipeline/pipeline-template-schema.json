@@ -1237,7 +1237,7 @@
         "$ref": "#/$defs/objectPublishTarget"
       }
     },
-    "v2Execution": {
+    "stepExecution": {
       "type": "object",
       "required": [
         "mode"
@@ -1246,7 +1246,6 @@
         "mode": {
           "type": "string",
           "enum": [
-            "LOCAL",
             "REMOTE"
           ]
         },
@@ -1536,7 +1535,7 @@
           "type": "boolean"
         },
         "execution": {
-          "$ref": "#/$defs/v2Execution"
+          "$ref": "#/$defs/stepExecution"
         },
         "id": {
           "type": "string",
@@ -2543,7 +2542,8 @@
       "properties": {
         "input": { "$ref": "#/$defs/logicalContractReference" },
         "output": { "$ref": "#/$defs/logicalContractReference" },
-        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } }
+        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } },
+        "execution": { "$ref": "#/$defs/stepExecution" }
       },
       "allOf": [
         {

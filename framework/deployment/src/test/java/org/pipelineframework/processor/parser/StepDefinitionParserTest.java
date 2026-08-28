@@ -2360,17 +2360,16 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void remoteStepStillRequiresExplicitJavaContractsWhenLogicalContractsAreDeclared() throws IOException {
-        List<String> diagnostics = new ArrayList<>();
+    void resolvesV3RemoteStepLogicalContractsToGeneratedJavaTypes() throws IOException {
         List<StepDefinition> steps = parse("""
-            version: 2
+            version: 3
             appName: "Test"
             basePackage: "com.example"
             types:
               ChargeRequest:
-                fields: [[1, id, uuid]]
+                fields: [[id, uuid]]
               ChargeResult:
-                fields: [[1, id, uuid]]
+                fields: [[id, uuid]]
             steps:
               - name: "charge-card"
                 cardinality: "ONE_TO_ONE"
@@ -2382,10 +2381,45 @@ class StepDefinitionParserTest {
                   protocol: "PROTOBUF_HTTP_V1"
                   target:
                     urlConfigKey: "remote.charge.url"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.REMOTE, step.kind());
+        assertEquals(ClassName.get("com.example.domain", "ChargeRequest"), step.inputType());
+        assertEquals(ClassName.get("com.example.domain", "ChargeResult"), step.outputType());
+    }
+
+    @Test
+    void rejectsV3RemoteJavaBindingsThatRedefineLogicalContracts() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: "Test"
+            basePackage: "com.example"
+            types:
+              ChargeRequest:
+                fields: [[id, uuid]]
+              ChargeResult:
+                fields: [[id, uuid]]
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                input: ChargeRequest
+                output: ChargeResult
+                java:
+                  input: com.example.legacy.ChargeRequest
+                  output: com.example.legacy.ChargeResult
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    urlConfigKey: "remote.charge.url"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("explicit Java 'input' and 'output'")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("must not redefine that contract")),
             diagnostics.toString());
     }
 

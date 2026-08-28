@@ -107,9 +107,7 @@ class DiscoveryConfigLoader {
                 System::getenv,
                 warning -> messager.printMessage(Diagnostic.Kind.WARNING, warning));
         try {
-            PipelineTemplateConfig config = loader.load(configPath);
-            new V3JavaWorkloadCapabilityValidator().validate(config);
-            return config;
+            return loader.load(configPath);
         } catch (Exception e) {
             if (messager != null) {
                 String errorMessage = "Failed to load pipeline template config from " + configPath + ": " + e.toString();
