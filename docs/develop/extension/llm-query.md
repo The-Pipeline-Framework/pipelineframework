@@ -209,7 +209,7 @@ support when `structuredOutputSchema` remains `REQUIRED`.
 
 The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
 
-Operational model/provider failures remain exceptional Query failures. A syntactically or structurally invalid model decision is instead a typed terminal Query outcome. Query capture records the successful application decision, not prompts, credentials, SDK objects, or hidden reasoning.
+Operational model/provider failures remain exceptional Query failures. A syntactically or structurally invalid model decision is instead a typed terminal Query outcome. Query capture records the successful application decision, not prompts, credentials, SDK objects, or hidden reasoning. The durable DynamoDB store persists only a SHA-256 input fingerprint and the canonical typed decision; its 300 KiB event limit requires `PayloadReference` for larger values.
 
 ## Deliberate limits
 

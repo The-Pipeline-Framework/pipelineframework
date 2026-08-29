@@ -4,38 +4,39 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
-import java.util.concurrent.ExecutionException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.Multi;
-import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.execution.PipelineExecutionContext;
-import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import io.smallrye.mutiny.Uni;
 import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorOperationInvocationCoordinator;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
-import org.pipelineframework.connector.StreamingQueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
-import org.pipelineframework.connector.ConnectorRuntimeContext;
+import org.pipelineframework.connector.StreamingQueryOperation;
+import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.mapper.Mapper;
 
 /**
@@ -59,7 +60,7 @@ public class QueryStepSupport {
         ConnectorBindingRegistry bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
-        this(toList(connectors), toStores(stores), Optional.of(bindingRegistry), runtimeContext);
+        this(toList(connectors), toList(stores), Optional.of(bindingRegistry), runtimeContext, false);
     }
 
     public QueryStepSupport(Collection<FrameworkQueryConnector> connectors, Collection<QueryCaptureStore> stores) {
@@ -89,10 +90,24 @@ public class QueryStepSupport {
         Optional<ConnectorBindingRegistry> bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
+        this(connectors, stores, bindingRegistry, runtimeContext, true);
+    }
+
+    private QueryStepSupport(
+        Collection<FrameworkQueryConnector> connectors,
+        Collection<QueryCaptureStore> stores,
+        Optional<ConnectorBindingRegistry> bindingRegistry,
+        ConnectorRuntimeContext runtimeContext,
+        boolean allowUnmanagedMemoryDefault
+    ) {
         this.connectors = connectors == null ? List.of() : List.copyOf(connectors);
-        this.stores = stores == null || stores.isEmpty()
+        this.stores = allowUnmanagedMemoryDefault && (stores == null || stores.isEmpty())
             ? List.of(new InMemoryQueryCaptureStore())
-            : List.copyOf(stores);
+            : stores == null ? List.of() : List.copyOf(stores);
+        if (!allowUnmanagedMemoryDefault && this.stores.size() != 1) {
+            throw new QueryCaptureStoreException(
+                "Exactly one QueryCaptureStore CDI bean is required, but found " + this.stores.size());
+        }
         this.bindingRegistry = java.util.Objects.requireNonNull(
             bindingRegistry, "connector binding registry selection must not be null");
         this.runtimeContext = java.util.Objects.requireNonNull(runtimeContext, "connector runtime context must not be null");
@@ -705,11 +720,11 @@ public class QueryStepSupport {
             return Uni.createFrom().failure(ex);
         }
         if (result == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
+            return Uni.createFrom().failure(new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' returned null CompletionStage from get"));
         }
         return Uni.createFrom().completionStage(result)
-            .onItem().ifNull().failWith(() -> new IllegalStateException(
+            .onItem().ifNull().failWith(() -> new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' completed get with null Optional"));
     }
 
@@ -721,11 +736,11 @@ public class QueryStepSupport {
             return Uni.createFrom().failure(ex);
         }
         if (result == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
+            return Uni.createFrom().failure(new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' returned null CompletionStage from putIfAbsent"));
         }
         return Uni.createFrom().completionStage(result)
-            .onItem().ifNull().failWith(() -> new IllegalStateException(
+            .onItem().ifNull().failWith(() -> new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' completed putIfAbsent with null record"));
     }
 
@@ -740,11 +755,11 @@ public class QueryStepSupport {
             return Uni.createFrom().failure(failure);
         }
         if (result == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
+            return Uni.createFrom().failure(new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' returned null CompletionStage from openStreaming"));
         }
         return Uni.createFrom().completionStage(result)
-            .onItem().ifNull().failWith(() -> new IllegalStateException(
+            .onItem().ifNull().failWith(() -> new QueryCaptureStoreException(
                 "Query capture store '" + store.providerName() + "' completed openStreaming with null result"));
     }
 
@@ -793,14 +808,14 @@ public class QueryStepSupport {
 
     private <O> O decodeStreamingCapture(StreamingQueryCaptureItem item, Class<O> outputType) {
         if (!outputType.getName().equals(item.outputType())) {
-            throw new IllegalStateException(
+            throw new QueryCaptureStoreException(
                 "Streaming Query capture item " + item.ordinal() + " has type " + item.outputType()
                     + " but step expected " + outputType.getName());
         }
         try {
             return capturePayloadCodec.decode(item.outputJson(), outputType);
         } catch (Exception failure) {
-            throw new IllegalStateException(
+            throw new QueryCaptureStoreException(
                 "Streaming Query capture item " + item.ordinal()
                     + " cannot be read as " + outputType.getName(), failure);
         }
@@ -820,18 +835,15 @@ public class QueryStepSupport {
     }
 
     private QueryCaptureStore resolveStore() {
-        // V1 captures query results in the in-memory store. A durable store/provider selector should
-        // be added when query capture graduates beyond the initial runtime primitive.
-        List<QueryCaptureStore> matches = stores.stream()
-            .filter(store -> "memory".equals(store.providerName()))
-            .toList();
-        if (matches.isEmpty()) {
-            throw new IllegalStateException("No QueryCaptureStore registered with providerName 'memory'");
+        if (stores.isEmpty()) {
+            throw new QueryCaptureStoreException("No QueryCaptureStore is registered");
         }
-        if (matches.size() > 1) {
-            throw new IllegalStateException("Multiple QueryCaptureStore beans registered with providerName 'memory'");
+        if (stores.size() > 1) {
+            throw new QueryCaptureStoreException(
+                "Multiple QueryCaptureStore beans are registered: "
+                    + stores.stream().map(QueryCaptureStore::providerName).sorted().toList());
         }
-        return matches.get(0);
+        return stores.getFirst();
     }
 
     private <O> Uni<O> captureFound(
@@ -913,7 +925,7 @@ public class QueryStepSupport {
             return Uni.createFrom().failure(new QueryNotFoundException(record.outcomeCode()));
         }
         if (!outputType.getName().equals(record.outputType())) {
-            return Uni.createFrom().failure(new IllegalStateException(
+            return Uni.createFrom().failure(new QueryCaptureStoreException(
                 "Captured query output for key '" + record.captureKey()
                     + "' has type " + record.outputType()
                     + " but step expected " + outputType.getName()));
@@ -921,7 +933,7 @@ public class QueryStepSupport {
         try {
             return Uni.createFrom().item(capturePayloadCodec.decode(record.outputJson(), outputType));
         } catch (Exception ex) {
-            return Uni.createFrom().failure(new IllegalStateException(
+            return Uni.createFrom().failure(new QueryCaptureStoreException(
                 "Captured query output for key '" + record.captureKey()
                     + "' cannot be read as " + outputType.getName(), ex));
         }
@@ -947,7 +959,9 @@ public class QueryStepSupport {
             + ":" + descriptor.queryId()
             + ":" + descriptor.version()
             + ":" + inputJson;
-        return HexFormat.of().formatHex(sha256(basis));
+        String tenant = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            context.tenantId().getBytes(StandardCharsets.UTF_8));
+        return tenant + "." + HexFormat.of().formatHex(sha256(basis));
     }
 
     private byte[] sha256(String value) {
@@ -988,11 +1002,6 @@ public class QueryStepSupport {
             items.add(item);
         }
         return List.copyOf(items);
-    }
-
-    private static List<QueryCaptureStore> toStores(Instance<QueryCaptureStore> stores) {
-        List<QueryCaptureStore> resolved = toList(stores);
-        return resolved.isEmpty() ? List.of(new InMemoryQueryCaptureStore()) : resolved;
     }
 
     private record NativeCapture(

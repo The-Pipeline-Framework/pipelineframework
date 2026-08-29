@@ -8,9 +8,14 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.protobuf.Message;
+import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.util.JsonFormat;
 
 /** JSON capture codec with explicit support for generated canonical sealed unions. */
 final class QueryCapturePayloadCodec {
+    private static final JsonFormat.Printer PROTOBUF_PRINTER =
+        JsonFormat.printer().omittingInsignificantWhitespace();
     private final ObjectMapper json;
 
     QueryCapturePayloadCodec(ObjectMapper json) {
@@ -21,6 +26,9 @@ final class QueryCapturePayloadCodec {
         Objects.requireNonNull(output, "query capture output must not be null");
         Objects.requireNonNull(outputType, "query capture output type must not be null");
         try {
+            if (output instanceof MessageOrBuilder protobuf) {
+                return PROTOBUF_PRINTER.print(protobuf);
+            }
             if (!outputType.isSealed()) {
                 return json.writeValueAsString(output);
             }
@@ -33,7 +41,7 @@ final class QueryCapturePayloadCodec {
             envelope.set("value", json.valueToTree(payload.invoke(output)));
             return json.writeValueAsString(envelope);
         } catch (Exception failure) {
-            throw new IllegalArgumentException(
+            throw new QueryCaptureStoreException(
                 "Failed encoding captured query output as " + outputType.getName(), failure);
         }
     }
@@ -42,6 +50,11 @@ final class QueryCapturePayloadCodec {
         Objects.requireNonNull(payload, "captured query payload must not be null");
         Objects.requireNonNull(outputType, "query capture output type must not be null");
         try {
+            if (Message.class.isAssignableFrom(outputType)) {
+                Message.Builder builder = (Message.Builder) outputType.getMethod("newBuilder").invoke(null);
+                JsonFormat.parser().merge(payload, builder);
+                return outputType.cast(builder.build());
+            }
             if (!outputType.isSealed()) {
                 return json.readValue(payload, outputType);
             }
@@ -70,7 +83,7 @@ final class QueryCapturePayloadCodec {
             }
             return outputType.cast(decoded);
         } catch (Exception failure) {
-            throw new IllegalArgumentException(
+            throw new QueryCaptureStoreException(
                 "Failed decoding captured query output as " + outputType.getName(), failure);
         }
     }
