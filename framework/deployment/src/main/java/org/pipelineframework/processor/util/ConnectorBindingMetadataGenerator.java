@@ -87,7 +87,8 @@ public final class ConnectorBindingMetadataGenerator {
         List<CallableReference> callables = config.stepDefinitions().values().stream().flatMap(List::stream)
             .flatMap(step -> step.callables().values().stream()
                 .filter(callable -> binding.name().equals(callable.using()))
-                .map(callable -> callableReference(step.name(), callable, providerId, binding.version(), catalog)))
+                .map(callable -> callableReference(
+                    step.name(), callable, config.basePackage(), providerId, binding.version(), catalog)))
             .sorted(Comparator.comparing(CallableReference::step).thenComparing(CallableReference::alias))
             .toList();
         return new BindingMetadata(binding.name(), binding.provider(), binding.version(), configuration, operations, callables);
@@ -96,6 +97,7 @@ public final class ConnectorBindingMetadataGenerator {
     private static CallableReference callableReference(
         String step,
         org.pipelineframework.config.pipeline.PipelineYamlCallable callable,
+        String basePackage,
         ConnectorProviderId providerId,
         int providerVersion,
         ConnectorProviderManifestCatalog catalog
@@ -104,13 +106,14 @@ public final class ConnectorBindingMetadataGenerator {
             providerId, providerVersion, callable.operation(), callable.kind(), callable.operationVersion());
         var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
             "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
-        if (!contract.inputType().equals(callable.input())) {
+        String canonicalInput = basePackage + ".domain." + callable.input();
+        if (!contract.inputType().equals(callable.input()) && !contract.inputType().equals(canonicalInput)) {
             throw new IllegalArgumentException("callable input contract for " + callable.using() + "/" + callable.operation()
                 + " does not match trusted connector metadata: " + contract.inputType());
         }
         return new CallableReference(
             step, callable.alias(), operation.kind().value(), operation.id(), operation.majorVersion(),
-            contract.inputType(), contract.outputType().orElseThrow(() -> new IllegalArgumentException(
+            callable.input(), contract.outputType().orElseThrow(() -> new IllegalArgumentException(
                 "callable operation has no output contract: " + callable.using() + "/" + callable.operation())));
     }
 

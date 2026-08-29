@@ -198,6 +198,54 @@ class QueryStepDescriptorFactoryTest {
     }
 
     @Test
+    void resolvesNativeQueryInsideNamedPipeline() throws Exception {
+        Path metadataRoot = tempDir.resolve("named-pipeline-connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "operations":[{"id":"document.find","kind":"tpf:query","majorVersion":1,
+            "queryCapabilities":{"cacheability":"CACHEABLE"}}]}]}
+            """);
+        Path explicit = tempDir.resolve("named-pipeline-query.yaml");
+        Files.writeString(explicit, """
+            version: 3
+            basePackage: org.example
+            connectors:
+              search: { provider: acme.search, version: 1 }
+            pipelines:
+              agent-loop:
+                steps:
+                  - name: Find Document
+                    kind: query
+                    operation: document.find
+                    using: search
+                    input: DocumentQuery
+                    output: Document
+            steps: []
+            """);
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessFindDocumentService", "org.example.domain.DocumentQuery", "org.example.domain.Document")
+                    .await().atMost(Duration.ofSeconds(2));
+
+                assertEquals("search", descriptor.nativeSelector().orElseThrow().binding().value());
+                assertEquals("document.find", descriptor.nativeSelector().orElseThrow().operationIdentity().operationId());
+            } finally {
+                factory.shutdown();
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void nativeQueryDescriptorRejectsAnUnknownBinding() throws Exception {
         Path explicit = tempDir.resolve("unknown-native-query.yaml");
         Files.writeString(explicit, """

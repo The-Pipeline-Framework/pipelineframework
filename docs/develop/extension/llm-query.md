@@ -145,6 +145,43 @@ The generated invocation adapter revalidates the proposed `binding + operation` 
 
 The application maps the generic observation into its own state in a later Mapper, service, or reducer step. Dynamic invocation never manufactures `InvoiceState`, `EngineeringState`, or another application-owned type.
 
+## Compose multiple turns with ordinary recursion
+
+Agentic behavior does not require a second Agent runtime. Put the one-turn Query, dynamic native
+operation, and application-authored reducer inside a named v3 pipeline, then route the reducer's
+state back through an ordinary bounded self-invocation:
+
+```text
+State -> LLM Query -> call:<tpf.llm.AgentCall>
+      -> operation.mode: dynamic -> native Query | Command
+      -> <tpf.connector.OperationObservation> -> authored reducer
+      -> State -> pipeline:self
+
+State -> LLM Query -> complete:ApplicationResult -> terminal
+```
+
+The model still makes exactly one decision per Query invocation. The dynamic adapter invokes at
+most one release-pinned capability and never chooses whether another turn is needed. The reducer
+alone interprets the observation and advances application state; the existing recursive pipeline
+depth limit provides the framework-owned safety bound.
+
+The offline [Agent Composition Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/agent-composition-proof) exercises
+the complete path with a Query `NotFound` observation, a durable Command, typed completion, generated
+metadata, and a stateless adapter whose response depends only on canonical `AgentState.phase`.
+
+After compilation, inspect `META-INF/pipeline/pipeline-contract.json` for contributed protocol types,
+the dynamic operation descriptor, and the named recursive binding; `order.json` for the finite root
+invocation; and `branching.json` for the `call`/`complete` routes. The existing
+`connector-bindings.json` exposes the release-pinned callable catalogue as generated inspection
+metadata. Runtime capabilities are resolved from `PipelineYamlConfig` and the trusted
+`ConnectorProviderManifestCatalog`; none of these artifacts introduces an Agent runtime or semantic
+dispatch step kind.
+
+This composition follows the existing decisions for [bounded recursion](../../decisions/0004-nested-composition-and-bounded-recursion.md),
+[Query observation](../../decisions/0005-query-is-external-observation.md),
+[Command effects](../../decisions/0006-command-owns-logical-effects.md), and
+[generated connector boundaries](../../decisions/0010-generated-boundaries-and-connectors.md).
+
 ## Adapter boundary
 
 Add the LangChain4j adapter:

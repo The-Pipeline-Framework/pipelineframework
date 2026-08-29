@@ -15,6 +15,7 @@ import org.pipelineframework.command.CommandIdGenerator;
 import org.pipelineframework.command.CommandStepSupport;
 import org.pipelineframework.command.NativeCommandSelector;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.config.pipeline.PipelineResources;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.query.NativeQuerySelector;
@@ -227,7 +228,7 @@ public final class OperationDispatchSupport {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static CommandIdGenerator<?> selectGenerator(Instance<CommandIdGenerator<?>> generators, String className) {
         try {
-            Class<?> type = Class.forName(className, true, OperationDispatchSupport.class.getClassLoader());
+            Class<?> type = Class.forName(className, true, PipelineResources.resolveClassLoader());
             Instance selected = generators.select((Class) type);
             if (selected.isUnsatisfied()) {
                 throw new IllegalStateException("no CDI command ID generator bean found for " + className);

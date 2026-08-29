@@ -77,7 +77,8 @@ public class QueryStepDescriptorFactory {
     private QueryStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
-        PipelineYamlStep step = config.steps().stream()
+        PipelineYamlStep step = config.stepDefinitions().values().stream()
+            .flatMap(java.util.Collection::stream)
             .filter(candidate -> matchesServiceName(serviceName, candidate.name()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No query YAML step found for generated service " + serviceName));

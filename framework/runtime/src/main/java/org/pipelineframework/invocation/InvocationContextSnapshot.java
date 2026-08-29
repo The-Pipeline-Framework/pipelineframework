@@ -68,6 +68,16 @@ final class InvocationContextSnapshot {
         this.commandRetryScope = CommandRetryExecutionScope.capture();
     }
 
+    static InvocationContextSnapshot capture() {
+        return new InvocationContextSnapshot(
+            PipelineContextHolder.get(),
+            AwaitExecutionContextHolder.get(),
+            PipelineExecutionContextHolder.get(),
+            PipelineRunContextHolder.get(),
+            false,
+            PipelineInvocationContextHolder.get());
+    }
+
     <T> T call(Supplier<T> supplier) {
         Objects.requireNonNull(supplier, "supplier must not be null");
         InvocationContextScope scope = install();

@@ -111,7 +111,7 @@ class ConnectorBindingMetadataGeneratorTest {
                 {"id":"decide","kind":"tpf:query","majorVersion":1,"queryCapabilities":{"cacheability":"LIVE_ONLY"}}]},
               {"id":"acme.payments","version":{"major":1,"minor":0},"operations":[
                 {"id":"charge.create","kind":"tpf:command","majorVersion":2,
-                 "typeContract":{"input":"ChargeArguments","output":"ChargeResult"}}]}
+                 "typeContract":{"input":"com.example.domain.ChargeArguments","output":"ChargeResult"}}]}
             ]}
             """);
         Path pipeline = tempDir.resolve("llm-pipeline.yaml");
