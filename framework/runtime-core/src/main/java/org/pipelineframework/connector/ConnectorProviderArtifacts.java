@@ -60,9 +60,6 @@ public final class ConnectorProviderArtifacts {
             .append(",\"version\":{\"major\":").append(provider.version().major())
             .append(",\"minor\":").append(provider.version().minor()).append('}');
         provider.configurationSchema().ifPresent(schema -> json.append(",\"configurationSchema\":").append(schema(schema)));
-        provider.executionCapabilities().ifPresent(capabilities -> json.append(",\"executionCapabilities\":{")
-            .append("\"executionStyle\":").append(quote(capabilities.executionStyle().name()))
-            .append(",\"concurrencyScope\":").append(quote(capabilities.concurrencyScope().name())).append('}'));
         json.append(",\"operations\":[");
         appendJoined(json, artifact.operations(), ConnectorProviderArtifacts::operation);
         return json.append("]}").toString();

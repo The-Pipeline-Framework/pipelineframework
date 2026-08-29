@@ -167,6 +167,25 @@ public class SpringRuntimeAdapterBootstrap implements InitializingBean, Disposab
         private static final ThreadLocal<Map<String, Object>> CONTEXT = ThreadLocal.withInitial(HashMap::new);
 
         @Override
+        public <T> Callable<T> contextualize(Callable<T> task) {
+            Objects.requireNonNull(task, "contextualized task must not be null");
+            Map<String, Object> captured = Map.copyOf(CONTEXT.get());
+            return () -> {
+                Map<String, Object> previous = CONTEXT.get();
+                CONTEXT.set(new HashMap<>(captured));
+                try {
+                    return task.call();
+                } finally {
+                    if (previous.isEmpty()) {
+                        CONTEXT.remove();
+                    } else {
+                        CONTEXT.set(previous);
+                    }
+                }
+            };
+        }
+
+        @Override
         public <T> T get(String key, Class<T> type) {
             Object value = CONTEXT.get().get(key);
             if (value == null || type == null || !type.isInstance(value)) {

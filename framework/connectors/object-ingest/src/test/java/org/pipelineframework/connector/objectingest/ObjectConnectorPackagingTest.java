@@ -7,8 +7,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectorOperation;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.ObjectSourceOperation;
 import org.pipelineframework.connector.ObjectTargetOperation;
@@ -30,10 +28,6 @@ class ObjectConnectorPackagingTest {
         S3ObjectConnector s3 = new S3ObjectConnector();
         try {
             assertOperations(s3, "s3.objects", "s3");
-            assertEquals(ConnectorExecutionStyle.PROVIDER_MANAGED,
-                s3.executionCapabilities().executionStyle());
-            assertEquals(ConnectorConcurrencyScope.PROVIDER_MANAGED,
-                s3.executionCapabilities().concurrencyScope());
         } finally {
             s3.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
         }

@@ -38,6 +38,9 @@ import org.pipelineframework.step.NonRetryableException;
  */
 @ApplicationScoped
 public class CommandStepSupport {
+    private final org.pipelineframework.connector.ConnectorOperationInvocationCoordinator invocationCoordinator =
+        new org.pipelineframework.connector.ConnectorOperationInvocationCoordinator();
+
     @Inject
     Instance<CommandEffectStore> stores;
 
@@ -430,21 +433,15 @@ public class CommandStepSupport {
         Object boundConfiguration
     ) {
         CommandOperation raw = operation;
-        CompletionStage<CommandOutcome<Object>> stage;
-        try {
-            stage = raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
+        org.pipelineframework.connector.ConnectorBindingName binding = selector.binding().orElseGet(() ->
+            org.pipelineframework.connector.ConnectorBindingName.of(selector.operationIdentity().providerId().value()));
+        CompletionStage<CommandOutcome<Object>> stage = invocationCoordinator.invoke(binding, raw, () ->
+            raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
                 request.input(),
                 boundConfiguration,
                 connectorExecutionContext(request),
                 Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
-                    request.commandId(), request.attemptId()))));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(unwrapTransportFailure(failure));
-        }
-        if (stage == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "native command operation " + selector.operationIdentity() + " returned a null CompletionStage"));
-        }
+                    request.commandId(), request.attemptId())))));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(CommandStepSupport::unwrapTransportFailure);
     }

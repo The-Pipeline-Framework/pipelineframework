@@ -23,8 +23,6 @@ import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorBindingName;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -176,8 +174,8 @@ public class CommandStepDescriptorFactory {
         values.keySet().stream()
             .map(String::valueOf)
             .filter(key -> !Set.of(
-                "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-                "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+                "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+                "requiredExecutionPosture", "minimumMachineConfirmation",
                 "requireUserConfirmation").contains(key))
             .sorted()
             .findFirst()
@@ -189,8 +187,6 @@ public class CommandStepDescriptorFactory {
             bool(values, "requireIdempotency"),
             bool(values, "requireReconciliation"),
             optionalEnum(values, "requiredExecutionPosture", CommandExecutionPosture.class),
-            optionalEnum(values, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            optionalEnum(values, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             optionalEnum(values, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             bool(values, "requireUserConfirmation"));
     }

@@ -1,11 +1,11 @@
 package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +54,7 @@ class JpaQueryProjectionTest {
     void readsInheritedFieldsAndRejectsMissingProperties() {
         InheritedFieldEntity entity = new InheritedFieldEntity("customer-1");
 
-        assertEquals("customer-1", JpaQueryReflection.readProperty(entity, "customerId"));
+        assertEquals(Optional.of("customer-1"), JpaQueryReflection.readProperty(entity, "customerId"));
         assertThrows(IllegalArgumentException.class, () -> JpaQueryReflection.readProperty(entity, "missing"));
     }
 
@@ -62,10 +62,14 @@ class JpaQueryProjectionTest {
     void readsNullFieldValues() {
         NullFieldEntity entity = new NullFieldEntity();
 
-        assertNull(JpaQueryReflection.readProperty(entity, "customerId"));
-        assertEquals(new NullCustomerRiskFacts(null), JpaQueryProjection.project(
+        assertEquals(Optional.empty(), JpaQueryReflection.readProperty(entity, "customerId"));
+        assertEquals(new OptionalCustomerRiskFacts(Optional.empty()), JpaQueryProjection.project(
             entity,
-            NullCustomerRiskFacts.class,
+            OptionalCustomerRiskFacts.class,
+            Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryProjection.project(
+            entity,
+            RequiredCustomerRiskFacts.class,
             Map.of()));
     }
 
@@ -75,7 +79,10 @@ class JpaQueryProjectionTest {
     record CustomerRiskWithAccount(String customerId, String accountStatus) {
     }
 
-    record NullCustomerRiskFacts(String customerId) {
+    record OptionalCustomerRiskFacts(Optional<String> customerId) {
+    }
+
+    record RequiredCustomerRiskFacts(String customerId) {
     }
 
     record Account(String status) {

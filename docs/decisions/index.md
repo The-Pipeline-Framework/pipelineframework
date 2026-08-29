@@ -25,6 +25,7 @@ authoritative for exact syntax and release support.
 | [0014](./0014-remote-transition-outcome-uncertainty.md) | Keep remote caller timeout ambiguity under durable coordinator authority. |
 | [0015](./0015-branch-routing-owns-await-projector-input.md) | Let v3 branch routing determine the typed request passed to an Await completion projector. |
 | [0016](./0016-field-presence-nullability-and-compatibility.md) | Keep field presence and value nullability independent and classify evolution per compatibility surface. |
+| [0017](./0017-structural-connector-execution-and-binding-serialization.md) | Declare blocking and serialized connector execution structurally and enforce serialization per binding and operation. |
 
 ## Maintenance
 

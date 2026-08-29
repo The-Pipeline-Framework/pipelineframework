@@ -74,9 +74,13 @@ public final class RuntimeAdapters {
         Callable<T> task,
         boolean offloadToVirtualThread
     ) {
+        Callable<T> contextualized = executionContextCarrier.contextualize(
+            Objects.requireNonNull(task, "blocking task must not be null"));
         return reactiveRuntime.executeBlocking(() -> {
             try {
-                return task.call();
+                return contextualized.call();
+            } catch (RuntimeException e) {
+                throw e;
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -204,13 +208,7 @@ public final class RuntimeAdapters {
         @Override
         public <T> java.util.concurrent.CompletionStage<T> executeBlocking(java.util.function.Supplier<T> supplier, boolean offloadToVirtualThread) {
             Objects.requireNonNull(supplier, "supplier");
-            try {
-                return CompletableFuture.completedFuture(supplier.get());
-            } catch (Exception failure) {
-                CompletableFuture<T> failed = new CompletableFuture<>();
-                failed.completeExceptionally(failure instanceof RuntimeException ? failure : new RuntimeException(failure));
-                return failed;
-            }
+            return CompletableFuture.supplyAsync(supplier);
         }
     }
 
@@ -223,6 +221,25 @@ public final class RuntimeAdapters {
         }
 
         private ThreadLocalExecutionContextCarrier() {
+        }
+
+        @Override
+        public <T> Callable<T> contextualize(Callable<T> task) {
+            Objects.requireNonNull(task, "contextualized task must not be null");
+            java.util.Map<String, Object> captured = java.util.Map.copyOf(CONTEXT.get());
+            return () -> {
+                java.util.Map<String, Object> previous = CONTEXT.get();
+                CONTEXT.set(new java.util.HashMap<>(captured));
+                try {
+                    return task.call();
+                } finally {
+                    if (previous.isEmpty()) {
+                        CONTEXT.remove();
+                    } else {
+                        CONTEXT.set(previous);
+                    }
+                }
+            };
         }
 
         @Override

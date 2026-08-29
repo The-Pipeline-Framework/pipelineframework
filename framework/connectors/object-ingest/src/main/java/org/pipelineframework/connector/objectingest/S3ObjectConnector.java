@@ -5,9 +5,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionCapabilities;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperation;
 import org.pipelineframework.connector.ConnectorProvider;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -37,12 +34,6 @@ public final class S3ObjectConnector implements ConnectorProvider<Void> {
     @Override
     public ConnectorProviderVersion version() {
         return new ConnectorProviderVersion(1, 0);
-    }
-
-    @Override
-    public ConnectorExecutionCapabilities executionCapabilities() {
-        return new ConnectorExecutionCapabilities(
-            ConnectorExecutionStyle.PROVIDER_MANAGED, ConnectorConcurrencyScope.PROVIDER_MANAGED);
     }
 
     @Override

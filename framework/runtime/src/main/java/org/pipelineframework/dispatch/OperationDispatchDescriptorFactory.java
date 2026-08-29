@@ -19,9 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
@@ -122,8 +120,8 @@ public final class OperationDispatchDescriptorFactory {
 
     private static CommandPolicy policy(Map<String, Object> values) {
         values.keySet().stream().filter(key -> !Set.of(
-            "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+            "requiredExecutionPosture", "minimumMachineConfirmation",
             "requireUserConfirmation").contains(key)).sorted().findFirst().ifPresent(key -> {
                 throw new IllegalArgumentException("callable command policy has unsupported field '" + key + "'");
             });
@@ -131,8 +129,6 @@ public final class OperationDispatchDescriptorFactory {
             bool(values, "requireRetryRedrive"), bool(values, "requireIdempotency"),
             bool(values, "requireReconciliation"),
             optionalEnum(values, "requiredExecutionPosture", CommandExecutionPosture.class),
-            optionalEnum(values, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            optionalEnum(values, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             optionalEnum(values, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             bool(values, "requireUserConfirmation"));
     }

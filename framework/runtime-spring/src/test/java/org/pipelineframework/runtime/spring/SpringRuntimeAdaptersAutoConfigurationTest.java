@@ -112,10 +112,17 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
     @Test
     void schedulerAndBlockingRuntimeCompleteWork() {
         contextRunner.run(context -> {
+            String caller = Thread.currentThread().getName();
+            RuntimeAdapters.setExecutionContext("tenant", "tenant-1");
             assertEquals("scheduled", RuntimeAdapters.schedule(() -> "scheduled")
                 .toCompletableFuture()
                 .get(5, TimeUnit.SECONDS));
-            assertEquals("blocking", RuntimeAdapters.executeBlocking(() -> "blocking", false)
+            String worker = RuntimeAdapters.executeBlocking(() -> Thread.currentThread().getName(), false)
+                .toCompletableFuture()
+                .get(5, TimeUnit.SECONDS);
+            assertNotEquals(caller, worker);
+            assertEquals("tenant-1", RuntimeAdapters.executeBlocking(
+                () -> RuntimeAdapters.executionContext("tenant", String.class), false)
                 .toCompletableFuture()
                 .get(5, TimeUnit.SECONDS));
             assertTrue(RuntimeAdapters.executeBlocking(() -> Thread.currentThread().isVirtual(), true)

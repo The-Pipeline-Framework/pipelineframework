@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
 import org.pipelineframework.connector.ConnectorExecutionContext;
+import org.pipelineframework.connector.BlockingQueryOperation;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.connector.QueryOperation;
@@ -55,6 +56,7 @@ class JpaQueryConnectorQuarkusTest {
                 .filter(candidate -> "find.one".equals(candidate.id()))
                 .findFirst()
                 .orElseThrow();
+        assertInstanceOf(BlockingQueryOperation.class, operation);
         assertEquals(QueryCacheability.CACHEABLE, operation.capabilities().cacheability());
         JpaFindOneConfiguration configuration = nativeConfiguration();
         QueryOutcome<Object> outcome = operation.query(new QueryInvocation<>(

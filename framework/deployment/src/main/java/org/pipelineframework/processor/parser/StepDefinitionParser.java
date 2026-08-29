@@ -40,8 +40,6 @@ import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -1441,16 +1439,14 @@ public class StepDefinitionParser {
             nativePolicyBoolean(policy, "requireIdempotency"),
             nativePolicyBoolean(policy, "requireReconciliation"),
             nativePolicyEnum(policy, "requiredExecutionPosture", CommandExecutionPosture.class),
-            nativePolicyEnum(policy, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            nativePolicyEnum(policy, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             nativePolicyEnum(policy, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             nativePolicyBoolean(policy, "requireUserConfirmation"));
     }
 
     private static void rejectUnknownNativePolicyFields(Map<String, Object> policy) {
         Set<String> supported = Set.of(
-            "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+            "requiredExecutionPosture", "minimumMachineConfirmation",
             "requireUserConfirmation");
         policy.keySet().stream()
             .filter(field -> !supported.contains(field))
