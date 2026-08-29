@@ -170,6 +170,41 @@ class ConnectorOperationInvocationCoordinatorTest {
     }
 
     @Test
+    void blockingCancellationRetainsGateUntilTheProviderStageTerminates() throws Exception {
+        try (var worker = Executors.newSingleThreadExecutor(r -> new Thread(r, "blocking-cancellation-worker"))) {
+            RuntimeAdapters.registerReactiveRuntime(new org.pipelineframework.runtime.core.ReactiveRuntime() {
+                @Override
+                public <T> CompletionStage<T> executeBlocking(
+                    java.util.function.Supplier<T> supplier,
+                    boolean virtualThread
+                ) {
+                    return CompletableFuture.supplyAsync(supplier, worker);
+                }
+            });
+            BlockingSerializedQuery operation = new BlockingSerializedQuery();
+            CompletableFuture<String> provider = new CompletableFuture<>();
+            CountDownLatch providerStarted = new CountDownLatch(1);
+            CompletionStage<String> first = coordinator.invoke(BINDING, operation, () -> {
+                providerStarted.countDown();
+                return provider.minimalCompletionStage();
+            });
+            assertTrue(providerStarted.await(5, TimeUnit.SECONDS));
+
+            CountDownLatch nextStarted = new CountDownLatch(1);
+            CompletionStage<String> next = coordinator.invoke(BINDING, operation, () -> {
+                nextStarted.countDown();
+                return CompletableFuture.completedFuture("next");
+            });
+
+            assertTrue(first.toCompletableFuture().cancel(true));
+            assertFalse(nextStarted.await(100, TimeUnit.MILLISECONDS));
+            provider.complete("provider-terminated");
+            assertTrue(nextStarted.await(5, TimeUnit.SECONDS));
+            assertEquals("next", next.toCompletableFuture().get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
     void separateBindingsRemainIndependentForTheSameOperationInstance() {
         SerializedQuery operation = new SerializedQuery();
         CompletableFuture<String> held = new CompletableFuture<>();

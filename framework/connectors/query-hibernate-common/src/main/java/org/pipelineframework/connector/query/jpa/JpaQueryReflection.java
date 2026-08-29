@@ -8,7 +8,7 @@ final class JpaQueryReflection {
     private JpaQueryReflection() {
     }
 
-    static Object readProperty(Object target, String property) {
+    static Optional<Object> readProperty(Object target, String property) {
         if (property != null && property.contains(".")) {
             return readPath(target, property);
         }
@@ -24,13 +24,12 @@ final class JpaQueryReflection {
             "Property '" + property + "' not found on " + target.getClass().getName());
     }
 
-    private static Object readPath(Object target, String path) {
-        Object current = target;
+    private static Optional<Object> readPath(Object target, String path) {
+        Optional<Object> current = Optional.of(target);
         for (String segment : path.split("\\.")) {
-            if (current == null) {
-                throw new IllegalArgumentException("Property path '" + path + "' resolved through null segment '" + segment + "'");
-            }
-            current = readProperty(current, segment);
+            Object receiver = current.orElseThrow(() -> new IllegalArgumentException(
+                "Property path '" + path + "' resolved through null segment '" + segment + "'"));
+            current = readProperty(receiver, segment);
         }
         return current;
     }
@@ -63,19 +62,19 @@ final class JpaQueryReflection {
         return Optional.empty();
     }
 
-    private static Object invokeAccessor(Method accessor, Object target, String property) {
+    private static Optional<Object> invokeAccessor(Method accessor, Object target, String property) {
         try {
             accessor.setAccessible(true);
-            return accessor.invoke(target);
+            return Optional.ofNullable(accessor.invoke(target));
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("Failed to read property '" + property + "' from " + target.getClass().getName(), ex);
         }
     }
 
-    private static Object readField(Field field, Object target, String property) {
+    private static Optional<Object> readField(Field field, Object target, String property) {
         try {
             field.setAccessible(true);
-            return field.get(target);
+            return Optional.ofNullable(field.get(target));
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("Failed to read field '" + property + "' from " + target.getClass().getName(), ex);
         }

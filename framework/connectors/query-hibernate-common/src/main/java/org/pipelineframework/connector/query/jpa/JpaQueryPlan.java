@@ -212,11 +212,9 @@ final class JpaQueryPlan {
         }
         String property = inputReference.substring(INPUT_PREFIX.length());
         validateIdentifier(property, "input property");
-        Object value = JpaQueryReflection.readProperty(input, property);
-        if (value == null) {
-            throw new IllegalArgumentException("query '" + queryId + "' input property '" + property + "' must not be null");
-        }
-        return value;
+        return JpaQueryReflection.readProperty(input, property)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "query '" + queryId + "' input property '" + property + "' must not be null"));
     }
 
     private static void validatePropertyMap(Map<String, String> values, String field) {

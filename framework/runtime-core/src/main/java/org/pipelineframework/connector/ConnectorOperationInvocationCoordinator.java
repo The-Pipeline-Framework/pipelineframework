@@ -54,26 +54,59 @@ public final class ConnectorOperationInvocationCoordinator {
                 return;
             }
             try {
-                CompletionStage<T> providerStage = invokeOperation(operation, invocation);
-                result.providerStage(providerStage);
-                providerStage.whenComplete((value, failure) -> {
-                    if (!result.isCancelled()) {
+                if (operation instanceof BlockingOperation) {
+                    CompletionStage<CompletionStage<T>> admission = RuntimeAdapters.executeBlocking(
+                        () -> requireStage(invocation.get()), false);
+                    admission.whenComplete((providerStage, failure) -> {
                         if (failure == null) {
-                            result.complete(value);
+                            observeProviderStage(key, turn, result, providerStage);
                         } else {
-                            result.completeExceptionally(failure);
+                            failAndRelease(key, turn, result, failure);
                         }
-                    }
-                    release(key, turn);
-                });
-            } catch (Throwable failure) {
-                if (!result.isCancelled()) {
-                    result.completeExceptionally(failure);
+                    });
+                } else {
+                    observeProviderStage(key, turn, result, invokeOperation(operation, invocation));
                 }
-                release(key, turn);
+            } catch (Throwable failure) {
+                failAndRelease(key, turn, result, failure);
             }
         });
         return result;
+    }
+
+    private <T> void observeProviderStage(
+        InvocationKey key,
+        CompletableFuture<Void> turn,
+        SerializedInvocationFuture<T> result,
+        CompletionStage<T> providerStage
+    ) {
+        try {
+            result.providerStage(providerStage);
+            providerStage.whenComplete((value, failure) -> {
+                if (!result.isCancelled()) {
+                    if (failure == null) {
+                        result.complete(value);
+                    } else {
+                        result.completeExceptionally(failure);
+                    }
+                }
+                release(key, turn);
+            });
+        } catch (Throwable failure) {
+            failAndRelease(key, turn, result, failure);
+        }
+    }
+
+    private <T> void failAndRelease(
+        InvocationKey key,
+        CompletableFuture<Void> turn,
+        SerializedInvocationFuture<T> result,
+        Throwable failure
+    ) {
+        if (!result.isCancelled()) {
+            result.completeExceptionally(failure);
+        }
+        release(key, turn);
     }
 
     private void release(InvocationKey key, CompletableFuture<Void> turn) {

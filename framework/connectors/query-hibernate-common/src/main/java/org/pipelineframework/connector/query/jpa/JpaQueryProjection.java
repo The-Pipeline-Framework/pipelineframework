@@ -3,6 +3,7 @@ package org.pipelineframework.connector.query.jpa;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.RecordComponent;
 import java.util.Map;
+import java.util.Optional;
 
 final class JpaQueryProjection {
     private JpaQueryProjection() {
@@ -26,7 +27,14 @@ final class JpaQueryProjection {
                 RecordComponent component = components[i];
                 parameterTypes[i] = component.getType();
                 String sourceProperty = projection.getOrDefault(component.getName(), component.getName());
-                arguments[i] = JpaQueryReflection.readProperty(entity, sourceProperty);
+                Optional<Object> value = JpaQueryReflection.readProperty(entity, sourceProperty);
+                if (component.getType() == Optional.class) {
+                    arguments[i] = value.filter(candidate -> candidate instanceof Optional).orElse(value);
+                } else {
+                    arguments[i] = value.orElseThrow(() -> new IllegalArgumentException(
+                        "JPA query projection property '" + sourceProperty + "' for component '"
+                            + component.getName() + "' must not be null"));
+                }
             }
             Constructor<O> constructor = outputType.getDeclaredConstructor(parameterTypes);
             constructor.setAccessible(true);
