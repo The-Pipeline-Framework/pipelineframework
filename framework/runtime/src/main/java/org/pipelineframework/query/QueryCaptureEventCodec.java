@@ -131,8 +131,15 @@ final class QueryCaptureEventCodec {
         if (event.stepIndex() < 0) {
             throw new QueryCaptureStoreException("Durable Query capture step index must be non-negative");
         }
-        if (event.kind() == Kind.FOUND || event.kind() == Kind.STREAM_ITEM) {
-            requireText(event.outputJson(), "output JSON");
+        if (event.kind() == Kind.NOT_FOUND
+            && (!NO_VALUE.equals(event.outputJson())
+                || !NO_VALUE.equals(event.outputType())
+                || !NO_VALUE.equals(event.runtimeType())
+                || !NO_VALUE.equals(event.encoding()))) {
+            throw new QueryCaptureStoreException(
+                "Durable not-found Query capture must not contain output metadata");
+        }
+        if (event.kind() == Kind.FOUND || event.kind().isStreaming()) {
             Class<?> outputType = resolve(event.outputType());
             Class<?> runtimeType = resolve(event.runtimeType());
             if (!outputType.isAssignableFrom(runtimeType)) {
@@ -140,16 +147,18 @@ final class QueryCaptureEventCodec {
                     "Durable Query runtime type " + runtimeType.getName()
                         + " is incompatible with declared type " + outputType.getName());
             }
-            validateJson(event.outputJson());
-        }
-        if (event.kind().isStreaming()) {
-            requireText(event.outputType(), "streaming output type");
             String expectedEncoding = encoding(event.outputType());
             if (!expectedEncoding.equals(event.encoding())) {
                 throw new QueryCaptureStoreException(
                     "Durable Query capture encoding " + event.encoding()
                         + " does not match output type " + event.outputType());
             }
+        }
+        if (event.kind() == Kind.FOUND || event.kind() == Kind.STREAM_ITEM) {
+            requireText(event.outputJson(), "output JSON");
+            validateJson(event.outputJson());
+        }
+        if (event.kind().isStreaming()) {
             requireText(event.ownerToken(), "streaming owner token");
             if (event.generation() < 0) {
                 throw new QueryCaptureStoreException("Streaming Query generation must be non-negative");

@@ -30,14 +30,19 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ConditionCheck;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
 import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.Put;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
+import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 /**
@@ -55,6 +60,9 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
     public static final String REVISION = "revision";
     public static final String SCHEMA_VERSION = "schema_version";
     public static final String EVENT_JSON = "event_json";
+    static final String GENERATION = "generation";
+    static final String OWNER_TOKEN = "owner_token";
+    static final String LEASE_EXPIRES_AT = "lease_expires_at";
     public static final int MAX_EVENT_BYTES = 300 * 1024;
 
     private static final Duration DEFAULT_LEASE = Duration.ofMinutes(5);
@@ -336,20 +344,11 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
 
     private void append(String captureKey, long revision, QueryCaptureEventCodec.Event event) {
         String encoded = codec.encode(event);
-        int bytes = encoded.getBytes(StandardCharsets.UTF_8).length;
-        if (bytes > MAX_EVENT_BYTES) {
-            throw new QueryCaptureStoreException(
-                "Durable Query capture event is " + bytes + " bytes; maximum is " + MAX_EVENT_BYTES
-                    + ". Carry large content with PayloadReference.");
-        }
+        validateSize(encoded);
         try {
             client.putItem(PutItemRequest.builder()
                 .tableName(tableName)
-                .item(Map.of(
-                    CAPTURE_KEY, stringValue(captureKey),
-                    REVISION, numberValue(revision),
-                    SCHEMA_VERSION, numberValue(QueryCaptureEventCodec.SCHEMA_VERSION),
-                    EVENT_JSON, stringValue(encoded)))
+                .item(eventItem(captureKey, revision, encoded, event))
                 .conditionExpression("attribute_not_exists(#captureKey) AND attribute_not_exists(#revision)")
                 .expressionAttributeNames(Map.of(
                     "#captureKey", CAPTURE_KEY,
@@ -361,6 +360,76 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
         } catch (DynamoDbException failure) {
             throw new QueryCaptureStoreException(
                 "Failed writing Query capture '" + captureKey + "' to DynamoDB", failure);
+        }
+    }
+
+    private void appendWriter(
+        String captureKey,
+        StoredEvent authority,
+        QueryCaptureEventCodec.Event event
+    ) {
+        String encoded = codec.encode(event);
+        validateSize(encoded);
+        long now = clock.millis();
+        try {
+            client.transactWriteItems(TransactWriteItemsRequest.builder()
+                .transactItems(
+                    TransactWriteItem.builder().conditionCheck(ConditionCheck.builder()
+                        .tableName(tableName)
+                        .key(Map.of(
+                            CAPTURE_KEY, stringValue(captureKey),
+                            REVISION, numberValue(authority.revision())))
+                        .conditionExpression(
+                            "#generation = :generation AND #ownerToken = :ownerToken AND #leaseExpiresAt > :now")
+                        .expressionAttributeNames(Map.of(
+                            "#generation", GENERATION,
+                            "#ownerToken", OWNER_TOKEN,
+                            "#leaseExpiresAt", LEASE_EXPIRES_AT))
+                        .expressionAttributeValues(Map.of(
+                            ":generation", numberValue(authority.event().generation()),
+                            ":ownerToken", stringValue(authority.event().ownerToken()),
+                            ":now", numberValue(now)))
+                        .build()).build(),
+                    TransactWriteItem.builder().put(Put.builder()
+                        .tableName(tableName)
+                        .item(eventItem(captureKey, authority.revision() + 1L, encoded, event))
+                        .conditionExpression("attribute_not_exists(#captureKey) AND attribute_not_exists(#revision)")
+                        .expressionAttributeNames(Map.of(
+                            "#captureKey", CAPTURE_KEY,
+                            "#revision", REVISION))
+                        .build()).build())
+                .build());
+        } catch (TransactionCanceledException failure) {
+            throw new QueryCaptureConflictException(
+                "Streaming Query capture lease is stale for key '" + captureKey + "'", failure);
+        } catch (DynamoDbException failure) {
+            throw new QueryCaptureStoreException(
+                "Failed writing Query capture '" + captureKey + "' to DynamoDB", failure);
+        }
+    }
+
+    private Map<String, AttributeValue> eventItem(
+        String captureKey,
+        long revision,
+        String encoded,
+        QueryCaptureEventCodec.Event event
+    ) {
+        return Map.of(
+            CAPTURE_KEY, stringValue(captureKey),
+            REVISION, numberValue(revision),
+            SCHEMA_VERSION, numberValue(QueryCaptureEventCodec.SCHEMA_VERSION),
+            EVENT_JSON, stringValue(encoded),
+            GENERATION, numberValue(event.generation()),
+            OWNER_TOKEN, stringValue(event.ownerToken()),
+            LEASE_EXPIRES_AT, numberValue(event.leaseExpiresAtEpochMs()));
+    }
+
+    private static void validateSize(String encoded) {
+        int bytes = encoded.getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > MAX_EVENT_BYTES) {
+            throw new QueryCaptureStoreException(
+                "Durable Query capture event is " + bytes + " bytes; maximum is " + MAX_EVENT_BYTES
+                    + ". Carry large content with PayloadReference.");
         }
     }
 
@@ -503,7 +572,7 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
                         "Streaming Query capture item type does not match its observation");
                 }
                 StoredEvent authority = ownedLatest();
-                DynamoQueryCaptureStore.this.append(captureKey, authority.revision() + 1L, codec.streamItem(
+                DynamoQueryCaptureStore.this.appendWriter(captureKey, authority, codec.streamItem(
                     authority.event(), item, clock.millis() + leaseDuration.toMillis()));
                 nextOrdinal.incrementAndGet();
             });
@@ -513,7 +582,7 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
         public CompletionStage<Void> commit() {
             return enqueue(() -> {
                 StoredEvent authority = ownedLatest();
-                DynamoQueryCaptureStore.this.append(captureKey, authority.revision() + 1L, codec.streamTerminal(
+                DynamoQueryCaptureStore.this.appendWriter(captureKey, authority, codec.streamTerminal(
                     authority.event(), QueryCaptureEventCodec.Kind.STREAM_COMMITTED, nextOrdinal.get()));
                 closed.set(true);
             });
@@ -531,9 +600,9 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
                     if (owns(authority.event())
                         && (authority.event().kind() == QueryCaptureEventCodec.Kind.STREAM_OPEN
                             || authority.event().kind() == QueryCaptureEventCodec.Kind.STREAM_ITEM)) {
-                        DynamoQueryCaptureStore.this.append(
+                        DynamoQueryCaptureStore.this.appendWriter(
                             captureKey,
-                            authority.revision() + 1L,
+                            authority,
                             codec.streamTerminal(
                                 authority.event(), QueryCaptureEventCodec.Kind.STREAM_ABORTED, nextOrdinal.get()));
                     }
@@ -582,7 +651,8 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
             if (!owns(authority.event())
                 || authority.event().kind() == QueryCaptureEventCodec.Kind.STREAM_ABORTED
                 || authority.event().kind() == QueryCaptureEventCodec.Kind.STREAM_COMMITTED
-                || authority.event().kind() == QueryCaptureEventCodec.Kind.TOMBSTONE) {
+                || authority.event().kind() == QueryCaptureEventCodec.Kind.TOMBSTONE
+                || authority.event().leaseExpiresAtEpochMs() <= clock.millis()) {
                 throw new QueryCaptureConflictException("Streaming Query capture lease is stale");
             }
             return authority;
@@ -603,7 +673,7 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
                     QueryCaptureEventCodec.Event heartbeat = authority.event().withStreamState(
                         QueryCaptureEventCodec.Kind.STREAM_OPEN, "",
                         clock.millis() + leaseDuration.toMillis(), -1L, -1L);
-                    DynamoQueryCaptureStore.this.append(captureKey, authority.revision() + 1L, heartbeat);
+                    DynamoQueryCaptureStore.this.appendWriter(captureKey, authority, heartbeat);
                 }).whenComplete((ignored, failure) -> {
                     if (failure == null) {
                         scheduleHeartbeat();
@@ -753,6 +823,7 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
                     QueryCaptureEventCodec.Event event = codec.decode(stringValue(row, EVENT_JSON));
                     if (event.kind() == QueryCaptureEventCodec.Kind.STREAM_ITEM
                         && event.generation() == committed.generation()) {
+                        verifyReplayIdentity(committed, event);
                         StreamingQueryCaptureItem item = codec.toItem(event);
                         if (item.ordinal() != nextOrdinal + decoded.size()) {
                             throw new QueryCaptureStoreException(
@@ -768,6 +839,23 @@ public class DynamoQueryCaptureStore implements QueryCaptureStore {
                     sourceComplete = cursor == null || cursor.isEmpty();
                 }
             }
+        }
+    }
+
+    private static void verifyReplayIdentity(
+        QueryCaptureEventCodec.Event committed,
+        QueryCaptureEventCodec.Event item
+    ) {
+        if (!committed.captureKey().equals(item.captureKey())
+            || !committed.tenantId().equals(item.tenantId())
+            || !committed.executionId().equals(item.executionId())
+            || committed.stepIndex() != item.stepIndex()
+            || !committed.queryId().equals(item.queryId())
+            || !committed.queryVersion().equals(item.queryVersion())
+            || !committed.inputDigest().equals(item.inputDigest())
+            || !committed.outputType().equals(item.outputType())) {
+            throw new QueryCaptureStoreException(
+                "Streaming Query capture item does not match its committed observation identity");
         }
     }
 

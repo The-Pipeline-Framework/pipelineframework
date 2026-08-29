@@ -46,6 +46,22 @@ class QueryCaptureEventCodecTest {
     }
 
     @Test
+    void rejectsUnavailableNotFoundOutputType() throws Exception {
+        QueryCaptureRecord record = new QueryCaptureRecord(
+            "tenant", "execution", 1, "customer.find", "v1", "capture-key",
+            "input", "", "", Instant.ofEpochMilli(10),
+            QueryCaptureStatus.NOT_FOUND, "missing");
+        com.fasterxml.jackson.databind.node.ObjectNode corrupted =
+            (com.fasterxml.jackson.databind.node.ObjectNode) PipelineJson.mapper().readTree(
+                codec.encode(codec.unary(record)));
+        corrupted.put("outputType", "missing.Type");
+        corrupted.put("runtimeType", "missing.Type");
+
+        assertThrows(QueryCaptureStoreException.class,
+            () -> codec.decode(PipelineJson.mapper().writeValueAsString(corrupted)));
+    }
+
+    @Test
     void protobufParserRejectsUnknownFields() {
         QueryCapturePayloadCodec payloadCodec = new QueryCapturePayloadCodec(PipelineJson.mapper());
 

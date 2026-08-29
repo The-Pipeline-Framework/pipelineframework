@@ -9,14 +9,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +46,7 @@ import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 
@@ -249,6 +256,74 @@ class DynamoQueryCaptureStoreIT {
     }
 
     @Test
+    void expiredWriterCannotRaceTheNextGenerationClaimant() {
+        MutableClock clock = new MutableClock(Instant.ofEpochMilli(1_000L));
+        Duration lease = Duration.ofSeconds(30);
+        DynamoQueryCaptureStore original = new DynamoQueryCaptureStore(
+            dynamo, tableName, lease, Duration.ofMillis(10), new QueryCaptureEventCodec(), clock,
+            ForkJoinPool.commonPool());
+        StreamingQueryCaptureRequest request = request("fenced-reclaim-key");
+        StreamingQueryCaptureWriter stale = assertInstanceOf(
+            StreamingQueryCaptureOpen.Write.class,
+            original.openStreaming(request).toCompletableFuture().join()).writer();
+        clock.advance(Duration.ofSeconds(31));
+        DynamoQueryCaptureStore contender = new DynamoQueryCaptureStore(
+            dynamo, tableName, lease, Duration.ofMillis(10), new QueryCaptureEventCodec(), clock,
+            ForkJoinPool.commonPool());
+
+        CompletableFuture<Throwable> staleAppend = CompletableFuture.supplyAsync(() -> {
+            try {
+                stale.append(item(0, "stale")).toCompletableFuture().join();
+                return new AssertionError("Expired writer appended a row");
+            } catch (CompletionException failure) {
+                return failure.getCause();
+            }
+        });
+        StreamingQueryCaptureWriter winner = assertInstanceOf(
+            StreamingQueryCaptureOpen.Write.class,
+            contender.openStreaming(request).toCompletableFuture().join()).writer();
+
+        assertInstanceOf(QueryCaptureConflictException.class, staleAppend.join());
+        winner.append(item(0, "winner")).toCompletableFuture().join();
+        winner.commit().toCompletableFuture().join();
+        original.close();
+        contender.close();
+    }
+
+    @Test
+    void replayRejectsForeignItemIdentityInTheCommittedPartition() throws Exception {
+        StreamingQueryCaptureRequest request = request("foreign-item-key");
+        StreamingQueryCaptureWriter writer = assertInstanceOf(
+            StreamingQueryCaptureOpen.Write.class,
+            store.openStreaming(request).toCompletableFuture().join()).writer();
+        writer.append(item(0, "captured")).toCompletableFuture().join();
+        writer.commit().toCompletableFuture().join();
+
+        Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> persistedItem =
+            dynamo.scan(ScanRequest.builder().tableName(tableName).build()).items().stream()
+                .filter(row -> row.get(DynamoQueryCaptureStore.EVENT_JSON).s().contains("\"kind\":\"STREAM_ITEM\""))
+                .findFirst().orElseThrow();
+        com.fasterxml.jackson.databind.node.ObjectNode foreign =
+            (com.fasterxml.jackson.databind.node.ObjectNode) org.pipelineframework.config.pipeline.PipelineJson
+                .mapper().readTree(persistedItem.get(DynamoQueryCaptureStore.EVENT_JSON).s());
+        foreign.put("tenantId", "foreign-tenant");
+        Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> replacement =
+            new HashMap<>(persistedItem);
+        replacement.put(DynamoQueryCaptureStore.EVENT_JSON,
+            software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder()
+                .s(org.pipelineframework.config.pipeline.PipelineJson.mapper().writeValueAsString(foreign))
+                .build());
+        dynamo.putItem(PutItemRequest.builder().tableName(tableName).item(replacement).build());
+
+        StreamingQueryCaptureOpen.Replay replay = assertInstanceOf(
+            StreamingQueryCaptureOpen.Replay.class,
+            new DynamoQueryCaptureStore(dynamo, tableName)
+                .openStreaming(request).toCompletableFuture().join());
+        CompletionException failure = assertThrows(CompletionException.class, () -> collect(replay.items()));
+        assertInstanceOf(QueryCaptureStoreException.class, failure.getCause());
+    }
+
+    @Test
     void tombstoneAndMaintenanceClearHideCapturedAuthority() {
         store.putIfAbsent(found("remove-key", "input", new TestOutput("safe"))).toCompletableFuture().join();
         assertTrue(store.remove("remove-key").toCompletableFuture().join());
@@ -392,6 +467,36 @@ class DynamoQueryCaptureStoreIT {
     }
 
     record TestInput(String id) {
+    }
+
+    private static final class MutableClock extends Clock {
+        private final AtomicReference<Instant> current;
+
+        private MutableClock(Instant current) {
+            this.current = new AtomicReference<>(current);
+        }
+
+        private void advance(Duration duration) {
+            current.updateAndGet(value -> value.plus(duration));
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            if (!ZoneOffset.UTC.equals(zone)) {
+                throw new IllegalArgumentException("Test clock only supports UTC");
+            }
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return current.get();
+        }
     }
 
     private static final class CountingConnector implements FrameworkQueryConnector {
