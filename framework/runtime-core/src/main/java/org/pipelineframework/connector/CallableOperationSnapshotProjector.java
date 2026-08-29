@@ -26,6 +26,11 @@ public final class CallableOperationSnapshotProjector {
                 throw new IllegalArgumentException("connector operation kind is not callable in snapshot format v1: "
                     + identity.kind().value());
             }
+            if (ConnectorOperationKind.QUERY.equals(identity.kind())
+                && descriptor.queryCardinality().orElseThrow() == QueryOperationCardinality.ONE_TO_MANY) {
+                throw new IllegalArgumentException(
+                    "streaming Query operation is not callable in unary snapshot format v1: " + identity);
+            }
             ConnectorOperationTypeContract contract = descriptor.typeContract().orElseThrow(() ->
                 new IllegalArgumentException("authorized connector operation has no normalized type contract: " + identity));
             definitions.add(new CallableOperationDefinition(

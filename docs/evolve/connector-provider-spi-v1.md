@@ -18,7 +18,8 @@ The public host-neutral Connector Provider API uses JDK async types.
 - The new public SPI must not expose Mutiny `Uni` or `Multi`.
 - Quarkus/runtime adapters may use Mutiny internally.
 - Existing legacy APIs may remain Mutiny-based behind compatibility adapters.
-- Streaming contracts are not part of v1. A future streaming contract must be pinned separately using a host-neutral abstraction rather than defaulting to `Multi`.
+- Object streaming remains family-specific. Finite Query streaming is pinned separately through
+  host-neutral `StreamingQueryOperation`/`QueryStream` contracts rather than exposing `Multi` to providers.
 
 A universal `CompletionStage<O> execute(...)` is explicitly rejected. `CompletionStage` is the shared async mechanism, not the shared semantic contract.
 
@@ -30,6 +31,7 @@ Conceptually:
 ConnectorProvider<PC>
     ├── CommandOperation<I,OC,O>
     ├── QueryOperation<I,OC,O>
+    ├── StreamingQueryOperation<I,OC,O>
     ├── ObjectSourceOperation     // specialised list/read semantics
     └── ObjectTargetOperation     // specialised write-session semantics
 ```
@@ -141,8 +143,8 @@ specialization, and only when TPF implements the corresponding enforcement.
 - consistency;
 - repeatability/capture behaviour;
 - timeout;
-- pagination/cardinality;
-- future streaming capability only after a separate contract is pinned.
+- pagination;
+- streaming cardinality is structural (`StreamingQueryOperation`), not a Query capability flag.
 
 Operation-family capabilities must not become a union of execution mechanics and every Command or
 Query semantic axis.
@@ -300,9 +302,8 @@ A Query represents a captured external observation, not an effect.
 
 ### V1 cardinality
 
-V1 Query is unary/at-most-one outcome at the operation boundary. Existing `ONE_TO_ONE` compatibility is preserved.
-
-Streaming, cursor APIs and reactive multi-item contracts are intentionally deferred.
+Unary Query is an at-most-one outcome. A finite multi-row observation uses
+`StreamingQueryOperation` and the existing ONE_TO_MANY runtime; it is not encoded as `List<O>`.
 
 ### Capture and cache
 

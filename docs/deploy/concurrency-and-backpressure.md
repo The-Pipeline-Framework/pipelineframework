@@ -76,6 +76,19 @@ Backpressure propagates through live reactive segments. A brokered await can par
 
 Durability takes over when the live session is unavailable. A request may complete later through Kafka, SQS, a webhook, a human/API completion, or a restarted worker. In that path, TPF uses await unit state, execution state, and queue admission rather than a single in-memory demand signal.
 
+### Finite streaming Query boundaries
+
+A `StreamingQueryOperation` emits a finite ordered row publisher into an ordinary ONE_TO_MANY step.
+LOCAL preserves that publisher directly. Generated gRPC uses server streaming, and generated REST
+uses its existing streaming response path, so row demand and cancellation remain visible through
+those live transports. Spring generation still rejects non-unary shapes rather than claiming parity.
+
+FUNCTION handlers return one materialized response. Their list sink enforces `BatchingPolicy.maxItems`
+and fails overflow for `FAIL` and `BUFFER`; only an explicitly selected `DROP` policy truncates. A
+finite Query may still be far too large to materialize, so choose a streaming transport or configure
+and test an honest function boundary limit. Provider fetch windows never change the pipeline item
+model on either path.
+
 For await-heavy pipelines, size the system around two kinds of pressure:
 
 - live segment pressure: step inflight counts, step buffers, pending live await interactions, terminal publish write latency, and source admission;

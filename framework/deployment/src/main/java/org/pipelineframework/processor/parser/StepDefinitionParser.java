@@ -46,6 +46,7 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.connector.QueryCapabilities;
+import org.pipelineframework.connector.QueryOperationCardinality;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
@@ -887,9 +888,10 @@ public class StepDefinitionParser {
                 return null;
             }
             StreamingShape shape = parseStreamingShapeHint(stepData, name);
-            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+            if (shape != null && shape != StreamingShape.UNARY_UNARY
+                && shape != StreamingShape.UNARY_STREAMING) {
                 String message = "Skipping step '" + name
-                    + "': query steps support only ONE_TO_ONE cardinality in v1";
+                    + "': query steps support only ONE_TO_ONE and ONE_TO_MANY cardinality";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -927,11 +929,19 @@ public class StepDefinitionParser {
                 Map<String, Object> operationConfig = parseStepConfig(stepData, name, "query");
                 Optional<Duration> negativeCacheTtl = parsePositiveDuration(
                     stepData.get("negativeCacheTtl"), name, "negativeCacheTtl");
-                if (operationConfig == null
-                    || !validateNativeQueryBinding(
-                        name, operation, using, stepData, operationConfig, negativeCacheTtl, connectorBindings)) {
+                if (operationConfig == null) {
                     throw new StepSkippedException();
                 }
+                Optional<QueryOperationCardinality> validatedCardinality = validateNativeQueryBinding(
+                    name, operation, using, stepData, operationConfig, negativeCacheTtl,
+                    Optional.ofNullable(shape), connectorBindings);
+                if (validatedCardinality.isEmpty()) {
+                    throw new StepSkippedException();
+                }
+                StreamingShape resolvedShape = validatedCardinality.orElseThrow()
+                    == QueryOperationCardinality.ONE_TO_MANY
+                    ? StreamingShape.UNARY_STREAMING
+                    : StreamingShape.UNARY_UNARY;
                 String bindingName = ConnectorBindingName.of(using).value();
                 queryId = "native-binding:" + bindingName + "/" + operation;
                 Map<String, Object> embedded = embedNativeQuerySelection(
@@ -957,13 +967,20 @@ public class StepDefinitionParser {
                     MapperFallbackMode.NONE,
                     inputType,
                     outputType,
-                    StreamingShape.UNARY_UNARY,
+                    resolvedShape,
                     false,
                     accepts,
                     terminal);
             }
             if (isBlank(queryId)) {
                 String message = "Skipping step '" + name + "': query steps must reference a top-level query id";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (shape == StreamingShape.UNARY_STREAMING) {
+                String message = "Skipping step '" + name
+                    + "': ONE_TO_MANY Query requires a native operation/using selection";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -1232,13 +1249,14 @@ public class StepDefinitionParser {
         return Optional.of(source);
     }
 
-    private boolean validateNativeQueryBinding(
+    private Optional<QueryOperationCardinality> validateNativeQueryBinding(
         String stepName,
         String operation,
         String using,
         Map<String, Object> stepData,
         Map<String, Object> operationConfig,
         Optional<Duration> negativeCacheTtl,
+        Optional<StreamingShape> declaredShape,
         Map<String, ParsedConnectorBinding> bindings
     ) {
         try {
@@ -1258,14 +1276,32 @@ public class StepDefinitionParser {
                 identity.majorVersion(),
                 new ConnectorConfigurationDocument(operationConfig),
                 "query step '" + stepName + "' operation " + operation);
-            validateNegativeCacheTtl(
-                identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
-            return true;
+            QueryOperationCardinality cardinality = catalog.requireQueryCardinality(
+                identity, binding.providerVersion());
+            StreamingShape operationShape = cardinality == QueryOperationCardinality.ONE_TO_MANY
+                ? StreamingShape.UNARY_STREAMING
+                : StreamingShape.UNARY_UNARY;
+            if (declaredShape.isPresent() && declaredShape.orElseThrow() != operationShape) {
+                throw new IllegalArgumentException(
+                    "declared cardinality " + declaredShape.orElseThrow()
+                        + " does not match provider operation cardinality "
+                        + cardinality);
+            }
+            if (cardinality == QueryOperationCardinality.ONE_TO_MANY) {
+                if (negativeCacheTtl.isPresent()) {
+                    throw new IllegalArgumentException(
+                        "streaming query operation " + identity + " does not support negativeCacheTtl");
+                }
+            } else {
+                validateNegativeCacheTtl(
+                    identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
+            }
+            return Optional.of(cardinality);
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return false;
+            return Optional.empty();
         }
     }
 

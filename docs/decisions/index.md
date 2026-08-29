@@ -27,6 +27,7 @@ authoritative for exact syntax and release support.
 | [0016](./0016-field-presence-nullability-and-compatibility.md) | Keep field presence and value nullability independent and classify evolution per compatibility surface. |
 | [0017](./0017-structural-connector-execution-and-binding-serialization.md) | Declare blocking and serialized connector execution structurally and enforce serialization per binding and operation. |
 | [0018](./0018-command-effects-use-immutable-durable-revisions.md) | Persist Command effect authority as immutable conditional revisions with lossless typed replay. |
+| [0019](./0019-finite-streaming-query-reuses-one-to-many.md) | Express finite streaming Query through the existing ONE_TO_MANY runtime and deterministic child lineage. |
 
 ## Maintenance
 

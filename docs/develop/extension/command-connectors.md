@@ -201,6 +201,25 @@ execution, an existing Query capture is replayed before resolving the provider. 
 both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
 [Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
 
+### Finite streaming Query
+
+An operation that observes an ordered finite sequence implements
+`StreamingQueryOperation<I, C, O>` and returns `QueryStream<O>`. Its row boundary is JDK
+`Flow.Publisher`, so provider code does not depend on Mutiny while still exposing demand and
+cancellation. The separate termination stage completes only after cancellation or row termination
+has released every provider-owned cursor, session, or similar resource.
+
+Select it from a `kind: query` step with `cardinality: ONE_TO_MANY`. The generated client implements
+the ordinary `StepOneToMany` contract: every row is a pipeline item, and provider fetch windows or
+pages are not visible in the pipeline. The operation must produce the same deterministic total row
+order when TPF retries by resubscribing. TPF then derives the same child ordinal and item identity for
+an emitted prefix on every attempt, independently for each concurrent upstream item.
+
+Streaming Query capture stages rows in order and commits only after successful completion. Failure
+or cancellation aborts the partial observation; a later attempt executes the Query again. Generic
+Query cache policies and `negativeCacheTtl` are unary semantics and are rejected for streaming
+operations. Dynamic operation dispatch is unary and cannot expose a streaming Query.
+
 ## Command Id Generator
 
 The command id must be stable for the same business command. Do not include the current time, a random UUID, or a process-local counter.

@@ -11,6 +11,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -327,6 +328,206 @@ class ConnectorOperationInvocationCoordinatorTest {
         }
     }
 
+    @Test
+    void streamingInvocationStartsOnDemandAndForwardsDemand() throws Exception {
+        StreamingQuery operation = new StreamingQuery();
+        ControlledPublisher<String> rows = new ControlledPublisher<>();
+        CompletableFuture<Void> termination = new CompletableFuture<>();
+        AtomicInteger invocations = new AtomicInteger();
+        RecordingSubscriber<String> subscriber = new RecordingSubscriber<>();
+
+        coordinator.<String>invokeStream(BINDING, operation, () -> {
+            invocations.incrementAndGet();
+            return new QueryStream<>(rows, termination);
+        }).subscribe(subscriber);
+
+        assertEquals(0, invocations.get());
+        subscriber.request(1);
+        assertEquals(1, invocations.get());
+        assertEquals(1L, rows.demand());
+        rows.emit("row-0");
+        assertEquals(java.util.List.of("row-0"), subscriber.items());
+        assertEquals(0L, rows.demand());
+        rows.complete();
+        termination.complete(null);
+        subscriber.awaitTerminal();
+        assertTrue(subscriber.completed());
+    }
+
+    @Test
+    void serializedStreamingGateCoversRowsAndProviderResourceLifetime() throws Exception {
+        SerializedStreamingQuery operation = new SerializedStreamingQuery();
+        ControlledPublisher<String> firstRows = new ControlledPublisher<>();
+        CompletableFuture<Void> firstTermination = new CompletableFuture<>();
+        AtomicInteger secondInvocations = new AtomicInteger();
+        RecordingSubscriber<String> first = new RecordingSubscriber<>();
+        RecordingSubscriber<String> second = new RecordingSubscriber<>();
+
+        coordinator.invokeStream(BINDING, operation,
+            () -> new QueryStream<>(firstRows, firstTermination)).subscribe(first);
+        coordinator.invokeStream(BINDING, operation, () -> {
+            secondInvocations.incrementAndGet();
+            ControlledPublisher<String> rows = new ControlledPublisher<>();
+            rows.completeOnSubscribe();
+            return new QueryStream<>(rows, CompletableFuture.completedFuture(null));
+        }).subscribe(second);
+        first.request(Long.MAX_VALUE);
+        second.request(Long.MAX_VALUE);
+
+        firstRows.complete();
+        assertEquals(0, secondInvocations.get());
+        assertFalse(first.completed());
+        firstTermination.complete(null);
+
+        first.awaitTerminal();
+        second.awaitTerminal();
+        assertEquals(1, secondInvocations.get());
+        assertTrue(first.completed());
+        assertTrue(second.completed());
+    }
+
+    @Test
+    void queuedStreamingCancellationSkipsProviderInvocation() throws Exception {
+        SerializedStreamingQuery operation = new SerializedStreamingQuery();
+        ControlledPublisher<String> firstRows = new ControlledPublisher<>();
+        CompletableFuture<Void> firstTermination = new CompletableFuture<>();
+        AtomicInteger queuedInvocations = new AtomicInteger();
+        RecordingSubscriber<String> first = new RecordingSubscriber<>();
+        RecordingSubscriber<String> queued = new RecordingSubscriber<>();
+
+        coordinator.invokeStream(BINDING, operation,
+            () -> new QueryStream<>(firstRows, firstTermination)).subscribe(first);
+        coordinator.<String>invokeStream(BINDING, operation, () -> {
+            queuedInvocations.incrementAndGet();
+            return new QueryStream<>(new ControlledPublisher<>(), CompletableFuture.completedFuture(null));
+        }).subscribe(queued);
+        first.request(Long.MAX_VALUE);
+        queued.request(Long.MAX_VALUE);
+        queued.cancel();
+
+        firstRows.complete();
+        firstTermination.complete(null);
+        first.awaitTerminal();
+        assertEquals(0, queuedInvocations.get());
+    }
+
+    @Test
+    void startedStreamingCancellationRetainsGateUntilProviderResourcesTerminate() throws Exception {
+        SerializedStreamingQuery operation = new SerializedStreamingQuery();
+        ControlledPublisher<String> firstRows = new ControlledPublisher<>();
+        CompletableFuture<Void> firstTermination = new CompletableFuture<>();
+        AtomicInteger nextInvocations = new AtomicInteger();
+        RecordingSubscriber<String> first = new RecordingSubscriber<>();
+        RecordingSubscriber<String> next = new RecordingSubscriber<>();
+
+        coordinator.invokeStream(BINDING, operation,
+            () -> new QueryStream<>(firstRows, firstTermination)).subscribe(first);
+        coordinator.invokeStream(BINDING, operation, () -> {
+            nextInvocations.incrementAndGet();
+            ControlledPublisher<String> rows = new ControlledPublisher<>();
+            rows.completeOnSubscribe();
+            return new QueryStream<>(rows, CompletableFuture.completedFuture(null));
+        }).subscribe(next);
+        first.request(Long.MAX_VALUE);
+        next.request(Long.MAX_VALUE);
+
+        first.cancel();
+        assertTrue(firstRows.cancelled());
+        assertEquals(0, nextInvocations.get());
+        firstTermination.complete(null);
+        next.awaitTerminal();
+        assertEquals(1, nextInvocations.get());
+    }
+
+    @Test
+    void blockingSerializedStreamReleasesWorkerButRetainsGateUntilStreamTermination() throws Exception {
+        try (var worker = Executors.newSingleThreadExecutor(r -> new Thread(r, "stream-blocking-worker"))) {
+            RuntimeAdapters.registerReactiveRuntime(new org.pipelineframework.runtime.core.ReactiveRuntime() {
+                @Override
+                public <T> CompletionStage<T> executeBlocking(
+                    java.util.function.Supplier<T> supplier,
+                    boolean virtualThread
+                ) {
+                    return CompletableFuture.supplyAsync(supplier, worker);
+                }
+            });
+            BlockingSerializedStreamingQuery operation = new BlockingSerializedStreamingQuery();
+            ControlledPublisher<String> firstRows = new ControlledPublisher<>();
+            CompletableFuture<Void> firstTermination = new CompletableFuture<>();
+            AtomicReference<String> firstWorker = new AtomicReference<>();
+            AtomicReference<String> secondWorker = new AtomicReference<>();
+            CountDownLatch firstInvoked = new CountDownLatch(1);
+            CountDownLatch secondInvoked = new CountDownLatch(1);
+            RecordingSubscriber<String> first = new RecordingSubscriber<>();
+            RecordingSubscriber<String> second = new RecordingSubscriber<>();
+
+            coordinator.invokeStream(BINDING, operation, () -> {
+                firstWorker.set(Thread.currentThread().getName());
+                firstInvoked.countDown();
+                return new QueryStream<>(firstRows, firstTermination);
+            }).subscribe(first);
+            first.request(Long.MAX_VALUE);
+            assertTrue(firstInvoked.await(5, TimeUnit.SECONDS));
+
+            coordinator.invokeStream(BINDING, operation, () -> {
+                secondWorker.set(Thread.currentThread().getName());
+                secondInvoked.countDown();
+                ControlledPublisher<String> rows = new ControlledPublisher<>();
+                rows.completeOnSubscribe();
+                return new QueryStream<>(rows, CompletableFuture.completedFuture(null));
+            }).subscribe(second);
+            second.request(Long.MAX_VALUE);
+
+            String availableWorker = RuntimeAdapters.executeBlocking(
+                () -> Thread.currentThread().getName(), false).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertEquals("stream-blocking-worker", availableWorker);
+            assertFalse(secondInvoked.await(100, TimeUnit.MILLISECONDS));
+
+            Thread.ofPlatform().name("unrelated-stream-terminator").start(() -> {
+                firstRows.complete();
+                firstTermination.complete(null);
+            });
+            first.awaitTerminal();
+            assertTrue(secondInvoked.await(5, TimeUnit.SECONDS));
+            second.awaitTerminal();
+            assertEquals("stream-blocking-worker", firstWorker.get());
+            assertEquals("stream-blocking-worker", secondWorker.get());
+        }
+    }
+
+    @Test
+    void blockingSerializedStreamReleasesGateWhenWorkerAdmissionFailsSynchronously() throws Exception {
+        IllegalStateException admissionFailure = new IllegalStateException("stream-worker-admission-failed");
+        RuntimeAdapters.registerReactiveRuntime(new org.pipelineframework.runtime.core.ReactiveRuntime() {
+            @Override
+            public <T> CompletionStage<T> executeBlocking(
+                java.util.function.Supplier<T> supplier,
+                boolean virtualThread
+            ) {
+                throw admissionFailure;
+            }
+        });
+        RecordingSubscriber<String> failed = new RecordingSubscriber<>();
+        coordinator.<String>invokeStream(BINDING, new BlockingSerializedStreamingQuery(), () -> {
+            throw new AssertionError("provider invocation must not start when worker admission fails");
+        }).subscribe(failed);
+
+        failed.request(Long.MAX_VALUE);
+
+        assertTrue(failed.terminal.await(5, TimeUnit.SECONDS));
+        assertEquals(admissionFailure, failed.failure);
+
+        RecordingSubscriber<String> next = new RecordingSubscriber<>();
+        coordinator.invokeStream(BINDING, new SerializedStreamingQuery(), () -> {
+            ControlledPublisher<String> rows = new ControlledPublisher<>();
+            rows.completeOnSubscribe();
+            return new QueryStream<>(rows, CompletableFuture.completedFuture(null));
+        }).subscribe(next);
+        next.request(Long.MAX_VALUE);
+        next.awaitTerminal();
+        assertTrue(next.completed());
+    }
+
     private static QueryOperation<Object, Object, Object> ordinaryQuery() {
         return new QueryOperation<>() {
             @Override
@@ -386,5 +587,136 @@ class ConnectorOperationInvocationCoordinatorTest {
 
     private static final class BlockingSerializedQuery extends SerializedQuery
         implements BlockingQueryOperation<Object, Object, Object> {
+    }
+
+    private static class StreamingQuery implements StreamingQueryOperation<Object, Object, String> {
+        @Override
+        public String id() {
+            return "streaming";
+        }
+
+        @Override
+        public QueryStream<String> query(QueryInvocation<Object, Object, String> invocation) {
+            throw new UnsupportedOperationException("test invokes through the coordinator supplier");
+        }
+    }
+
+    private static class SerializedStreamingQuery extends StreamingQuery implements SerializedOperation {
+    }
+
+    private static final class BlockingSerializedStreamingQuery extends SerializedStreamingQuery
+        implements BlockingOperation {
+    }
+
+    private static final class RecordingSubscriber<T> implements Flow.Subscriber<T> {
+        private final java.util.List<T> items = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private final CountDownLatch terminal = new CountDownLatch(1);
+        private volatile Flow.Subscription subscription;
+        private volatile Throwable failure;
+        private volatile boolean completed;
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+        }
+
+        @Override
+        public void onNext(T item) {
+            items.add(item);
+        }
+
+        @Override
+        public void onError(Throwable failure) {
+            this.failure = failure;
+            terminal.countDown();
+        }
+
+        @Override
+        public void onComplete() {
+            completed = true;
+            terminal.countDown();
+        }
+
+        void request(long count) {
+            subscription.request(count);
+        }
+
+        void cancel() {
+            subscription.cancel();
+        }
+
+        java.util.List<T> items() {
+            return java.util.List.copyOf(items);
+        }
+
+        boolean completed() {
+            return completed;
+        }
+
+        void awaitTerminal() throws InterruptedException {
+            assertTrue(terminal.await(5, TimeUnit.SECONDS));
+            if (failure != null) {
+                throw new AssertionError("stream failed", failure);
+            }
+        }
+    }
+
+    private static final class ControlledPublisher<T> implements Flow.Publisher<T> {
+        private final AtomicReference<Flow.Subscriber<? super T>> subscriber = new AtomicReference<>();
+        private final java.util.concurrent.atomic.AtomicLong demand = new java.util.concurrent.atomic.AtomicLong();
+        private volatile boolean completeOnSubscribe;
+        private volatile boolean cancelled;
+
+        @Override
+        public void subscribe(Flow.Subscriber<? super T> subscriber) {
+            if (!this.subscriber.compareAndSet(null, subscriber)) {
+                throw new IllegalStateException("single subscription publisher");
+            }
+            subscriber.onSubscribe(new Flow.Subscription() {
+                @Override
+                public void request(long count) {
+                    demand.accumulateAndGet(count, (left, right) -> {
+                        long sum = left + right;
+                        return sum < 0L ? Long.MAX_VALUE : sum;
+                    });
+                }
+
+                @Override
+                public void cancel() {
+                    cancelled = true;
+                }
+            });
+            if (completeOnSubscribe) {
+                subscriber.onComplete();
+            }
+        }
+
+        long demand() {
+            return demand.get();
+        }
+
+        void emit(T item) {
+            if (demand.getAndUpdate(current -> current == Long.MAX_VALUE ? current : current - 1L) <= 0L) {
+                throw new IllegalStateException("emitted without demand");
+            }
+            subscriber.get().onNext(item);
+        }
+
+        void complete() {
+            Flow.Subscriber<? super T> resolved = subscriber.get();
+            if (resolved != null) {
+                resolved.onComplete();
+            } else {
+                completeOnSubscribe = true;
+            }
+        }
+
+        void completeOnSubscribe() {
+            completeOnSubscribe = true;
+        }
+
+        boolean cancelled() {
+            return cancelled;
+        }
     }
 }

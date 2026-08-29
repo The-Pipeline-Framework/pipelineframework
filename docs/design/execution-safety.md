@@ -21,7 +21,7 @@ Timeout bounds one started invocation. Retry and backoff decide whether a failed
 | Brokered durable await | TPF bounds unresolved provider interactions and preserves live-segment demand where possible. Its outbound dispatch is not yet a generic circuit boundary. |
 | Command, checkpoint, and generic connector effects | TPF owns their execution lifecycle, but this release does not wrap them with circuit admission. |
 | `BlockingQueryOperation` and `BlockingCommandOperation` | TPF invokes the provider method on a worker and flattens its returned `CompletionStage`. |
-| `SerializedOperation` | TPF admits one provider stage per connector binding and operation until that complete stage terminates. |
+| `SerializedOperation` | TPF admits one provider invocation per connector binding and operation until its complete stage, or its row publisher plus provider-resource lifetime, terminates. |
 | Queue-async transition worker | TPF can use circuit admission only with shared circuit protection and finite durable circuit deferral. |
 
 ## Backpressure And Circuit Admission
@@ -50,6 +50,12 @@ returns, while the serialization gate remains until the stage terminates.
 Serialization is scoped to `(connector binding, operation ID, operation major version)`. A second
 binding is independent. Queued cancellation skips provider invocation; cancellation after admission
 is forwarded best-effort without releasing the gate before provider termination.
+
+Finite streaming Query uses a JDK `Flow.Publisher` provider boundary. Demand and cancellation cross
+that boundary without requiring Mutiny in provider code. A blocking streaming operation uses a
+worker only to open its stream; serialization and resource ownership continue until both row and
+provider-resource termination. Providers must emit a deterministic total row order so retry
+resubscription recreates the same ONE_TO_MANY child identities.
 
 A reactive streaming pipeline can slow source parsing when an await or downstream step has no demand. A `BlockingIteratorService` is different: TPF requests the next iterator item only when downstream asks, but the iterator implementation might have already loaded a page, buffered rows, or contacted a dependency. Prefer the iterator form over a list-returning blocking form when a synchronous library exposes a cursor or reader, but do not mistake it for full end-to-end backpressure.
 

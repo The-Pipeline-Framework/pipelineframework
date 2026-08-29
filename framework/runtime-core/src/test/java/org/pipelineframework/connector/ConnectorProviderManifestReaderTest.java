@@ -328,6 +328,41 @@ class ConnectorProviderManifestReaderTest {
     }
 
     @Test
+    void schemaFourRequiresAndReadsStructuralQueryCardinality() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_MANY"}]}]}
+            """));
+
+        assertEquals(QueryOperationCardinality.ONE_TO_MANY,
+            manifest.providers().getFirst().operations().getFirst().queryCardinality().orElseThrow());
+
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"find.one","kind":"tpf:query","majorVersion":1}]}]}
+                """)));
+        assertTrue(missing.getMessage().contains("queryCardinality"));
+
+        IllegalArgumentException nonQuery = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"send","kind":"tpf:command","majorVersion":1,
+                "queryCardinality":"ONE_TO_MANY"}]}]}
+                """)));
+        assertTrue(nonQuery.getMessage().contains("valid only for Query operations"));
+
+        IllegalArgumentException unaryCache = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"find.many","kind":"tpf:query","majorVersion":1,
+                "queryCardinality":"ONE_TO_MANY","queryCapabilities":{"cacheability":"LIVE_ONLY"}}]}]}
+                """)));
+        assertTrue(unaryCache.getMessage().contains("must not declare unary Query cache capabilities"));
+    }
+
+    @Test
     void rejectsCommandIdentityWhenQueryCapabilitiesAreRequested() {
         ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
             {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},

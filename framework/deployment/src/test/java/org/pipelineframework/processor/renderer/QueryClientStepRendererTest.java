@@ -91,6 +91,24 @@ class QueryClientStepRendererTest {
     }
 
     @Test
+    void rendersStreamingQueryIntoTheExistingOneToManyStepContractWithoutGenericCache() throws IOException {
+        PipelineStepModel model = model(
+            ClassName.get("com.example.common.domain", "CustomerRiskLookup"),
+            ClassName.get("com.example.common.domain", "CustomerRiskSnapshot"),
+            StreamingShape.UNARY_STREAMING);
+
+        new QueryClientStepRenderer().render(model, generationContext("LOCAL"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+        assertTrue(source.contains("implements StepOneToMany<CustomerRiskLookup, CustomerRiskSnapshot>"));
+        assertTrue(source.contains("Multi<CustomerRiskSnapshot> applyOneToMany(CustomerRiskLookup input)"));
+        assertTrue(source.contains("support.queryOneToMany(descriptorFactory.descriptor(\"LoadCustomerRisk\", "));
+        assertTrue(!source.contains("CacheKeyTarget"));
+        assertTrue(!source.contains("ProviderQueryStep"));
+    }
+
+    @Test
     void fallsBackToConfiguredBasePackageForNonStandardDomainPackage() throws IOException {
         PipelineStepModel model = model(
             ClassName.get("com.example.risk.domain", "CustomerRiskLookup"),
@@ -248,12 +266,20 @@ class QueryClientStepRendererTest {
     }
 
     private PipelineStepModel model(ClassName inputType, ClassName outputType) {
+        return model(inputType, outputType, StreamingShape.UNARY_UNARY);
+    }
+
+    private PipelineStepModel model(
+        ClassName inputType,
+        ClassName outputType,
+        StreamingShape streamingShape
+    ) {
         return new PipelineStepModel.Builder()
             .serviceName("LoadCustomerRisk")
             .generatedName("LoadCustomerRiskService")
             .servicePackage("com.example.risk")
             .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
+            .streamingShape(streamingShape)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(inputType, null, false))
             .outputMapping(new TypeMapping(outputType, null, false))

@@ -120,6 +120,84 @@ class QueryStepDescriptorFactoryTest {
     }
 
     @Test
+    void streamingNativeQueryDescriptorUsesManifestCardinalityAndRejectsRuntimeMismatch() throws Exception {
+        Path metadataRoot = tempDir.resolve("streaming-connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":4,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "operations":[{"id":"document.find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_MANY"}]}]}
+            """);
+        Path explicit = tempDir.resolve("native-streaming-query.yaml");
+        Files.writeString(explicit, streamingPipelineYaml("ONE_TO_MANY"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessFindDocumentsService",
+                    "org.example.DocumentQuery",
+                    "org.example.Document").await().atMost(Duration.ofSeconds(2));
+                assertEquals("ONE_TO_MANY", descriptor.cardinality());
+                assertTrue(descriptor.queryCapabilities().isEmpty());
+                assertEquals(List.of("accountId"), descriptor.keyFields());
+            } finally {
+                factory.shutdown();
+            }
+
+            Files.writeString(explicit, streamingPipelineYaml("ONE_TO_ONE"));
+            QueryStepDescriptorFactory mismatchFactory = new QueryStepDescriptorFactory();
+            try {
+                RuntimeException mismatch = assertThrows(RuntimeException.class, () -> mismatchFactory.descriptor(
+                    "ProcessFindDocumentsService",
+                    "org.example.DocumentQuery",
+                    "org.example.Document").await().atMost(Duration.ofSeconds(2)));
+                assertTrue(mismatch.getMessage().contains("does not match provider operation cardinality ONE_TO_MANY"));
+            } finally {
+                mismatchFactory.shutdown();
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
+    void unaryNativeQueryDescriptorUsesTheNormalizedDeclaredCardinality() throws Exception {
+        Path metadataRoot = tempDir.resolve("unary-connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":4,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "operations":[{"id":"document.find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_ONE"}]}]}
+            """);
+        Path explicit = tempDir.resolve("native-unary-query.yaml");
+        Files.writeString(explicit, streamingPipelineYaml("\" ONE_TO_ONE \""));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessFindDocumentsService",
+                    "org.example.DocumentQuery",
+                    "org.example.Document").await().atMost(Duration.ofSeconds(2));
+                assertEquals("ONE_TO_ONE", descriptor.cardinality());
+            } finally {
+                factory.shutdown();
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void nativeQueryDescriptorRejectsAnUnknownBinding() throws Exception {
         Path explicit = tempDir.resolve("unknown-native-query.yaml");
         Files.writeString(explicit, """
@@ -181,5 +259,25 @@ class QueryStepDescriptorFactoryTest {
                 capture:
                   keyFields: [customerId]
             """.formatted(version);
+    }
+
+    private static String streamingPipelineYaml(String cardinality) {
+        return """
+            basePackage: org.example
+            connectors:
+              search:
+                provider: acme.search
+                version: 1
+            steps:
+              - name: Find Documents
+                kind: query
+                cardinality: %s
+                operation: document.find.many
+                using: search
+                capture:
+                  keyFields: [accountId]
+                input: org.example.DocumentQuery
+                output: org.example.Document
+            """.formatted(cardinality);
     }
 }

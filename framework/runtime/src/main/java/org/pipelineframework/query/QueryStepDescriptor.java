@@ -65,8 +65,10 @@ public final class QueryStepDescriptor {
         this.inputType = requireText(inputType, "inputType");
         this.outputType = requireText(outputType, "outputType");
         this.cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality;
-        if (!"ONE_TO_ONE".equalsIgnoreCase(this.cardinality)) {
-            throw new IllegalArgumentException("Query step '" + stepId + "' supports only ONE_TO_ONE cardinality in v1");
+        if (!"ONE_TO_ONE".equalsIgnoreCase(this.cardinality)
+            && !"ONE_TO_MANY".equalsIgnoreCase(this.cardinality)) {
+            throw new IllegalArgumentException(
+                "Query step '" + stepId + "' requires ONE_TO_ONE or ONE_TO_MANY cardinality");
         }
         this.keyFields = keyFields == null ? List.of() : List.copyOf(keyFields);
         this.jpa = Objects.requireNonNull(jpa, "jpa query config must not be null");
@@ -77,8 +79,13 @@ public final class QueryStepDescriptor {
         this.config = Map.copyOf(Objects.requireNonNull(config, "query operation config must not be null"));
         this.queryCapabilities = Objects.requireNonNull(queryCapabilities, "query capabilities must not be null");
         this.negativeCacheTtl = Objects.requireNonNull(negativeCacheTtl, "negative cache TTL must not be null");
-        if (this.nativeSelector.isPresent() != this.queryCapabilities.isPresent()) {
-            throw new IllegalArgumentException("native query descriptors must declare query capabilities");
+        if (this.nativeSelector.isPresent() && "ONE_TO_ONE".equalsIgnoreCase(this.cardinality)
+            && this.queryCapabilities.isEmpty()) {
+            throw new IllegalArgumentException("unary native query descriptors must declare query capabilities");
+        }
+        if ("ONE_TO_MANY".equalsIgnoreCase(this.cardinality)
+            && (this.queryCapabilities.isPresent() || this.negativeCacheTtl.isPresent())) {
+            throw new IllegalArgumentException("streaming native query descriptors do not support generic Query cache metadata");
         }
     }
 
@@ -98,6 +105,31 @@ public final class QueryStepDescriptor {
             selector,
             config,
             QueryCapabilities.conservative(),
+            Optional.empty());
+    }
+
+    public static QueryStepDescriptor nativeStreamingQuery(
+        String stepId,
+        String inputType,
+        String outputType,
+        NativeQuerySelector selector,
+        Map<String, Object> config,
+        List<String> keyFields
+    ) {
+        NativeQuerySelector checked = Objects.requireNonNull(selector, "native query selector must not be null");
+        return new QueryStepDescriptor(
+            stepId,
+            "native-binding:" + checked.binding().value() + "/" + checked.operationIdentity().operationId(),
+            "native",
+            "v" + checked.operationIdentity().majorVersion(),
+            inputType,
+            outputType,
+            "ONE_TO_MANY",
+            keyFields,
+            Optional.empty(),
+            Optional.of(checked),
+            config,
+            Optional.empty(),
             Optional.empty());
     }
 

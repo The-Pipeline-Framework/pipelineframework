@@ -20,13 +20,31 @@ final class ConnectorOperationTypes {
     static Optional<ConnectorOperationTypeContract> contract(ConnectorOperation operation) {
         Class<?> family = operation instanceof CommandOperation<?, ?, ?>
             ? CommandOperation.class
-            : operation instanceof QueryOperation<?, ?, ?> ? QueryOperation.class : null;
+            : operation instanceof QueryOperation<?, ?, ?>
+                ? QueryOperation.class
+                : operation instanceof StreamingQueryOperation<?, ?, ?> ? StreamingQueryOperation.class : null;
         if (family == null) {
             return Optional.empty();
         }
         return findArguments(operation.getClass(), family, Map.of())
             .map(arguments -> new ConnectorOperationTypeContract(
                 normalize(arguments[0]), output(arguments[2])));
+    }
+
+    static Optional<Class<?>> configurationType(ConnectorOperation operation, Class<?> family) {
+        return findArguments(operation.getClass(), family, Map.of())
+            .flatMap(arguments -> rawClass(arguments[1]));
+    }
+
+    private static Optional<Class<?>> rawClass(Type type) {
+        if (type instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        if (type instanceof ParameterizedType parameterized
+            && parameterized.getRawType() instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        return Optional.empty();
     }
 
     private static Optional<String> output(Type type) {

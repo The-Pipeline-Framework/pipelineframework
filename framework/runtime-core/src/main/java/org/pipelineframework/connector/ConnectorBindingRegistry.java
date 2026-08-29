@@ -285,6 +285,18 @@ public final class ConnectorBindingRegistry {
             QueryOperation.class);
     }
 
+    public synchronized StreamingQueryOperation<?, ?, ?> requireStreamingQueryOperation(
+        ConnectorBindingName name,
+        String operationId,
+        int operationMajorVersion
+    ) {
+        Binding binding = requireActiveBinding(name);
+        return binding.registry().requireExecutionOperation(
+            new ConnectorOperationIdentity(
+                binding.lease().provider().id(), operationId, ConnectorOperationKind.QUERY, operationMajorVersion),
+            StreamingQueryOperation.class);
+    }
+
     /** Returns the durable identity of one configured object-source operation. */
     public ConnectorPayloadOrigin objectSourceOrigin(
         ConnectorBindingName name,
