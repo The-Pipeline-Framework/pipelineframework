@@ -220,6 +220,14 @@ or cancellation aborts the partial observation; a later attempt executes the Que
 Query cache policies and `negativeCacheTtl` are unary semantics and are rejected for streaming
 operations. Dynamic operation dispatch is unary and cannot expose a streaming Query.
 
+For production restart safety, select `pipeline.query.capture-store.provider=dynamo` and provision
+the configured table with string key `capture_key` and numeric key `revision`. The default
+`memory` provider remains intended for tests and single-process development. Dynamo capture
+coordinates streaming writers across replicas, redacts Query inputs to fingerprints, and preserves
+the existing generic-cache-miss → capture-lookup → live-provider ordering. See
+[Capture, Replay, and Persistence](../../design/jpa-query-connector/capture-and-persistence.md#durable-dynamodb-capture)
+for provisioning, IAM, limits, and recovery behavior.
+
 ## Command Id Generator
 
 The command id must be stable for the same business command. Do not include the current time, a random UUID, or a process-local counter.

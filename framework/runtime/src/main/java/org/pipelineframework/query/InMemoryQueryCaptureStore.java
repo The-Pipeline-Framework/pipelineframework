@@ -12,10 +12,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.quarkus.arc.properties.IfBuildProperty;
+
 /**
  * In-memory query capture store for tests, local development, and unmanaged defaults.
  */
 @ApplicationScoped
+@IfBuildProperty(
+    name = "pipeline.query.capture-store.provider",
+    stringValue = "memory",
+    enableIfMissing = true)
 public class InMemoryQueryCaptureStore implements QueryCaptureStore {
     private final ConcurrentMap<String, QueryCaptureRecord> records = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, List<StreamingQueryCaptureItem>> streamingRecords = new ConcurrentHashMap<>();
