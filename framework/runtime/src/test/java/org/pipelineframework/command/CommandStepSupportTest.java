@@ -104,6 +104,26 @@ class CommandStepSupportTest {
   }
 
   @Test
+  void storeFailureIsNotInterpretedAsProviderOutcome() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    CommandEffectStore failingStore = mock(CommandEffectStore.class);
+    when(failingStore.find("tenant", "cmd-doc-1"))
+        .thenReturn(Uni.createFrom().failure(new CommandEffectStoreException("DynamoDB unavailable")));
+    CommandStepSupport failingSupport = new CommandStepSupport(
+        List.of(connector),
+        List.of(failingStore),
+        config(OrchestratorMode.QUEUE_ASYNC));
+
+    assertThrows(CommandEffectStoreException.class,
+        () -> failingSupport.<CommandInput, CommandOutput>execute(
+                descriptor,
+                new StaticCommandIdGenerator(),
+                new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+    assertEquals(0, connector.calls.get());
+  }
+
+  @Test
   void preservesInvocationContextAcrossAsyncDescriptorResolution() {
     PipelineExecutionContext expectedContext = new PipelineExecutionContext("async-tenant", "async-exec", 7);
     PipelineExecutionContextHolder.set(expectedContext);

@@ -6,12 +6,17 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
 
 /**
  * In-memory command effect store for tests, dev, and local examples.
  */
 @ApplicationScoped
+@IfBuildProperty(
+    name = "pipeline.command.effect-store.provider",
+    stringValue = "memory",
+    enableIfMissing = true)
 public class InMemoryCommandEffectStore implements CommandEffectStore {
     private final Map<String, CommandEffectRecord> records = new ConcurrentHashMap<>();
 
