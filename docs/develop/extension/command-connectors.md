@@ -4,16 +4,22 @@ Command connectors adapt a typed pipeline command to an external system. Use one
 
 ## Blocking Work And Connector-Owned Limits
 
-`CommandConnector` execution is reactive. A connector that calls a blocking client must explicitly offload that work to an application-owned worker or executor; generated command steps do not offload it automatically. Defer the blocking invocation until subscription, then offload it:
+The legacy `CommandConnector` bridge remains provider-managed. A legacy connector that calls a
+blocking client must explicitly offload that work. Native provider operations instead implement
+`BlockingCommandOperation`; TPF invokes the method on a worker and flattens its returned
+`CompletionStage`, so provider code needs neither Mutiny nor a private offload executor.
+
+For the legacy bridge, defer the blocking invocation until subscription, then offload it:
 
 ```java
 return Uni.createFrom().item(() -> manager.callBlocking(request.input()))
     .runSubscriptionOn(applicationManager.workerExecutor());
 ```
 
-Do not call the blocking client while constructing the `Uni`; a connector test should assert the executing thread. `CommandStepSupport` captures the execution context before an asynchronously loaded descriptor resolves and supplies it in the `CommandRequest`. Long-lived clients, sessions, and provider-specific concurrency limits belong to the connector or its application-scoped manager.
+Do not call the blocking client while constructing the `Uni`; a connector test should assert the executing thread. `CommandStepSupport` captures the execution context before an asynchronously loaded descriptor resolves and supplies it in the `CommandRequest`.
 
-The command `config` map is immutable connector-visible application configuration. A value such as `maxConcurrency: 1` is not a framework-enforced named-command limit; the connector must implement any such limit itself.
+Implement `SerializedOperation` when one configured binding and operation must allow only one
+in-flight provider stage. Numeric and wider provider/connection limits remain provider-owned.
 
 For YAML setup, see [Command Steps](/deploy/orchestrator-runtime/command). This page covers the Java code.
 
@@ -60,8 +66,6 @@ steps:
       requireIdempotency: true
       requireReconciliation: true
       requiredExecutionPosture: AUTOMATED
-      requiredExecutionStyle: PROVIDER_MANAGED
-      requiredConcurrencyScope: PROVIDER_MANAGED
       minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
@@ -87,8 +91,6 @@ connector:
     requireIdempotency: true
     requireReconciliation: true
     requiredExecutionPosture: AUTOMATED
-    requiredExecutionStyle: PROVIDER_MANAGED
-    requiredConcurrencyScope: PROVIDER_MANAGED
     minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
@@ -141,8 +143,10 @@ The queue-async control plane may deliberately re-drive a failed execution with
 the normal generated Command client, which consumes that intent only at the targeted Command step.
 `CommandStepSupport.retry(...)` remains the lower-level runtime primitive: a retry-capable effect
 store atomically appends and claims one new attempt under the same logical `CommandId`. `DLQ`,
-`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers. Native commands do not run with
-framework-managed blocking execution or bounded framework-managed concurrency.
+`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers. Ordinary native operations run directly;
+only `BlockingCommandOperation` receives framework worker execution. Only `SerializedOperation`
+receives framework-managed concurrency, scoped to its configured binding and operation for the full
+provider-stage lifetime.
 The transition identity and logical `CommandId` derive a stable attempt identity for that
 one admission. If the transition worker is recovered after the attempt has already failed,
 the same admission reports the recorded retryable failure instead of appending another attempt.

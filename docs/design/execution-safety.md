@@ -20,6 +20,8 @@ Timeout bounds one started invocation. Retry and backoff decide whether a failed
 | `BlockingIteratorPacer` | An optional blocking emission-rate limiter. It is neither reactive demand propagation nor circuit admission. |
 | Brokered durable await | TPF bounds unresolved provider interactions and preserves live-segment demand where possible. Its outbound dispatch is not yet a generic circuit boundary. |
 | Command, checkpoint, and generic connector effects | TPF owns their execution lifecycle, but this release does not wrap them with circuit admission. |
+| `BlockingQueryOperation` and `BlockingCommandOperation` | TPF invokes the provider method on a worker and flattens its returned `CompletionStage`. |
+| `SerializedOperation` | TPF admits one provider stage per connector binding and operation until that complete stage terminates. |
 | Queue-async transition worker | TPF can use circuit admission only with shared circuit protection and finite durable circuit deferral. |
 
 ## Backpressure And Circuit Admission
@@ -37,6 +39,17 @@ At an eligible TPF-managed boundary, circuit admission records health-affecting 
 For queue-async transition work under shared protection, the durable scheduler uses that hint to defer the encountered execution. It does not scan or park unrelated executions, and the remote-attempt budget remains unchanged.
 
 ## Reactive And Blocking Examples
+
+Native Query and Command providers keep a JDK-only async API. An ordinary operation is invoked
+directly and may return an incomplete stage completed by its own executor or reactive client. A
+blocking specialization is invoked on a framework worker; provider code does not need Mutiny or a
+private offload executor. Combining `BlockingOperation` with `SerializedOperation` does not retain
+the worker while an incomplete stage is pending: blocking ownership ends when the invocation method
+returns, while the serialization gate remains until the stage terminates.
+
+Serialization is scoped to `(connector binding, operation ID, operation major version)`. A second
+binding is independent. Queued cancellation skips provider invocation; cancellation after admission
+is forwarded best-effort without releasing the gate before provider termination.
 
 A reactive streaming pipeline can slow source parsing when an await or downstream step has no demand. A `BlockingIteratorService` is different: TPF requests the next iterator item only when downstream asks, but the iterator implementation might have already loaded a page, buffered rows, or contacted a dependency. Prefer the iterator form over a list-returning blocking form when a synchronous library exposes a cursor or reader, but do not mistake it for full end-to-end backpressure.
 

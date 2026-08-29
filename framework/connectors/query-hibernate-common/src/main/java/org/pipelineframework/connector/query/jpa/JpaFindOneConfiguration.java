@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Bindable operation configuration for the {@code jpa.query/find.one} Query operation. */
+/** Bindable operation configuration shared by Hibernate Query providers. */
 public record JpaFindOneConfiguration(
     String entity,
     Map<String, JpaPredicate> where,

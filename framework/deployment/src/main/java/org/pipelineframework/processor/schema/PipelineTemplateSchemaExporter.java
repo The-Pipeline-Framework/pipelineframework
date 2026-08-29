@@ -1953,8 +1953,6 @@ public final class PipelineTemplateSchemaExporter {
         "requireIdempotency": { "type": "boolean" },
         "requireReconciliation": { "type": "boolean" },
         "requiredExecutionPosture": { "type": "string", "enum": ["UNSPECIFIED", "AUTOMATED", "ATTENDED"] },
-        "requiredExecutionStyle": { "type": "string", "enum": ["UNSPECIFIED", "NON_BLOCKING", "BLOCKING", "PROVIDER_MANAGED"] },
-        "requiredConcurrencyScope": { "type": "string", "enum": ["UNSPECIFIED", "UNBOUNDED", "PROVIDER_SCOPED", "CONNECTION_SCOPED", "OPERATION_SCOPED", "PROVIDER_MANAGED"] },
         "minimumMachineConfirmation": { "type": "string", "enum": ["NONE", "SUBMITTED", "PROVIDER_ACKNOWLEDGED", "READ_AFTER_WRITE_VERIFIED"] },
         "requireUserConfirmation": { "type": "boolean" }
       },

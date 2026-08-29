@@ -7,6 +7,8 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.junit.jupiter.api.Test;
 
 class ConnectorProviderArtifactsTest {
@@ -31,6 +33,32 @@ class ConnectorProviderArtifactsTest {
         assertTrue(json.contains("line\\nfeed"));
         assertTrue(json.contains("tab\\tvalue"));
         assertTrue(json.contains("unit\\u0001separator"));
+        assertTrue(json.contains("\"schemaVersion\":3"));
+        assertTrue(!json.contains("executionCapabilities"));
         assertEquals(manifest, parsed);
+    }
+
+    @Test
+    void resolvesTypeContractsThroughBlockingFamilySpecialization() {
+        ConnectorOperationDescriptor descriptor = ConnectorDescriptors.operation(new BlockingStringQuery());
+
+        ConnectorOperationTypeContract contract = descriptor.typeContract().orElseThrow();
+        assertEquals("string", contract.inputType());
+        assertEquals(Optional.of("integer"), contract.outputType());
+    }
+
+    private static final class BlockingStringQuery
+        implements BlockingQueryOperation<String, ConnectorConfigurationDocument, Integer> {
+        @Override
+        public String id() {
+            return "blocking.string";
+        }
+
+        @Override
+        public CompletionStage<QueryOutcome<Integer>> query(
+            QueryInvocation<String, ConnectorConfigurationDocument, Integer> invocation
+        ) {
+            return CompletableFuture.completedFuture(new QueryOutcome.Found<>(1));
+        }
     }
 }

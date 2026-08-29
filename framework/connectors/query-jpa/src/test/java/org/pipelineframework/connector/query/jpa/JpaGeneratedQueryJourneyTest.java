@@ -2,7 +2,6 @@ package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.Base64;
@@ -88,7 +87,6 @@ class JpaGeneratedQueryJourneyTest {
         assertEquals(expected, actual);
         Thread loadThread = InvoiceFilesEntity.LAST_LOAD_THREAD.get();
         assertNotEquals(callerThread, loadThread);
-        assertTrue(loadThread.isVirtual(), "JPA reads must run on the connector's virtual-thread executor");
     }
 
     private void replaceWith(Class<?> entityType, Object entity) {

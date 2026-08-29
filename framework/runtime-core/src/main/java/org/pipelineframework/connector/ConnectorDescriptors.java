@@ -14,9 +14,7 @@ final class ConnectorDescriptors {
         return new ConnectorProviderDescriptor(
             provider.id(),
             provider.version(),
-            provider.configurationSchema().map(ConnectorConfigSchema::descriptor),
-            optional(provider.executionCapabilities(), ConnectorExecutionCapabilities.conservative(),
-                "connector provider execution capabilities"));
+            provider.configurationSchema().map(ConnectorConfigSchema::descriptor));
     }
 
     static ConnectorOperationDescriptor operation(ConnectorOperation operation) {

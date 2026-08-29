@@ -28,6 +28,7 @@ import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorExecutionContext;
+import org.pipelineframework.connector.ConnectorOperationInvocationCoordinator;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
@@ -45,6 +46,8 @@ public class QueryStepSupport {
     private final ConnectorRuntimeContext runtimeContext;
     private final ObjectMapper json = PipelineJson.mapper();
     private final QueryCapturePayloadCodec capturePayloadCodec = new QueryCapturePayloadCodec(json);
+    private final ConnectorOperationInvocationCoordinator invocationCoordinator =
+        new ConnectorOperationInvocationCoordinator();
 
     @Inject
     public QueryStepSupport(
@@ -378,22 +381,14 @@ public class QueryStepSupport {
         Optional<Function<O, ?>> localResultMapper,
         ConnectorBindingRegistry bindings
     ) {
-        CompletionStage<QueryOutcome<Object>> stage;
-        try {
-            stage = operation.query(new QueryInvocation<>(
+        CompletionStage<QueryOutcome<Object>> stage = invocationCoordinator.invoke(selector.binding(), operation, () ->
+            operation.query(new QueryInvocation<>(
                 input,
                 boundConfiguration,
                 outputType,
                 connectorExecutionContext(descriptor),
                 Optional.of(bindings::materialize),
-                localResultMapper));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(unwrapTransportFailure(failure));
-        }
-        if (stage == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "native query operation " + selector.operationIdentity() + " returned a null CompletionStage"));
-        }
+                localResultMapper)));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(QueryStepSupport::unwrapTransportFailure);
     }

@@ -258,22 +258,14 @@ class ConnectorProviderManifestReaderTest {
     }
 
     @Test
-    void reportsMalformedExecutionCapabilitiesWithManifestDiagnostics() {
-        IllegalArgumentException executionStyle = assertThrows(IllegalArgumentException.class,
+    void rejectsDeletedExecutionCapabilitiesField() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
             () -> ConnectorProviderManifestReader.read(input("""
-                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
-                "executionCapabilities":{"executionStyle":"ASYNC","concurrencyScope":"PROVIDER_MANAGED"},"operations":[]}]}
+                {"schemaVersion":3,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "executionCapabilities":{"executionStyle":"NON_BLOCKING","concurrencyScope":"PROVIDER_MANAGED"},
+                "operations":[]}]}
                 """)));
-        assertEquals("malformed connector provider manifest: field 'executionStyle' must be a ConnectorExecutionStyle",
-            executionStyle.getMessage());
-
-        IllegalArgumentException concurrencyScope = assertThrows(IllegalArgumentException.class,
-            () -> ConnectorProviderManifestReader.read(input("""
-                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
-                "executionCapabilities":{"executionStyle":"NON_BLOCKING","concurrencyScope":"BOUNDED"},"operations":[]}]}
-                """)));
-        assertEquals("malformed connector provider manifest: field 'concurrencyScope' must be a ConnectorConcurrencyScope",
-            concurrencyScope.getMessage());
+        assertEquals("malformed connector provider manifest: unsupported field 'executionCapabilities'", rejected.getMessage());
     }
 
     @Test

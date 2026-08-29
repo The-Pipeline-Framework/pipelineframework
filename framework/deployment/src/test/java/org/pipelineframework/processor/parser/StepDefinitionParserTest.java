@@ -697,7 +697,6 @@ class StepDefinitionParserTest {
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
             {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
-            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
             "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
             "reconciliationSupported":true,"executionPosture":"AUTOMATED",
@@ -721,8 +720,6 @@ class StepDefinitionParserTest {
                     requireIdempotency: true
                     requireReconciliation: true
                     requiredExecutionPosture: "AUTOMATED"
-                    requiredExecutionStyle: "PROVIDER_MANAGED"
-                    requiredConcurrencyScope: "PROVIDER_MANAGED"
                     minimumMachineConfirmation: "PROVIDER_ACKNOWLEDGED"
                 input: "com.example.SearchIndexDocument"
                 output: "com.example.SearchIndexWriteResult"
@@ -1135,9 +1132,9 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsInvalidNativeCommandPolicyEnumValues() throws IOException {
-        assertNativeCommandPolicyRejected("requiredExecutionStyle: \"NOT_A_STYLE\"",
-            "requiredExecutionStyle has unsupported value 'NOT_A_STYLE'");
+    void rejectsDeletedAndInvalidNativeCommandPolicyFields() throws IOException {
+        assertNativeCommandPolicyRejected("requiredExecutionStyle: \"PROVIDER_MANAGED\"",
+            "unsupported field 'requiredExecutionStyle'");
         assertNativeCommandPolicyRejected("requiredExecutionPosture: \"ROBOT\"",
             "requiredExecutionPosture has unsupported value 'ROBOT'");
     }
@@ -3177,7 +3174,6 @@ class StepDefinitionParserTest {
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
             {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
-            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
             "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
             "reconciliationSupported":true,"maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",

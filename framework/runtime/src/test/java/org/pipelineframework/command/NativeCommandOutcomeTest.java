@@ -44,9 +44,7 @@ import org.pipelineframework.connector.ConnectorCompletionStages;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.ConnectorConfigurationSnapshot;
-import org.pipelineframework.connector.ConnectorExecutionCapabilities;
 import org.pipelineframework.connector.ConnectorExecutionContext;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperation;
 import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
@@ -57,7 +55,6 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderVersion;
 import org.pipelineframework.connector.ConnectorRegistry;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
 
 class NativeCommandOutcomeTest {
     private final InMemoryCommandEffectStore store = new InMemoryCommandEffectStore();
@@ -191,7 +188,7 @@ class NativeCommandOutcomeTest {
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done", CommandConfirmation.none(), Set.of(), List.of());
         CommandPolicy machinePolicy = new CommandPolicy(
-            false, false, false, Optional.empty(), Optional.empty(),
+            false, false, false, Optional.empty(),
             Optional.of(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED), false);
 
         CommandOutcomeException machineFailure = assertThrows(CommandOutcomeException.class, () -> support.<String, String>execute(
@@ -210,7 +207,7 @@ class NativeCommandOutcomeTest {
             new CommandConfirmation(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, false),
             Set.of(), List.of());
         CommandPolicy userPolicy = new CommandPolicy(
-            false, false, false, Optional.empty(), Optional.empty(), Optional.empty(), true);
+            false, false, false, Optional.empty(), Optional.empty(), true);
         CommandOutcomeException userFailure = assertThrows(CommandOutcomeException.class, () -> support.<String, String>execute(
             descriptor(userPolicy), (ignored, input) -> "missing-user-confirmation", "input")
             .await().atMost(Duration.ofSeconds(5)));
@@ -230,7 +227,7 @@ class NativeCommandOutcomeTest {
             new CommandConfirmation(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true),
             Set.of(), List.of());
         CommandPolicy policy = new CommandPolicy(
-            false, false, false, Optional.empty(), Optional.empty(),
+            false, false, false, Optional.empty(),
             Optional.of(CommandMachineConfirmation.SUBMITTED), true);
 
         assertEquals("done", support.<String, String>execute(
@@ -398,22 +395,6 @@ class NativeCommandOutcomeTest {
     }
 
     @Test
-    void rejectsBlockingNativeProvidersBeforeCreatingAnEffect() {
-        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
-        CommandStepSupport blockingSupport = new CommandStepSupport(
-            new ConnectorRegistry(List.of(new NativeProvider(operation, new ConnectorExecutionCapabilities(
-                ConnectorExecutionStyle.BLOCKING, ConnectorConcurrencyScope.PROVIDER_MANAGED)))),
-            List.of(store), queueAsyncConfig());
-
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> blockingSupport.<String, String>execute(
-            descriptor(), (ignored, input) -> "blocking", "input").await().atMost(Duration.ofSeconds(5)));
-
-        assertTrue(failure.getMessage().contains("declares blocking execution"));
-        assertFalse(store.find("tenant", "blocking").await().atMost(Duration.ofSeconds(5)).isPresent());
-        assertEquals(0, operation.invocations);
-    }
-
-    @Test
     void normalizesProviderThrowsWrappedFailuresAndNullResults() {
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
         IllegalArgumentException immediate = new IllegalArgumentException("immediate-provider-bug");
@@ -544,7 +525,6 @@ class NativeCommandOutcomeTest {
 
     public static final class NativeProvider implements ConnectorProvider<Void> {
         private final NativeOperation operation;
-        private final ConnectorExecutionCapabilities executionCapabilities;
         private int starts;
 
         public NativeProvider() {
@@ -554,13 +534,7 @@ class NativeCommandOutcomeTest {
         }
 
         private NativeProvider(NativeOperation operation) {
-            this(operation, new ConnectorExecutionCapabilities(
-                ConnectorExecutionStyle.PROVIDER_MANAGED, ConnectorConcurrencyScope.PROVIDER_MANAGED));
-        }
-
-        private NativeProvider(NativeOperation operation, ConnectorExecutionCapabilities executionCapabilities) {
             this.operation = operation;
-            this.executionCapabilities = executionCapabilities;
         }
 
         @Override
@@ -576,11 +550,6 @@ class NativeCommandOutcomeTest {
         @Override
         public Collection<? extends ConnectorOperation> operations() {
             return List.of(operation);
-        }
-
-        @Override
-        public org.pipelineframework.connector.ConnectorExecutionCapabilities executionCapabilities() {
-            return executionCapabilities;
         }
 
         @Override

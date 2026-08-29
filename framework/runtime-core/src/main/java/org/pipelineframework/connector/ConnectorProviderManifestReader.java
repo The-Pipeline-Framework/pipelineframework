@@ -44,11 +44,10 @@ public final class ConnectorProviderManifestReader {
     }
 
     private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value, int schemaVersion) {
-        requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations", "protocolTypes");
+        requireOnly(value, "id", "version", "configurationSchema", "operations", "protocolTypes");
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
-            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema,
-            optionalExecutionCapabilities(value));
+            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema);
         if (provider.id().isFrameworkReserved()) {
             throw new IllegalArgumentException(
                 "connector provider ID is reserved for framework use: " + provider.id().value());
@@ -262,17 +261,6 @@ public final class ConnectorProviderManifestReader {
     private static ConnectorProviderVersion version(Map<String, Object> value) {
         requireOnly(value, "major", "minor");
         return new ConnectorProviderVersion(integer(value, "major"), integer(value, "minor"));
-    }
-
-    private static Optional<ConnectorExecutionCapabilities> optionalExecutionCapabilities(Map<String, Object> value) {
-        if (!value.containsKey("executionCapabilities")) {
-            return Optional.empty();
-        }
-        Map<String, Object> capabilities = object(value.get("executionCapabilities"), "executionCapabilities");
-        requireOnly(capabilities, "executionStyle", "concurrencyScope");
-        return Optional.of(new ConnectorExecutionCapabilities(
-            enumValue(ConnectorExecutionStyle.class, string(capabilities, "executionStyle"), "executionStyle"),
-            enumValue(ConnectorConcurrencyScope.class, string(capabilities, "concurrencyScope"), "concurrencyScope")));
     }
 
     private static Optional<CommandCapabilities> optionalCommandCapabilities(Map<String, Object> value) {

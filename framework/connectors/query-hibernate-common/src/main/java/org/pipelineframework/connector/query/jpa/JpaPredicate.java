@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** Connector-domain predicate used by the {@code jpa.query/find.one} operation. */
+/** Connector-domain predicate shared by Hibernate Query providers. */
 public record JpaPredicate(String operator, List<Object> values) {
     private static final Set<String> SUPPORTED_OPERATORS = Set.of(
         "eq", "in", "gt", "gte", "lt", "lte", "between", "like", "isNull");

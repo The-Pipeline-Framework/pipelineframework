@@ -1,6 +1,9 @@
 # JPA Query Connector
 
-The JPA query connector lets a pipeline declare a database read as an explicit `kind: query` step. Use it when mutable database state affects a downstream business decision.
+The Hibernate query connectors let a pipeline declare a database read as an explicit `kind: query`
+step. The blocking `jpa.query` provider uses Hibernate ORM/JPA; the non-blocking
+`hibernate.reactive.query` provider uses Hibernate Reactive. Both share the same validated HQL,
+predicate, cardinality, and projection model.
 
 The intended shape is:
 
@@ -15,7 +18,9 @@ instead of hiding the read inside:
 AssessCustomerRisk(CustomerRiskLookup) -> RiskDecision
 ```
 
-This keeps the decision facts visible in topology, tests, replay data, and audits. Application code owns the JPA entity, input record, output record, and decision step. TPF owns connector resolution, read-only JPA session handling, predicate binding, projection, duplicate-row handling, and captured query replay.
+This keeps the decision facts visible in topology, tests, replay data, and audits. Application code
+owns the entity, input record, output record, and decision step. TPF owns connector resolution,
+session handling, predicate binding, projection, duplicate-row handling, and captured query replay.
 
 ## When to use it
 
@@ -35,10 +40,18 @@ Keep ordinary repository code for local implementation details that do not defin
 
 ## Current shape
 
-- `connector: "jpa"` is the first-party query connector.
+- `jpa.query` is the blocking Hibernate ORM/JPA provider and is safely isolated on framework workers.
+- `hibernate.reactive.query` is the non-blocking Hibernate Reactive provider and uses
+  `Mutiny.SessionFactory` internally without making Mutiny part of the provider SPI.
 - `kind: "query"` is the framework-owned step type.
 - `cardinality: "ONE_TO_ONE"` and `result: "single"` are required.
 - Java record projection is the supported output shape.
-- App developers do not implement connector classes and do not call `Panache.withSession()`, Hibernate sessions, or transaction helpers from the query step.
+- App developers do not implement connector classes or call Hibernate sessions from the query step.
+
+Both providers expose a unary `CompletionStage` Query. That contract does not provide element-level
+backpressure; the reactive provider preserves non-blocking database execution and composes with TPF
+admission, while the blocking provider isolates synchronous database work on workers. Applications
+using Panache entities can use the reactive provider, but the connector itself does not depend on
+Panache.
 
 For the architectural rationale behind captured query steps, see [I/O Shell Absorption](/evolve/io-shell-absorption#captured-query-steps-for-dbapi-reads).
