@@ -48,10 +48,10 @@ final class CommandEffectRecordCodec {
             record.status(),
             encodeValue(record.input(), inputDeclaredType),
             encodeValue(record.output(), outputDeclaredType),
-            record.errorClass(),
-            record.errorMessage(),
-            record.outcome().orElse(null),
-            record.attempts(),
+            Optional.ofNullable(record.errorClass()),
+            Optional.ofNullable(record.errorMessage()),
+            record.outcome(),
+            record.attempts().stream().map(PersistedAttemptSnapshot::from).toList(),
             record.createdAtEpochMs(),
             record.updatedAtEpochMs(),
             inputDeclaredType,
@@ -86,12 +86,14 @@ final class CommandEffectRecordCodec {
                 snapshot.command(),
                 snapshot.commandId(),
                 Objects.requireNonNull(snapshot.status(), "command effect status must not be null"),
-                decodeValue(snapshot.input(), snapshot.inputDeclaredType()),
-                decodeValue(snapshot.output(), snapshot.outputDeclaredType()),
-                snapshot.errorClass(),
-                snapshot.errorMessage(),
-                Optional.ofNullable(snapshot.outcome()),
-                snapshot.attempts(),
+                decodeValue(requireOptional(snapshot.input(), "input value"), snapshot.inputDeclaredType())
+                    .orElse(null),
+                decodeValue(requireOptional(snapshot.output(), "output value"), snapshot.outputDeclaredType())
+                    .orElse(null),
+                requireOptional(snapshot.errorClass(), "error class").orElse(null),
+                requireOptional(snapshot.errorMessage(), "error message").orElse(null),
+                requireOptional(snapshot.outcome(), "outcome snapshot"),
+                snapshot.attempts().stream().map(PersistedAttemptSnapshot::toRecord).toList(),
                 snapshot.createdAtEpochMs(),
                 snapshot.updatedAtEpochMs());
             return new DecodedSnapshot(record, snapshot.inputDeclaredType(), snapshot.outputDeclaredType());
@@ -102,29 +104,30 @@ final class CommandEffectRecordCodec {
         }
     }
 
-    private TypedValueSnapshot encodeValue(Object value, String declaredType) {
+    private Optional<TypedValueSnapshot> encodeValue(Object value, String declaredType) {
         if (value == null) {
-            return null;
+            return Optional.empty();
         }
         String runtimeType = value.getClass().getName();
         verifyDeclaredType(declaredType, value.getClass());
         try {
             if (value instanceof MessageOrBuilder protobuf) {
-                return new TypedValueSnapshot(
+                return Optional.of(new TypedValueSnapshot(
                     runtimeType,
                     PROTOBUF_JSON_ENCODING,
-                    json.readTree(PROTOBUF_PRINTER.print(protobuf)));
+                    json.readTree(PROTOBUF_PRINTER.print(protobuf))));
             }
-            return new TypedValueSnapshot(runtimeType, JSON_ENCODING, json.valueToTree(value));
+            return Optional.of(new TypedValueSnapshot(runtimeType, JSON_ENCODING, json.valueToTree(value)));
         } catch (Exception failure) {
             throw new CommandEffectStoreException("Failed encoding durable value of type " + runtimeType, failure);
         }
     }
 
-    private Object decodeValue(TypedValueSnapshot snapshot, String declaredType) {
-        if (snapshot == null) {
-            return null;
+    private Optional<Object> decodeValue(Optional<TypedValueSnapshot> encoded, String declaredType) {
+        if (encoded.isEmpty()) {
+            return Optional.empty();
         }
+        TypedValueSnapshot snapshot = encoded.orElseThrow();
         requireText(snapshot.runtimeType(), "runtime type");
         requireText(snapshot.encoding(), "value encoding");
         if (snapshot.value() == null) {
@@ -133,12 +136,12 @@ final class CommandEffectRecordCodec {
         Class<?> runtimeType = resolve(snapshot.runtimeType());
         verifyDeclaredType(declaredType, runtimeType);
         try {
-            return switch (snapshot.encoding()) {
+            return Optional.of(switch (snapshot.encoding()) {
                 case JSON_ENCODING -> json.treeToValue(snapshot.value(), runtimeType);
                 case PROTOBUF_JSON_ENCODING -> decodeProtobuf(snapshot.value(), runtimeType);
                 default -> throw new CommandEffectStoreException(
                     "Unsupported durable Command value encoding " + snapshot.encoding());
-            };
+            });
         } catch (CommandEffectStoreException failure) {
             throw failure;
         } catch (Exception failure) {
@@ -153,7 +156,7 @@ final class CommandEffectRecordCodec {
                 "Durable protobuf value declares non-protobuf type " + runtimeType.getName());
         }
         Message.Builder builder = (Message.Builder) runtimeType.getMethod("newBuilder").invoke(null);
-        JsonFormat.parser().ignoringUnknownFields().merge(json.writeValueAsString(value), builder);
+        JsonFormat.parser().merge(json.writeValueAsString(value), builder);
         return builder.build();
     }
 
@@ -210,6 +213,13 @@ final class CommandEffectRecordCodec {
         }
     }
 
+    private static <T> Optional<T> requireOptional(Optional<T> value, String field) {
+        if (value == null) {
+            throw new CommandEffectStoreException("Durable Command effect is missing " + field + " metadata");
+        }
+        return value;
+    }
+
     record DecodedSnapshot(
         CommandEffectRecord record,
         String inputDeclaredType,
@@ -224,6 +234,44 @@ final class CommandEffectRecordCodec {
     ) {
     }
 
+    private record PersistedAttemptSnapshot(
+        String attemptId,
+        int attemptNumber,
+        String executionId,
+        CommandEffectStatus status,
+        Optional<String> errorClass,
+        Optional<String> errorMessage,
+        Optional<CommandOutcomeSnapshot> outcome,
+        long createdAtEpochMs,
+        long updatedAtEpochMs
+    ) {
+        private static PersistedAttemptSnapshot from(CommandEffectAttemptRecord attempt) {
+            return new PersistedAttemptSnapshot(
+                attempt.attemptId(),
+                attempt.attemptNumber(),
+                attempt.executionId(),
+                attempt.status(),
+                Optional.ofNullable(attempt.errorClass()),
+                Optional.ofNullable(attempt.errorMessage()),
+                attempt.outcome(),
+                attempt.createdAtEpochMs(),
+                attempt.updatedAtEpochMs());
+        }
+
+        private CommandEffectAttemptRecord toRecord() {
+            return new CommandEffectAttemptRecord(
+                attemptId,
+                attemptNumber,
+                executionId,
+                status,
+                requireOptional(errorClass, "attempt error class").orElse(null),
+                requireOptional(errorMessage, "attempt error message").orElse(null),
+                requireOptional(outcome, "attempt outcome snapshot"),
+                createdAtEpochMs,
+                updatedAtEpochMs);
+        }
+    }
+
     private record PersistedSnapshot(
         int schemaVersion,
         String tenantId,
@@ -232,12 +280,12 @@ final class CommandEffectRecordCodec {
         String command,
         String commandId,
         CommandEffectStatus status,
-        TypedValueSnapshot input,
-        TypedValueSnapshot output,
-        String errorClass,
-        String errorMessage,
-        CommandOutcomeSnapshot outcome,
-        List<CommandEffectAttemptRecord> attempts,
+        Optional<TypedValueSnapshot> input,
+        Optional<TypedValueSnapshot> output,
+        Optional<String> errorClass,
+        Optional<String> errorMessage,
+        Optional<CommandOutcomeSnapshot> outcome,
+        List<PersistedAttemptSnapshot> attempts,
         long createdAtEpochMs,
         long updatedAtEpochMs,
         String inputDeclaredType,

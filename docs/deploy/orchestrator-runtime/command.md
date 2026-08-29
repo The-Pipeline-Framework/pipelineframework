@@ -115,6 +115,10 @@ state without provider redispatch. The encoded revision is limited to 300 KiB so
 overhead remain below DynamoDB's item limit. Carry large content as `PayloadReference`; an
 oversized revision fails as a store failure before it is written.
 
+Replay decoding is strict. Unknown snapshot schema versions, unavailable or incompatible runtime
+types, corrupt JSON, and unknown stored protobuf fields fail as store corruption instead of being
+discarded or reconstructed as generic values.
+
 ## Duplicate Policy
 
 `RETURN_RECORDED` returns the stored output when the same command id has already succeeded. This is the usual replay-safe setting.

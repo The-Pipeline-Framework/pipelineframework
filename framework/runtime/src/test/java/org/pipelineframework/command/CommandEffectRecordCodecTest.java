@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.StringValue;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.CommandMachineConfirmation;
@@ -97,6 +98,21 @@ class CommandEffectRecordCodecTest {
 
         assertThrows(CommandEffectStoreException.class,
             () -> codec.encode(record, String.class.getName(), TestOutput.class.getName()));
+    }
+
+    @Test
+    void rejectsUnknownStoredProtobufFields() {
+        FileDescriptorProto input = FileDescriptorProto.newBuilder().setName("input.proto").build();
+        CommandEffectRecord record = pending(input)
+            .dispatching("attempt-1", 2L)
+            .succeeded("attempt-1", input, 3L);
+        String encoded = codec.encode(
+            record, FileDescriptorProto.class.getName(), FileDescriptorProto.class.getName())
+            .replaceFirst(
+                "\\\"name\\\":\\\"input.proto\\\"",
+                "\\\"name\\\":\\\"input.proto\\\",\\\"unknownStoredField\\\":\\\"unexpected\\\"");
+
+        assertThrows(CommandEffectStoreException.class, () -> codec.decode(encoded));
     }
 
     private static CommandEffectRecord pending(Object input) {
