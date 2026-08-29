@@ -316,6 +316,12 @@ search.index.opensearch.timeout-seconds=5
 
 Do not put endpoint URLs, credentials, or provider timeout tuning in the authored step unless the value is part of the pipeline contract.
 
+The framework-owned effect store is deployment configuration, not connector configuration and not
+an application repository. Production deployments can select the built-in durable DynamoDB store
+with `pipeline.command.effect-store.provider=dynamo`; local and test deployments default to
+`memory`. See [Command Steps](/deploy/orchestrator-runtime/command#effect-store-deployment) for the
+table schema, IAM operations, size limit, and custom-store selection.
+
 ## Testing
 
 At minimum, test:
