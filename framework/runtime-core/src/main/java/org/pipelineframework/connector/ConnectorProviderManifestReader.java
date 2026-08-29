@@ -237,14 +237,36 @@ public final class ConnectorProviderManifestReader {
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value, int schemaVersion) {
         requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities",
-            "queryCapabilities", "typeContract");
+            "queryCapabilities", "queryCardinality", "typeContract");
         if (schemaVersion == 1 && value.containsKey("typeContract")) {
             throw malformed("typeContract", "field absent from schema version 1");
         }
+        ConnectorOperationKind kind = ConnectorOperationKind.of(string(value, "kind"));
+        Optional<QueryOperationCardinality> queryCardinality = queryCardinality(value, schemaVersion, kind);
         return new ConnectorOperationDescriptor(
-            string(value, "id"), ConnectorOperationKind.of(string(value, "kind")), integer(value, "majorVersion"),
+            string(value, "id"), kind, integer(value, "majorVersion"),
             optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value),
-            optionalQueryCapabilities(value), optionalTypeContract(value));
+            optionalQueryCapabilities(value), queryCardinality, optionalTypeContract(value));
+    }
+
+    private static Optional<QueryOperationCardinality> queryCardinality(
+        Map<String, Object> value,
+        int schemaVersion,
+        ConnectorOperationKind kind
+    ) {
+        if (!ConnectorOperationKind.QUERY.equals(kind)) {
+            if (value.containsKey("queryCardinality")) {
+                throw malformed("queryCardinality", "field valid only for Query operations");
+            }
+            return Optional.empty();
+        }
+        if (!value.containsKey("queryCardinality")) {
+            if (schemaVersion >= 4) {
+                throw malformed("queryCardinality", "field required for Query operations in schema version 4");
+            }
+            return Optional.of(QueryOperationCardinality.ONE_TO_ONE);
+        }
+        return Optional.of(QueryOperationCardinality.of(string(value, "queryCardinality")));
     }
 
     private static Optional<ConnectorOperationTypeContract> optionalTypeContract(Map<String, Object> value) {

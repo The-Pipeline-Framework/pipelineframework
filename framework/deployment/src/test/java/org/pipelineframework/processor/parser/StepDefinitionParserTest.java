@@ -921,6 +921,65 @@ class StepDefinitionParserTest {
         }
     }
 
+    @Test
+    void derivesOneToManyQueryShapeFromProviderMetadataAndRejectsCardinalityMismatch() throws IOException {
+        Path metadataRoot = tempDir.resolve("streaming-query-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "operations":[{"id":"invoice.find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_MANY"}]}]}
+            """);
+        Path pipeline = tempDir.resolve("streaming-query.yaml");
+        Files.writeString(pipeline, streamingNativeQuery("ONE_TO_MANY"));
+        List<String> diagnostics = new ArrayList<>();
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> valid = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(1, valid.size(), diagnostics.toString());
+            assertEquals(StreamingShape.UNARY_STREAMING, valid.getFirst().streamingShapeHint());
+
+            Files.writeString(pipeline, streamingNativeQuery("ONE_TO_ONE"));
+            List<String> mismatchDiagnostics = new ArrayList<>();
+            List<StepDefinition> mismatch = new StepDefinitionParser(
+                (kind, message) -> mismatchDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+            assertTrue(mismatch.isEmpty());
+            assertTrue(mismatchDiagnostics.stream().anyMatch(message -> message.contains(
+                "does not match provider operation cardinality ONE_TO_MANY")), mismatchDiagnostics.toString());
+        }
+    }
+
+    private static String streamingNativeQuery(String cardinality) {
+        return """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Find invoices
+                kind: query
+                cardinality: %s
+                operation: invoice.find.many
+                using: work
+                capture:
+                  keyFields: [accountId]
+                input: FindInvoices
+                output: Invoice
+                java:
+                  input: com.example.FindInvoices
+                  output: com.example.Invoice
+            """.formatted(cardinality);
+    }
+
     private static String nativeQueryWithNegativeCacheTtl(String ttl) {
         return """
             version: 3
@@ -2964,7 +3023,7 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsQueryStepWithNonOneToOneCardinalityOrServiceBinding() throws IOException {
+    void rejectsLegacyOneToManyQueryOrServiceBinding() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -2996,7 +3055,8 @@ class StepDefinitionParserTest {
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("support only ONE_TO_ONE")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "ONE_TO_MANY Query requires a native operation/using selection")),
             diagnostics.toString());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains("cannot declare 'service'")),
             diagnostics.toString());

@@ -7,7 +7,7 @@ status: accepted
 
 ## Context
 
-Query and Command providers expose unary JDK `CompletionStage` contracts. Earlier provider
+Unary Query and Command providers expose JDK `CompletionStage` contracts. Earlier provider
 metadata described blocking style and broad concurrency scopes, but the runtime did not enforce
 those claims. Provider-owned asynchronous execution, framework-owned blocking adaptation, and
 framework-owned serialization have different ownership and lifetime rules.
@@ -47,3 +47,5 @@ provider instances.
 - Command policy no longer requests execution style or concurrency scope.
 - Unary `CompletionStage` Query preserves non-blocking execution but does not expose element-level
   stream backpressure.
+- A finite streaming Query uses the separate publisher contract in [ADR-0019](./0019-finite-streaming-query-reuses-one-to-many.md);
+  serialization covers its publisher and provider-resource lifetime.

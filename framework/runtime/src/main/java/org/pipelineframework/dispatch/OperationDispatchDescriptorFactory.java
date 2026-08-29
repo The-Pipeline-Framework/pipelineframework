@@ -71,6 +71,12 @@ public final class OperationDispatchDescriptorFactory {
         ConnectorProviderId provider = ConnectorProviderId.of(binding.provider());
         ConnectorOperationDescriptor operation = catalog.requireOperation(
             provider, binding.version(), callable.operation(), callable.kind(), callable.operationVersion());
+        if (ConnectorOperationKind.QUERY.equals(operation.kind())
+            && operation.queryCardinality().orElseThrow()
+                == org.pipelineframework.connector.QueryOperationCardinality.ONE_TO_MANY) {
+            throw new IllegalArgumentException("streaming Query operation cannot be exposed through unary operation dispatch: "
+                + callable.using() + "/" + callable.operation());
+        }
         var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
             "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
         if (!contract.inputType().equals(callable.input())) {

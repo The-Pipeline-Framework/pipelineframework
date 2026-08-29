@@ -23,6 +23,12 @@ Provider-backed Query operations use the same capture boundary. `Found` captures
 represented by `null` or a fabricated output object. Temporary availability, authentication, and
 terminal provider failures are not captured as observations.
 
+A finite streaming Query stages its ordered rows during one subscription. Successful terminal
+completion atomically commits the observation, including an empty stream. Failure or cancellation
+aborts every staged row, so partial capture is never replayable. A retry re-evaluates the source and
+may re-emit a prior prefix; stable ONE_TO_MANY lineage identifies that prefix as the same logical
+children. Capture does not roll back downstream work already performed by the failed attempt.
+
 Query capture is separate from generic step-result caching:
 
 1. A permitted generic cache hit replays the versioned step output before Query runtime.
@@ -65,6 +71,7 @@ captured values use the canonical Query output type.
 - `cardinality: "ONE_TO_ONE"` and `result: "single"` are required.
 - Java record projection is the supported output shape.
 - Predicates are `AND` only; no `OR` groups.
-- The first provider-operation runtime is unary only; no pagination or public streaming contract is exposed.
+- The database providers currently expose only unary `find.one`; their `find.many` implementations
+  have not yet been added to the framework-neutral streaming Query contract.
 - JPA declarations still do not support JPQL, named queries, aggregates, optional results, or list results.
 - Simple dotted paths are accepted syntactically; invalid JPA paths fail deterministically when the connector executes the query.

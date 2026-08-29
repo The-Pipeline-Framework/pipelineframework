@@ -20,7 +20,9 @@ final class ConnectorOperationTypes {
     static Optional<ConnectorOperationTypeContract> contract(ConnectorOperation operation) {
         Class<?> family = operation instanceof CommandOperation<?, ?, ?>
             ? CommandOperation.class
-            : operation instanceof QueryOperation<?, ?, ?> ? QueryOperation.class : null;
+            : operation instanceof QueryOperation<?, ?, ?>
+                ? QueryOperation.class
+                : operation instanceof StreamingQueryOperation<?, ?, ?> ? StreamingQueryOperation.class : null;
         if (family == null) {
             return Optional.empty();
         }

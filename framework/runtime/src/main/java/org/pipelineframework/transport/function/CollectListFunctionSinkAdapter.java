@@ -59,16 +59,20 @@ public final class CollectListFunctionSinkAdapter<O> implements FunctionSinkAdap
         int maxItems = batchingPolicy.maxItems();
         int fetchCount = maxItems == Integer.MAX_VALUE ? maxItems : maxItems + 1;
         return switch (batchingPolicy.overflowPolicy()) {
-            case FAIL -> items.select().first(fetchCount).collect().asList()
+            // A function response has one materialized result and cannot flush BUFFER as
+            // multiple windows without changing pipeline semantics. BUFFER therefore remains
+            // bounded and fails here; only an explicit DROP policy may truncate.
+            case FAIL, BUFFER -> items.select().first(fetchCount).collect().asList()
                 .onItem().transformToMulti(collected -> {
                     if (collected.size() > maxItems) {
                         return Multi.createFrom().failure(new IllegalStateException(
                             "Function sink overflow: received at least " + collected.size()
-                                + " items with maxItems=" + maxItems + " and overflowPolicy=FAIL"));
+                                + " items with maxItems=" + maxItems + " and overflowPolicy="
+                                + batchingPolicy.overflowPolicy()));
                     }
                     return Multi.createFrom().iterable(collected);
                 });
-            case DROP, BUFFER -> items.select().first(maxItems);
+            case DROP -> items.select().first(maxItems);
         };
     }
 }

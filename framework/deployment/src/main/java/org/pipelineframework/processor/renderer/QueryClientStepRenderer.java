@@ -17,6 +17,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding;
@@ -37,6 +38,8 @@ import org.pipelineframework.processor.representation.PersistenceRepresentationM
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
+import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 
 /**
@@ -54,7 +57,10 @@ public class QueryClientStepRenderer {
             : model.generatedName();
         String className = baseName + "QueryClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
-        Optional<NativeCacheRequirements> nativeCacheRequirements = resolveNativeCacheRequirements(model, ctx);
+        boolean streaming = model.streamingShape() == StreamingShape.UNARY_STREAMING;
+        Optional<NativeCacheRequirements> nativeCacheRequirements = streaming
+            ? Optional.empty()
+            : resolveNativeCacheRequirements(model, ctx);
         Optional<QueryPersistenceRepresentation> persistenceRepresentation =
             resolveQueryPersistenceRepresentation(model, ctx, configHints);
         TypeName inputType = clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage());
@@ -77,18 +83,22 @@ public class QueryClientStepRenderer {
             .addStatement("return $T.class", outputType)
             .build();
 
-        MethodSpec.Builder apply = MethodSpec.methodBuilder("applyOneToOne")
+        MethodSpec.Builder apply = MethodSpec.methodBuilder(streaming ? "applyOneToMany" : "applyOneToOne")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
+            .returns(ParameterizedTypeName.get(ClassName.get(streaming ? Multi.class : Uni.class), outputType))
             .addParameter(inputType, "input");
         persistenceRepresentation.ifPresentOrElse(
             mapping -> apply.addStatement(
-                "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)",
+                streaming
+                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)"
+                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)",
                 model.serviceName(), inputType.toString(), outputType.toString(), outputType,
                 mapping.representationType()),
             () -> apply.addStatement(
-                "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
+                streaming
+                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class)"
+                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
                 model.serviceName(), inputType.toString(), outputType.toString(), outputType));
 
         TypeSpec.Builder type = TypeSpec.classBuilder(className)
@@ -105,13 +115,17 @@ public class QueryClientStepRenderer {
                 .addMember("threadSafety", "$T.$L", ClassName.get(ThreadSafety.class), ThreadSafety.SAFE.name())
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
-            .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
+            .addSuperinterface(ParameterizedTypeName.get(
+                ClassName.get(streaming ? StepOneToMany.class : StepOneToOne.class), inputType, outputType))
             .addField(support)
             .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
-            .addMethod(cacheKeyTargetType)
             .addMethod(apply.build());
+
+        if (!streaming) {
+            type.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
+                .addMethod(cacheKeyTargetType);
+        }
 
         persistenceRepresentation.ifPresent(mapping -> type.addField(
             FieldSpec.builder(mapping.mapperType(), "representationMapper", Modifier.PRIVATE)

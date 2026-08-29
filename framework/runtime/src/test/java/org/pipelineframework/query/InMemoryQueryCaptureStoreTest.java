@@ -3,12 +3,16 @@ package org.pipelineframework.query;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
+import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import io.smallrye.mutiny.Multi;
 
 class InMemoryQueryCaptureStoreTest {
 
@@ -121,5 +125,87 @@ class InMemoryQueryCaptureStoreTest {
 
         // putIfAbsent should return the first stored record
         assertEquals(first.executionId(), stored.executionId());
+    }
+
+    @Test
+    void streamingCaptureAbortsPartialItemsThenCommitsAndReplaysOnlyTheSuccessfulAttempt() throws Exception {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        StreamingQueryCaptureRequest request = streamingRequest("stream-key");
+        StreamingQueryCaptureWriter first = ((StreamingQueryCaptureOpen.Write) store.openStreaming(request)
+            .toCompletableFuture().join()).writer();
+        first.append(streamingItem(0, "A")).toCompletableFuture().join();
+        var waiting = store.openStreaming(request).toCompletableFuture();
+
+        first.abort().toCompletableFuture().join();
+        StreamingQueryCaptureWriter retry = ((StreamingQueryCaptureOpen.Write) waiting.get(
+            2, java.util.concurrent.TimeUnit.SECONDS)).writer();
+        retry.append(streamingItem(0, "A")).toCompletableFuture().join();
+        retry.append(streamingItem(1, "B")).toCompletableFuture().join();
+        retry.commit().toCompletableFuture().join();
+
+        StreamingQueryCaptureOpen.Replay replay = (StreamingQueryCaptureOpen.Replay) store.openStreaming(request)
+            .toCompletableFuture().join();
+        List<StreamingQueryCaptureItem> items = Multi.createFrom().publisher(replay.items())
+            .collect().asList().await().atMost(Duration.ofSeconds(2));
+        assertEquals(List.of(streamingItem(0, "A"), streamingItem(1, "B")), items);
+    }
+
+    @Test
+    void streamingCaptureCommitsAndReplaysAnEmptyObservation() {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        StreamingQueryCaptureRequest request = streamingRequest("empty-stream-key");
+        StreamingQueryCaptureWriter writer = ((StreamingQueryCaptureOpen.Write) store.openStreaming(request)
+            .toCompletableFuture().join()).writer();
+
+        writer.commit().toCompletableFuture().join();
+
+        StreamingQueryCaptureOpen.Replay replay = (StreamingQueryCaptureOpen.Replay) store.openStreaming(request)
+            .toCompletableFuture().join();
+        assertEquals(List.of(), Multi.createFrom().publisher(replay.items())
+            .collect().asList().await().atMost(Duration.ofSeconds(2)));
+    }
+
+    @Test
+    void abortedCaptureReopensEachWaiterWithItsOwnObservationRequest() throws Exception {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        StreamingQueryCaptureRequest firstRequest = streamingRequest("shared-key");
+        StreamingQueryCaptureRequest waitingRequest = new StreamingQueryCaptureRequest(
+            "tenant", "execution", 2, "find.many", "v1", "shared-key", "{}", Integer.class.getName());
+        StreamingQueryCaptureWriter first = ((StreamingQueryCaptureOpen.Write) store.openStreaming(firstRequest)
+            .toCompletableFuture().join()).writer();
+        var waiting = store.openStreaming(waitingRequest).toCompletableFuture();
+
+        first.abort().toCompletableFuture().join();
+        StreamingQueryCaptureWriter reopened = ((StreamingQueryCaptureOpen.Write) waiting.get(
+            2, java.util.concurrent.TimeUnit.SECONDS)).writer();
+
+        reopened.append(new StreamingQueryCaptureItem(0, "1", Integer.class.getName()))
+            .toCompletableFuture().join();
+    }
+
+    @Test
+    void clearClosesActiveWritersAndReleasesWaitersExceptionally() {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        StreamingQueryCaptureRequest request = streamingRequest("clear-key");
+        StreamingQueryCaptureWriter writer = ((StreamingQueryCaptureOpen.Write) store.openStreaming(request)
+            .toCompletableFuture().join()).writer();
+        var waiting = store.openStreaming(request).toCompletableFuture();
+
+        store.clear().toCompletableFuture().join();
+
+        assertThrows(java.util.concurrent.CompletionException.class, waiting::join);
+        assertThrows(java.util.concurrent.CompletionException.class,
+            () -> writer.append(streamingItem(0, "A")).toCompletableFuture().join());
+        assertTrue(store.openStreaming(request).toCompletableFuture().join()
+            instanceof StreamingQueryCaptureOpen.Write);
+    }
+
+    private static StreamingQueryCaptureRequest streamingRequest(String key) {
+        return new StreamingQueryCaptureRequest(
+            "tenant", "execution", 2, "find.many", "v1", key, "{}", String.class.getName());
+    }
+
+    private static StreamingQueryCaptureItem streamingItem(long ordinal, String value) {
+        return new StreamingQueryCaptureItem(ordinal, "\"" + value + "\"", String.class.getName());
     }
 }

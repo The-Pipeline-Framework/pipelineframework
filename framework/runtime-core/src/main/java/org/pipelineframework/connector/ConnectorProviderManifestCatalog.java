@@ -147,6 +147,22 @@ public final class ConnectorProviderManifestCatalog {
         return operation.queryCapabilities().orElse(QueryCapabilities.conservative());
     }
 
+    public QueryOperationCardinality requireQueryCardinality(
+        ConnectorOperationIdentity identity,
+        int expectedProviderMajorVersion
+    ) {
+        Objects.requireNonNull(identity, "query operation identity must not be null");
+        if (identity.kind() != ConnectorOperationKind.QUERY) {
+            throw new IllegalArgumentException("query cardinality requires a Query operation identity: " + identity);
+        }
+        return requireOperation(
+            identity.providerId(),
+            expectedProviderMajorVersion,
+            identity.operationId(),
+            ConnectorOperationKind.QUERY,
+            identity.majorVersion()).queryCardinality().orElseThrow();
+    }
+
     private static void validateConfiguration(
         java.util.Optional<ConnectorConfigSchemaDescriptor> schema,
         ConnectorConfigurationDocument configuration,

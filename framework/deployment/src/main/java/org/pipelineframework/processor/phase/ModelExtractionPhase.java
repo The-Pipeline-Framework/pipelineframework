@@ -341,10 +341,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
-        if (streamingShape != StreamingShape.UNARY_UNARY) {
+        if (streamingShape != StreamingShape.UNARY_UNARY
+            && streamingShape != StreamingShape.UNARY_STREAMING) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Query step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
+                "Query step '" + stepDef.name() + "' supports only ONE_TO_ONE and ONE_TO_MANY cardinality");
             return null;
         }
 
@@ -363,7 +364,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
             .inputMapping(TypeMapping.withoutMapper(inputType))
             .outputMapping(TypeMapping.withoutMapper(outputType))
-            .streamingShape(StreamingShape.UNARY_UNARY)
+            .streamingShape(streamingShape)
             .enabledTargets(java.util.Set.of(GenerationTarget.QUERY_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)

@@ -33,7 +33,7 @@ class ConnectorProviderArtifactsTest {
         assertTrue(json.contains("line\\nfeed"));
         assertTrue(json.contains("tab\\tvalue"));
         assertTrue(json.contains("unit\\u0001separator"));
-        assertTrue(json.contains("\"schemaVersion\":3"));
+        assertTrue(json.contains("\"schemaVersion\":4"));
         assertTrue(!json.contains("executionCapabilities"));
         assertEquals(manifest, parsed);
     }
@@ -45,6 +45,17 @@ class ConnectorProviderArtifactsTest {
         ConnectorOperationTypeContract contract = descriptor.typeContract().orElseThrow();
         assertEquals("string", contract.inputType());
         assertEquals(Optional.of("integer"), contract.outputType());
+    }
+
+    @Test
+    void projectsStreamingQueryCardinalityWithoutUnaryCacheCapabilities() {
+        ConnectorOperationDescriptor descriptor = ConnectorDescriptors.operation(new StringRowsQuery());
+
+        assertEquals(ConnectorOperationKind.QUERY, descriptor.kind());
+        assertEquals(Optional.of(QueryOperationCardinality.ONE_TO_MANY), descriptor.queryCardinality());
+        assertTrue(descriptor.queryCapabilities().isEmpty());
+        assertEquals("string", descriptor.typeContract().orElseThrow().inputType());
+        assertEquals(Optional.of("integer"), descriptor.typeContract().orElseThrow().outputType());
     }
 
     private static final class BlockingStringQuery
@@ -59,6 +70,30 @@ class ConnectorProviderArtifactsTest {
             QueryInvocation<String, ConnectorConfigurationDocument, Integer> invocation
         ) {
             return CompletableFuture.completedFuture(new QueryOutcome.Found<>(1));
+        }
+    }
+
+    private static final class StringRowsQuery
+        implements StreamingQueryOperation<String, ConnectorConfigurationDocument, Integer> {
+        @Override
+        public String id() {
+            return "string.rows";
+        }
+
+        @Override
+        public QueryStream<Integer> query(
+            QueryInvocation<String, ConnectorConfigurationDocument, Integer> invocation
+        ) {
+            return new QueryStream<>(subscriber -> subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+                @Override
+                public void request(long count) {
+                    subscriber.onComplete();
+                }
+
+                @Override
+                public void cancel() {
+                }
+            }), CompletableFuture.completedFuture(null));
         }
     }
 }
