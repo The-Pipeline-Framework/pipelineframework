@@ -17,7 +17,7 @@
 package org.pipelineframework.config.template;
 
 /**
- * Remote/local execution metadata for a v2 template step.
+ * Remote/local execution metadata for a template step.
  *
  * @param mode execution mode; defaults to {@code LOCAL} when absent
  * @param operatorId logical operator identifier used for remote routing and diagnostics

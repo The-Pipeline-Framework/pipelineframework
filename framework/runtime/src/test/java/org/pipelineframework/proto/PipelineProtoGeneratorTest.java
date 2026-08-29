@@ -1360,26 +1360,20 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesExternalStepHostContractPackForRemoteSteps() throws Exception {
         String yaml = """
-            version: 2
+            version: 3
             appName: "Remote Step Test"
             basePackage: "com.example.remote"
             transport: "REST"
-            messages:
+            types:
               ChargeRequest:
-                fields:
-                  - number: 1
-                    name: "orderId"
-                    type: "uuid"
+                fields: [[orderId, uuid]]
               ChargeResult:
-                fields:
-                  - number: 1
-                    name: "paymentId"
-                    type: "uuid"
+                fields: [[paymentId, uuid]]
             steps:
               - name: "Charge Card"
                 cardinality: "ONE_TO_ONE"
-                inputTypeName: "ChargeRequest"
-                outputTypeName: "ChargeResult"
+                input: "ChargeRequest"
+                output: "ChargeResult"
                 execution:
                   mode: "REMOTE"
                   operatorId: "charge-card"
@@ -1392,7 +1386,12 @@ class PipelineProtoGeneratorTest {
         Files.writeString(configPath, yaml);
         Path outputDir = tempDir.resolve("proto-remote-step-out");
 
-        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
 
         Path manifestPath = outputDir.resolve("external-step-hosts.json");
         Path readmePath = outputDir.resolve("EXTERNAL-STEP-HOSTS.md");
