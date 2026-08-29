@@ -43,7 +43,7 @@ unary and are unavailable to streaming Query.
 
 `SerializedOperation` owns a streaming invocation from provider admission through publisher
 termination and provider-resource release. LOCAL, gRPC, and REST use their existing row-streaming
-paths. Function transports materialize a finite output under an explicit item bound and fail on
+paths. The FUNCTION platform path materializes a finite output under an explicit item bound and fails on
 overflow unless truncation was explicitly selected. Finite never means safely materializable.
 
 ## Rationale

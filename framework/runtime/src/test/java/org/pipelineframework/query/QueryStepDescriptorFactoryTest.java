@@ -166,6 +166,38 @@ class QueryStepDescriptorFactoryTest {
     }
 
     @Test
+    void unaryNativeQueryDescriptorUsesTheNormalizedDeclaredCardinality() throws Exception {
+        Path metadataRoot = tempDir.resolve("unary-connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":4,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "operations":[{"id":"document.find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_ONE"}]}]}
+            """);
+        Path explicit = tempDir.resolve("native-unary-query.yaml");
+        Files.writeString(explicit, streamingPipelineYaml("\" ONE_TO_ONE \""));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessFindDocumentsService",
+                    "org.example.DocumentQuery",
+                    "org.example.Document").await().atMost(Duration.ofSeconds(2));
+                assertEquals("ONE_TO_ONE", descriptor.cardinality());
+            } finally {
+                factory.shutdown();
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void nativeQueryDescriptorRejectsAnUnknownBinding() throws Exception {
         Path explicit = tempDir.resolve("unknown-native-query.yaml");
         Files.writeString(explicit, """

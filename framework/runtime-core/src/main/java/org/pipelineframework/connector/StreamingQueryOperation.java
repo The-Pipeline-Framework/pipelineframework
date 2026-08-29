@@ -50,6 +50,16 @@ public interface StreamingQueryOperation<I, C, O> extends ConnectorOperation {
             throw new ConnectorConfigurationException(
                 "streaming query operation " + id() + " does not declare a configuration schema");
         }
+        Class<?> configurationType = ConnectorOperationTypes.configurationType(
+                this, StreamingQueryOperation.class)
+            .orElseThrow(() -> new ConnectorConfigurationException(
+                "streaming query operation " + id()
+                    + " must declare a configuration schema when its configuration type cannot be resolved"));
+        if (configurationType != ConnectorConfigurationDocument.class) {
+            throw new ConnectorConfigurationException(
+                "streaming query operation " + id() + " must declare a configuration schema for "
+                    + configurationType.getName());
+        }
         return (C) ConnectorConfigurationDocument.empty();
     }
 }

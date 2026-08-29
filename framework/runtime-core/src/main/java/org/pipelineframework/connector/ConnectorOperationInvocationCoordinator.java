@@ -279,22 +279,28 @@ public final class ConnectorOperationInvocationCoordinator {
                 return;
             }
             if (operation instanceof BlockingOperation) {
-                RuntimeAdapters.executeBlocking(() -> requireStream(invocation.get()), false)
-                    .whenComplete(this::subscribeProvider);
+                try {
+                    RuntimeAdapters.executeBlocking(() -> requireStream(invocation.get()), false)
+                        .whenComplete((stream, failure) -> {
+                            if (failure == null) {
+                                subscribeProvider(stream);
+                            } else {
+                                failBeforeStream(failure);
+                            }
+                        });
+                } catch (Throwable failure) {
+                    failBeforeStream(failure);
+                }
                 return;
             }
             try {
-                subscribeProvider(requireStream(invocation.get()), null);
+                subscribeProvider(requireStream(invocation.get()));
             } catch (Throwable failure) {
-                subscribeProvider(null, failure);
+                failBeforeStream(failure);
             }
         }
 
-        private void subscribeProvider(QueryStream<T> stream, Throwable failure) {
-            if (failure != null) {
-                failBeforeStream(failure);
-                return;
-            }
+        private void subscribeProvider(QueryStream<T> stream) {
             try {
                 stream.termination().whenComplete((ignored, terminationFailure) -> {
                     resourceFailure = terminationFailure;

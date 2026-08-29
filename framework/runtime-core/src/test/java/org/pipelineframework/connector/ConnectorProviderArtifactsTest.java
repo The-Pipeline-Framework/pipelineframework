@@ -1,6 +1,7 @@
 package org.pipelineframework.connector;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -58,6 +59,20 @@ class ConnectorProviderArtifactsTest {
         assertEquals(Optional.of("integer"), descriptor.typeContract().orElseThrow().outputType());
     }
 
+    @Test
+    void schemaLessStreamingQueryRejectsAnArbitraryConfigurationType() {
+        ConnectorConfigurationException failure = assertThrows(
+            ConnectorConfigurationException.class,
+            () -> new TypedRowsQuery().query(
+                "input",
+                ConnectorConfigurationDocument.empty(),
+                Integer.class,
+                ConnectorExecutionContext.empty()));
+
+        assertTrue(failure.getMessage().contains("must declare a configuration schema for"));
+        assertTrue(failure.getMessage().contains(TypedConfiguration.class.getName()));
+    }
+
     private static final class BlockingStringQuery
         implements BlockingQueryOperation<String, ConnectorConfigurationDocument, Integer> {
         @Override
@@ -94,6 +109,22 @@ class ConnectorProviderArtifactsTest {
                 public void cancel() {
                 }
             }), CompletableFuture.completedFuture(null));
+        }
+    }
+
+    private record TypedConfiguration(String value) {
+    }
+
+    private static final class TypedRowsQuery
+        implements StreamingQueryOperation<String, TypedConfiguration, Integer> {
+        @Override
+        public String id() {
+            return "typed.rows";
+        }
+
+        @Override
+        public QueryStream<Integer> query(QueryInvocation<String, TypedConfiguration, Integer> invocation) {
+            throw new AssertionError("invalid configuration must fail before provider invocation");
         }
     }
 }

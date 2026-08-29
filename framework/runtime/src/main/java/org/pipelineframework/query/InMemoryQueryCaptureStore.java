@@ -52,9 +52,16 @@ public class InMemoryQueryCaptureStore implements QueryCaptureStore {
     }
 
     @Override
-    public CompletionStage<Boolean> remove(String captureKey) {
+    public synchronized CompletionStage<Boolean> remove(String captureKey) {
         boolean removed = records.remove(captureKey) != null;
         removed |= streamingRecords.remove(captureKey) != null;
+        StreamingState active = streamingWrites.remove(captureKey);
+        if (active != null) {
+            active.closed = true;
+            active.waiters.forEach(waiter -> waiter.result().completeExceptionally(
+                new IllegalStateException("streaming Query capture was removed")));
+            removed = true;
+        }
         return CompletableFuture.completedFuture(removed);
     }
 

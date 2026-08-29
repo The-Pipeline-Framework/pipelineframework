@@ -51,6 +51,7 @@ import org.pipelineframework.connector.StreamingQueryOperation;
 import org.pipelineframework.connector.TestConnectorBindingRegistries;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import org.pipelineframework.mapper.Mapper;
 
 class NativeStreamingQueryOperationTest {
     private final InMemoryQueryCaptureStore captureStore = new InMemoryQueryCaptureStore();
@@ -72,6 +73,31 @@ class NativeStreamingQueryOperationTest {
 
         assertEquals(List.of(new Row("A"), new Row("B"), new Row("C")), rows);
         assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
+    void nullDescriptorUniFailsForBothStreamingOverloads() {
+        io.smallrye.mutiny.Uni<QueryStepDescriptor> nullDescriptor =
+            io.smallrye.mutiny.Uni.createFrom().nullItem();
+
+        assertThrows(IllegalArgumentException.class, () -> support.queryOneToMany(
+                nullDescriptor, new Lookup("group-1"), Row.class)
+            .collect().asList().await().atMost(Duration.ofSeconds(2)));
+
+        Mapper<Row, Row> identity = new Mapper<>() {
+            @Override
+            public Row fromExternal(Row external) {
+                return external;
+            }
+
+            @Override
+            public Row toExternal(Row domain) {
+                return domain;
+            }
+        };
+        assertThrows(IllegalArgumentException.class, () -> support.queryOneToMany(
+                nullDescriptor, new Lookup("group-1"), Row.class, Row.class, identity)
+            .collect().asList().await().atMost(Duration.ofSeconds(2)));
     }
 
     @Test

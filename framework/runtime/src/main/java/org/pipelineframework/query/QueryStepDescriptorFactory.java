@@ -130,7 +130,7 @@ public class QueryStepDescriptorFactory {
                 serviceName,
                 inputType,
                 outputType,
-                step.cardinality(),
+                declaredCardinality,
                 new NativeQuerySelector(
                     ConnectorBindingName.of(binding.name()),
                     identity,

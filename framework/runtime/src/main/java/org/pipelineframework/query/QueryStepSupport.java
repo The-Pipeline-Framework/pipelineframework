@@ -103,9 +103,8 @@ public class QueryStepSupport {
     }
 
     public <I, O> Multi<O> queryOneToMany(Uni<QueryStepDescriptor> descriptor, I input, Class<O> outputType) {
-        return descriptor.toMulti().onItem()
-            .transformToMulti(resolved -> queryOneToMany(resolved, input, outputType))
-            .concatenate();
+        return descriptor.onItem()
+            .transformToMulti(resolved -> queryOneToMany(resolved, input, outputType));
     }
 
     public <I, O, E> Multi<O> queryOneToMany(
@@ -115,10 +114,8 @@ public class QueryStepSupport {
         Class<E> externalOutputType,
         Mapper<O, E> mapper
     ) {
-        return descriptor.toMulti().onItem()
-            .transformToMulti(resolved -> queryOneToMany(
-                resolved, input, outputType, externalOutputType, mapper))
-            .concatenate();
+        return descriptor.onItem().transformToMulti(resolved -> queryOneToMany(
+            resolved, input, outputType, externalOutputType, mapper));
     }
 
     public <I, O> Multi<O> queryOneToMany(

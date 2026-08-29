@@ -31,6 +31,22 @@ final class ConnectorOperationTypes {
                 normalize(arguments[0]), output(arguments[2])));
     }
 
+    static Optional<Class<?>> configurationType(ConnectorOperation operation, Class<?> family) {
+        return findArguments(operation.getClass(), family, Map.of())
+            .flatMap(arguments -> rawClass(arguments[1]));
+    }
+
+    private static Optional<Class<?>> rawClass(Type type) {
+        if (type instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        if (type instanceof ParameterizedType parameterized
+            && parameterized.getRawType() instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        return Optional.empty();
+    }
+
     private static Optional<String> output(Type type) {
         if (type == Void.class || type == void.class) {
             return Optional.empty();

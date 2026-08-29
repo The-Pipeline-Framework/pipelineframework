@@ -933,7 +933,8 @@ public class StepDefinitionParser {
                     throw new StepSkippedException();
                 }
                 Optional<QueryOperationCardinality> validatedCardinality = validateNativeQueryBinding(
-                    name, operation, using, stepData, operationConfig, negativeCacheTtl, shape, connectorBindings);
+                    name, operation, using, stepData, operationConfig, negativeCacheTtl,
+                    Optional.ofNullable(shape), connectorBindings);
                 if (validatedCardinality.isEmpty()) {
                     throw new StepSkippedException();
                 }
@@ -1255,7 +1256,7 @@ public class StepDefinitionParser {
         Map<String, Object> stepData,
         Map<String, Object> operationConfig,
         Optional<Duration> negativeCacheTtl,
-        StreamingShape declaredShape,
+        Optional<StreamingShape> declaredShape,
         Map<String, ParsedConnectorBinding> bindings
     ) {
         try {
@@ -1280,9 +1281,10 @@ public class StepDefinitionParser {
             StreamingShape operationShape = cardinality == QueryOperationCardinality.ONE_TO_MANY
                 ? StreamingShape.UNARY_STREAMING
                 : StreamingShape.UNARY_UNARY;
-            if (declaredShape != null && declaredShape != operationShape) {
+            if (declaredShape.isPresent() && declaredShape.orElseThrow() != operationShape) {
                 throw new IllegalArgumentException(
-                    "declared cardinality " + declaredShape + " does not match provider operation cardinality "
+                    "declared cardinality " + declaredShape.orElseThrow()
+                        + " does not match provider operation cardinality "
                         + cardinality);
             }
             if (cardinality == QueryOperationCardinality.ONE_TO_MANY) {

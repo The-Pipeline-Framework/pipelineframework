@@ -56,8 +56,7 @@ work on workers. Applications using Panache entities can use the reactive provid
 connector itself does not depend on Panache.
 
 TPF also has a separate finite streaming Query SPI for `find.many`: rows cross a demand-aware
-publisher boundary and become ordinary ONE_TO_MANY pipeline items. The database providers do not yet
-publish `find.many`; adding their blocking cursor and Hibernate Reactive implementations is separate
-provider work. Finite does not imply safely materializable.
+publisher boundary and become ordinary ONE_TO_MANY pipeline items. The current database providers
+do not expose `find.many`. Finite does not imply safely materializable.
 
 For the architectural rationale behind captured query steps, see [I/O Shell Absorption](/evolve/io-shell-absorption#captured-query-steps-for-dbapi-reads).

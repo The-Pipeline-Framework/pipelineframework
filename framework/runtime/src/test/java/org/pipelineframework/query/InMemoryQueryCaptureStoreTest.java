@@ -200,6 +200,23 @@ class InMemoryQueryCaptureStoreTest {
             instanceof StreamingQueryCaptureOpen.Write);
     }
 
+    @Test
+    void removeInvalidatesAnActiveStreamingWriteAndItsWaiters() {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        StreamingQueryCaptureRequest request = streamingRequest("remove-key");
+        StreamingQueryCaptureWriter writer = ((StreamingQueryCaptureOpen.Write) store.openStreaming(request)
+            .toCompletableFuture().join()).writer();
+        var waiting = store.openStreaming(request).toCompletableFuture();
+
+        assertTrue(store.remove(request.captureKey()).toCompletableFuture().join());
+
+        assertThrows(java.util.concurrent.CompletionException.class, waiting::join);
+        assertThrows(java.util.concurrent.CompletionException.class,
+            () -> writer.commit().toCompletableFuture().join());
+        assertTrue(store.openStreaming(request).toCompletableFuture().join()
+            instanceof StreamingQueryCaptureOpen.Write);
+    }
+
     private static StreamingQueryCaptureRequest streamingRequest(String key) {
         return new StreamingQueryCaptureRequest(
             "tenant", "execution", 2, "find.many", "v1", key, "{}", String.class.getName());

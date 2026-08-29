@@ -495,6 +495,39 @@ class ConnectorOperationInvocationCoordinatorTest {
         }
     }
 
+    @Test
+    void blockingSerializedStreamReleasesGateWhenWorkerAdmissionFailsSynchronously() throws Exception {
+        IllegalStateException admissionFailure = new IllegalStateException("stream-worker-admission-failed");
+        RuntimeAdapters.registerReactiveRuntime(new org.pipelineframework.runtime.core.ReactiveRuntime() {
+            @Override
+            public <T> CompletionStage<T> executeBlocking(
+                java.util.function.Supplier<T> supplier,
+                boolean virtualThread
+            ) {
+                throw admissionFailure;
+            }
+        });
+        RecordingSubscriber<String> failed = new RecordingSubscriber<>();
+        coordinator.<String>invokeStream(BINDING, new BlockingSerializedStreamingQuery(), () -> {
+            throw new AssertionError("provider invocation must not start when worker admission fails");
+        }).subscribe(failed);
+
+        failed.request(Long.MAX_VALUE);
+
+        assertTrue(failed.terminal.await(5, TimeUnit.SECONDS));
+        assertEquals(admissionFailure, failed.failure);
+
+        RecordingSubscriber<String> next = new RecordingSubscriber<>();
+        coordinator.invokeStream(BINDING, new SerializedStreamingQuery(), () -> {
+            ControlledPublisher<String> rows = new ControlledPublisher<>();
+            rows.completeOnSubscribe();
+            return new QueryStream<>(rows, CompletableFuture.completedFuture(null));
+        }).subscribe(next);
+        next.request(Long.MAX_VALUE);
+        next.awaitTerminal();
+        assertTrue(next.completed());
+    }
+
     private static QueryOperation<Object, Object, Object> ordinaryQuery() {
         return new QueryOperation<>() {
             @Override
