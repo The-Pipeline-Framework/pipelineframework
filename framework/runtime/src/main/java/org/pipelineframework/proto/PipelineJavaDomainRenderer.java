@@ -25,8 +25,8 @@ import org.pipelineframework.config.template.*;
 /**
  * Renders nominal Java v3 domain records and their protobuf conversion helpers.
  *
- * <p>Record component order intentionally follows the authored YAML order. Null component values
- * preserve transport presence and do not model domain-validity constraints.</p>
+ * <p>Record component order intentionally follows the authored YAML order. Non-default field semantics
+ * use an explicit three-state carrier so absence is never inferred from a nullable Java reference.</p>
  */
 final class PipelineJavaDomainRenderer {
     private static final String ADAPTER_NAME = "PipelineDomainProtoAdapters";
@@ -126,20 +126,39 @@ final class PipelineJavaDomainRenderer {
             builder.append("    ");
             if (field.repeated()) {
                 builder.append("java.util.List<");
+            } else if (usesSemanticCarrier(field)) {
+                builder.append("org.pipelineframework.type.CanonicalFieldValue<");
             }
             builder.append(resolveJavaType(field.type(), plan.typeModel()));
-            if (field.repeated()) {
+            if (field.repeated() || usesSemanticCarrier(field)) {
                 builder.append('>');
             }
             builder.append(' ').append(field.name());
             builder.append(i + 1 == record.fields().size() ? "\n" : ",\n");
         }
         builder.append(") {\n");
-        if (record.fields().stream().anyMatch(field -> field.repeated())) {
+        if (!record.fields().isEmpty()) {
             builder.append("    public ").append(record.name()).append(" {\n");
             record.fields().stream().filter(field -> field.repeated()).forEach(field -> builder
                 .append("        ").append(field.name()).append(" = ").append(field.name())
                 .append(" == null ? java.util.List.of() : java.util.List.copyOf(").append(field.name()).append(");\n"));
+            record.fields().stream().filter(field -> !field.repeated()).forEach(field -> {
+                builder.append("        java.util.Objects.requireNonNull(").append(field.name()).append(", \"")
+                    .append(javaStringLiteral(record.name() + "." + field.name() + " must not be null"))
+                    .append("\");\n");
+                if (usesSemanticCarrier(field)) {
+                    if (field.presence() == PipelineFieldPresence.REQUIRED) {
+                        builder.append("        if (").append(field.name()).append(".isAbsent()) { throw new IllegalArgumentException(\"")
+                            .append(javaStringLiteral(record.name() + "." + field.name() + " must be present"))
+                            .append("\"); }\n");
+                    }
+                    if (field.nullability() == PipelineFieldNullability.NON_NULL) {
+                        builder.append("        if (").append(field.name()).append(".isNull()) { throw new IllegalArgumentException(\"")
+                            .append(javaStringLiteral(record.name() + "." + field.name() + " must not contain null"))
+                            .append("\"); }\n");
+                    }
+                }
+            });
             builder.append("    }\n");
         }
         return builder.append("}\n").toString();
@@ -203,7 +222,10 @@ final class PipelineJavaDomainRenderer {
             .append(" * This surface is intentionally provisional while union APIs are introduced.\n")
             .append(" */\n")
             .append("public final class ").append(ADAPTER_NAME).append(" {\n")
-            .append("    private ").append(ADAPTER_NAME).append("() {\n    }\n\n");
+            .append("    private ").append(ADAPTER_NAME).append("() {\n    }\n\n")
+            .append("    private static <T> T requireProtoField(boolean present, T value, String field) {\n")
+            .append("        if (!present) { throw new IllegalArgumentException(\"Missing required protobuf field: \" + field); }\n")
+            .append("        return value;\n    }\n\n");
         List<String> names = new ArrayList<>(plan.typeModel().definitions().keySet());
         Collections.sort(names);
         for (String name : names) {
@@ -241,9 +263,25 @@ final class PipelineJavaDomainRenderer {
                     .append(accessor).append(".stream().map(item -> ")
                     .append(toProtoExpression(field.type(), "item", plan.typeModel())).append(").toList());\n");
             } else {
-                builder.append("        if (").append(accessor).append(" != null) { builder.")
-                    .append("set").append(javaSetter(fieldState.protoName())).append('(')
-                    .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append("); }\n");
+                if (usesSemanticCarrier(field)) {
+                    builder.append("        if (!").append(accessor).append(".isAbsent()) {\n");
+                    if (field.nullability() == PipelineFieldNullability.NULLABLE) {
+                        builder.append("            if (").append(accessor).append(".isNull()) { builder.set")
+                            .append(javaSetter(fieldState.nullMarkerProtoName().orElseThrow())).append("(")
+                            .append("com.google.protobuf.NullValue.NULL_VALUE); } else {\n                builder.set")
+                            .append(javaSetter(fieldState.protoName())).append('(')
+                            .append(toProtoExpression(field.type(), accessor + ".asOptional().orElseThrow()", plan.typeModel()))
+                            .append(");\n            }\n");
+                    } else {
+                        builder.append("            builder.set").append(javaSetter(fieldState.protoName())).append('(')
+                            .append(toProtoExpression(field.type(), accessor + ".asOptional().orElseThrow()", plan.typeModel()))
+                            .append(");\n");
+                    }
+                    builder.append("        }\n");
+                } else {
+                    builder.append("        builder.set").append(javaSetter(fieldState.protoName())).append('(')
+                        .append(toProtoExpression(field.type(), accessor, plan.typeModel())).append(");\n");
+                }
             }
         }
         builder.append("        return builder.build();\n    }\n\n");
@@ -263,9 +301,25 @@ final class PipelineJavaDomainRenderer {
                     .append(i + 1 == record.fields().size() ? "\n" : ",\n");
             } else {
                 String getter = "value.get" + setter + "()";
-                builder.append("            value.has").append(setter).append("() ? ")
-                    .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(" : null")
-                    .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+                if (field.nullability() == PipelineFieldNullability.NULLABLE) {
+                    String nullSetter = javaSetter(fieldState.nullMarkerProtoName().orElseThrow());
+                    builder.append("            value.has").append(setter).append("() ? org.pipelineframework.type.CanonicalFieldValue.of(")
+                        .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(") : value.has")
+                        .append(nullSetter).append("() ? org.pipelineframework.type.CanonicalFieldValue.nullValue()")
+                        .append(" : org.pipelineframework.type.CanonicalFieldValue.absent()")
+                        .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+                } else if (field.presence() == PipelineFieldPresence.OPTIONAL) {
+                    builder.append("            value.has").append(setter)
+                        .append("() ? org.pipelineframework.type.CanonicalFieldValue.of(")
+                        .append(fromProtoExpression(field.type(), getter, plan.typeModel()))
+                        .append(") : org.pipelineframework.type.CanonicalFieldValue.absent()")
+                        .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+                } else {
+                    builder.append("            requireProtoField(value.has").append(setter).append("(), ")
+                        .append(fromProtoExpression(field.type(), getter, plan.typeModel())).append(", \"")
+                        .append(javaStringLiteral(record.name() + "." + field.name())).append("\")")
+                        .append(i + 1 == record.fields().size() ? "\n" : ",\n");
+                }
             }
         }
         builder.append("        );\n    }\n\n");
@@ -551,6 +605,11 @@ final class PipelineJavaDomainRenderer {
             throw new IllegalStateException("Version 3 Java domain target does not support generic or map type references.");
         }
         return javaScalarTypes.typeName(scalar.name());
+    }
+
+    private boolean usesSemanticCarrier(PipelineTemplateTypeDefinition.Field field) {
+        return !field.repeated() && (field.presence() != PipelineFieldPresence.REQUIRED
+            || field.nullability() != PipelineFieldNullability.NON_NULL);
     }
 
     private String toProtoExpression(PipelineTemplateTypeReference reference, String expression, PipelineTemplateTypeModel model) {

@@ -116,6 +116,15 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals(2, tuple.get("maxItems").getAsInt());
         assertFalse(tuple.get("items").getAsBoolean());
 
+        JsonObject nullableReference = definitions.getAsJsonObject("v3NullableTypeReference");
+        JsonArray nullableScalars = nullableReference.getAsJsonArray("oneOf").get(0).getAsJsonObject().getAsJsonArray("enum");
+        assertContains(nullableScalars, "string?");
+        assertFalse(nullableScalars.asList().stream().anyMatch(value -> "?".equals(value.getAsString())));
+        String namedNullablePattern = nullableReference.getAsJsonArray("oneOf").get(1).getAsJsonObject()
+            .get("pattern").getAsString();
+        assertTrue(java.util.regex.Pattern.matches(namedNullablePattern, "Customer?"));
+        assertFalse(java.util.regex.Pattern.matches(namedNullablePattern, "?"));
+
         JsonObject properties = schema.getAsJsonObject("properties");
         assertEquals("#/$defs/pipelineInputBoundary", properties.getAsJsonObject("input").get("$ref").getAsString());
         assertEquals("#/$defs/pipelineOutputBoundary", properties.getAsJsonObject("output").get("$ref").getAsString());
@@ -155,6 +164,8 @@ class PipelineTemplateSchemaExporterTest {
             .findFirst().orElseThrow();
         assertContains(repeatedField.getAsJsonArray("required"), "name");
         assertContains(repeatedField.getAsJsonArray("required"), "repeated");
+        assertTrue(repeatedField.getAsJsonObject("properties").has("presence"));
+        assertTrue(repeatedField.getAsJsonObject("properties").has("nullability"));
         assertFalse(repeatedField.get("additionalProperties").getAsBoolean());
         JsonObject logicalReference = definitions.getAsJsonObject("logicalContractReference");
         assertEquals(3, logicalReference.getAsJsonArray("oneOf").size());

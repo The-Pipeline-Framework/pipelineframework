@@ -18,6 +18,7 @@ package org.pipelineframework.config.template;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /** Host-neutral normalized semantic v3 type declarations. Wire metadata is intentionally absent. */
 public sealed interface PipelineTemplateTypeDefinition
@@ -55,9 +56,28 @@ public sealed interface PipelineTemplateTypeDefinition
         }
     }
 
-    record Field(String name, PipelineTemplateTypeReference type, boolean repeated) {
+    record Field(
+        String name,
+        PipelineTemplateTypeReference type,
+        boolean repeated,
+        PipelineFieldPresence presence,
+        PipelineFieldNullability nullability
+    ) {
+        public Field {
+            Objects.requireNonNull(presence, "field presence must not be null");
+            Objects.requireNonNull(nullability, "field nullability must not be null");
+            if (repeated && (presence != PipelineFieldPresence.REQUIRED
+                || nullability != PipelineFieldNullability.NON_NULL)) {
+                throw new IllegalArgumentException("Repeated fields do not yet support presence or nullability modifiers.");
+            }
+        }
+
         public Field(String name, PipelineTemplateTypeReference type) {
-            this(name, type, false);
+            this(name, type, false, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL);
+        }
+
+        public Field(String name, PipelineTemplateTypeReference type, boolean repeated) {
+            this(name, type, repeated, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL);
         }
     }
 

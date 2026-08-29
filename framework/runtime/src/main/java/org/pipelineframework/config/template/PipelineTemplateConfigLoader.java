@@ -17,7 +17,6 @@
 package org.pipelineframework.config.template;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
@@ -56,6 +55,14 @@ public class PipelineTemplateConfigLoader {
     private static final String DEFAULT_TRANSPORT = "GRPC";
     private static final String AGENT_CALL_PROTOCOL_TYPE = "tpf.llm.AgentCall";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
+    private static final Pattern V3_DOCUMENT = Pattern.compile("(?m)^\\s*version:\\s*3\\s*(?:#.*)?$");
+    private static final Pattern V3_COMPACT_OPTIONAL_NAME = Pattern.compile(
+        "(?m)(\\[\\s*)([A-Za-z_][A-Za-z0-9_]*\\?)(\\s*,)");
+    private static final Pattern V3_COMPACT_NULLABLE_TYPE = Pattern.compile(
+        "(?m)(,\\s*)([A-Za-z_][A-Za-z0-9_.:-]*\\?)(\\s*\\])");
+    private static final Pattern YAML_TYPES_BLOCK = Pattern.compile("^types\\s*:\\s*(?:#.*)?$");
+    private static final Pattern YAML_FIELDS_BLOCK = Pattern.compile("^fields\\s*:(.*)$");
+    private static final Pattern YAML_COMPACT_FIELD_ITEM = Pattern.compile("^-\\s*\\[");
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
@@ -613,17 +620,26 @@ public class PipelineTemplateConfigLoader {
             String fieldName;
             String fieldType;
             boolean repeated = false;
+            PipelineFieldPresence presence = PipelineFieldPresence.REQUIRED;
+            PipelineFieldNullability nullability = PipelineFieldNullability.NON_NULL;
             if (fieldObj instanceof List<?> tuple) {
                 if (tuple.size() != 2) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
                 }
                 fieldName = stringify(tuple.get(0));
                 fieldType = stringify(tuple.get(1));
+                V3SemanticToken nameToken = semanticToken(fieldName, owner + " field " + index + " name");
+                V3SemanticToken typeToken = semanticToken(fieldType, owner + " field " + index + " type");
+                fieldName = nameToken.value();
+                fieldType = typeToken.value();
+                presence = nameToken.marked() ? PipelineFieldPresence.OPTIONAL : PipelineFieldPresence.REQUIRED;
+                nullability = typeToken.marked() ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL;
             } else if (fieldObj instanceof Map<?, ?> fieldMap) {
                 if (fieldMap.containsKey("number") || fieldMap.containsKey("optional") || fieldMap.containsKey("reserved")) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " cannot declare protobuf wire metadata in version: 3.");
                 }
-                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index, "name", "type", "repeated");
+                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index,
+                    "name", "type", "repeated", "presence", "nullability");
                 fieldName = stringify(fieldMap.get("name"));
                 boolean hasType = fieldMap.containsKey("type");
                 boolean hasRepeated = fieldMap.containsKey("repeated");
@@ -633,6 +649,14 @@ public class PipelineTemplateConfigLoader {
                 }
                 repeated = hasRepeated;
                 fieldType = stringify(fieldMap.get(repeated ? "repeated" : "type"));
+                if ((fieldName != null && fieldName.endsWith("?")) || (fieldType != null && fieldType.endsWith("?"))) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index
+                        + " cannot mix compact '?' markers with verbose field properties.");
+                }
+                presence = readV3Enum(fieldMap, "presence", PipelineFieldPresence.class,
+                    PipelineFieldPresence.REQUIRED, owner, index);
+                nullability = readV3Enum(fieldMap, "nullability", PipelineFieldNullability.class,
+                    PipelineFieldNullability.NON_NULL, owner, index);
             } else {
                 throw new IllegalStateException("Type '" + owner + "' field " + index + " must be an object or [name, type] tuple.");
             }
@@ -642,10 +666,48 @@ public class PipelineTemplateConfigLoader {
             result.add(new PipelineTemplateTypeDefinition.Field(
                 fieldName,
                 readV3Reference(fieldType, owner + "." + fieldName),
-                repeated));
+                repeated,
+                presence,
+                nullability));
             index++;
         }
         return List.copyOf(result);
+    }
+
+    private V3SemanticToken semanticToken(String token, String subject) {
+        if (token == null) {
+            return new V3SemanticToken("", false);
+        }
+        String value = token.trim();
+        boolean marked = value.endsWith("?");
+        String normalized = marked ? value.substring(0, value.length() - 1) : value;
+        if (normalized.isBlank() || normalized.contains("?")) {
+            throw new IllegalStateException(subject + " has an invalid '?' marker.");
+        }
+        return new V3SemanticToken(normalized, marked);
+    }
+
+    private <E extends Enum<E>> E readV3Enum(
+        Map<?, ?> fieldMap,
+        String key,
+        Class<E> enumType,
+        E defaultValue,
+        String owner,
+        int index
+    ) {
+        if (!fieldMap.containsKey(key)) {
+            return defaultValue;
+        }
+        String value = stringify(fieldMap.get(key));
+        try {
+            return Enum.valueOf(enumType, value.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException failure) {
+            throw new IllegalStateException("Type '" + owner + "' field " + index + " has invalid " + key
+                + " '" + value + "'.", failure);
+        }
+    }
+
+    private record V3SemanticToken(String value, boolean marked) {
     }
 
     private Map<String, PipelineTemplateTypeDefinition.Variant> readV3Variants(String unionName, Object variantsObj) {
@@ -858,11 +920,79 @@ public class PipelineTemplateConfigLoader {
         loaderOptions.setMaxAliasesForCollections(50);
         loaderOptions.setAllowDuplicateKeys(false);
         Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
-        try (Reader reader = Files.newBufferedReader(configPath)) {
-            return yaml.load(reader);
+        try {
+            String source = Files.readString(configPath);
+            return yaml.load(normalizeV3QuestionMarkers(source));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read pipeline template config: " + configPath, e);
         }
+    }
+
+    private String normalizeV3QuestionMarkers(String source) {
+        if (!V3_DOCUMENT.matcher(source).find()) {
+            return source;
+        }
+        StringBuilder normalized = new StringBuilder(source.length());
+        int typesIndent = -1;
+        int typeIndent = -1;
+        int memberIndent = -1;
+        int fieldsIndent = -1;
+        for (String line : source.split("(?<=\\n)", -1)) {
+            String content = line.stripLeading();
+            String structural = content.stripTrailing();
+            if (structural.isBlank() || structural.startsWith("#")) {
+                normalized.append(line);
+                continue;
+            }
+            int indent = line.length() - content.length();
+            if (typesIndent < 0) {
+                if (indent == 0 && YAML_TYPES_BLOCK.matcher(structural).matches()) {
+                    typesIndent = indent;
+                }
+                normalized.append(line);
+                continue;
+            }
+            if (indent <= typesIndent) {
+                typesIndent = -1;
+                typeIndent = -1;
+                memberIndent = -1;
+                fieldsIndent = -1;
+                normalized.append(line);
+                continue;
+            }
+            if (typeIndent < 0 || indent <= typeIndent) {
+                typeIndent = indent;
+                memberIndent = -1;
+                fieldsIndent = -1;
+                normalized.append(line);
+                continue;
+            }
+            if (fieldsIndent >= 0 && indent > fieldsIndent) {
+                normalized.append(YAML_COMPACT_FIELD_ITEM.matcher(structural).find()
+                    ? normalizeV3FieldTuple(line)
+                    : line);
+                continue;
+            }
+            fieldsIndent = -1;
+            if (memberIndent < 0 || indent < memberIndent) {
+                memberIndent = indent;
+            }
+            java.util.regex.Matcher fields = YAML_FIELDS_BLOCK.matcher(structural);
+            if (indent == memberIndent && fields.matches()) {
+                fieldsIndent = indent;
+                normalized.append(fields.group(1).stripLeading().startsWith("[")
+                    ? normalizeV3FieldTuple(line)
+                    : line);
+            } else {
+                normalized.append(line);
+            }
+        }
+        return normalized.toString();
+    }
+
+    private String normalizeV3FieldTuple(String source) {
+        String namesQuoted = V3_COMPACT_OPTIONAL_NAME.matcher(source).replaceAll("$1\"$2\"$3");
+        return V3_COMPACT_NULLABLE_TYPE.matcher(namesQuoted).replaceAll("$1\"$2\"$3");
     }
 
     private int readVersion(Map<?, ?> rootMap) {

@@ -274,7 +274,7 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
-    void v3AdditionsAreCompatibleButChangingGeneratedIdentityIsNot() {
+    void v3AdditionsReportPerSurfaceConsequencesAndChangingGeneratedIdentityIsIncompatible() {
         PipelineIdlSnapshot.TypeSnapshot baselineRecord = new PipelineIdlSnapshot.TypeSnapshot(
             "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid")),
             Optional.empty(), List.of());
@@ -284,7 +284,14 @@ class PipelineIdlCompatibilityCheckerTest {
                 new PipelineIdlSnapshot.TypeFieldSnapshot(2, "lineItems", "line_items", "LineItem", true)),
             Optional.empty(), List.of());
 
-        assertTrue(new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(additiveRecord)).isEmpty());
+        PipelineIdlCompatibilityReport addition = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(baselineRecord), v3Snapshot(additiveRecord));
+        assertTrue(addition.findings().stream().anyMatch(finding ->
+            finding.dimension() == PipelineCompatibilityDimension.PROTOBUF_WIRE
+                && finding.impact() == PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(addition.findings().stream().anyMatch(finding ->
+            finding.dimension() == PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE
+                && finding.impact() == PipelineCompatibilityImpact.BREAKING));
 
         PipelineIdlSnapshot.TypeSnapshot renamedProtoField = new PipelineIdlSnapshot.TypeSnapshot(
             "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_identifier", "uuid")),
@@ -292,6 +299,85 @@ class PipelineIdlCompatibilityCheckerTest {
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(renamedProtoField));
 
         assertTrue(errors.stream().anyMatch(error -> error.contains("protobuf identity or type")));
+    }
+
+    @Test
+    void classifiesRequiredAndOptionalFieldAdditionsByCanonicalDataCompatibility() {
+        PipelineIdlSnapshot.TypeSnapshot baseline = recordWith(field(1, "id",
+            PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));
+        PipelineIdlSnapshot.TypeSnapshot required = recordWith(
+            field(1, "id", PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL),
+            field(2, "email", PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));
+        PipelineIdlSnapshot.TypeSnapshot optional = recordWith(
+            field(1, "id", PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL),
+            field(2, "email", PipelineFieldPresence.OPTIONAL, PipelineFieldNullability.NON_NULL));
+
+        PipelineIdlCompatibilityReport requiredReport = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(baseline), v3Snapshot(required));
+        PipelineIdlCompatibilityReport optionalReport = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(baseline), v3Snapshot(optional));
+
+        assertTrue(has(requiredReport, PipelineCompatibilityDimension.PROTOBUF_WIRE, PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(has(requiredReport, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(optionalReport, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baseline), v3Snapshot(required)).stream()
+            .anyMatch(message -> message.contains("protobuf-wire compatible")
+                && message.contains("canonical-data breaking")
+                && message.contains("previous contract")));
+    }
+
+    @Test
+    void classifiesRemovedFieldsAcrossEveryCompatibilitySurface() {
+        PipelineIdlSnapshot.TypeSnapshot baseline = recordWith(field(1, "id",
+            PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));
+
+        PipelineIdlCompatibilityReport report = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(baseline), v3Snapshot(recordWith()));
+
+        assertTrue(has(report, PipelineCompatibilityDimension.NORMALIZED_IDL, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(report, PipelineCompatibilityDimension.PROTOBUF_WIRE, PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(has(report, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(report, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE, PipelineCompatibilityImpact.BREAKING));
+    }
+
+    @Test
+    void classifiesPresenceAndNullabilityTransitionsWithoutCollapsingAxes() {
+        PipelineIdlSnapshot.TypeSnapshot strict = recordWith(field(1, "value",
+            PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL));
+        PipelineIdlSnapshot.TypeSnapshot loose = recordWith(field(1, "value",
+            PipelineFieldPresence.OPTIONAL, PipelineFieldNullability.NULLABLE));
+
+        PipelineIdlCompatibilityReport widening = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(strict), v3Snapshot(loose));
+        PipelineIdlCompatibilityReport narrowing = new PipelineIdlCompatibilityChecker()
+            .analyze(v3Snapshot(loose), v3Snapshot(strict));
+
+        assertTrue(has(widening, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.WIDENING));
+        assertTrue(has(narrowing, PipelineCompatibilityDimension.CANONICAL_DATA, PipelineCompatibilityImpact.BREAKING));
+        assertTrue(has(widening, PipelineCompatibilityDimension.PROTOBUF_WIRE, PipelineCompatibilityImpact.COMPATIBLE));
+        assertTrue(has(narrowing, PipelineCompatibilityDimension.PROTOBUF_WIRE, PipelineCompatibilityImpact.LOSSY));
+    }
+
+    @Test
+    void nullableToNonNullRequiresRetiredMarkerIdentityToRemainReserved() {
+        PipelineIdlSnapshot.TypeFieldSnapshot nullableField = new PipelineIdlSnapshot.TypeFieldSnapshot(
+            1, "value", "value", "string", false, PipelineFieldPresence.REQUIRED,
+            PipelineFieldNullability.NULLABLE, Optional.of(2), Optional.of("value_null"));
+        PipelineIdlSnapshot.TypeSnapshot baseline = recordWith(nullableField);
+        PipelineIdlSnapshot.TypeFieldSnapshot nonNullField = field(
+            1, "value", PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL);
+        PipelineIdlSnapshot.TypeSnapshot invalid = recordWith(nonNullField);
+        PipelineIdlSnapshot.TypeSnapshot valid = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record", List.of(nonNullField), Optional.empty(), List.of(),
+            List.of(2), List.of("value_null"));
+
+        List<String> invalidErrors = new PipelineIdlCompatibilityChecker()
+            .compare(v3Snapshot(baseline), v3Snapshot(invalid));
+        List<String> validErrors = new PipelineIdlCompatibilityChecker()
+            .compare(v3Snapshot(baseline), v3Snapshot(valid));
+
+        assertTrue(invalidErrors.stream().anyMatch(error -> error.contains("without reserving its protobuf null marker")));
+        assertFalse(validErrors.stream().anyMatch(error -> error.contains("without reserving its protobuf null marker")));
     }
 
     @Test
@@ -389,6 +475,28 @@ class PipelineIdlCompatibilityCheckerTest {
 
     private PipelineIdlSnapshot v3Snapshot(PipelineIdlSnapshot.TypeSnapshot type) {
         return new PipelineIdlSnapshot(3, "App", "com.example", Map.of(), Map.of(), Map.of(type.name(), type), List.of());
+    }
+
+    private PipelineIdlSnapshot.TypeSnapshot recordWith(PipelineIdlSnapshot.TypeFieldSnapshot... fields) {
+        return new PipelineIdlSnapshot.TypeSnapshot("Payment", "record", List.of(fields), Optional.empty(), List.of());
+    }
+
+    private PipelineIdlSnapshot.TypeFieldSnapshot field(
+        int number,
+        String name,
+        PipelineFieldPresence presence,
+        PipelineFieldNullability nullability
+    ) {
+        return new PipelineIdlSnapshot.TypeFieldSnapshot(number, name, name, "string", false, presence, nullability);
+    }
+
+    private boolean has(
+        PipelineIdlCompatibilityReport report,
+        PipelineCompatibilityDimension dimension,
+        PipelineCompatibilityImpact impact
+    ) {
+        return report.findings().stream().anyMatch(finding ->
+            finding.dimension() == dimension && finding.impact() == impact);
     }
 
     private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {

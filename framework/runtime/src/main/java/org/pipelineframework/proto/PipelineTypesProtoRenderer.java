@@ -52,6 +52,9 @@ final class PipelineTypesProtoRenderer {
         StringBuilder builder = header(plan.basePackage());
         PipelineTemplateTypeModel model = plan.typeModel();
         PipelineIdlSnapshot state = plan.idlState();
+        if (usesNullableFields(model)) {
+            builder.append("import \"google/protobuf/struct.proto\";\n\n");
+        }
         boolean first = true;
         if (usesV3PayloadReference(model)) {
             PayloadReferenceProtoSchema.renderMessages(builder);
@@ -107,6 +110,19 @@ final class PipelineTypesProtoRenderer {
                 throw new IllegalStateException("IDL state references removed v3 field '" + record.name() + "." + field.name() + "'.");
             }
             String protoType = protoType(definition.type(), model);
+            if (definition.nullability() == PipelineFieldNullability.NULLABLE) {
+                int nullMarkerNumber = field.nullMarkerNumber().orElseThrow(() -> new IllegalStateException(
+                    "Missing protobuf null marker tag for nullable field '" + record.name() + "." + field.name() + "'."));
+                String nullMarkerName = field.nullMarkerProtoName().orElseThrow(() -> new IllegalStateException(
+                    "Missing protobuf null marker name for nullable field '" + record.name() + "." + field.name() + "'."));
+                builder.append("  oneof ").append(field.protoName()).append("_state {\n")
+                    .append("    ").append(protoType).append(' ').append(field.protoName()).append(" = ")
+                    .append(field.number()).append(";\n")
+                    .append("    google.protobuf.NullValue ").append(nullMarkerName).append(" = ")
+                    .append(nullMarkerNumber).append(";\n")
+                    .append("  }\n");
+                continue;
+            }
             builder.append("  ");
             if (definition.repeated()) {
                 builder.append("repeated ");
@@ -194,6 +210,14 @@ final class PipelineTypesProtoRenderer {
             }
             return false;
         });
+    }
+
+    private boolean usesNullableFields(PipelineTemplateTypeModel model) {
+        return model.definitions().values().stream()
+            .filter(PipelineTemplateTypeDefinition.RecordType.class::isInstance)
+            .map(PipelineTemplateTypeDefinition.RecordType.class::cast)
+            .flatMap(record -> record.fields().stream())
+            .anyMatch(field -> field.nullability() == PipelineFieldNullability.NULLABLE);
     }
 
     private void renderV2Message(StringBuilder builder, PipelineTemplateMessage message) {
