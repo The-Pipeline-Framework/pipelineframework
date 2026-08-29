@@ -208,7 +208,10 @@ The current `main` development version is scheduled for publication daily at 02:
 and may be delayed. The workflow can also be dispatched manually, but its publish job runs only
 from `main`. It verifies the same framework reactor that the release workflow deploys, then
 publishes the existing `-SNAPSHOT` version with the `central-publishing` profile. It does not
-create a tag or GitHub release.
+create a tag or GitHub release. After Maven Central deployment succeeds, it automatically
+dispatches the author MCP publisher with the exact `-SNAPSHOT` version and checked-out `main`
+commit. That downstream workflow activates the current snapshot alias only after the matching
+commit-addressed Repowise input has been verified and published.
 
 Sonatype Central snapshots are mutable development artifacts and are currently cleaned up after 90 days.
 Before the first snapshot deployment, enable SNAPSHOT publishing for the project namespace in
