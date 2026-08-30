@@ -22,8 +22,8 @@ class StatelessDecisionClientTest {
         var client = new ScriptedLlmQueryConnector.StatelessDecisionClient(recorder);
         LlmTurnRequest request = request("lookup");
 
-        LlmToolProposal first = client.decide(request).toCompletableFuture().join();
-        LlmToolProposal repeated = client.decide(request).toCompletableFuture().join();
+        LlmToolProposal first = client.decide(request).toCompletableFuture().join().proposal();
+        LlmToolProposal repeated = client.decide(request).toCompletableFuture().join().proposal();
 
         assertEquals(first, repeated);
         assertEquals(new LlmToolProposal("lookup", "{\"subject\":\"missing-proof\"}"), first);
@@ -36,9 +36,9 @@ class StatelessDecisionClientTest {
         ProofInvocationRecorder recorder = new ProofInvocationRecorder();
         var client = new ScriptedLlmQueryConnector.StatelessDecisionClient(recorder);
 
-        assertEquals("lookup", client.decide(request("lookup")).toCompletableFuture().join().alias());
-        assertEquals("record", client.decide(request("action")).toCompletableFuture().join().alias());
-        assertEquals("complete", client.decide(request("complete")).toCompletableFuture().join().alias());
+        assertEquals("lookup", client.decide(request("lookup")).toCompletableFuture().join().proposal().alias());
+        assertEquals("record", client.decide(request("action")).toCompletableFuture().join().proposal().alias());
+        assertEquals("complete", client.decide(request("complete")).toCompletableFuture().join().proposal().alias());
         assertEquals(List.of(
             StructuredOutputSchemaMode.REQUIRED,
             StructuredOutputSchemaMode.REQUIRED,
