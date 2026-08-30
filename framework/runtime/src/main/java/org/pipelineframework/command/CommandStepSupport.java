@@ -439,7 +439,7 @@ public class CommandStepSupport {
             raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
                 request.input(),
                 boundConfiguration,
-                connectorExecutionContext(request),
+                connectorExecutionContext(request, selector, binding),
                 Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
                     request.commandId(), request.attemptId())))));
         return Uni.createFrom().completionStage(stage)
@@ -717,13 +717,23 @@ public class CommandStepSupport {
         return context;
     }
 
-    private static ConnectorExecutionContext connectorExecutionContext(CommandRequest<?> request) {
+    private static ConnectorExecutionContext connectorExecutionContext(
+        CommandRequest<?> request,
+        NativeCommandSelector selector,
+        org.pipelineframework.connector.ConnectorBindingName binding
+    ) {
         PipelineExecutionContext context = request.executionContext();
-        return new ConnectorExecutionContext(
-            Optional.of(context.tenantId()),
-            Optional.of(context.executionId()),
-            Optional.of(request.descriptor().stepId()),
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+        return ConnectorExecutionContext.managed(
+            context.tenantId(),
+            context.executionId(),
+            context.pipelineId(),
+            context.contractVersion(),
+            context.releaseVersion(),
+            request.descriptor().stepId(),
+            new org.pipelineframework.connector.ConnectorInvocationTarget(binding, selector.operationIdentity()),
+            context.correlationId(),
+            context.traceId(),
+            Optional.empty());
     }
 
     private <I, O> Uni<O> dispatchLegacyConnector(
