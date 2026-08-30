@@ -42,7 +42,7 @@ while leaving generic cache policy and Command effect semantics unchanged.
 ## Consequences
 
 - A concurrent unary miss can call the provider more than once before one capture wins; every replay
-  afterwards uses the winner. Each completed live observation is recorded before arbitration, while
+  afterward uses the winner. Each completed live observation is recorded before arbitration, while
   decoding the winning record does not relabel the just-completed call as replay.
 - An incomplete streaming generation is never replayed. An expired lease permits a new generation
   to observe the provider again.
