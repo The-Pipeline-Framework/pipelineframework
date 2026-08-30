@@ -1,6 +1,7 @@
 package org.pipelineframework.invocation;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
@@ -79,6 +80,9 @@ class PipelineInvocationStepsTest {
         AtomicReference<PipelineInvocationContext> observedParent = new AtomicReference<>();
         AtomicReference<PipelineInvocationContext> observedChild = new AtomicReference<>();
         AtomicReference<String> subscriptionThread = new AtomicReference<>();
+        AtomicReference<Optional<PipelineInvocationContext>> invocationAfterCall = new AtomicReference<>();
+        AtomicReference<Optional<PipelineExecutionContext>> executionAfterCall = new AtomicReference<>();
+        AtomicReference<String> cleanupThread = new AtomicReference<>();
         when(runner.runNestedWithContext(
                 any(), anyList(), anyString(), anyInt(), any(PipelineInvocationContext.class)))
             .thenAnswer(invocation -> {
@@ -87,7 +91,11 @@ class PipelineInvocationStepsTest {
                 observedChild.set(invocation.getArgument(4));
                 subscriptionThread.set(Thread.currentThread().getName());
                 Uni<?> input = invocation.getArgument(0);
-                return new PipelineRunner.ExecutionResult(input.replaceWith("done"), null);
+                return new PipelineRunner.ExecutionResult(input.replaceWith("done").invoke(() -> {
+                    invocationAfterCall.set(PipelineInvocationContextHolder.get());
+                    executionAfterCall.set(PipelineExecutionContextHolder.get());
+                    cleanupThread.set(Thread.currentThread().getName());
+                }), null);
             });
 
         PipelineInvocationContext parent = PipelineInvocationContext.root(8);
@@ -105,6 +113,9 @@ class PipelineInvocationStepsTest {
         assertEquals(parent, observedParent.get());
         assertEquals(parent.enterRecursive("agent", "continue"), observedChild.get());
         assertNotEquals(callerThread, subscriptionThread.get());
+        assertEquals(subscriptionThread.get(), cleanupThread.get());
+        assertTrue(invocationAfterCall.get().isEmpty());
+        assertTrue(executionAfterCall.get().isEmpty());
         assertTrue(PipelineInvocationContextHolder.get().isEmpty());
         assertTrue(PipelineExecutionContextHolder.get().isEmpty());
     }
