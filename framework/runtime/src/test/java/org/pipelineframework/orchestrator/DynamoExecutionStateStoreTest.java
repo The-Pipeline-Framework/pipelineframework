@@ -1033,6 +1033,34 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void renewLeaseIsFencedByOwnerAndVersionWithoutChangingTheVersion() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> renewedItem = new HashMap<>(executionItem(
+            "tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.RUNNING));
+        renewedItem.put("lease_owner", AttributeValue.builder().s("worker-1").build());
+        renewedItem.put("lease_expires_epoch_ms", AttributeValue.builder().n(Long.toString(now + 30_000L)).build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(renewedItem).build());
+
+        ExecutionRecord<Object, Object> renewed = store.renewLease(
+                "tenant-a", "exec-1", 0L, "worker-1", now, 30_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(0L, renewed.version());
+        ArgumentCaptor<UpdateItemRequest> request = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(request.capture());
+        assertTrue(request.getValue().conditionExpression().contains("#status = :running"));
+        assertTrue(request.getValue().conditionExpression().contains("#version = :expectedVersion"));
+        assertTrue(request.getValue().conditionExpression().contains("#leaseOwner = :leaseOwner"));
+        assertTrue(request.getValue().conditionExpression().contains("#leaseExpires > :now"));
+        assertFalse(request.getValue().updateExpression().contains("#version"));
+    }
+
+    @Test
     void scheduleRetryReturnsEmptyOnVersionMismatch() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");

@@ -189,6 +189,64 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String leaseOwner,
+        long nowEpochMs,
+        long leaseMs) {
+        if (leaseMs <= 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("leaseMs must be > 0 for renewLease."));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null
+                    || current.status() != ExecutionStatus.RUNNING
+                    || current.version() != expectedVersion
+                    || !Objects.equals(current.leaseOwner(), leaseOwner)
+                    || current.leaseExpiresEpochMs() <= nowEpochMs) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> renewed = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    current.pipelineId(),
+                    current.contractVersion(),
+                    current.releaseVersion(),
+                    current.resultShape(),
+                    current.status(),
+                    current.version(),
+                    current.currentStepIndex(),
+                    current.attempt(),
+                    current.leaseOwner(),
+                    nowEpochMs + leaseMs,
+                    current.nextDueEpochMs(),
+                    current.lastTransitionKey(),
+                    current.inputPayload(),
+                    current.awaitUnitId(),
+                    current.resultPayload(),
+                    current.errorCode(),
+                    current.errorMessage(),
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity(),
+                    current.redriveIntent(),
+                    current.failedStepIndex(),
+                    current.failedCommandId());
+                executionsByScopedId.put(scopedId, renewed);
+                return Optional.of(renewed);
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> markSucceeded(
         String tenantId,
         String executionId,

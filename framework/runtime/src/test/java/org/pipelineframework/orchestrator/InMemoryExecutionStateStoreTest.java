@@ -10,6 +10,38 @@ import static org.junit.jupiter.api.Assertions.*;
 class InMemoryExecutionStateStoreTest {
 
     @Test
+    void renewLeaseExtendsOnlyTheCurrentOwnersClaimWithoutChangingVersion() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a", "key-renew", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a", created.record().executionId(), "worker-1", now, 1_000L)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> renewed = store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-1", now + 500L, 1_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(claimed.version(), renewed.version());
+        assertEquals("worker-1", renewed.leaseOwner());
+        assertEquals(now + 1_500L, renewed.leaseExpiresEpochMs());
+        assertTrue(store.claimLease("tenant-a", claimed.executionId(), "worker-2", now + 1_100L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-2", now + 600L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version() + 1L, "worker-1", now + 600L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-1", now + 1_500L, 1_000L)
+            .await().indefinitely().isEmpty());
+    }
+
+    @Test
     void createOrGetReturnsDuplicateForSameKey() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

@@ -41,12 +41,14 @@ import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.controlplane.TerminalPublicationClaim;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -136,6 +138,57 @@ class QueueAsyncSegmentPipelineTest {
     lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
     lenient().when(awaitContinuations.afterParentWaiting(any(), any(), anyLong(), any()))
         .thenReturn(Uni.createFrom().voidItem());
+  }
+
+  @Test
+  void renewsLeaseWhileAClaimedTransitionIsStillRunning() {
+    when(orchestratorConfig.leaseMs()).thenReturn(30L);
+    ExecutionRecord<Object, Object> claimed = record("exec-long-running", ExecutionResultShape.SINGLE);
+    ExecutionRecord<Object, Object> succeeded = withStatus(claimed, ExecutionStatus.SUCCEEDED, 1L);
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-long-running"), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.renewLease(
+            eq("tenant-1"), eq("exec-long-running"), eq(0L), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.markSucceeded(
+            eq("tenant-1"), eq("exec-long-running"), eq(0L), eq("exec-long-running:0:0"),
+            eq(List.of("output")), anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+
+    pipeline(transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
+            new ExecutionWorkItem("tenant-1", "exec-long-running"),
+            command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output")))
+                .onItem().delayIt().by(Duration.ofMillis(90)),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    verify(executionStateStore, atLeastOnce()).renewLease(
+        eq("tenant-1"), eq("exec-long-running"), eq(0L), any(), anyLong(), eq(30L));
+    verify(executionStateStore).markSucceeded(
+        eq("tenant-1"), eq("exec-long-running"), eq(0L), eq("exec-long-running:0:0"),
+        eq(List.of("output")), anyLong());
+  }
+
+  @Test
+  void lostLeaseCancelsTheTransitionBeforeItCanCommit() {
+    when(orchestratorConfig.leaseMs()).thenReturn(30L);
+    ExecutionRecord<Object, Object> claimed = record("exec-lease-lost", ExecutionResultShape.SINGLE);
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-lease-lost"), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.renewLease(
+            eq("tenant-1"), eq("exec-lease-lost"), eq(0L), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().item(Optional.empty()));
+
+    RuntimeException failure = assertThrows(RuntimeException.class, () -> pipeline(
+        transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
+            new ExecutionWorkItem("tenant-1", "exec-lease-lost"),
+            command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output")))
+                .onItem().delayIt().by(Duration.ofMillis(90)),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely());
+
+    assertTrue(messageChain(failure).contains("Execution lease ownership was lost"));
+    verify(executionStateStore, never()).markSucceeded(any(), any(), anyLong(), any(), any(), anyLong());
   }
 
   @Test
@@ -641,5 +694,17 @@ class QueueAsyncSegmentPipelineTest {
         "idempotency-" + kind,
         "terminal-publication-prepared:publication-" + kind + ":idempotency-" + kind,
         "terminal-publication-completed:publication-" + kind + ":idempotency-" + kind);
+  }
+
+  private static String messageChain(Throwable failure) {
+    StringBuilder messages = new StringBuilder();
+    Throwable current = failure;
+    while (current != null) {
+      if (current.getMessage() != null) {
+        messages.append(current.getMessage()).append(' ');
+      }
+      current = current.getCause();
+    }
+    return messages.toString();
   }
 }

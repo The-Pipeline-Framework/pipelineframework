@@ -125,8 +125,37 @@ class QueueAsyncSegmentPipeline {
             now,
             orchestratorConfig.leaseMs())
         .onItem().transformToUni(claimed -> claimed
-            .map(record -> runClaimed(ClaimedSegment.from(record), worker, itemContinuationHandler, now))
+            .map(record -> {
+              ClaimedSegment segment = ClaimedSegment.from(record);
+              return keepLeaseAlive(segment, runClaimed(segment, worker, itemContinuationHandler, now));
+            })
             .orElseGet(() -> Uni.createFrom().voidItem()));
+  }
+
+  private Uni<Void> keepLeaseAlive(ClaimedSegment segment, Uni<Void> work) {
+    long leaseMs = orchestratorConfig.leaseMs();
+    Duration renewalInterval = Duration.ofMillis(Math.max(1L, leaseMs / 3L));
+    return Uni.join().first(work, renewLeaseUntilLost(segment, renewalInterval)).toTerminate();
+  }
+
+  private Uni<Void> renewLeaseUntilLost(ClaimedSegment segment, Duration renewalInterval) {
+    return Uni.createFrom().voidItem()
+        .onItem().delayIt().by(renewalInterval)
+        .onItem().transformToUni(ignored -> {
+          ExecutionRecord<Object, Object> record = segment.record();
+          long nowEpochMs = System.currentTimeMillis();
+          return executionStateStore.renewLease(
+                  record.tenantId(),
+                  record.executionId(),
+                  record.version(),
+                  queueWorkerId,
+                  nowEpochMs,
+                  orchestratorConfig.leaseMs())
+              .onItem().transformToUni(renewed -> renewed.isPresent()
+                  ? renewLeaseUntilLost(segment, renewalInterval)
+                  : Uni.createFrom().failure(new IllegalStateException(
+                      "Execution lease ownership was lost for execution " + record.executionId())));
+        });
   }
 
   private Uni<Void> runClaimed(
