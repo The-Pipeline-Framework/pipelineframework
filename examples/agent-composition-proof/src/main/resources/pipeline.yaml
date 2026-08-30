@@ -1,0 +1,121 @@
+version: 3
+appName: Agent Composition Proof
+basePackage: org.pipelineframework.examples.agentproof
+transport: LOCAL
+platform: COMPUTE
+contract: { input: AgentState, output: ApplicationResult }
+
+connectors:
+  model:
+    provider: proof.llm
+    version: 1
+    config: { model: deterministic-proof }
+  capabilities:
+    provider: proof.capabilities
+    version: 1
+    config: { fixture: offline }
+
+types:
+  AgentState:
+    fields:
+      - [evidence, string]
+      - [phase, string]
+  ApplicationResult:
+    fields:
+      - [summary, string]
+      - [turns, int32]
+  LookupArguments:
+    fields:
+      - [subject, string]
+  LookupResult:
+    fields:
+      - [evidence, string]
+  RecordArguments:
+    fields:
+      - [action, string]
+  RecordResult:
+    fields:
+      - [confirmation, string]
+  AgentDecision:
+    variants:
+      call: <tpf.llm.AgentCall>
+      complete: ApplicationResult
+
+pipelines:
+  agent-loop:
+    input: AgentState
+    output: ApplicationResult
+    steps:
+      - name: Decide
+        kind: query
+        cardinality: ONE_TO_ONE
+        input: AgentState
+        output: AgentDecision
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentState
+          output: org.pipelineframework.examples.agentproof.domain.AgentDecision
+        using: model
+        operation: decide
+        operationVersion: 1
+        config:
+          instructions: Select exactly one release-pinned alternative from the supplied AgentState.
+        callables:
+          lookup:
+            using: capabilities
+            operation: evidence.lookup
+            operationVersion: 1
+            kind: query
+            input: LookupArguments
+          record:
+            using: capabilities
+            operation: evidence.record
+            operationVersion: 1
+            kind: command
+            input: RecordArguments
+            commandIdGenerator: org.pipelineframework.examples.agentproof.RecordCommandIdGenerator
+            duplicatePolicy: RETURN_RECORDED
+            config: { label: proof }
+      - name: Invoke proposal
+        cardinality: ONE_TO_ONE
+        input: <tpf.llm.AgentCall>
+        output: <tpf.connector.OperationObservation>
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentCall
+          output: org.pipelineframework.examples.agentproof.domain.OperationObservation
+        operation: { mode: dynamic, from: Decide }
+      - name: Reduce observation
+        service: org.pipelineframework.examples.agentproof.ObservationReducerService
+        cardinality: ONE_TO_ONE
+        input: <tpf.connector.OperationObservation>
+        output: AgentState
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.OperationObservation
+          output: org.pipelineframework.examples.agentproof.domain.AgentState
+      - name: Recur
+        pipeline: agent-loop
+        cardinality: ONE_TO_ONE
+        input: AgentState
+        output: ApplicationResult
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentState
+          output: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+      - name: Finish
+        service: org.pipelineframework.examples.agentproof.FinishService
+        cardinality: ONE_TO_ONE
+        input: ApplicationResult
+        output: ApplicationResult
+        terminal: true
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+          output: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+
+steps:
+  - name: Call agent loop
+    pipeline: agent-loop
+    cardinality: ONE_TO_ONE
+    input: AgentState
+    output: ApplicationResult
+    terminal: true
+    java:
+      input: org.pipelineframework.examples.agentproof.domain.AgentState
+      output: org.pipelineframework.examples.agentproof.domain.ApplicationResult

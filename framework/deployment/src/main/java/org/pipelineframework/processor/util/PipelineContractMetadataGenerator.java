@@ -295,6 +295,11 @@ public class PipelineContractMetadataGenerator {
             }
             indexed.put(normalizeStepToken(step.name()), step);
         }
+        config.localPipelines().values().stream()
+            .flatMap(List::stream)
+            .filter(Objects::nonNull)
+            .filter(step -> step.name() != null)
+            .forEach(step -> indexed.put(normalizeStepToken(step.name()), step));
         return indexed;
     }
 

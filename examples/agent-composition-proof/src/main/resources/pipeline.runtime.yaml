@@ -1,0 +1,12 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: agent-composition-proof-app
+  module: agent-composition-proof-app
+  synthetic:
+    module: agent-composition-proof-app
+modules:
+  agent-composition-proof-app:
+    runtime: agent-composition-proof-app
+    steps:
+      - call-agent-loop

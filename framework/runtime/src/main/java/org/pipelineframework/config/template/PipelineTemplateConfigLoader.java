@@ -36,7 +36,6 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
-import org.pipelineframework.config.pipeline.PipelineResources;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
@@ -102,7 +101,8 @@ public class PipelineTemplateConfigLoader {
     }
 
     private static ProtocolTypeRegistry discoveredProtocolTypes() {
-        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        ClassLoader classLoader = ConnectorProviderManifestLoader.metadataClassLoader(
+            PipelineTemplateConfigLoader.class);
         return new ProtocolTypeRegistry(
             ProtocolTypeRegistry.discoverContributions(classLoader), ConnectorProviderManifestLoader.load(classLoader));
     }

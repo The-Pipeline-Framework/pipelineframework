@@ -85,6 +85,8 @@
         <module>examples/search</module>
         <module>examples/stdio-object-demo</module>
         <module>examples/local-command-proof</module>
+        <module>examples/agent-composition-proof/connectors</module>
+        <module>examples/agent-composition-proof</module>
     </modules>
 
     <dependencyManagement>
