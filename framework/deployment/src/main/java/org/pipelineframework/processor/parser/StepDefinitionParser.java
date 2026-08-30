@@ -188,6 +188,11 @@ public class StepDefinitionParser {
             root = new PipelineYamlDocumentLoader().load(templatePath);
         } catch (YAMLException e) {
             throw new IOException(e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            if (e.getCause() instanceof IOException readFailure) {
+                throw readFailure;
+            }
+            throw e;
         }
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IOException("Pipeline template root must be a map");

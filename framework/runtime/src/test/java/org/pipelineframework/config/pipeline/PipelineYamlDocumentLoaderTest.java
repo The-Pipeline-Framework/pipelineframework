@@ -60,6 +60,23 @@ class PipelineYamlDocumentLoaderTest {
     }
 
     @Test
+    void loadsCompactMarkersForQuotedVersionThreeDocuments() {
+        for (String version : List.of("\"3\"", "'3'")) {
+            Map<?, ?> root = root(loader.load(new StringReader("""
+                version: %s
+                types:
+                  Customer:
+                    fields: [[note?, string?]]
+                """.formatted(version))));
+            Map<?, ?> customer = root((Map<?, ?>) root.get("types")).get("Customer") instanceof Map<?, ?> value
+                ? value
+                : throwUnexpectedDocument();
+
+            assertEquals(List.of("note?", "string?"), ((List<?>) customer.get("fields")).getFirst());
+        }
+    }
+
+    @Test
     void loadsUtf8FromPathAndInputStream(@TempDir Path tempDir) throws Exception {
         String source = "version: 3\nappName: Catálogo\ntypes: {}\n";
         Path config = tempDir.resolve("pipeline.yaml");
@@ -102,6 +119,11 @@ class PipelineYamlDocumentLoaderTest {
             aliases.append("  - *shared\n");
         }
         assertThrows(YAMLException.class, () -> loader.load(new StringReader(aliases.toString())));
+    }
+
+    @Test
+    void rejectsOversizedInputWhileBuffering() {
+        assertThrows(YAMLException.class, () -> loader.load(new StringReader("a".repeat(3_000_001))));
     }
 
     private static Map<?, ?> root(Object document) {

@@ -28,12 +28,15 @@ import java.util.regex.Pattern;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.YAMLException;
 
 /**
  * Loads a {@code pipeline.yaml} document through the framework's shared secure YAML grammar.
  */
 public final class PipelineYamlDocumentLoader {
-    private static final Pattern V3_DOCUMENT = Pattern.compile("(?m)^\\s*version:\\s*3\\s*(?:#.*)?$");
+    private static final int MAX_CODE_POINTS = 3_000_000;
+    private static final Pattern V3_DOCUMENT = Pattern.compile(
+        "(?m)^\\s*version:\\s*(?:3|\"3\"|'3')\\s*(?:#.*)?$");
     private static final Pattern V3_COMPACT_OPTIONAL_NAME = Pattern.compile(
         "(?m)(\\[\\s*)([A-Za-z_][A-Za-z0-9_]*\\?)(\\s*,)");
     private static final Pattern V3_COMPACT_NULLABLE_TYPE = Pattern.compile(
@@ -44,8 +47,8 @@ public final class PipelineYamlDocumentLoader {
 
     /** Load a pipeline YAML document from a UTF-8 file. */
     public Object load(Path configPath) {
-        try {
-            return parse(Files.readString(configPath, StandardCharsets.UTF_8));
+        try (Reader reader = Files.newBufferedReader(configPath, StandardCharsets.UTF_8)) {
+            return parse(readSource(reader));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read pipeline config: " + configPath, e);
         }
@@ -71,7 +74,7 @@ public final class PipelineYamlDocumentLoader {
 
     private Object parse(String source) {
         LoaderOptions loaderOptions = new LoaderOptions();
-        loaderOptions.setCodePointLimit(3_000_000);
+        loaderOptions.setCodePointLimit(MAX_CODE_POINTS);
         loaderOptions.setMaxAliasesForCollections(50);
         loaderOptions.setAllowDuplicateKeys(false);
         return new Yaml(new SafeConstructor(loaderOptions)).load(normalizeV3QuestionMarkers(source));
@@ -80,9 +83,21 @@ public final class PipelineYamlDocumentLoader {
     private String readSource(Reader reader) throws IOException {
         StringBuilder source = new StringBuilder();
         char[] buffer = new char[8_192];
+        int codePoints = 0;
         int read;
         while ((read = reader.read(buffer)) >= 0) {
+            int addedCodePoints = Character.codePointCount(buffer, 0, read);
+            if (!source.isEmpty()
+                && read > 0
+                && Character.isHighSurrogate(source.charAt(source.length() - 1))
+                && Character.isLowSurrogate(buffer[0])) {
+                addedCodePoints--;
+            }
+            if (codePoints + addedCodePoints > MAX_CODE_POINTS) {
+                throw new YAMLException("Pipeline YAML exceeds the " + MAX_CODE_POINTS + " character limit");
+            }
             source.append(buffer, 0, read);
+            codePoints += addedCodePoints;
         }
         return source.toString();
     }
