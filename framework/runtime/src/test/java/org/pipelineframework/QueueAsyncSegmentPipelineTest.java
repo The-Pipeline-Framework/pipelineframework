@@ -3,6 +3,7 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
@@ -178,6 +179,8 @@ class QueueAsyncSegmentPipelineTest {
     when(executionStateStore.renewLease(
             eq("tenant-1"), eq("exec-lease-lost"), eq(0L), any(), anyLong(), eq(30L)))
         .thenReturn(Uni.createFrom().item(Optional.empty()));
+    when(executionStateStore.getExecution("tenant-1", "exec-lease-lost"))
+        .thenReturn(Uni.createFrom().item(Optional.empty()));
 
     RuntimeException failure = assertThrows(RuntimeException.class, () -> pipeline(
         transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
@@ -189,6 +192,41 @@ class QueueAsyncSegmentPipelineTest {
 
     assertTrue(messageChain(failure).contains("Execution lease ownership was lost"));
     verify(executionStateStore, never()).markSucceeded(any(), any(), anyLong(), any(), any(), anyLong());
+  }
+
+  @Test
+  void committedTransitionDoesNotLoseToAnOverlappingLeaseRenewal() {
+    when(orchestratorConfig.leaseMs()).thenReturn(30L);
+    ExecutionRecord<Object, Object> claimed = record("exec-committed-renewal", ExecutionResultShape.SINGLE);
+    String transitionKey = "exec-committed-renewal:0:0";
+    ExecutionRecord<Object, Object> succeeded = withCommittedTransition(
+        claimed, ExecutionStatus.SUCCEEDED, 1L, transitionKey);
+    CompletableFuture<Optional<ExecutionRecord<Object, Object>>> renewal = new CompletableFuture<>();
+    when(executionStateStore.claimLease(
+            eq("tenant-1"), eq("exec-committed-renewal"), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.renewLease(
+            eq("tenant-1"), eq("exec-committed-renewal"), eq(0L), any(), anyLong(), eq(30L)))
+        .thenReturn(Uni.createFrom().completionStage(renewal));
+    when(executionStateStore.markSucceeded(
+            eq("tenant-1"), eq("exec-committed-renewal"), eq(0L), eq(transitionKey),
+            eq(List.of("output")), anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded))
+            .onItem().delayIt().by(Duration.ofMillis(25))
+            .invoke(() -> renewal.complete(Optional.empty())));
+    when(executionStateStore.getExecution("tenant-1", "exec-committed-renewal"))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+    when(segmentBoundaryLedger.recordRunSucceeded(any(), any(), anyLong()))
+        .thenReturn(Uni.createFrom().voidItem().onItem().delayIt().by(Duration.ofMillis(25)));
+
+    pipeline(transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
+            new ExecutionWorkItem("tenant-1", "exec-committed-renewal"),
+            command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output"))),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    verify(executionStateStore).getExecution("tenant-1", "exec-committed-renewal");
+    verify(segmentBoundaryLedger).recordRunSucceeded(same(succeeded), eq(List.of("output")), anyLong());
   }
 
   @Test
@@ -677,6 +715,37 @@ class QueueAsyncSegmentPipelineTest {
         source.leaseExpiresEpochMs(),
         source.nextDueEpochMs(),
         source.lastTransitionKey(),
+        source.inputPayload(),
+        source.awaitUnitId(),
+        source.resultPayload(),
+        source.errorCode(),
+        source.errorMessage(),
+        source.createdAtEpochMs(),
+        source.updatedAtEpochMs(),
+        source.ttlEpochS());
+  }
+
+  private static ExecutionRecord<Object, Object> withCommittedTransition(
+      ExecutionRecord<Object, Object> source,
+      ExecutionStatus status,
+      long version,
+      String transitionKey) {
+    return new ExecutionRecord<>(
+        source.tenantId(),
+        source.executionId(),
+        source.executionKey(),
+        source.pipelineId(),
+        source.contractVersion(),
+        source.releaseVersion(),
+        source.resultShape(),
+        status,
+        version,
+        source.currentStepIndex(),
+        source.attempt(),
+        source.leaseOwner(),
+        source.leaseExpiresEpochMs(),
+        source.nextDueEpochMs(),
+        transitionKey,
         source.inputPayload(),
         source.awaitUnitId(),
         source.resultPayload(),

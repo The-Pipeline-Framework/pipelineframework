@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -66,7 +67,10 @@ class ExecutionStateStoreTest {
         assertNotNull(store.getExecution("tenant1", "exec1"));
         assertNotNull(store.getExecutionByKey("tenant1", "key1"));
         assertNotNull(store.claimLease("tenant1", "exec1", "worker1", now, 30000L));
-        assertNotNull(store.renewLease("tenant1", "exec1", 1L, "worker1", now, 30000L));
+        assertFalse(store.supportsLeaseRenewal());
+        assertThrows(UnsupportedOperationException.class, () -> store.renewLease(
+                "tenant1", "exec1", 1L, "worker1", now, 30000L)
+            .await().indefinitely());
         assertNotNull(store.markSucceeded("tenant1", "exec1", 1L, "key1", "result", now));
         assertNotNull(store.markWaitingExternal("tenant1", "exec1", 1L, "key1", "unit1", 1, now));
         assertNotNull(store.markAwaitCompleted("tenant1", "exec1", "unit1", 2, now));
@@ -117,13 +121,6 @@ class ExecutionStateStoreTest {
         @Override
         public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
             String tenantId, String executionId, String leaseOwner, long nowEpochMs, long leaseMs) {
-            return Uni.createFrom().item(Optional.of(createTestRecord()));
-        }
-
-        @Override
-        public Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
-            String tenantId, String executionId, long expectedVersion, String leaseOwner,
-            long nowEpochMs, long leaseMs) {
             return Uni.createFrom().item(Optional.of(createTestRecord()));
         }
 

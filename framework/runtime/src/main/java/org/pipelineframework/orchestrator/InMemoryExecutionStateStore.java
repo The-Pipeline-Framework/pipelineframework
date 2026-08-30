@@ -34,6 +34,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public boolean supportsLeaseRenewal() {
+        return true;
+    }
+
+    @Override
     public Uni<CreateExecutionResult> createOrGetExecution(ExecutionCreateCommand command) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {

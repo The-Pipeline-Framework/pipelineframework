@@ -1057,6 +1057,10 @@ class DynamoExecutionStateStoreTest {
         assertTrue(request.getValue().conditionExpression().contains("#version = :expectedVersion"));
         assertTrue(request.getValue().conditionExpression().contains("#leaseOwner = :leaseOwner"));
         assertTrue(request.getValue().conditionExpression().contains("#leaseExpires > :now"));
+        assertTrue(request.getValue().conditionExpression().contains(
+            "attribute_not_exists(#ttl) OR #ttl > :nowSec"));
+        assertEquals(Long.toString(now / 1000L),
+            request.getValue().expressionAttributeValues().get(":nowSec").n());
         assertFalse(request.getValue().updateExpression().contains("#version"));
     }
 

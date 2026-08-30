@@ -213,6 +213,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public boolean supportsLeaseRenewal() {
+        return true;
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
         String tenantId,
         String executionId,
@@ -686,19 +691,22 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             "#version", VERSION,
             "#leaseOwner", LEASE_OWNER,
             "#leaseExpires", LEASE_EXPIRES_EPOCH_MS,
-            "#updated", UPDATED_AT_EPOCH_MS);
+            "#updated", UPDATED_AT_EPOCH_MS,
+            "#ttl", TTL_EPOCH_S);
         Map<String, AttributeValue> values = Map.of(
             ":running", avS(ExecutionStatus.RUNNING.name()),
             ":expectedVersion", avN(expectedVersion),
             ":leaseOwner", avS(leaseOwner),
             ":leaseExpires", avN(nowEpochMs + leaseMs),
-            ":now", avN(nowEpochMs));
+            ":now", avN(nowEpochMs),
+            ":nowSec", avN(nowEpochMs / 1000L));
         UpdateItemRequest request = UpdateItemRequest.builder()
             .tableName(executionTable())
             .key(executionPrimaryKey(tenantId, executionId))
             .conditionExpression(
                 "#status = :running AND #version = :expectedVersion "
-                    + "AND #leaseOwner = :leaseOwner AND #leaseExpires > :now")
+                    + "AND #leaseOwner = :leaseOwner AND #leaseExpires > :now "
+                    + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression("SET #leaseExpires = :leaseExpires, #updated = :now")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)

@@ -161,6 +161,10 @@ class QueueAsyncCoordinator {
     sweepFlow = null;
 
     List<String> providerReadinessErrors = new ArrayList<>();
+    if (!executionStateStore.supportsLeaseRenewal()) {
+      providerReadinessErrors.add(
+          "ExecutionStateStore(" + executionStateStore.providerName() + "): live lease renewal is not supported");
+    }
     executionStateStore.startupValidationError(orchestratorConfig)
         .ifPresent(error -> providerReadinessErrors
             .add("ExecutionStateStore(" + executionStateStore.providerName() + "): " + error));
