@@ -282,8 +282,14 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
             return new ConnectorExecutionContext(
                 Optional.of(context.tenantId()),
                 Optional.of(context.executionId()),
+                Optional.of(context.pipelineId()),
+                Optional.of(context.contractVersion()),
+                Optional.of(context.releaseVersion()),
                 Optional.of(request.descriptor().stepId()),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(),
+                context.correlationId(),
+                context.traceId(),
+                Optional.empty());
         }
 
         @SuppressWarnings("unchecked")

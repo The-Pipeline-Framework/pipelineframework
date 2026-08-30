@@ -84,7 +84,9 @@ class NativeCommandOutcomeTest {
 
     @Test
     void recordsSuccessWithOnlyDeclaredSafeReferencesAndReplaysWithoutResolvingProvider() {
-        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 1));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext(
+            "tenant", "execution", "orders-pipeline", "contract-3", "release-9", 1,
+            Optional.of("correlation-5"), Optional.of("trace-7")));
         operation.outcome = new CommandOutcome.Succeeded<>(
             "done",
             new CommandConfirmation(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, false),
@@ -102,6 +104,17 @@ class NativeCommandOutcomeTest {
         assertEquals(Set.of("created"), record.outcome().orElseThrow().flags());
         assertEquals(1, record.outcome().orElseThrow().providerMajorVersion());
         assertFalse(record.outcome().orElseThrow().toString().contains("do-not-persist"));
+        ConnectorExecutionContext execution = operation.executionContext;
+        assertEquals(Optional.of("tenant"), execution.tenantId());
+        assertEquals(Optional.of("execution"), execution.executionId());
+        assertEquals(Optional.of("orders-pipeline"), execution.pipelineId());
+        assertEquals(Optional.of("contract-3"), execution.contractVersion());
+        assertEquals(Optional.of("release-9"), execution.releaseVersion());
+        assertEquals(Optional.of("NativeWriteService"), execution.stepId());
+        assertEquals(Optional.of("correlation-5"), execution.correlationId());
+        assertEquals(Optional.of("trace-7"), execution.traceId());
+        assertEquals(ConnectorProviderId.of("acme.search"),
+            execution.invocationTarget().orElseThrow().operation().providerId());
 
         CommandStepSupport replayWithoutProvider = new CommandStepSupport(
             new ConnectorRegistry(List.of()), List.of(store), queueAsyncConfig());
@@ -569,6 +582,7 @@ class NativeCommandOutcomeTest {
         private boolean returnNullStage;
         private boolean retryRedriveSupported = true;
         private final List<CommandDispatchIdentity> dispatchIdentities = new java.util.ArrayList<>();
+        private ConnectorExecutionContext executionContext;
 
         @Override
         public String id() {
@@ -594,6 +608,7 @@ class NativeCommandOutcomeTest {
             }
             invocations++;
             dispatchIdentities.add(invocation.dispatchIdentity().orElseThrow());
+            executionContext = invocation.executionContext();
             if (immediateFailure != null) {
                 throw immediateFailure;
             }

@@ -531,7 +531,7 @@ public class QueryStepSupport {
                             input,
                             boundConfiguration,
                             providerOutputType,
-                            connectorExecutionContext(descriptor),
+                            connectorExecutionContext(descriptor, selector),
                             Optional.of(bindings::materialize),
                             Optional.empty())));
                     return Multi.createFrom().publisher(publisher)
@@ -559,7 +559,7 @@ public class QueryStepSupport {
                 input,
                 boundConfiguration,
                 outputType,
-                connectorExecutionContext(descriptor),
+                connectorExecutionContext(descriptor, selector),
                 Optional.of(bindings::materialize),
                 localResultMapper)));
         return Uni.createFrom().completionStage(stage)
@@ -1024,16 +1024,27 @@ public class QueryStepSupport {
         }
     }
 
-    private static ConnectorExecutionContext connectorExecutionContext(QueryStepDescriptor descriptor) {
+    private static ConnectorExecutionContext connectorExecutionContext(
+        QueryStepDescriptor descriptor,
+        NativeQuerySelector selector
+    ) {
         Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
-        return new ConnectorExecutionContext(
-            context.map(PipelineExecutionContext::tenantId),
-            context.map(PipelineExecutionContext::executionId),
-            Optional.of(descriptor.stepId()),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty());
+        org.pipelineframework.connector.ConnectorInvocationTarget target =
+            new org.pipelineframework.connector.ConnectorInvocationTarget(
+                selector.binding(), selector.operationIdentity());
+        return context
+            .map(execution -> ConnectorExecutionContext.managed(
+                execution.tenantId(),
+                execution.executionId(),
+                execution.pipelineId(),
+                execution.contractVersion(),
+                execution.releaseVersion(),
+                descriptor.stepId(),
+                target,
+                execution.correlationId(),
+                execution.traceId(),
+                Optional.empty()))
+            .orElseGet(() -> ConnectorExecutionContext.forTarget(descriptor.stepId(), target));
     }
 
     private static Throwable unwrapTransportFailure(Throwable failure) {

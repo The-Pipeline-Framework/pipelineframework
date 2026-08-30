@@ -57,6 +57,9 @@ class NativeQueryOperationTest {
 
     @Test
     void bindsTypedConfigAndReturnsFoundOutput() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext(
+            "tenant-1", "execution-1", "mail-pipeline", "contract-3", "release-9", 2,
+            Optional.of("correlation-5"), Optional.of("trace-7")));
         operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "LOW"));
 
         Snapshot output = support.queryOneToOne(descriptor(Map.of("index", "customers")),
@@ -67,6 +70,19 @@ class NativeQueryOperationTest {
         assertEquals(Snapshot.class, operation.outputType);
         assertEquals(1, operation.invocations.get());
         assertEquals(1, operation.providerStarts.get());
+        ConnectorExecutionContext execution = operation.executionContext;
+        assertEquals(Optional.of("tenant-1"), execution.tenantId());
+        assertEquals(Optional.of("execution-1"), execution.executionId());
+        assertEquals(Optional.of("mail-pipeline"), execution.pipelineId());
+        assertEquals(Optional.of("contract-3"), execution.contractVersion());
+        assertEquals(Optional.of("release-9"), execution.releaseVersion());
+        assertEquals(Optional.of("LoadCustomer"), execution.stepId());
+        assertEquals(Optional.of("correlation-5"), execution.correlationId());
+        assertEquals(Optional.of("trace-7"), execution.traceId());
+        assertEquals(ConnectorBindingName.of("lookup"),
+            execution.invocationTarget().orElseThrow().bindingName());
+        assertEquals(ConnectorProviderId.of("acme.lookup"),
+            execution.invocationTarget().orElseThrow().operation().providerId());
     }
 
     @Test
@@ -457,6 +473,7 @@ class NativeQueryOperationTest {
         private QueryOutcome<Snapshot> outcome = new QueryOutcome.Found<>(new Snapshot("default", "LOW"));
         private QueryConfig configuration;
         private Class<?> outputType;
+        private ConnectorExecutionContext executionContext;
         private boolean returnNullStage;
         private RuntimeException immediateFailure;
         private CompletionStage<QueryOutcome<Snapshot>> stageOverride;
@@ -481,6 +498,7 @@ class NativeQueryOperationTest {
             invocations.incrementAndGet();
             configuration = invocation.configuration();
             outputType = invocation.outputType();
+            executionContext = invocation.executionContext();
             if (immediateFailure != null) {
                 throw immediateFailure;
             }

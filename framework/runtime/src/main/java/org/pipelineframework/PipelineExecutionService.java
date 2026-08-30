@@ -494,6 +494,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     AtomicBoolean terminalInputPassthrough = new AtomicBoolean(false);
     return executePipelineStreamingFromCommand(
             decodedCommand,
+            command,
             terminalOutputPublished,
             terminalInputPassthrough,
             policy.continuationMode(),
@@ -592,6 +593,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   private Multi<?> executePipelineStreamingFromCommand(
       TransitionWorkerCommand command,
+      TransitionCommandEnvelope envelope,
       AtomicBoolean terminalOutputPublished,
       AtomicBoolean terminalInputPassthrough,
       AwaitContinuationMode continuationMode,
@@ -607,7 +609,14 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         java.util.Optional<PipelineExecutionContext> previousExecution = PipelineExecutionContextHolder.get();
         CommandRetryExecutionScope.Snapshot previousCommandRetry = CommandRetryExecutionScope.capture();
         PipelineExecutionContext executionContext = new PipelineExecutionContext(
-            command.tenantId(), command.executionId(), command.currentStepIndex());
+            command.tenantId(),
+            command.executionId(),
+            envelope.pipelineId(),
+            envelope.contractVersion(),
+            envelope.releaseVersion(),
+            command.currentStepIndex(),
+            java.util.Optional.empty(),
+            java.util.Optional.of(envelope.traceId()).filter(traceId -> !traceId.isBlank()));
         final CommandRetryExecutionScope.AdmissionHandle commandRetryAdmission;
         if (command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
           commandRetryAdmission = CommandRetryExecutionScope.installRetry(

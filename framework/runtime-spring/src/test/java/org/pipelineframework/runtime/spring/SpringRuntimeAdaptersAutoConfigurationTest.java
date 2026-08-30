@@ -26,6 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.runtime.core.PipelineUnaryStep;
+import org.pipelineframework.connector.ConnectionResolutionRequest;
+import org.pipelineframework.connector.ConnectionResolver;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
+import org.pipelineframework.connector.ResolvedConnection;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 import org.pipelineframework.runtime.core.TpfExecutionContext;
 import reactor.core.publisher.Mono;
@@ -67,6 +71,27 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
                 assertEquals("primary", RuntimeAdapters.resolveBean(SampleService.class).orElseThrow().name());
                 assertEquals("config-value", RuntimeAdapters.resolveConfig(SampleConfig.class).orElseThrow().value());
             });
+    }
+
+    @Test
+    void connectorRuntimeContextUsesTheOptionalApplicationResolver() {
+        contextRunner.withUserConfiguration(ConnectionResolverConfig.class).run(context -> {
+            ConnectorRuntimeContext runtimeContext = context.getBean(ConnectorRuntimeContext.class);
+
+            assertEquals("spring", runtimeContext.runtimeIdentity());
+            assertEquals(TestConnectionResolver.class,
+                runtimeContext.connectionResolver().orElseThrow().getClass());
+            assertTrue(runtimeContext.secretResolver().isEmpty());
+        });
+    }
+
+    @Test
+    void connectorRuntimeContextRejectsAmbiguousApplicationResolvers() {
+        contextRunner.withUserConfiguration(AmbiguousConnectionResolverConfig.class).run(context -> {
+            assertNotNull(context.getStartupFailure());
+            assertTrue(rootMessage(context.getStartupFailure())
+                .contains("Multiple ConnectionResolver beans are registered"));
+        });
     }
 
     @Test
@@ -253,6 +278,44 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
     }
 
     record SampleConfig(String value) {
+    }
+
+    private static String rootMessage(Throwable failure) {
+        Throwable current = failure;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage();
+    }
+
+    static class TestConnectionResolver implements ConnectionResolver {
+        @Override
+        public <C extends ResolvedConnection> java.util.concurrent.CompletionStage<C> resolve(
+            ConnectionResolutionRequest<C> request
+        ) {
+            return CompletableFuture.failedStage(new UnsupportedOperationException());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ConnectionResolverConfig {
+        @Bean
+        ConnectionResolver connectionResolver() {
+            return new TestConnectionResolver();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class AmbiguousConnectionResolverConfig {
+        @Bean
+        ConnectionResolver firstConnectionResolver() {
+            return new TestConnectionResolver();
+        }
+
+        @Bean
+        ConnectionResolver secondConnectionResolver() {
+            return new TestConnectionResolver();
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
