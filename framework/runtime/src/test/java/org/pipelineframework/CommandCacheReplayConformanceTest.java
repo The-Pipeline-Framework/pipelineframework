@@ -75,7 +75,7 @@ class CommandCacheReplayConformanceTest {
     @Test
     void preferCacheWarmReplaysPipelineOutputWithoutFabricatingEffect() {
         CommandOutput cached = new CommandOutput("cached-observation");
-        CountingReader cache = new CountingReader(Map.of("v1:key", cached));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", cached));
 
         CommandOutput output = run(cache, "prefer-cache", "v1");
 
@@ -88,7 +88,7 @@ class CommandCacheReplayConformanceTest {
     @Test
     void requireCacheWarmReplaysWithoutCommandRuntime() {
         CommandOutput cached = new CommandOutput("required-observation");
-        CountingReader cache = new CountingReader(Map.of("v1:key", cached));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", cached));
 
         assertEquals(cached, run(cache, "require-cache", "v1"));
         assertEquals(0, connector.calls.get());
@@ -106,7 +106,7 @@ class CommandCacheReplayConformanceTest {
 
     @Test
     void cacheOnlyIgnoresWarmEntryAndExecutesCommandRuntime() {
-        CountingReader cache = new CountingReader(Map.of("v1:key", new CommandOutput("old")));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", new CommandOutput("old")));
 
         CommandOutput output = run(cache, "cache-only", "v1");
 
@@ -118,7 +118,7 @@ class CommandCacheReplayConformanceTest {
 
     @Test
     void bypassCachePerformsNoCacheIoAndStableCommandIdStillReplaysEffect() {
-        CountingReader cache = new CountingReader(Map.of("v1:key", new CommandOutput("old")));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", new CommandOutput("old")));
 
         CommandOutput first = run(cache, "bypass-cache", "v1");
         CommandOutput replayed = run(cache, "bypass-cache", "v2");
@@ -132,7 +132,7 @@ class CommandCacheReplayConformanceTest {
 
     @Test
     void skipIfPresentFailsBeforeCacheOrCommandRuntime() {
-        CountingReader cache = new CountingReader(Map.of("v1:key", new CommandOutput("old")));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", new CommandOutput("old")));
 
         assertThrows(CachePolicyViolation.class, () -> run(cache, "skip-if-present", "v1"));
 
@@ -144,7 +144,7 @@ class CommandCacheReplayConformanceTest {
 
     @Test
     void versionTagIsPipelineReplayIdentityNotCommandEffectIdentity() {
-        CountingReader cache = new CountingReader(Map.of("v1:key", new CommandOutput("v1-observation")));
+        CountingReader cache = new CountingReader(Map.of("2:v1:key", new CommandOutput("v1-observation")));
 
         assertEquals("v1-observation", run(cache, "prefer-cache", "v1").commandId());
         assertEquals("cmd-item", run(cache, "prefer-cache", "v2").commandId());

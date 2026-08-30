@@ -15,6 +15,9 @@ hero:
     - theme: brand
       text: Code a Step
       link: /develop/code-a-step
+    - theme: alt
+      text: AI Authoring Skill
+      link: https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/.agents/skills/tpf-authoring
 ---
 
 <figure class="home-cinematic-spotlight">
@@ -34,6 +37,10 @@ hero:
   </a>
   <figcaption>Async application flow: an await step hands work through Kafka to an external provider, then resumes from captured state with deterministic lineage.</figcaption>
 </figure>
+
+<Callout type="tip" title="Give your AI agent the TPF authoring model">
+Install the <a href="https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/.agents/skills/tpf-authoring"><code>tpf-authoring</code> Agent Skill</a> to keep generated applications aligned with TPF's typed functional core and framework-owned shell. It is self-contained and guides the agent from architectural intent to the matching versioned documentation, dependency sources, examples, and compiler diagnostics.
+</Callout>
 
 <Callout type="tip" title="YAML is the canonical design path">
 Define the typed application flow in pipeline YAML, then let the framework validate and generate the adapters, transports, and runtime wiring. The same model can then be refined through Java functions, existing-method operators, type mappers, connectors, and runtime configuration.

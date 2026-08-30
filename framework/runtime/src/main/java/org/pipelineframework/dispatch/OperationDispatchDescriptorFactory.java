@@ -19,9 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
@@ -73,9 +71,16 @@ public final class OperationDispatchDescriptorFactory {
         ConnectorProviderId provider = ConnectorProviderId.of(binding.provider());
         ConnectorOperationDescriptor operation = catalog.requireOperation(
             provider, binding.version(), callable.operation(), callable.kind(), callable.operationVersion());
+        if (ConnectorOperationKind.QUERY.equals(operation.kind())
+            && operation.queryCardinality().orElseThrow()
+                == org.pipelineframework.connector.QueryOperationCardinality.ONE_TO_MANY) {
+            throw new IllegalArgumentException("streaming Query operation cannot be exposed through unary operation dispatch: "
+                + callable.using() + "/" + callable.operation());
+        }
         var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
             "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
-        if (!contract.inputType().equals(callable.input())) {
+        String canonicalInput = config.basePackage() + ".domain." + callable.input();
+        if (!contract.inputType().equals(callable.input()) && !contract.inputType().equals(canonicalInput)) {
             throw new IllegalArgumentException("callable input contract for " + callable.using() + "/" + callable.operation()
                 + " does not match trusted connector metadata: " + contract.inputType());
         }
@@ -100,9 +105,9 @@ public final class OperationDispatchDescriptorFactory {
             new BoundOperationReference(org.pipelineframework.connector.ConnectorBindingName.of(binding.name()), operation.id()),
             identity,
             binding.version(),
-            contract.inputType(),
+            callable.input(),
             loadType(config.basePackage(), contract.inputType(), classLoader),
-            outputType,
+            semanticType(config.basePackage(), outputType),
             loadType(config.basePackage(), outputType, classLoader),
             callable.config(),
             ConnectorOperationKind.QUERY.equals(operation.kind())
@@ -112,7 +117,7 @@ public final class OperationDispatchDescriptorFactory {
     }
 
     private static Class<?> loadType(String basePackage, String type, ClassLoader classLoader) {
-        String name = type.contains(".") ? type : basePackage + "." + type;
+        String name = type.contains(".") ? type : basePackage + ".domain." + type;
         try {
             return Class.forName(name, true, classLoader);
         } catch (ClassNotFoundException failure) {
@@ -120,10 +125,15 @@ public final class OperationDispatchDescriptorFactory {
         }
     }
 
+    private static String semanticType(String basePackage, String runtimeType) {
+        String prefix = basePackage + ".domain.";
+        return runtimeType.startsWith(prefix) ? runtimeType.substring(prefix.length()) : runtimeType;
+    }
+
     private static CommandPolicy policy(Map<String, Object> values) {
         values.keySet().stream().filter(key -> !Set.of(
-            "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+            "requiredExecutionPosture", "minimumMachineConfirmation",
             "requireUserConfirmation").contains(key)).sorted().findFirst().ifPresent(key -> {
                 throw new IllegalArgumentException("callable command policy has unsupported field '" + key + "'");
             });
@@ -131,8 +141,6 @@ public final class OperationDispatchDescriptorFactory {
             bool(values, "requireRetryRedrive"), bool(values, "requireIdempotency"),
             bool(values, "requireReconciliation"),
             optionalEnum(values, "requiredExecutionPosture", CommandExecutionPosture.class),
-            optionalEnum(values, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            optionalEnum(values, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             optionalEnum(values, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             bool(values, "requireUserConfirmation"));
     }
@@ -184,6 +192,6 @@ public final class OperationDispatchDescriptorFactory {
                 result.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
             }
         }
-        return result.append("Service").toString();
+        return "Process" + result.append("Service");
     }
 }

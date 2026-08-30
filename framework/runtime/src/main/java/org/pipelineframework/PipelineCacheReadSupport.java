@@ -24,6 +24,7 @@ import java.util.function.Predicate;
 
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CachePolicy;
+import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.cache.PipelineCacheReader;
 import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.context.PipelineContext;
@@ -64,14 +65,7 @@ class PipelineCacheReadSupport {
         }
         if (targetType != null) {
             Predicate<CacheKeyStrategy> supportsTarget = strategy -> strategy.supportsTarget(targetType);
-            Optional<String> targetKey = resolveWithFilter(item, context, supportsTarget);
-            if (targetKey.isPresent()) {
-                return targetKey;
-            }
-            boolean foundSupporting = strategies.stream().anyMatch(supportsTarget::test);
-            if (foundSupporting) {
-                return Optional.empty();
-            }
+            return resolveWithFilter(item, context, supportsTarget);
         }
         return resolveWithFilter(item, context, strategy -> true);
     }
@@ -112,11 +106,7 @@ class PipelineCacheReadSupport {
         if (key == null || context == null) {
             return key;
         }
-        String versionTag = context.versionTag();
-        if (versionTag == null || versionTag.isBlank()) {
-            return key;
-        }
-        return versionTag + ":" + key;
+        return PipelineCacheKeyFormat.applyVersionTag(key, context.versionTag());
     }
 
     PipelineCacheReader reader() {

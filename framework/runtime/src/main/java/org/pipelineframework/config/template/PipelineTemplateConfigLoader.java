@@ -16,13 +16,10 @@
 
 package org.pipelineframework.config.template;
 
-import java.io.IOException;
-import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
@@ -37,15 +34,12 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
-import org.pipelineframework.config.pipeline.PipelineResources;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
 import org.pipelineframework.protocol.ProtocolTypeRegistry;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * Loads the pipeline template configuration used by the template generator.
@@ -95,7 +89,8 @@ public class PipelineTemplateConfigLoader {
     }
 
     private static ProtocolTypeRegistry discoveredProtocolTypes() {
-        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        ClassLoader classLoader = ConnectorProviderManifestLoader.metadataClassLoader(
+            PipelineTemplateConfigLoader.class);
         return new ProtocolTypeRegistry(
             ProtocolTypeRegistry.discoverContributions(classLoader), ConnectorProviderManifestLoader.load(classLoader));
     }
@@ -128,7 +123,7 @@ public class PipelineTemplateConfigLoader {
         warnedAuthoredFieldNumber = false;
         warnedOptional = false;
         warnedAuthoredUnionNumber = false;
-        Object root = loadYaml(configPath);
+        Object root = new PipelineYamlDocumentLoader().load(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline template config root is not a map");
         }
@@ -613,17 +608,26 @@ public class PipelineTemplateConfigLoader {
             String fieldName;
             String fieldType;
             boolean repeated = false;
+            PipelineFieldPresence presence = PipelineFieldPresence.REQUIRED;
+            PipelineFieldNullability nullability = PipelineFieldNullability.NON_NULL;
             if (fieldObj instanceof List<?> tuple) {
                 if (tuple.size() != 2) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
                 }
                 fieldName = stringify(tuple.get(0));
                 fieldType = stringify(tuple.get(1));
+                V3SemanticToken nameToken = semanticToken(fieldName, owner + " field " + index + " name");
+                V3SemanticToken typeToken = semanticToken(fieldType, owner + " field " + index + " type");
+                fieldName = nameToken.value();
+                fieldType = typeToken.value();
+                presence = nameToken.marked() ? PipelineFieldPresence.OPTIONAL : PipelineFieldPresence.REQUIRED;
+                nullability = typeToken.marked() ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL;
             } else if (fieldObj instanceof Map<?, ?> fieldMap) {
                 if (fieldMap.containsKey("number") || fieldMap.containsKey("optional") || fieldMap.containsKey("reserved")) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " cannot declare protobuf wire metadata in version: 3.");
                 }
-                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index, "name", "type", "repeated");
+                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index,
+                    "name", "type", "repeated", "presence", "nullability");
                 fieldName = stringify(fieldMap.get("name"));
                 boolean hasType = fieldMap.containsKey("type");
                 boolean hasRepeated = fieldMap.containsKey("repeated");
@@ -633,6 +637,14 @@ public class PipelineTemplateConfigLoader {
                 }
                 repeated = hasRepeated;
                 fieldType = stringify(fieldMap.get(repeated ? "repeated" : "type"));
+                if ((fieldName != null && fieldName.endsWith("?")) || (fieldType != null && fieldType.endsWith("?"))) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index
+                        + " cannot mix compact '?' markers with verbose field properties.");
+                }
+                presence = readV3Enum(fieldMap, "presence", PipelineFieldPresence.class,
+                    PipelineFieldPresence.REQUIRED, owner, index);
+                nullability = readV3Enum(fieldMap, "nullability", PipelineFieldNullability.class,
+                    PipelineFieldNullability.NON_NULL, owner, index);
             } else {
                 throw new IllegalStateException("Type '" + owner + "' field " + index + " must be an object or [name, type] tuple.");
             }
@@ -642,10 +654,48 @@ public class PipelineTemplateConfigLoader {
             result.add(new PipelineTemplateTypeDefinition.Field(
                 fieldName,
                 readV3Reference(fieldType, owner + "." + fieldName),
-                repeated));
+                repeated,
+                presence,
+                nullability));
             index++;
         }
         return List.copyOf(result);
+    }
+
+    private V3SemanticToken semanticToken(String token, String subject) {
+        if (token == null) {
+            return new V3SemanticToken("", false);
+        }
+        String value = token.trim();
+        boolean marked = value.endsWith("?");
+        String normalized = marked ? value.substring(0, value.length() - 1) : value;
+        if (normalized.isBlank() || normalized.contains("?")) {
+            throw new IllegalStateException(subject + " has an invalid '?' marker.");
+        }
+        return new V3SemanticToken(normalized, marked);
+    }
+
+    private <E extends Enum<E>> E readV3Enum(
+        Map<?, ?> fieldMap,
+        String key,
+        Class<E> enumType,
+        E defaultValue,
+        String owner,
+        int index
+    ) {
+        if (!fieldMap.containsKey(key)) {
+            return defaultValue;
+        }
+        String value = stringify(fieldMap.get(key));
+        try {
+            return Enum.valueOf(enumType, value.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException failure) {
+            throw new IllegalStateException("Type '" + owner + "' field " + index + " has invalid " + key
+                + " '" + value + "'.", failure);
+        }
+    }
+
+    private record V3SemanticToken(String value, boolean marked) {
     }
 
     private Map<String, PipelineTemplateTypeDefinition.Variant> readV3Variants(String unionName, Object variantsObj) {
@@ -845,26 +895,6 @@ public class PipelineTemplateConfigLoader {
      * assignable to that payload in ordinary Java terms, so keep that rule local to pipeline flow
      * validation rather than weakening the type model's general assignability contract.
      */
-    /**
-     * Load and parse a YAML document from the given file path.
-     *
-     * @param configPath the path to the YAML configuration file
-     * @return the parsed YAML document as an Object (for example, a Map, List, or scalar)
-     * @throws IllegalStateException if the file cannot be read or opened
-     */
-    private Object loadYaml(Path configPath) {
-        LoaderOptions loaderOptions = new LoaderOptions();
-        loaderOptions.setCodePointLimit(3_000_000);
-        loaderOptions.setMaxAliasesForCollections(50);
-        loaderOptions.setAllowDuplicateKeys(false);
-        Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
-        try (Reader reader = Files.newBufferedReader(configPath)) {
-            return yaml.load(reader);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline template config: " + configPath, e);
-        }
-    }
-
     private int readVersion(Map<?, ?> rootMap) {
         Object rawVersion = rootMap.get("version");
         if (rawVersion == null) {

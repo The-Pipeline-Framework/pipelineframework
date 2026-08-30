@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletionException;
@@ -28,10 +29,14 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryObservationOrigin;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.QueryTokenUsage;
 import org.pipelineframework.connector.TestConnectorBindingRegistries;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import org.pipelineframework.mapper.Mapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -52,6 +57,9 @@ class NativeQueryOperationTest {
 
     @Test
     void bindsTypedConfigAndReturnsFoundOutput() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext(
+            "tenant-1", "execution-1", "mail-pipeline", "contract-3", "release-9", 2,
+            Optional.of("correlation-5"), Optional.of("trace-7")));
         operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "LOW"));
 
         Snapshot output = support.queryOneToOne(descriptor(Map.of("index", "customers")),
@@ -62,6 +70,19 @@ class NativeQueryOperationTest {
         assertEquals(Snapshot.class, operation.outputType);
         assertEquals(1, operation.invocations.get());
         assertEquals(1, operation.providerStarts.get());
+        ConnectorExecutionContext execution = operation.executionContext;
+        assertEquals(Optional.of("tenant-1"), execution.tenantId());
+        assertEquals(Optional.of("execution-1"), execution.executionId());
+        assertEquals(Optional.of("mail-pipeline"), execution.pipelineId());
+        assertEquals(Optional.of("contract-3"), execution.contractVersion());
+        assertEquals(Optional.of("release-9"), execution.releaseVersion());
+        assertEquals(Optional.of("LoadCustomer"), execution.stepId());
+        assertEquals(Optional.of("correlation-5"), execution.correlationId());
+        assertEquals(Optional.of("trace-7"), execution.traceId());
+        assertEquals(ConnectorBindingName.of("lookup"),
+            execution.invocationTarget().orElseThrow().bindingName());
+        assertEquals(ConnectorProviderId.of("acme.lookup"),
+            execution.invocationTarget().orElseThrow().operation().providerId());
     }
 
     @Test
@@ -79,6 +100,65 @@ class NativeQueryOperationTest {
 
         assertEquals(first, replayed);
         assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
+    void capturesLiveObservationAndMarksSemanticReplayWithoutAnotherProviderCall() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "observed-execution", 3));
+        QueryObservation observation = observation();
+        operation.outcome = new QueryOutcome.Found<>(
+            new Snapshot("customer-1", "MEDIUM"), Optional.of(observation));
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
+
+        QueryOutcome.Found<?> live = assertInstanceOf(QueryOutcome.Found.class,
+            support.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        QueryOutcome.Found<?> replayed = assertInstanceOf(QueryOutcome.Found.class,
+            replayWithoutProvider.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertEquals(QueryObservationOrigin.LIVE_PROVIDER, live.observation().orElseThrow().origin());
+        assertEquals(QueryObservationOrigin.CAPTURE_REPLAY, replayed.observation().orElseThrow().origin());
+        assertEquals(observation.tokenUsage(), replayed.observation().orElseThrow().tokenUsage());
+        assertEquals(live.output(), replayed.output());
+        assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
+    void mapsExternalRepresentationBeforeCanonicalCaptureAndReplay() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "mapped-execution", 3));
+        operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "MEDIUM"));
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
+        AtomicInteger mappings = new AtomicInteger();
+        Mapper<CanonicalSnapshot, Snapshot> mapper = new Mapper<>() {
+            @Override
+            public CanonicalSnapshot fromExternal(Snapshot external) {
+                mappings.incrementAndGet();
+                return new CanonicalSnapshot(external.customerId(), external.risk());
+            }
+
+            @Override
+            public Snapshot toExternal(CanonicalSnapshot domain) {
+                return new Snapshot(domain.customerId(), domain.risk());
+            }
+        };
+
+        CanonicalSnapshot first = support.queryOneToOne(
+                descriptor, new Lookup("customer-1"), CanonicalSnapshot.class, Snapshot.class, mapper)
+            .await().atMost(Duration.ofSeconds(2));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        CanonicalSnapshot replayed = replayWithoutProvider.queryOneToOne(
+                descriptor, new Lookup("customer-1"), CanonicalSnapshot.class, Snapshot.class, mapper)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(first, replayed);
+        assertEquals(new CanonicalSnapshot("customer-1", "MEDIUM"), replayed);
+        assertEquals(1, mappings.get());
+        assertEquals(1, operation.invocations.get());
+        assertEquals(Snapshot.class, operation.outputType);
     }
 
     @Test
@@ -103,7 +183,7 @@ class NativeQueryOperationTest {
     @Test
     void exposesCapturedNotFoundAsAValidSemanticObservationWithoutChangingOrdinaryQueryBehavior() {
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 5));
-        operation.outcome = new QueryOutcome.NotFound<>("customer-missing");
+        operation.outcome = new QueryOutcome.NotFound<>("customer-missing", Optional.of(observation()));
         QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
 
         QueryOutcome.NotFound<?> first = assertInstanceOf(QueryOutcome.NotFound.class,
@@ -117,6 +197,8 @@ class NativeQueryOperationTest {
 
         assertEquals("customer-missing", first.code());
         assertEquals(first.code(), replayed.code());
+        assertEquals(QueryObservationOrigin.LIVE_PROVIDER, first.observation().orElseThrow().origin());
+        assertEquals(QueryObservationOrigin.CAPTURE_REPLAY, replayed.observation().orElseThrow().origin());
         assertEquals(1, operation.invocations.get());
     }
 
@@ -219,6 +301,13 @@ class NativeQueryOperationTest {
         assertInstanceOf(expected, failure);
     }
 
+    private static QueryObservation observation() {
+        return QueryObservation.live(
+            Optional.of(new QueryTokenUsage(
+                OptionalLong.of(8), OptionalLong.of(5), OptionalLong.of(17))),
+            Optional.of("provider-model"), Optional.of("stop"));
+    }
+
     private QueryStepDescriptor descriptor(Map<String, Object> configuration) {
         ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
             ConnectorProviderId.of("acme.lookup"), "find.customer", ConnectorOperationKind.QUERY, 1);
@@ -286,6 +375,9 @@ class NativeQueryOperationTest {
     }
 
     public record Snapshot(String customerId, String risk) {
+    }
+
+    public record CanonicalSnapshot(String customerId, String risk) {
     }
 
     public static final class FakeProvider implements ConnectorProvider<Void> {
@@ -381,6 +473,7 @@ class NativeQueryOperationTest {
         private QueryOutcome<Snapshot> outcome = new QueryOutcome.Found<>(new Snapshot("default", "LOW"));
         private QueryConfig configuration;
         private Class<?> outputType;
+        private ConnectorExecutionContext executionContext;
         private boolean returnNullStage;
         private RuntimeException immediateFailure;
         private CompletionStage<QueryOutcome<Snapshot>> stageOverride;
@@ -405,6 +498,7 @@ class NativeQueryOperationTest {
             invocations.incrementAndGet();
             configuration = invocation.configuration();
             outputType = invocation.outputType();
+            executionContext = invocation.executionContext();
             if (immediateFailure != null) {
                 throw immediateFailure;
             }

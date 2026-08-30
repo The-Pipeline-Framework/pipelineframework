@@ -119,9 +119,13 @@ class ConnectorConfigurationBindingTest {
     }
 
     private static ConnectorRuntimeContext context(AtomicInteger connections, AtomicInteger secrets) {
-        ConnectionResolver connectionResolver = reference -> {
-            connections.incrementAndGet();
-            return CompletableFuture.supplyAsync(FakeConnection::new, Runnable::run);
+        ConnectionResolver connectionResolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                connections.incrementAndGet();
+                return CompletableFuture.supplyAsync(
+                    () -> request.connectionType().cast(new FakeConnection()), Runnable::run);
+            }
         };
         SecretResolver secretResolver = reference -> {
             secrets.incrementAndGet();
@@ -199,7 +203,9 @@ class ConnectorConfigurationBindingTest {
         public CompletionStage<Void> start(ConnectorRuntimeContext context, ProviderConfig configuration) {
             startedWith = configuration;
             operation.runtimeContext = context;
-            return context.connectionResolver().orElseThrow().resolve(configuration.connection()).thenAccept(ignored -> {
+            ConnectionResolutionRequest<FakeConnection> request = new ConnectionResolutionRequest<>(
+                configuration.connection(), FakeConnection.class, ConnectorExecutionContext.empty());
+            return context.connectionResolver().orElseThrow().resolve(request).thenAccept(ignored -> {
             });
         }
 

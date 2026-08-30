@@ -83,6 +83,33 @@ class PipelineIdlStateResolverTest {
     }
 
     @Test
+    void persistsAndReservesNullableFieldWireMarkers() throws Exception {
+        Path nullableYaml = tempDir.resolve("nullable.yaml");
+        Files.writeString(nullableYaml, template("fields: [[note?, string?]]", "approved: Record"));
+        PipelineIdlStateResolver resolver = new PipelineIdlStateResolver();
+        PipelineIdlSnapshot nullable = resolver.resolve(
+            new PipelineTemplateConfigLoader().load(nullableYaml), null, true).state();
+        PipelineIdlSnapshot.TypeFieldSnapshot nullableField = nullable.types().get("Record").fields().getFirst();
+
+        assertEquals(PipelineFieldPresence.OPTIONAL, nullableField.presence());
+        assertEquals(PipelineFieldNullability.NULLABLE, nullableField.nullability());
+        assertEquals("note_null", nullableField.nullMarkerProtoName().orElseThrow());
+
+        PipelineIdlSnapshot unchanged = resolver.resolve(
+            new PipelineTemplateConfigLoader().load(nullableYaml), nullable, false).state();
+        assertEquals(nullableField, unchanged.types().get("Record").fields().getFirst());
+
+        Path narrowedYaml = tempDir.resolve("narrowed.yaml");
+        Files.writeString(narrowedYaml, template("fields: [[note, string]]", "approved: Record"));
+        PipelineIdlSnapshot narrowed = resolver.resolve(
+            new PipelineTemplateConfigLoader().load(narrowedYaml), nullable, false).state();
+
+        assertEquals(List.of(nullableField.nullMarkerNumber().orElseThrow()),
+            narrowed.types().get("Record").reservedNumbers());
+        assertEquals(List.of("note_null"), narrowed.types().get("Record").reservedNames());
+    }
+
+    @Test
     void rejectsV3FieldsThatCollideAfterProtobufNameNormalization() throws Exception {
         Path yaml = tempDir.resolve("collision.yaml");
         Files.writeString(yaml, template("fields: [[paymentId, string], [payment_id, string]]", "approved: Record"));
@@ -128,7 +155,7 @@ class PipelineIdlStateResolverTest {
     }
 
     @Test
-    void persistsOnlyRepeatedV3MultiplicityAndReadsOlderFieldsAsSingular() throws Exception {
+    void persistsV3FieldSemanticsAndReadsOlderFieldsWithStrongDefaults() throws Exception {
         PipelineIdlSnapshot olderState = PipelineJson.mapper().copy().findAndRegisterModules().readValue("""
             {"version":3,"appName":"V3","basePackage":"com.example.v3","messages":{},"unions":{},
              "types":{"Record":{"name":"Record","kind":"record","fields":[
@@ -136,6 +163,8 @@ class PipelineIdlStateResolverTest {
              "variants":[],"reservedNumbers":[],"reservedNames":[]}},"steps":[]}
             """, PipelineIdlSnapshot.class);
         assertEquals(false, olderState.types().get("Record").fields().getFirst().repeated());
+        assertEquals(PipelineFieldPresence.REQUIRED, olderState.types().get("Record").fields().getFirst().presence());
+        assertEquals(PipelineFieldNullability.NON_NULL, olderState.types().get("Record").fields().getFirst().nullability());
 
         PipelineIdlSnapshot snapshot = new PipelineIdlSnapshot(3, "V3", "com.example.v3", Map.of(), Map.of(), Map.of(
             "Record", new PipelineIdlSnapshot.TypeSnapshot("Record", "record", List.of(

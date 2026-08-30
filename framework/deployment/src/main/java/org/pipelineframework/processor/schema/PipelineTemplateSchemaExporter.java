@@ -58,6 +58,15 @@ public final class PipelineTemplateSchemaExporter {
         { "$ref": "#/$defs/logicalContractReference" }
       ]
     },
+    "v3NullableTypeReference": {
+      "type": "string",
+      "oneOf": [
+        { "enum": ["string?", "bool?", "int32?", "int64?", "float32?", "float64?", "decimal?", "uuid?", "timestamp?", "datetime?", "date?", "duration?", "bytes?", "currency?", "uri?", "path?", "payload_ref?"] },
+        { "pattern": "^[A-Z][A-Za-z0-9_]*\\\\?$" },
+        { "pattern": "^<[a-z][a-z0-9]*(?:\\\\.[a-z][a-z0-9]*)*\\\\.[A-Z][A-Za-z0-9_]*>\\\\?$" },
+        { "pattern": "^<[A-Z][A-Za-z0-9_]*>\\\\?$" }
+      ]
+    },
     "legacyJavaContract": {
       "type": "string",
       "deprecated": true,
@@ -1271,7 +1280,7 @@ public final class PipelineTemplateSchemaExporter {
         "$ref": "#/$defs/objectPublishTarget"
       }
     },
-    "v2Execution": {
+    "stepExecution": {
       "type": "object",
       "required": [
         "mode"
@@ -1280,7 +1289,6 @@ public final class PipelineTemplateSchemaExporter {
         "mode": {
           "type": "string",
           "enum": [
-            "LOCAL",
             "REMOTE"
           ]
         },
@@ -1571,7 +1579,7 @@ public final class PipelineTemplateSchemaExporter {
           "type": "boolean"
         },
         "execution": {
-          "$ref": "#/$defs/v2Execution"
+          "$ref": "#/$defs/stepExecution"
         },
         "id": {
           "type": "string",
@@ -1910,6 +1918,23 @@ public final class PipelineTemplateSchemaExporter {
         "transport": {
           "$ref": "#/$defs/awaitTransport"
         },
+        "completion": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
+            },
+            "projector": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*\\\\S.*"
+            }
+          },
+          "required": ["type", "projector"],
+          "additionalProperties": false
+        },
         "dispatch": {
           "type": "object",
           "additionalProperties": true
@@ -1928,8 +1953,6 @@ public final class PipelineTemplateSchemaExporter {
         "requireIdempotency": { "type": "boolean" },
         "requireReconciliation": { "type": "boolean" },
         "requiredExecutionPosture": { "type": "string", "enum": ["UNSPECIFIED", "AUTOMATED", "ATTENDED"] },
-        "requiredExecutionStyle": { "type": "string", "enum": ["UNSPECIFIED", "NON_BLOCKING", "BLOCKING", "PROVIDER_MANAGED"] },
-        "requiredConcurrencyScope": { "type": "string", "enum": ["UNSPECIFIED", "UNBOUNDED", "PROVIDER_SCOPED", "CONNECTION_SCOPED", "OPERATION_SCOPED", "PROVIDER_MANAGED"] },
         "minimumMachineConfirmation": { "type": "string", "enum": ["NONE", "SUBMITTED", "PROVIDER_ACKNOWLEDGED", "READ_AFTER_WRITE_VERIFIED"] },
         "requireUserConfirmation": { "type": "boolean" }
       },
@@ -2440,7 +2463,9 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["name", "type"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
-            "type": { "$ref": "#/$defs/v3TypeReference" }
+            "type": { "$ref": "#/$defs/v3TypeReference" },
+            "presence": { "enum": ["required", "optional"] },
+            "nullability": { "enum": ["non_null", "nullable"] }
           },
           "additionalProperties": false
         },
@@ -2449,7 +2474,9 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["name", "repeated"],
           "properties": {
             "name": { "type": "string", "minLength": 1 },
-            "repeated": { "$ref": "#/$defs/v3TypeReference" }
+            "repeated": { "$ref": "#/$defs/v3TypeReference" },
+            "presence": { "enum": ["required", "optional"] },
+            "nullability": { "enum": ["non_null", "nullable"] }
           },
           "additionalProperties": false
         },
@@ -2457,7 +2484,10 @@ public final class PipelineTemplateSchemaExporter {
           "type": "array",
           "prefixItems": [
             { "type": "string", "minLength": 1 },
-            { "$ref": "#/$defs/v3TypeReference" }
+            { "oneOf": [
+              { "$ref": "#/$defs/v3TypeReference" },
+              { "$ref": "#/$defs/v3NullableTypeReference" }
+            ] }
           ],
           "minItems": 2,
           "maxItems": 2,
@@ -2561,7 +2591,8 @@ public final class PipelineTemplateSchemaExporter {
       "properties": {
         "input": { "$ref": "#/$defs/logicalContractReference" },
         "output": { "$ref": "#/$defs/logicalContractReference" },
-        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } }
+        "accepts": { "type": "array", "items": { "$ref": "#/$defs/logicalContractReference" } },
+        "execution": { "$ref": "#/$defs/stepExecution" }
       },
       "allOf": [
         {

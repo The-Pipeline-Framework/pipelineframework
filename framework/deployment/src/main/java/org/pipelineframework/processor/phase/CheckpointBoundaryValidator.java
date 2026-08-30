@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -24,6 +23,7 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
+import org.pipelineframework.processor.util.ImplementedGenericInterfaceResolver;
 
 /**
  * Validates checkpoint publication/subscription declarations loaded from pipeline YAML.
@@ -36,6 +36,8 @@ final class CheckpointBoundaryValidator {
     private static final String OBJECT_PUBLISH_MAPPER_INTERFACE = "org.pipelineframework.objectpublish.ObjectPublishMapper";
     private static final String STREAMING_OBJECT_PUBLISH_MAPPER_INTERFACE =
         "org.pipelineframework.objectpublish.StreamingObjectPublishMapper";
+    private final ImplementedGenericInterfaceResolver genericInterfaces =
+        new ImplementedGenericInterfaceResolver();
 
     void validate(
         PipelineTemplateConfig templateConfig,
@@ -195,11 +197,7 @@ final class CheckpointBoundaryValidator {
         if (!(rawMapperInterfaceType instanceof DeclaredType mapperInterfaceType)) {
             throw new IllegalStateException("Mapper interface not resolvable as declared type: " + interfaceName);
         }
-        return findImplementedInterface(
-            element.asType(),
-            mapperInterfaceType,
-            processingEnv.getTypeUtils(),
-            new HashSet<>());
+        return genericInterfaces.resolve(element, interfaceName, processingEnv);
     }
 
     private void validateObjectInput(PipelineTemplateConfig templateConfig, ProcessingEnvironment processingEnv) {
@@ -246,8 +244,8 @@ final class CheckpointBoundaryValidator {
                 "ObjectSnapshotMapper interface not resolvable as declared type: " + OBJECT_SNAPSHOT_MAPPER_INTERFACE);
         }
         Types types = processingEnv.getTypeUtils();
-        Optional<DeclaredType> mapperType = findImplementedInterface(
-            mapperElement.asType(), mapperInterfaceType, types, new HashSet<>());
+        Optional<DeclaredType> mapperType = genericInterfaces.resolve(
+            mapperElement, OBJECT_SNAPSHOT_MAPPER_INTERFACE, processingEnv);
         if (mapperType.isEmpty()) {
             throw new IllegalStateException(
                 "Object input mapper '" + mapperClass + "' must implement "
@@ -265,27 +263,6 @@ final class CheckpointBoundaryValidator {
                 "Object input mapper '" + mapperClass + "' must declare ObjectSnapshotMapper<"
                     + expected + ">");
         }
-    }
-
-    private Optional<DeclaredType> findImplementedInterface(
-        TypeMirror type,
-        DeclaredType targetInterface,
-        Types types,
-        Set<String> visited
-    ) {
-        if (!(type instanceof DeclaredType declared) || !visited.add(types.erasure(type).toString())) {
-            return Optional.empty();
-        }
-        if (types.isSameType(types.erasure(declared), types.erasure(targetInterface))) {
-            return Optional.of(declared);
-        }
-        for (TypeMirror supertype : types.directSupertypes(declared)) {
-            Optional<DeclaredType> match = findImplementedInterface(supertype, targetInterface, types, visited);
-            if (match.isPresent()) {
-                return match;
-            }
-        }
-        return Optional.empty();
     }
 
     private void validateSubscriptionMapper(PipelineTemplateConfig templateConfig, ProcessingEnvironment processingEnv) {

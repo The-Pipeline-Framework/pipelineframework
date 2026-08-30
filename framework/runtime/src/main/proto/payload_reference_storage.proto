@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package pipelineframework.repository;
+
+option java_package = "org.pipelineframework.proto";
+option java_outer_classname = "PayloadReferenceStorageProto";
+
+message ConnectorPayloadOrigin {
+  string binding_name = 1;
+  string provider_id = 2;
+  string operation_id = 3;
+  string operation_kind = 4;
+  int32 operation_major_version = 5;
+  int32 provider_major_version = 6;
+  bool has_configuration = 7;
+  string configuration_schema_id = 8;
+  int32 configuration_schema_version = 9;
+  string configuration_digest = 10;
+  repeated string connection_references = 11;
+}
+
+message PayloadReference {
+  string provider = 1;
+  string container = 2;
+  string key = 3;
+  string content_type = 4;
+  string codec = 5;
+  string checksum = 6;
+  int64 size_bytes = 7;
+  string version = 8;
+  map<string, string> metadata = 9;
+  ConnectorPayloadOrigin connector_origin = 10;
+}

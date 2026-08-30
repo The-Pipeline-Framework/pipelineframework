@@ -16,20 +16,32 @@
 
 package org.pipelineframework.config.pipeline;
 
+import java.util.Optional;
+
 /**
  * Await-step configuration parsed from pipeline.yaml.
  *
  * @param correlation correlation configuration
  * @param transport transport adapter configuration
+ * @param completion optional request-aware completion projection
  */
 public record PipelineYamlAwaitConfig(
     PipelineYamlAwaitCorrelation correlation,
-    PipelineYamlAwaitTransport transport
+    PipelineYamlAwaitTransport transport,
+    Optional<PipelineYamlAwaitCompletion> completion
 ) {
+    public PipelineYamlAwaitConfig(
+        PipelineYamlAwaitCorrelation correlation,
+        PipelineYamlAwaitTransport transport
+    ) {
+        this(correlation, transport, Optional.empty());
+    }
+
     public PipelineYamlAwaitConfig {
         correlation = correlation == null ? new PipelineYamlAwaitCorrelation("interactionId") : correlation;
         if (transport == null) {
             throw new IllegalArgumentException("await.transport must be defined");
         }
+        completion = completion == null ? Optional.empty() : completion;
     }
 }

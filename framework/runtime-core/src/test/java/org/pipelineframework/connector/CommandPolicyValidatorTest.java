@@ -13,9 +13,7 @@ class CommandPolicyValidatorTest {
     private final ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
         ConnectorProviderId.of("acme.search"),
         new ConnectorProviderVersion(1, 0),
-        Optional.empty(),
-        Optional.of(new ConnectorExecutionCapabilities(
-            ConnectorExecutionStyle.PROVIDER_MANAGED, ConnectorConcurrencyScope.PROVIDER_MANAGED)));
+        Optional.empty());
 
     private final ConnectorOperationDescriptor command = new ConnectorOperationDescriptor(
         "write.document", ConnectorOperationKind.COMMAND, 1, Optional.empty(),
@@ -28,8 +26,6 @@ class CommandPolicyValidatorTest {
         assertDoesNotThrow(() -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
             false, true, true,
             Optional.of(CommandExecutionPosture.AUTOMATED),
-            Optional.of(ConnectorExecutionStyle.PROVIDER_MANAGED),
-            Optional.of(ConnectorConcurrencyScope.PROVIDER_MANAGED),
             Optional.of(CommandMachineConfirmation.SUBMITTED), true)));
     }
 
@@ -41,7 +37,7 @@ class CommandPolicyValidatorTest {
         CommandPolicy automated = new CommandPolicy(
             false, false, false,
             Optional.of(CommandExecutionPosture.AUTOMATED),
-            Optional.empty(), Optional.empty(), Optional.empty(), false);
+            Optional.empty(), false);
 
         IllegalArgumentException missing = assertThrows(
             IllegalArgumentException.class, () -> CommandPolicyValidator.validate(provider, undeclared, automated));
@@ -51,7 +47,7 @@ class CommandPolicyValidatorTest {
         CommandPolicy attended = new CommandPolicy(
             false, false, false,
             Optional.of(CommandExecutionPosture.ATTENDED),
-            Optional.empty(), Optional.empty(), Optional.empty(), false);
+            Optional.empty(), false);
         IllegalArgumentException mismatch = assertThrows(
             IllegalArgumentException.class, () -> CommandPolicyValidator.validate(provider, command, attended));
         assertEquals("command policy for provider acme.search operation write.document requires command execution posture "
@@ -59,25 +55,20 @@ class CommandPolicyValidatorTest {
     }
 
     @Test
-    void rejectsDeferredOrUnsupportedGuaranteesWithActionableDiagnostics() {
+    void acceptsDeclaredRetryRedriveAndRejectsUnsupportedGuaranteesWithActionableDiagnostics() {
         IllegalArgumentException retry = assertThrows(IllegalArgumentException.class,
             () -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
-                true, false, false, Optional.empty(), Optional.empty(), Optional.empty(), false)));
-        assertEquals("command policy for provider acme.search operation write.document requires retry/redrive, but stable-ID redispatch is deferred to #545", retry.getMessage());
+                true, false, false, Optional.empty(), Optional.empty(), false)));
+        assertEquals("command policy for provider acme.search operation write.document requires retry/redrive support",
+            retry.getMessage());
 
-        IllegalArgumentException blocking = assertThrows(IllegalArgumentException.class,
-            () -> CommandPolicyValidator.validate(provider, command, new CommandPolicy(
-                false, false, false, Optional.of(ConnectorExecutionStyle.BLOCKING), Optional.empty(), Optional.empty(), false)));
-        assertEquals("command policy for provider acme.search operation write.document requires framework-managed blocking execution, deferred to #577", blocking.getMessage());
-
-        ConnectorProviderDescriptor blockingProvider = new ConnectorProviderDescriptor(
-            ConnectorProviderId.of("acme.search"), new ConnectorProviderVersion(1, 0), Optional.empty(),
-            Optional.of(new ConnectorExecutionCapabilities(
-                ConnectorExecutionStyle.BLOCKING, ConnectorConcurrencyScope.PROVIDER_MANAGED)));
-        IllegalArgumentException declaredBlocking = assertThrows(IllegalArgumentException.class,
-            () -> CommandPolicyValidator.validate(blockingProvider, command, CommandPolicy.none()));
-        assertEquals("command policy for provider acme.search operation write.document declares blocking execution, "
-            + "which requires framework-managed execution deferred to #577", declaredBlocking.getMessage());
+        ConnectorOperationDescriptor retryCapable = new ConnectorOperationDescriptor(
+            "write.retryable", ConnectorOperationKind.COMMAND, 1, Optional.empty(),
+            Optional.of(new CommandCapabilities(
+                true, true, true, CommandExecutionPosture.AUTOMATED,
+                CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED, true, Set.of("ticket"))));
+        assertDoesNotThrow(() -> CommandPolicyValidator.validate(provider, retryCapable, new CommandPolicy(
+            true, true, false, Optional.empty(), Optional.empty(), false)));
     }
 
     @Test

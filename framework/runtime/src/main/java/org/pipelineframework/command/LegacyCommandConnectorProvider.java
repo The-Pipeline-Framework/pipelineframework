@@ -16,7 +16,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
 import io.smallrye.mutiny.Uni;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.connector.CommandInvocation;
 import org.pipelineframework.connector.CommandOperation;
 import org.pipelineframework.connector.CommandOutcome;
@@ -278,12 +278,18 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
         }
 
         private static ConnectorExecutionContext executionContext(CommandRequest<?> request) {
-            AwaitExecutionContext context = request.executionContext();
+            PipelineExecutionContext context = request.executionContext();
             return new ConnectorExecutionContext(
                 Optional.of(context.tenantId()),
                 Optional.of(context.executionId()),
+                Optional.of(context.pipelineId()),
+                Optional.of(context.contractVersion()),
+                Optional.of(context.releaseVersion()),
                 Optional.of(request.descriptor().stepId()),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(),
+                context.correlationId(),
+                context.traceId(),
+                Optional.empty());
         }
 
         @SuppressWarnings("unchecked")

@@ -22,8 +22,8 @@ import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.command.CommandDescriptor;
 import org.pipelineframework.command.CommandDuplicatePolicy;
 import org.pipelineframework.command.CommandRequest;
@@ -59,7 +59,7 @@ class ConnectorBindingCdiLifecycleTest {
         assertEquals(0, InjectedConnectorProvider.unconfiguredStarts());
         assertEquals(0, InjectedConnectorProvider.configurationBindings("first"));
         CommandDescriptor firstOperation = descriptor("cdi-first", "inspect.first");
-        AwaitExecutionContext execution = new AwaitExecutionContext("connector-tenant", "connector-execution", 0);
+        PipelineExecutionContext execution = new PipelineExecutionContext("connector-tenant", "connector-execution", 0);
         String replayId = "connector-replay-only";
         CommandRequest<String> replayRequest = new CommandRequest<>(
             firstOperation, replayId, "ignored", execution, firstOperation.config());
@@ -67,13 +67,13 @@ class ConnectorBindingCdiLifecycleTest {
         fixture.store().markSucceeded(
             execution.tenantId(), replayId, "recorded", System.currentTimeMillis()).await().atMost(TIMEOUT);
 
-        AwaitExecutionContextHolder.set(execution);
+        PipelineExecutionContextHolder.set(execution);
         try {
             String replayed = fixture.commands().<String, String>execute(
                 firstOperation, (descriptor, input) -> replayId, "ignored").await().atMost(TIMEOUT);
             assertEquals("recorded", replayed);
         } finally {
-            AwaitExecutionContextHolder.clear();
+            PipelineExecutionContextHolder.clear();
         }
         assertTrue(fixture.bindings().providerInstances().isEmpty());
         assertEquals(0, InjectedConnectorProvider.configurationBindings("first"));
@@ -83,7 +83,7 @@ class ConnectorBindingCdiLifecycleTest {
     @Test
     void bindingsOwnDistinctInjectedInstancesWhileOperationsShareTheirBinding() {
         Fixture fixture = fixture("cdi-first", "cdi-second");
-        AwaitExecutionContext execution = new AwaitExecutionContext("connector-tenant", "connector-execution", 0);
+        PipelineExecutionContext execution = new PipelineExecutionContext("connector-tenant", "connector-execution", 0);
 
         InjectedConnectorProvider.InvocationResult first = invoke(
             fixture.commands(), execution, "cdi-first", "inspect.first", "live-first", "one");
@@ -163,19 +163,19 @@ class ConnectorBindingCdiLifecycleTest {
 
     private static InjectedConnectorProvider.InvocationResult invoke(
         CommandStepSupport commands,
-        AwaitExecutionContext execution,
+        PipelineExecutionContext execution,
         String binding,
         String operation,
         String commandId,
         String suffix
     ) {
-        AwaitExecutionContextHolder.set(execution);
+        PipelineExecutionContextHolder.set(execution);
         try {
             return commands.<String, InjectedConnectorProvider.InvocationResult>execute(
                 descriptor(binding, operation), (descriptor, input) -> commandId, "input")
                 .await().atMost(TIMEOUT);
         } finally {
-            AwaitExecutionContextHolder.clear();
+            PipelineExecutionContextHolder.clear();
         }
     }
 

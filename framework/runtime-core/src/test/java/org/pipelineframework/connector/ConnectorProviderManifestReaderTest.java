@@ -258,22 +258,14 @@ class ConnectorProviderManifestReaderTest {
     }
 
     @Test
-    void reportsMalformedExecutionCapabilitiesWithManifestDiagnostics() {
-        IllegalArgumentException executionStyle = assertThrows(IllegalArgumentException.class,
+    void rejectsDeletedExecutionCapabilitiesField() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
             () -> ConnectorProviderManifestReader.read(input("""
-                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
-                "executionCapabilities":{"executionStyle":"ASYNC","concurrencyScope":"PROVIDER_MANAGED"},"operations":[]}]}
+                {"schemaVersion":3,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "executionCapabilities":{"executionStyle":"NON_BLOCKING","concurrencyScope":"PROVIDER_MANAGED"},
+                "operations":[]}]}
                 """)));
-        assertEquals("malformed connector provider manifest: field 'executionStyle' must be a ConnectorExecutionStyle",
-            executionStyle.getMessage());
-
-        IllegalArgumentException concurrencyScope = assertThrows(IllegalArgumentException.class,
-            () -> ConnectorProviderManifestReader.read(input("""
-                {"schemaVersion":1,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
-                "executionCapabilities":{"executionStyle":"NON_BLOCKING","concurrencyScope":"BOUNDED"},"operations":[]}]}
-                """)));
-        assertEquals("malformed connector provider manifest: field 'concurrencyScope' must be a ConnectorConcurrencyScope",
-            concurrencyScope.getMessage());
+        assertEquals("malformed connector provider manifest: unsupported field 'executionCapabilities'", rejected.getMessage());
     }
 
     @Test
@@ -333,6 +325,41 @@ class ConnectorProviderManifestReaderTest {
         assertEquals(
             QueryCapabilities.conservative(),
             new ConnectorProviderManifestCatalog(List.of(undeclared)).requireQueryCapabilities(identity, 1));
+    }
+
+    @Test
+    void schemaFourRequiresAndReadsStructuralQueryCardinality() {
+        ConnectorProviderManifest manifest = ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+            "operations":[{"id":"find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_MANY"}]}]}
+            """));
+
+        assertEquals(QueryOperationCardinality.ONE_TO_MANY,
+            manifest.providers().getFirst().operations().getFirst().queryCardinality().orElseThrow());
+
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"find.one","kind":"tpf:query","majorVersion":1}]}]}
+                """)));
+        assertTrue(missing.getMessage().contains("queryCardinality"));
+
+        IllegalArgumentException nonQuery = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"send","kind":"tpf:command","majorVersion":1,
+                "queryCardinality":"ONE_TO_MANY"}]}]}
+                """)));
+        assertTrue(nonQuery.getMessage().contains("valid only for Query operations"));
+
+        IllegalArgumentException unaryCache = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorProviderManifestReader.read(input("""
+                {"schemaVersion":4,"providers":[{"id":"metadata.provider","version":{"major":1,"minor":0},
+                "operations":[{"id":"find.many","kind":"tpf:query","majorVersion":1,
+                "queryCardinality":"ONE_TO_MANY","queryCapabilities":{"cacheability":"LIVE_ONLY"}}]}]}
+                """)));
+        assertTrue(unaryCache.getMessage().contains("must not declare unary Query cache capabilities"));
     }
 
     @Test

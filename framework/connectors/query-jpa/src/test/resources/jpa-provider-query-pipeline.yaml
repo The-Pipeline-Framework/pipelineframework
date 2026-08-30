@@ -20,3 +20,14 @@ steps:
         riskBand: riskBand
         score: score
       result: single
+  - name: Load Invoice Files
+    kind: query
+    operation: find.one
+    using: jpa
+    config:
+      entity: org.pipelineframework.connector.query.jpa.InvoiceFilesEntity
+      where:
+        documentId:
+          operator: eq
+          values: [input.documentId]
+      result: single

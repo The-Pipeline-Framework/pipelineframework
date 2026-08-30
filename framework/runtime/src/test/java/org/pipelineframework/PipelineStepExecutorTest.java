@@ -18,10 +18,12 @@ package org.pipelineframework;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.quarkus.arc.ClientProxy;
 import io.quarkus.arc.InjectableBean;
@@ -36,8 +38,13 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.BranchExecutionTracker;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.branching.StepBranchingDescriptor;
+import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.cache.CacheKeyTarget;
+import org.pipelineframework.cache.CacheReadBypass;
+import org.pipelineframework.cache.PipelineCacheReader;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
@@ -131,6 +138,214 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void reactiveServiceCacheReadBypassSurvivesRuntimeAdaptation() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        AtomicInteger serviceCalls = new AtomicInteger();
+        ReactiveService<String, String> service = new BypassReactiveService(serviceCalls);
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "cached"),
+            List.of((item, context) -> Optional.of("key")),
+            "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            service,
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, cacheReads.get());
+        assertEquals(1, serviceCalls.get());
+    }
+
+    @Test
+    void reactiveServiceCacheTargetSurvivesRuntimeAdaptation() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        AtomicReference<String> requestedKey = new AtomicReference<>();
+        CacheKeyStrategy unsafeFallback = (item, context) -> Optional.of("wrong");
+        CacheKeyStrategy targeted = new CacheKeyStrategy() {
+            @Override
+            public Optional<String> resolveKey(Object item, PipelineContext context) {
+                return Optional.of("right");
+            }
+
+            @Override
+            public boolean supportsTarget(Class<?> targetType) {
+                return String.class.equals(targetType);
+            }
+        };
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "cached", requestedKey), List.of(unsafeFallback, targeted), "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            new TargetedReactiveService(),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals("cached", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, cacheReads.get());
+        assertEquals("2:v1:right", requestedKey.get());
+    }
+
+    @Test
+    void reactiveServiceDerivedOutputTargetRejectsInputKeyFallback() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        AtomicInteger serviceCalls = new AtomicInteger();
+        CacheKeyStrategy inputOnly = new CacheKeyStrategy() {
+            @Override
+            public Optional<String> resolveKey(Object item, PipelineContext context) {
+                return item instanceof String ? Optional.of("input-key") : Optional.empty();
+            }
+
+            @Override
+            public boolean supportsTarget(Class<?> targetType) {
+                return String.class.equals(targetType);
+            }
+        };
+        PipelineCacheReadSupport cache = new PipelineCacheReadSupport(
+            cacheReader(cacheReads, "wrong-input-value"), List.of(inputOnly), "PREFER_CACHE");
+
+        Object result = executor.applyStep(
+            new IntegerReactiveService(serviceCalls),
+            Uni.createFrom().item("abcd"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            cache,
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals(4, ((Uni<Integer>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, cacheReads.get());
+        assertEquals(1, serviceCalls.get());
+    }
+
+    @Test
+    void derivesReactiveServiceOutputThroughParameterizedSuperclass() {
+        assertDerivedIntegerTarget(new IntegerSuperclassReactiveService());
+    }
+
+    @Test
+    void derivesReactiveServiceOutputThroughParameterizedInterface() {
+        assertDerivedIntegerTarget(new IntegerInterfaceReactiveService());
+    }
+
+    private void assertDerivedIntegerTarget(ReactiveService<String, Integer> service) {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        AtomicInteger cacheReads = new AtomicInteger();
+        CacheKeyStrategy stringTargetOnly = new CacheKeyStrategy() {
+            @Override
+            public Optional<String> resolveKey(Object item, PipelineContext context) {
+                return Optional.of("wrong");
+            }
+
+            @Override
+            public boolean supportsTarget(Class<?> targetType) {
+                return String.class.equals(targetType);
+            }
+        };
+        Object result = executor.applyStep(
+            service,
+            Uni.createFrom().item("abcd"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            org.pipelineframework.telemetry.PipelineStepTelemetry.disabled(),
+            new PipelineCacheReadSupport(cacheReader(cacheReads, "wrong"), List.of(stringTargetOnly), "PREFER_CACHE"),
+            new PipelineContext("v1", null, "PREFER_CACHE"),
+            null);
+
+        assertEquals(4, ((Uni<Integer>) result).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, cacheReads.get());
+    }
+
+    private static PipelineCacheReader cacheReader(AtomicInteger reads, String value) {
+        return cacheReader(reads, value, new AtomicReference<>());
+    }
+
+    private static PipelineCacheReader cacheReader(
+        AtomicInteger reads,
+        String value,
+        AtomicReference<String> requestedKey
+    ) {
+        return new PipelineCacheReader() {
+            @Override
+            public Uni<Optional<Object>> get(String key) {
+                reads.incrementAndGet();
+                requestedKey.set(key);
+                return Uni.createFrom().item(Optional.of(value));
+            }
+
+            @Override
+            public Uni<Boolean> exists(String key) {
+                return Uni.createFrom().item(false);
+            }
+        };
+    }
+
+    private record BypassReactiveService(AtomicInteger calls)
+            implements ReactiveService<String, String>, CacheReadBypass {
+        @Override
+        public Uni<String> process(String input) {
+            calls.incrementAndGet();
+            return Uni.createFrom().item(input + "-service");
+        }
+    }
+
+    private static final class TargetedReactiveService
+            implements ReactiveService<String, String>, CacheKeyTarget {
+        @Override
+        public Uni<String> process(String input) {
+            return Uni.createFrom().item(input + "-service");
+        }
+
+        @Override
+        public Class<?> cacheKeyTargetType() {
+            return String.class;
+        }
+    }
+
+    private record IntegerReactiveService(AtomicInteger calls)
+            implements ReactiveService<String, Integer> {
+        @Override
+        public Uni<Integer> process(String input) {
+            calls.incrementAndGet();
+            return Uni.createFrom().item(input.length());
+        }
+    }
+
+    private abstract static class GenericSuperclassReactiveService<T> implements ReactiveService<String, T> {
+    }
+
+    private static final class IntegerSuperclassReactiveService extends GenericSuperclassReactiveService<Integer> {
+        @Override
+        public Uni<Integer> process(String input) {
+            return Uni.createFrom().item(input.length());
+        }
+    }
+
+    private interface GenericInterfaceReactiveService<T> extends ReactiveService<String, T> {
+    }
+
+    private static final class IntegerInterfaceReactiveService implements GenericInterfaceReactiveService<Integer> {
+        @Override
+        public Uni<Integer> process(String input) {
+            return Uni.createFrom().item(input.length());
+        }
     }
 
     @Test
@@ -245,6 +460,117 @@ class PipelineStepExecutorTest {
         assertTrue(output instanceof DigitalOrder);
         assertEquals("o-1", ((DigitalOrder) output).id());
         assertEquals(0, step.invocations());
+    }
+
+    @Test
+    void afterStepObserverSkipsAnItemWhenItsParentWasSkipped() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        ReserveStockStep parent = new ReserveStockStep();
+        DigitalOrder input = new DigitalOrder("o-branch");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(), PhysicalOrder.class,
+            List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()), List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null, null,
+            parentDescriptor, java.util.Optional.empty(), tracker);
+        Object skippedParentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        CountingIdentityStep<DigitalOrder> observer = new CountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Reserve Stock", observer.getClass().getName(), DigitalOrder.class.getName(),
+            DigitalOrder.class, List.of("DigitalOrder"), List.of(DigitalOrder.class.getName()),
+            List.of(DigitalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneUnchecked(
+            observer, Uni.createFrom().item(skippedParentOutput), false, 16, null, null, null, null, null,
+            observerDescriptor, java.util.Optional.empty(), tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, observer.invocations());
+    }
+
+    @Test
+    void afterStepObserverRunsWhenItsParentExecuted() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        ReserveStockStep parent = new ReserveStockStep();
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(), PhysicalOrder.class,
+            List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()), List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneUnchecked(
+            parent, Uni.createFrom().item(new PhysicalOrder("o-stock")), false, 16, null, null, null, null, null,
+            parentDescriptor, java.util.Optional.empty(), tracker);
+        Object parentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        CountingIdentityStep<StockReserved> observer = new CountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Reserve Stock", observer.getClass().getName(), StockReserved.class.getName(),
+            StockReserved.class, List.of("StockReserved"), List.of(StockReserved.class.getName()),
+            List.of(StockReserved.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneUnchecked(
+            observer, Uni.createFrom().item(parentOutput), false, 16, null, null, null, null, null,
+            observerDescriptor, java.util.Optional.empty(), tracker);
+
+        assertEquals(parentOutput, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, observer.invocations());
+    }
+
+    @Test
+    void futureAfterStepObserverSkipsAnItemWhenItsFutureParentWasSkipped() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        FutureCountingIdentityStep<PhysicalOrder> parent = new FutureCountingIdentityStep<>();
+        DigitalOrder input = new DigitalOrder("o-future-branch");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Future Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null,
+            parentDescriptor, tracker);
+        Object skippedParentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        FutureCountingIdentityStep<DigitalOrder> observer = new FutureCountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Future Reserve Stock", observer.getClass().getName(), DigitalOrder.class.getName(),
+            DigitalOrder.class, List.of("DigitalOrder"), List.of(DigitalOrder.class.getName()),
+            List.of(DigitalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            observer, Uni.createFrom().item(skippedParentOutput), false, 16, null, null, null, null,
+            observerDescriptor, tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(0, parent.invocations());
+        assertEquals(0, observer.invocations());
+    }
+
+    @Test
+    void futureAfterStepObserverRunsWhenItsFutureParentExecuted() {
+        BranchExecutionTracker tracker = new BranchExecutionTracker();
+        FutureCountingIdentityStep<PhysicalOrder> parent = new FutureCountingIdentityStep<>();
+        PhysicalOrder input = new PhysicalOrder("o-future-stock");
+        StepBranchingDescriptor parentDescriptor = new StepBranchingDescriptor(
+            1, "Future Reserve Stock", parent.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), false);
+
+        Object parentResult = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            parent, Uni.createFrom().item(input), false, 16, null, null, null, null,
+            parentDescriptor, tracker);
+        Object parentOutput = ((Uni<?>) parentResult).await().atMost(Duration.ofSeconds(5));
+
+        FutureCountingIdentityStep<PhysicalOrder> observer = new FutureCountingIdentityStep<>();
+        StepBranchingDescriptor observerDescriptor = new StepBranchingDescriptor(
+            2, "Observe Future Reserve Stock", observer.getClass().getName(), PhysicalOrder.class.getName(),
+            PhysicalOrder.class, List.of("PhysicalOrder"), List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class), List.of(), List.of(), List.of(), false, true);
+        Object observed = PipelineStepExecutor.applyOneToOneFutureUnchecked(
+            observer, Uni.createFrom().item(parentOutput), false, 16, null, null, null, null,
+            observerDescriptor, tracker);
+
+        assertEquals(input, ((Uni<?>) observed).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(1, parent.invocations());
+        assertEquals(1, observer.invocations());
     }
 
     @Test
@@ -905,6 +1231,21 @@ class PipelineStepExecutorTest {
         }
     }
 
+    static final class FutureCountingIdentityStep<T> extends ConfigurableStep
+        implements StepOneToOneCompletableFuture<T, T> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public CompletableFuture<T> applyAsync(T input) {
+            invocations.incrementAndGet();
+            return CompletableFuture.completedFuture(input);
+        }
+
+        int invocations() {
+            return invocations.get();
+        }
+    }
+
     static final class ApprovePaymentStep extends ConfigurableStep
         implements StepOneToOne<ApprovedPaymentStatusMessage, String> {
         private final AtomicInteger invocations = new AtomicInteger();
@@ -1171,6 +1512,20 @@ class PipelineStepExecutorTest {
         public Uni<StockReserved> applyOneToOne(PhysicalOrder in) {
             invocations.incrementAndGet();
             return Uni.createFrom().item(new StockReserved(in.id()));
+        }
+
+        int invocations() {
+            return invocations.get();
+        }
+    }
+
+    static final class CountingIdentityStep<T> extends ConfigurableStep implements StepOneToOne<T, T> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<T> applyOneToOne(T input) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item(input);
         }
 
         int invocations() {

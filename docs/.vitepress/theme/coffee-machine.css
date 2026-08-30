@@ -1,0 +1,530 @@
+.coffee-app {
+  --coffee-ink: var(--vp-c-text-1);
+  --coffee-muted: var(--vp-c-text-2);
+  --coffee-surface: color-mix(in srgb, var(--vp-c-bg-soft) 86%, #8b5e3c 14%);
+  --coffee-border: color-mix(in srgb, var(--vp-c-divider) 72%, #a16207 28%);
+
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 80px;
+  color: var(--coffee-ink);
+}
+
+.coffee-hero,
+.coffee-page-header {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--coffee-border);
+  border-radius: 28px;
+  padding: clamp(32px, 7vw, 80px);
+  background:
+    radial-gradient(
+      circle at 90% 12%,
+      color-mix(in srgb, #d97706 24%, transparent),
+      transparent 35%
+    ),
+    linear-gradient(145deg, var(--coffee-surface), var(--vp-c-bg));
+}
+
+.coffee-hero::after {
+  content: "☕";
+  position: absolute;
+  right: clamp(20px, 7vw, 90px);
+  bottom: -24px;
+  font-size: clamp(100px, 20vw, 230px);
+  opacity: 0.08;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+.coffee-hero h1,
+.coffee-page-header h1 {
+  max-width: 780px;
+  margin: 8px 0 16px;
+  font-size: clamp(42px, 7vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.coffee-page-header h1 {
+  font-size: clamp(38px, 6vw, 64px);
+}
+
+.coffee-hero > p:not(.coffee-eyebrow),
+.coffee-page-header > p:not(.coffee-eyebrow) {
+  max-width: 700px;
+  font-size: 1.16rem;
+  color: var(--coffee-muted);
+}
+
+.coffee-eyebrow {
+  margin: 0;
+  color: #b45309;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dark .coffee-eyebrow {
+  color: #fbbf24;
+}
+
+.coffee-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  border: 1px solid #92400e;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: #92400e;
+  color: #fff !important;
+  font-weight: 700;
+  text-decoration: none !important;
+  cursor: pointer;
+}
+
+.coffee-button:hover {
+  background: #78350f;
+}
+
+.coffee-section {
+  margin-top: clamp(44px, 7vw, 78px);
+}
+
+.coffee-section h2 {
+  margin: 4px 0 22px;
+  border: 0;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -0.025em;
+}
+
+.coffee-section h2 small {
+  color: var(--coffee-muted);
+  font-size: 0.55em;
+}
+
+.coffee-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.coffee-section-heading > a {
+  margin-bottom: 22px;
+  font-weight: 700;
+}
+
+.coffee-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.coffee-topic-card,
+.coffee-faq-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--coffee-border);
+  border-radius: 18px;
+  padding: 20px;
+  background: var(--vp-c-bg-soft);
+  color: var(--coffee-ink) !important;
+  text-decoration: none !important;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.coffee-topic-card:hover,
+.coffee-faq-card:hover {
+  transform: translateY(-3px);
+  border-color: #b45309;
+  box-shadow: 0 12px 30px rgb(67 39 18 / 10%);
+}
+
+.coffee-topic-card-icon {
+  font-size: 1.7rem;
+}
+
+.coffee-topic-card > span:not(.coffee-topic-card-icon),
+.coffee-faq-card > span,
+.coffee-faq-card small {
+  color: var(--coffee-muted);
+  font-size: 0.86rem;
+}
+
+.coffee-topic-card small {
+  margin-top: auto;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.dark .coffee-topic-card small {
+  color: #fbbf24;
+}
+
+.coffee-two-column {
+  display: grid;
+  grid-template-columns: 1.08fr 0.92fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.coffee-fortune,
+.coffee-debate article {
+  height: 100%;
+  border: 1px solid var(--coffee-border);
+  border-radius: 22px;
+  padding: 24px;
+  background: var(--vp-c-bg-soft);
+}
+
+.coffee-terminal {
+  color: #15803d;
+  font:
+    700 0.82rem/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.dark .coffee-terminal {
+  color: #86efac;
+}
+
+.coffee-fortune blockquote,
+.coffee-debate blockquote {
+  margin: 22px 0;
+  border: 0;
+  padding: 0;
+  color: var(--coffee-ink);
+  font-size: clamp(20px, 3vw, 28px);
+  line-height: 1.35;
+}
+
+.coffee-fortune-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.coffee-fortune-actions .coffee-button {
+  margin: 0;
+}
+
+.coffee-debate {
+  display: flex;
+  flex-direction: column;
+}
+
+.coffee-debate article {
+  border-top: 5px solid var(--coffee-accent, #b45309);
+}
+
+.coffee-debate article > a {
+  font-weight: 700;
+}
+
+.coffee-faq-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.coffee-persona-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.coffee-persona-picker button {
+  border: 1px solid var(--coffee-border);
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: var(--vp-c-bg-soft);
+  color: var(--coffee-ink);
+  cursor: pointer;
+}
+
+.coffee-persona-picker button:hover,
+.coffee-persona-picker button.active {
+  border-color: var(--coffee-accent);
+  box-shadow: inset 0 0 0 1px var(--coffee-accent);
+}
+
+.coffee-persona-picker button span {
+  margin-right: 7px;
+}
+
+.coffee-persona-results {
+  margin-top: 22px;
+}
+
+.coffee-directory {
+  max-width: 1080px;
+}
+
+.coffee-search {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.coffee-search label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--coffee-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.coffee-search input,
+.coffee-search select {
+  width: 100%;
+  border: 1px solid var(--coffee-border);
+  border-radius: 12px;
+  padding: 11px 13px;
+  background: var(--vp-c-bg);
+  color: var(--coffee-ink);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.coffee-search--single {
+  display: flex;
+  max-width: 620px;
+}
+
+.coffee-empty {
+  border: 1px dashed var(--coffee-border);
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--coffee-muted);
+}
+
+.coffee-quote-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.coffee-quote-list blockquote {
+  margin: 0;
+  border: 1px solid var(--coffee-border);
+  border-left: 5px solid #b45309;
+  border-radius: 16px;
+  padding: 22px;
+  background: var(--vp-c-bg-soft);
+}
+
+.coffee-quote-list blockquote p {
+  color: var(--coffee-ink);
+  font-size: 1.08rem;
+}
+
+.coffee-quote-list blockquote a {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.coffee-persona-profile {
+  scroll-margin-top: 90px;
+  margin-top: 28px;
+  border: 1px solid var(--coffee-border);
+  border-top: 6px solid var(--coffee-accent);
+  border-radius: 22px;
+  padding: clamp(20px, 4vw, 34px);
+  background: var(--vp-c-bg-soft);
+}
+
+.coffee-persona-profile > header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.coffee-persona-profile > header > span {
+  font-size: 2.5rem;
+}
+
+.coffee-persona-profile h2,
+.coffee-persona-profile h3 {
+  margin: 0;
+  border: 0;
+}
+
+.coffee-persona-profile header p {
+  margin: 4px 0 0;
+  color: var(--coffee-muted);
+}
+
+.coffee-persona-profile-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+  margin-top: 24px;
+}
+
+.coffee-persona-profile-body h3 {
+  margin-top: 18px;
+  font-size: 1rem;
+}
+
+.coffee-persona-profile-body ul {
+  padding-left: 20px;
+}
+
+.coffee-persona-profile details {
+  margin-top: 20px;
+}
+
+.coffee-persona-profile summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.coffee-misconceptions {
+  margin: 32px 0;
+}
+
+.coffee-misconceptions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.coffee-persona-card {
+  border: 1px solid var(--vp-c-divider);
+  border-top: 4px solid var(--coffee-accent, #b45309);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--vp-c-bg-soft);
+}
+
+.coffee-persona-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coffee-persona-card p {
+  margin-bottom: 0;
+}
+
+.coffee-faq-footer {
+  margin-top: 48px;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 20px;
+}
+
+.coffee-faq-footer h2 {
+  margin-top: 30px;
+}
+
+.coffee-faq-footer-quote {
+  border: 1px solid var(--coffee-border);
+  border-radius: 16px;
+  padding: 4px 20px 20px;
+  background: var(--vp-c-bg-soft);
+}
+
+.coffee-faq-footer-quote blockquote {
+  border: 0;
+  padding: 0;
+}
+
+.coffee-faq-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.coffee-faq-nav a {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 14px;
+  text-decoration: none;
+}
+
+.coffee-faq-nav a:last-child {
+  text-align: right;
+}
+
+.coffee-faq-nav a span {
+  color: var(--coffee-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.coffee-app a:focus-visible,
+.coffee-app button:focus-visible,
+.coffee-app input:focus-visible,
+.coffee-app select:focus-visible {
+  outline: 3px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+@media (max-width: 960px) {
+  .coffee-topic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coffee-faq-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .coffee-app {
+    width: min(100% - 20px, 1180px);
+    padding-top: 10px;
+  }
+
+  .coffee-hero,
+  .coffee-page-header {
+    border-radius: 18px;
+    padding: 28px 22px;
+  }
+
+  .coffee-topic-grid,
+  .coffee-faq-grid,
+  .coffee-two-column,
+  .coffee-search,
+  .coffee-quote-list,
+  .coffee-persona-profile-body,
+  .coffee-misconceptions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coffee-section-heading,
+  .coffee-fortune-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .coffee-section-heading > a {
+    margin: -12px 0 18px;
+  }
+
+  .coffee-faq-nav {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coffee-topic-card,
+  .coffee-faq-card {
+    transition: none;
+  }
+}

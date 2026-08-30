@@ -10,6 +10,38 @@ import static org.junit.jupiter.api.Assertions.*;
 class InMemoryExecutionStateStoreTest {
 
     @Test
+    void renewLeaseExtendsOnlyTheCurrentOwnersClaimWithoutChangingVersion() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a", "key-renew", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a", created.record().executionId(), "worker-1", now, 1_000L)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> renewed = store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-1", now + 500L, 1_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(claimed.version(), renewed.version());
+        assertEquals("worker-1", renewed.leaseOwner());
+        assertEquals(now + 1_500L, renewed.leaseExpiresEpochMs());
+        assertTrue(store.claimLease("tenant-a", claimed.executionId(), "worker-2", now + 1_100L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-2", now + 600L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version() + 1L, "worker-1", now + 600L, 1_000L)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.renewLease(
+                "tenant-a", claimed.executionId(), claimed.version(), "worker-1", now + 1_500L, 1_000L)
+            .await().indefinitely().isEmpty());
+    }
+
+    @Test
     void createOrGetReturnsDuplicateForSameKey() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
@@ -117,6 +149,44 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void remoteOutcomeUnknownIsNotAutomaticallyDueOrClaimableButCanBeExplicitlyRedriven() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-remote-unknown", "payload", ExecutionResultShape.SINGLE, now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a", created.record().executionId(), "worker-1", now, 1_000)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> parked = store.markRemoteOutcomeUnknown(
+                "tenant-a",
+                claimed.executionId(),
+                claimed.version(),
+                "transition-remote-unknown",
+                "REMOTE_OUTCOME_UNKNOWN",
+                "remote REST outcome is unknown",
+                now + 1)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, parked.status());
+        assertEquals(claimed.attempt(), parked.attempt());
+        assertTrue(store.findDueExecutions(now + 2_000, 10).await().indefinitely().isEmpty());
+        assertTrue(store.claimLease("tenant-a", parked.executionId(), "worker-2", now + 2_000, 1_000)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a", parked.executionId(), parked.version(), false, "redrive", now + 2)
+            .await().indefinitely().isEmpty());
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a", parked.executionId(), parked.version(), true, "redrive", now + 2)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionStatus.QUEUED, redriven.status());
+        assertEquals(parked.attempt() + 1, redriven.attempt());
+    }
+
+    @Test
     void redriveTerminalExecutionQueuesDlqAndPreservesPinnedIdentity() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
@@ -204,6 +274,59 @@ class InMemoryExecutionStateStoreTest {
                 "redrive",
                 now + 3)
             .await().indefinitely().isPresent());
+    }
+
+    @Test
+    void deliberateCommandRetryIntentSurvivesAdmissionAndLeaseClaim() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-command-retry",
+                    "payload",
+                    ExecutionResultShape.SINGLE,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> failed = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                ExecutionStatus.FAILED,
+                "transition",
+                "COMMAND_FAILED_RETRYABLE",
+                "retryable command failure",
+                4,
+                Optional.of("archive:confirmation-7"),
+                now + 1)
+            .await().indefinitely().orElseThrow();
+        assertEquals(4, failed.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), failed.failedCommandId());
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                failed.version(),
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "command-retry:" + created.record().executionId() + ":" + failed.version(),
+                now + 2)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, redriven.redriveIntent());
+        assertEquals(4, redriven.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), redriven.failedCommandId());
+
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a",
+                created.record().executionId(),
+                "worker-1",
+                now + 3,
+                30_000L)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, claimed.redriveIntent());
+        assertEquals(4, claimed.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), claimed.failedCommandId());
     }
 
     @Test

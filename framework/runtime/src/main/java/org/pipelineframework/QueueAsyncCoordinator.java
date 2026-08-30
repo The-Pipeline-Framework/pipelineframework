@@ -36,6 +36,7 @@ import org.pipelineframework.telemetry.PipelineReplayTelemetry;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
@@ -160,6 +161,10 @@ class QueueAsyncCoordinator {
     sweepFlow = null;
 
     List<String> providerReadinessErrors = new ArrayList<>();
+    if (!executionStateStore.supportsLeaseRenewal()) {
+      providerReadinessErrors.add(
+          "ExecutionStateStore(" + executionStateStore.providerName() + "): live lease renewal is not supported");
+    }
     executionStateStore.startupValidationError(orchestratorConfig)
         .ifPresent(error -> providerReadinessErrors
             .add("ExecutionStateStore(" + executionStateStore.providerName() + "): " + error));
@@ -261,6 +266,19 @@ class QueueAsyncCoordinator {
       return Uni.createFrom().failure(queueModeDisabledException());
     }
     return redriveFlow().redrive(tenantId, executionId, expectedVersion, allowFailed, reason);
+  }
+
+  Uni<ExecutionRedriveResult> redriveExecution(
+      String tenantId,
+      String executionId,
+      Long expectedVersion,
+      boolean allowFailed,
+      ExecutionRedriveIntent intent,
+      String reason) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
+    return redriveFlow().redrive(tenantId, executionId, expectedVersion, allowFailed, intent, reason);
   }
 
   Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {

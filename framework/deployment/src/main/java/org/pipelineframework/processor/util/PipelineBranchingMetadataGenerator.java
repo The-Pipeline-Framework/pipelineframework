@@ -23,6 +23,8 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.AspectExpansionProcessor;
+import org.pipelineframework.processor.ResolvedStep;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -61,6 +63,13 @@ public final class PipelineBranchingMetadataGenerator {
         List<StepMetadata> steps = new ArrayList<>();
         if (rootBranchAware) {
             appendPlan(ctx, rootPlan, indexModelsByStepName(orderedModels(ctx)), false, "$root", steps);
+            appendSideEffectDescriptors(
+                ctx,
+                withSyntheticAspects(ctx, ctx.getStepModels()),
+                false,
+                "$root",
+                rootPlan.terminalStepIndex(),
+                steps);
         }
         for (Map.Entry<PipelineReference, PipelineBranchingPlan> entry
                 : ctx.getLocalDefinitionBranchingPlans().entrySet().stream()
@@ -73,6 +82,13 @@ public final class PipelineBranchingMetadataGenerator {
                 .getOrDefault(entry.getKey().logicalId(), List.of());
             appendPlan(ctx, entry.getValue(), indexModelsByStepName(childModels), true,
                 entry.getKey().logicalId(), steps);
+            appendSideEffectDescriptors(
+                ctx,
+                withSyntheticAspects(ctx, childModels),
+                true,
+                entry.getKey().logicalId(),
+                entry.getValue().terminalStepIndex(),
+                steps);
         }
         if (steps.isEmpty()) {
             return;
@@ -86,6 +102,90 @@ public final class PipelineBranchingMetadataGenerator {
             try (var writer = resourceFile.openWriter()) {
                 writer.write(gson.toJson(metadata));
             }
+        }
+    }
+
+    private List<PipelineStepModel> withSyntheticAspects(
+        PipelineCompilationContext ctx,
+        List<PipelineStepModel> models
+    ) {
+        if (models == null || models.isEmpty() || models.stream().anyMatch(PipelineStepModel::sideEffect)) {
+            return models == null ? List.of() : models;
+        }
+        var aspects = ctx.getAspectModels().stream()
+            .filter(java.util.Objects::nonNull)
+            // At this fallback point only the definition-local authored models are available.
+            // A STEPS-scoped aspect may target a step owned by another module/definition, so
+            // expanding it here would validate against an incomplete model set.
+            .filter(aspect -> aspect.scope() == org.pipelineframework.processor.ir.AspectScope.GLOBAL)
+            .filter(aspect -> aspect.config().get("pluginImplementationClass") instanceof String implementation
+                && !implementation.isBlank())
+            .toList();
+        if (aspects.isEmpty()) {
+            return models;
+        }
+        List<ResolvedStep> resolved = models.stream()
+            .map(model -> new ResolvedStep(model, null, null))
+            .toList();
+        return new AspectExpansionProcessor().expandAspects(resolved, aspects).stream()
+            .map(ResolvedStep::model)
+            .toList();
+    }
+
+    /**
+     * Aspect steps are identity observers, but they still have a concrete observed type. In a
+     * branch-aware pipeline a non-applicable variant must pass through the observer unchanged,
+     * just as it passes through the authored step the observer surrounds.
+     */
+    private void appendSideEffectDescriptors(
+        PipelineCompilationContext ctx,
+        List<PipelineStepModel> models,
+        boolean generatedLocalRuntime,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        List<StepMetadata> steps
+    ) {
+        if (models == null) {
+            return;
+        }
+        Set<String> emittedRuntimeClasses = steps.stream()
+            .filter(step -> definitionId.equals(step.definitionId()))
+            .map(StepMetadata::runtimeStepClass)
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (PipelineStepModel model : models) {
+            if (!model.sideEffect()) {
+                continue;
+            }
+            boolean transportMappedRuntime = generatedLocalRuntime || usesTransportMappedRuntime(model, ctx);
+            String inputRuntimeClass = runtimeInputType(model, ctx, transportMappedRuntime).orElse(null);
+            if (inputRuntimeClass == null || inputRuntimeClass.isBlank()) {
+                continue;
+            }
+            // Aspect models describe the plugin service, while the pipeline always executes the
+            // generated side-effect client step around the authored boundary.
+            String runtimeStepClass = clientClass(model, ctx);
+            if (!emittedRuntimeClasses.add(runtimeStepClass)) {
+                continue;
+            }
+            String acceptedContract = model.inputMapping() != null
+                    && model.inputMapping().domainType() instanceof ClassName className
+                ? className.simpleName()
+                : inputRuntimeClass;
+            steps.add(new StepMetadata(
+                definitionId,
+                definitionTerminalStepIndex,
+                -1,
+                model.generatedName(),
+                runtimeStepClass,
+                inputRuntimeClass,
+                List.of(acceptedContract),
+                List.of(inputRuntimeClass),
+                List.of(),
+                List.of(),
+                List.of(),
+                false,
+                model.aspectPosition().filter(
+                    org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP::equals).isPresent()));
         }
     }
 
@@ -148,7 +248,8 @@ public final class PipelineBranchingMetadataGenerator {
             variants(step.inputVariants()),
             variants(step.acceptedVariants()),
             variants(step.producedVariants()),
-            step.terminal());
+            step.terminal(),
+            false);
     }
 
     private List<String> invocationRuntimeClasses(
@@ -450,7 +551,8 @@ public final class PipelineBranchingMetadataGenerator {
         List<VariantMetadata> inputVariants,
         List<VariantMetadata> acceptedVariants,
         List<VariantMetadata> producedVariants,
-        boolean terminal
+        boolean terminal,
+        boolean afterStepObserver
     ) {
     }
 

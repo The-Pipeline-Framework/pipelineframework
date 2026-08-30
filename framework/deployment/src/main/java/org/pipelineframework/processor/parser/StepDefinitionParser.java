@@ -25,12 +25,11 @@ import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepContractSyntax;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
@@ -39,18 +38,19 @@ import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.connector.QueryCapabilities;
+import org.pipelineframework.connector.QueryOperationCardinality;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.routing.V3JavaTypeResolver;
+import org.yaml.snakeyaml.error.YAMLException;
 
 /**
  * Parser for extracting StepDefinition objects from pipeline template YAML files.
@@ -58,8 +58,6 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-        new YAMLFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION));
     private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
     private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
         "eq",
@@ -185,16 +183,32 @@ public class StepDefinitionParser {
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
 
-        String yamlContent = Files.readString(templatePath);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
+        Object root;
+        try {
+            root = new PipelineYamlDocumentLoader().load(templatePath);
+        } catch (YAMLException e) {
+            throw new IOException(e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            if (e.getCause() instanceof IOException readFailure) {
+                throw readFailure;
+            }
+            throw e;
+        }
+        if (!(root instanceof Map<?, ?> rootMap)) {
+            throw new IOException("Pipeline template root must be a map");
+        }
+        Map<String, Object> templateData = new LinkedHashMap<>();
+        rootMap.forEach((key, value) -> templateData.put(String.valueOf(key), value));
         String basePackage = getStringValue(templateData, "basePackage");
         int version = parseVersion(templateData);
+        Optional<V3JavaTypeResolver> v3JavaTypes = version == 3 && containsRemoteExecution(templateData)
+            ? Optional.of(new V3JavaTypeResolver(new PipelineTemplateConfigLoader().load(templatePath)))
+            : Optional.empty();
         Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
         Map<String, ParsedConnectorBinding> connectorBindings = parseConnectorBindings(templateData);
 
         List<StepDefinition> rootSteps = parseStepList(
-            templateData.get("steps"), basePackage, version, queryDefinitions, connectorBindings);
+            templateData.get("steps"), basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings);
         if (rootSteps.isEmpty() && !(templateData.get("steps") instanceof List)) {
             LOG.debugf("No 'steps' array found in pipeline template");
         }
@@ -215,7 +229,8 @@ public class StepDefinitionParser {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> definition = (Map<String, Object>) rawDefinition;
                 if (definitions.putIfAbsent(id, parseStepList(
-                        definition.get("steps"), basePackage, version, queryDefinitions, connectorBindings)) != null) {
+                        definition.get("steps"), basePackage, version, v3JavaTypes,
+                        queryDefinitions, connectorBindings)) != null) {
                     throw new IOException("Duplicate pipeline definition ID '" + id + "'");
                 }
             }
@@ -223,10 +238,37 @@ public class StepDefinitionParser {
         return new ParsedPipelineDefinitionCatalog(rootSteps, definitions);
     }
 
+    private boolean containsRemoteExecution(Map<String, Object> templateData) {
+        if (stepsContainRemoteExecution(templateData.get("steps"))) {
+            return true;
+        }
+        Object rawDefinitions = templateData.get("pipelines");
+        if (!(rawDefinitions instanceof Map<?, ?> definitions)) {
+            return false;
+        }
+        return definitions.values().stream()
+            .filter(Map.class::isInstance)
+            .map(Map.class::cast)
+            .anyMatch(definition -> stepsContainRemoteExecution(definition.get("steps")));
+    }
+
+    private boolean stepsContainRemoteExecution(Object rawSteps) {
+        if (!(rawSteps instanceof Iterable<?> steps)) {
+            return false;
+        }
+        for (Object rawStep : steps) {
+            if (rawStep instanceof Map<?, ?> step && step.containsKey("execution")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<StepDefinition> parseStepList(
             Object stepsObj,
             String basePackage,
             int version,
+            Optional<V3JavaTypeResolver> v3JavaTypes,
             Map<String, QueryDefinition> queryDefinitions,
             Map<String, ParsedConnectorBinding> connectorBindings) {
         if (!(stepsObj instanceof List<?> stepsList)) {
@@ -242,7 +284,8 @@ public class StepDefinitionParser {
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
             StepDefinition stepDef;
             try {
-                stepDef = parseStepDefinition(stepData, basePackage, version, queryDefinitions, connectorBindings);
+                stepDef = parseStepDefinition(
+                    stepData, basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings);
             } catch (StepSkippedException ignored) {
                 continue;
             }
@@ -270,6 +313,7 @@ public class StepDefinitionParser {
             Map<String, Object> stepData,
             String basePackage,
             int version,
+            Optional<V3JavaTypeResolver> v3JavaTypes,
             Map<String, QueryDefinition> queryDefinitions,
             Map<String, ParsedConnectorBinding> connectorBindings) {
         String name = getStringValue(stepData, "name");
@@ -567,14 +611,36 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            if (inputType == null || outputType == null) {
+            Optional<ClassName> canonicalV3Input = contracts.logicalInput().flatMap(logical ->
+                v3JavaTypes.flatMap(types -> types.resolve(logical)));
+            Optional<ClassName> canonicalV3Output = contracts.logicalOutput().flatMap(logical ->
+                v3JavaTypes.flatMap(types -> types.resolve(logical)));
+            Optional<ClassName> resolvedRemoteInput = version == 3
+                ? canonicalV3Input : Optional.ofNullable(inputType);
+            Optional<ClassName> resolvedRemoteOutput = version == 3
+                ? canonicalV3Output : Optional.ofNullable(outputType);
+            if (resolvedRemoteInput.isEmpty() || resolvedRemoteOutput.isEmpty()) {
                 String message = "Skipping step '" + name
-                    + "': remote steps must provide explicit Java 'input' and 'output' bindings via java.input and java.output"
-                    + " (legacy fully qualified input/output remains supported)";
+                    + "': remote steps must resolve both input and output Java contracts; version: 3 logical contracts"
+                    + " resolve to compiler-generated Java types, while older templates must declare explicit Java bindings";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
+            boolean redefinesV3Input = version == 3 && inputType != null
+                && !inputType.equals(resolvedRemoteInput.orElseThrow());
+            boolean redefinesV3Output = version == 3 && outputType != null
+                && !outputType.equals(resolvedRemoteOutput.orElseThrow());
+            if (redefinesV3Input || redefinesV3Output) {
+                String message = "Skipping step '" + name
+                    + "': version: 3 remote execution uses compiler-generated Java types from logical input/output;"
+                    + " java.input/java.output must not redefine that contract";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            inputType = resolvedRemoteInput.orElseThrow();
+            outputType = resolvedRemoteOutput.orElseThrow();
             StreamingShape shape = parseStreamingShapeHint(stepData, name);
             if (shape != null && shape != StreamingShape.UNARY_UNARY) {
                 String message = "Skipping step '" + name
@@ -625,7 +691,16 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            if (inputType == null || outputType == null) {
+            boolean hasJavaInput = inputType != null;
+            boolean hasJavaOutput = outputType != null;
+            if (hasJavaInput != hasJavaOutput) {
+                String message = "Skipping step '" + name
+                    + "': await steps must declare both java.input and java.output together";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
+            if (version < 3 && !hasJavaInput) {
                 String message = "Skipping step '" + name + "': await steps must provide input and output types";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
@@ -823,9 +898,10 @@ public class StepDefinitionParser {
                 return null;
             }
             StreamingShape shape = parseStreamingShapeHint(stepData, name);
-            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+            if (shape != null && shape != StreamingShape.UNARY_UNARY
+                && shape != StreamingShape.UNARY_STREAMING) {
                 String message = "Skipping step '" + name
-                    + "': query steps support only ONE_TO_ONE cardinality in v1";
+                    + "': query steps support only ONE_TO_ONE and ONE_TO_MANY cardinality";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -863,11 +939,19 @@ public class StepDefinitionParser {
                 Map<String, Object> operationConfig = parseStepConfig(stepData, name, "query");
                 Optional<Duration> negativeCacheTtl = parsePositiveDuration(
                     stepData.get("negativeCacheTtl"), name, "negativeCacheTtl");
-                if (operationConfig == null
-                    || !validateNativeQueryBinding(
-                        name, operation, using, stepData, operationConfig, negativeCacheTtl, connectorBindings)) {
+                if (operationConfig == null) {
                     throw new StepSkippedException();
                 }
+                Optional<QueryOperationCardinality> validatedCardinality = validateNativeQueryBinding(
+                    name, operation, using, stepData, operationConfig, negativeCacheTtl,
+                    Optional.ofNullable(shape), connectorBindings);
+                if (validatedCardinality.isEmpty()) {
+                    throw new StepSkippedException();
+                }
+                StreamingShape resolvedShape = validatedCardinality.orElseThrow()
+                    == QueryOperationCardinality.ONE_TO_MANY
+                    ? StreamingShape.UNARY_STREAMING
+                    : StreamingShape.UNARY_UNARY;
                 String bindingName = ConnectorBindingName.of(using).value();
                 queryId = "native-binding:" + bindingName + "/" + operation;
                 Map<String, Object> embedded = embedNativeQuerySelection(
@@ -893,13 +977,20 @@ public class StepDefinitionParser {
                     MapperFallbackMode.NONE,
                     inputType,
                     outputType,
-                    StreamingShape.UNARY_UNARY,
+                    resolvedShape,
                     false,
                     accepts,
                     terminal);
             }
             if (isBlank(queryId)) {
                 String message = "Skipping step '" + name + "': query steps must reference a top-level query id";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (shape == StreamingShape.UNARY_STREAMING) {
+                String message = "Skipping step '" + name
+                    + "': ONE_TO_MANY Query requires a native operation/using selection";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -1168,13 +1259,14 @@ public class StepDefinitionParser {
         return Optional.of(source);
     }
 
-    private boolean validateNativeQueryBinding(
+    private Optional<QueryOperationCardinality> validateNativeQueryBinding(
         String stepName,
         String operation,
         String using,
         Map<String, Object> stepData,
         Map<String, Object> operationConfig,
         Optional<Duration> negativeCacheTtl,
+        Optional<StreamingShape> declaredShape,
         Map<String, ParsedConnectorBinding> bindings
     ) {
         try {
@@ -1194,14 +1286,32 @@ public class StepDefinitionParser {
                 identity.majorVersion(),
                 new ConnectorConfigurationDocument(operationConfig),
                 "query step '" + stepName + "' operation " + operation);
-            validateNegativeCacheTtl(
-                identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
-            return true;
+            QueryOperationCardinality cardinality = catalog.requireQueryCardinality(
+                identity, binding.providerVersion());
+            StreamingShape operationShape = cardinality == QueryOperationCardinality.ONE_TO_MANY
+                ? StreamingShape.UNARY_STREAMING
+                : StreamingShape.UNARY_UNARY;
+            if (declaredShape.isPresent() && declaredShape.orElseThrow() != operationShape) {
+                throw new IllegalArgumentException(
+                    "declared cardinality " + declaredShape.orElseThrow()
+                        + " does not match provider operation cardinality "
+                        + cardinality);
+            }
+            if (cardinality == QueryOperationCardinality.ONE_TO_MANY) {
+                if (negativeCacheTtl.isPresent()) {
+                    throw new IllegalArgumentException(
+                        "streaming query operation " + identity + " does not support negativeCacheTtl");
+                }
+            } else {
+                validateNegativeCacheTtl(
+                    identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
+            }
+            return Optional.of(cardinality);
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return false;
+            return Optional.empty();
         }
     }
 
@@ -1375,16 +1485,14 @@ public class StepDefinitionParser {
             nativePolicyBoolean(policy, "requireIdempotency"),
             nativePolicyBoolean(policy, "requireReconciliation"),
             nativePolicyEnum(policy, "requiredExecutionPosture", CommandExecutionPosture.class),
-            nativePolicyEnum(policy, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            nativePolicyEnum(policy, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             nativePolicyEnum(policy, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             nativePolicyBoolean(policy, "requireUserConfirmation"));
     }
 
     private static void rejectUnknownNativePolicyFields(Map<String, Object> policy) {
         Set<String> supported = Set.of(
-            "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-            "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+            "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+            "requiredExecutionPosture", "minimumMachineConfirmation",
             "requireUserConfirmation");
         policy.keySet().stream()
             .filter(field -> !supported.contains(field))
@@ -1776,6 +1884,21 @@ public class StepDefinitionParser {
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
+        }
+        if (awaitMap.containsKey("completion")) {
+            Object completionObj = awaitMap.get("completion");
+            if (!(completionObj instanceof Map<?, ?> completionMap)
+                || !completionMap.keySet().equals(java.util.Set.of("type", "projector"))
+                || !(completionMap.get("type") instanceof String completionType)
+                || completionType.isBlank()
+                || !(completionMap.get("projector") instanceof String completionProjector)
+                || completionProjector.isBlank()) {
+                String message = "Skipping step '" + stepName
+                    + "': await.completion must contain only non-blank string type and projector fields";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
         }
         Object transportObj = awaitMap.get("transport");
         if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {

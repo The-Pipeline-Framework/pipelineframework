@@ -44,11 +44,10 @@ public final class ConnectorProviderManifestReader {
     }
 
     private static ConnectorProviderArtifactDescriptor artifact(Map<String, Object> value, int schemaVersion) {
-        requireOnly(value, "id", "version", "configurationSchema", "executionCapabilities", "operations", "protocolTypes");
+        requireOnly(value, "id", "version", "configurationSchema", "operations", "protocolTypes");
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
-            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema,
-            optionalExecutionCapabilities(value));
+            ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema);
         if (provider.id().isFrameworkReserved()) {
             throw new IllegalArgumentException(
                 "connector provider ID is reserved for framework use: " + provider.id().value());
@@ -238,14 +237,36 @@ public final class ConnectorProviderManifestReader {
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value, int schemaVersion) {
         requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities",
-            "queryCapabilities", "typeContract");
+            "queryCapabilities", "queryCardinality", "typeContract");
         if (schemaVersion == 1 && value.containsKey("typeContract")) {
             throw malformed("typeContract", "field absent from schema version 1");
         }
+        ConnectorOperationKind kind = ConnectorOperationKind.of(string(value, "kind"));
+        Optional<QueryOperationCardinality> queryCardinality = queryCardinality(value, schemaVersion, kind);
         return new ConnectorOperationDescriptor(
-            string(value, "id"), ConnectorOperationKind.of(string(value, "kind")), integer(value, "majorVersion"),
+            string(value, "id"), kind, integer(value, "majorVersion"),
             optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value),
-            optionalQueryCapabilities(value), optionalTypeContract(value));
+            optionalQueryCapabilities(value), queryCardinality, optionalTypeContract(value));
+    }
+
+    private static Optional<QueryOperationCardinality> queryCardinality(
+        Map<String, Object> value,
+        int schemaVersion,
+        ConnectorOperationKind kind
+    ) {
+        if (!ConnectorOperationKind.QUERY.equals(kind)) {
+            if (value.containsKey("queryCardinality")) {
+                throw malformed("queryCardinality", "field valid only for Query operations");
+            }
+            return Optional.empty();
+        }
+        if (!value.containsKey("queryCardinality")) {
+            if (schemaVersion >= 4) {
+                throw malformed("queryCardinality", "field required for Query operations in schema version 4");
+            }
+            return Optional.of(QueryOperationCardinality.ONE_TO_ONE);
+        }
+        return Optional.of(QueryOperationCardinality.of(string(value, "queryCardinality")));
     }
 
     private static Optional<ConnectorOperationTypeContract> optionalTypeContract(Map<String, Object> value) {
@@ -262,17 +283,6 @@ public final class ConnectorProviderManifestReader {
     private static ConnectorProviderVersion version(Map<String, Object> value) {
         requireOnly(value, "major", "minor");
         return new ConnectorProviderVersion(integer(value, "major"), integer(value, "minor"));
-    }
-
-    private static Optional<ConnectorExecutionCapabilities> optionalExecutionCapabilities(Map<String, Object> value) {
-        if (!value.containsKey("executionCapabilities")) {
-            return Optional.empty();
-        }
-        Map<String, Object> capabilities = object(value.get("executionCapabilities"), "executionCapabilities");
-        requireOnly(capabilities, "executionStyle", "concurrencyScope");
-        return Optional.of(new ConnectorExecutionCapabilities(
-            enumValue(ConnectorExecutionStyle.class, string(capabilities, "executionStyle"), "executionStyle"),
-            enumValue(ConnectorConcurrencyScope.class, string(capabilities, "concurrencyScope"), "concurrencyScope")));
     }
 
     private static Optional<CommandCapabilities> optionalCommandCapabilities(Map<String, Object> value) {

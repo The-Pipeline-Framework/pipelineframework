@@ -131,7 +131,43 @@ public class RuntimeAdapterBootstrap {
     private final class QuarkusExecutionContextCarrier implements ExecutionContextCarrier {
         private static final ThreadLocal<java.util.Map<String, Object>> FALLBACK =
             ThreadLocal.withInitial(java.util.HashMap::new);
-        private final Set<String> trackedKeys = ConcurrentHashMap.newKeySet();
+        private final Set<String> knownKeys = ConcurrentHashMap.newKeySet();
+
+        @Override
+        public <T> Callable<T> contextualize(Callable<T> task) {
+            java.util.Objects.requireNonNull(task, "contextualized task must not be null");
+            java.util.Map<String, Object> captured = new java.util.HashMap<>();
+            Context context = Vertx.currentContext();
+            for (String key : knownKeys) {
+                Object value = null;
+                if (context != null) {
+                    try {
+                        value = context.getLocal(key);
+                    } catch (UnsupportedOperationException ignored) {
+                        // Use the fallback value below.
+                    }
+                }
+                if (value == null) {
+                    value = FALLBACK.get().get(key);
+                }
+                if (value != null) {
+                    captured.put(key, value);
+                }
+            }
+            return () -> {
+                java.util.Map<String, Object> previous = FALLBACK.get();
+                FALLBACK.set(new java.util.HashMap<>(captured));
+                try {
+                    return task.call();
+                } finally {
+                    if (previous.isEmpty()) {
+                        FALLBACK.remove();
+                    } else {
+                        FALLBACK.set(previous);
+                    }
+                }
+            };
+        }
 
         @Override
         public <T> T get(String key, Class<T> type) {
@@ -163,10 +199,9 @@ public class RuntimeAdapterBootstrap {
                 try {
                     if (value == null) {
                         context.removeLocal(key);
-                        trackedKeys.remove(key);
                     } else {
                         context.putLocal(key, value);
-                        trackedKeys.add(key);
+                        knownKeys.add(key);
                     }
                     return;
                 } catch (UnsupportedOperationException ignored) {
@@ -175,10 +210,9 @@ public class RuntimeAdapterBootstrap {
             }
             if (value == null) {
                 FALLBACK.get().remove(key);
-                trackedKeys.remove(key);
             } else {
                 FALLBACK.get().put(key, value);
-                trackedKeys.add(key);
+                knownKeys.add(key);
             }
         }
 
@@ -191,14 +225,12 @@ public class RuntimeAdapterBootstrap {
             if (context != null) {
                 try {
                     context.removeLocal(key);
-                    trackedKeys.remove(key);
                     return;
                 } catch (UnsupportedOperationException ignored) {
                     // Fall back to thread-local cache.
                 }
             }
             FALLBACK.get().remove(key);
-            trackedKeys.remove(key);
         }
 
         @Override
@@ -206,7 +238,7 @@ public class RuntimeAdapterBootstrap {
             Context context = Vertx.currentContext();
             if (context != null) {
                 try {
-                    for (String key : trackedKeys) {
+                    for (String key : knownKeys) {
                         context.removeLocal(key);
                     }
                 } catch (UnsupportedOperationException ignored) {
@@ -214,7 +246,7 @@ public class RuntimeAdapterBootstrap {
                 }
             }
             FALLBACK.remove();
-            trackedKeys.clear();
+            knownKeys.clear();
         }
     }
 
@@ -245,6 +277,7 @@ public class RuntimeAdapterBootstrap {
                         throw new RuntimeException(ex);
                     }
                 })
+                .runSubscriptionOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool())
                 .subscribeAsCompletionStage();
         }
     }

@@ -1,16 +1,22 @@
 package org.pipelineframework.command;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
 
 /**
  * In-memory command effect store for tests, dev, and local examples.
  */
 @ApplicationScoped
+@IfBuildProperty(
+    name = "pipeline.command.effect-store.provider",
+    stringValue = "memory",
+    enableIfMissing = true)
 public class InMemoryCommandEffectStore implements CommandEffectStore {
     private final Map<String, CommandEffectRecord> records = new ConcurrentHashMap<>();
 
@@ -33,6 +39,16 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
             null,
             null,
             null,
+            List.of(new CommandEffectAttemptRecord(
+                request.attemptId(),
+                1,
+                request.executionContext().executionId(),
+                CommandEffectStatus.PENDING,
+                null,
+                null,
+                Optional.empty(),
+                nowEpochMs,
+                nowEpochMs)),
             nowEpochMs,
             nowEpochMs);
         CommandEffectRecord existing = records.putIfAbsent(key(pending.tenantId(), pending.commandId()), pending);
@@ -43,8 +59,38 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
     }
 
     @Override
+    public boolean supportsRetryAttempts() {
+        return true;
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> createRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+        String key = key(request.executionContext().tenantId(), request.commandId());
+        CommandEffectRecord updated = records.compute(key, (ignored, existing) -> {
+            if (existing == null) {
+                throw new IllegalStateException(
+                    "No command effect record found for commandId " + request.commandId());
+            }
+            return existing.appendRetryAttempt(request, nowEpochMs);
+        });
+        return Uni.createFrom().item(updated);
+    }
+
+    @Override
     public Uni<CommandEffectRecord> markDispatching(String tenantId, String commandId, long nowEpochMs) {
-        return update(tenantId, commandId, record -> record.withStatus(CommandEffectStatus.DISPATCHING, nowEpochMs));
+        return update(
+            tenantId, commandId,
+            record -> record.dispatching(record.currentAttempt().attemptId(), nowEpochMs));
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markDispatching(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.dispatching(attemptId, nowEpochMs));
     }
 
     @Override
@@ -54,7 +100,21 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
 
     @Override
     public Uni<CommandEffectRecord> markSucceeded(String tenantId, String commandId, Object output, long nowEpochMs) {
-        return update(tenantId, commandId, record -> record.succeeded(output, nowEpochMs));
+        return update(tenantId, commandId, record -> {
+            CommandEffectRecord dispatching = legacyCompletionSource(record, nowEpochMs);
+            return dispatching.succeeded(dispatching.currentAttempt().attemptId(), output, nowEpochMs);
+        });
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markSucceeded(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Object output,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.succeeded(attemptId, output, nowEpochMs));
     }
 
     @Override
@@ -65,17 +125,61 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
         CommandOutcomeSnapshot outcome,
         long nowEpochMs
     ) {
-        return update(tenantId, commandId, record -> record.succeeded(output, outcome, nowEpochMs));
+        return update(tenantId, commandId, record -> {
+            CommandEffectRecord dispatching = legacyCompletionSource(record, nowEpochMs);
+            return dispatching.succeeded(
+                dispatching.currentAttempt().attemptId(), output, outcome, nowEpochMs);
+        });
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markSucceeded(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Object output,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.succeeded(attemptId, output, outcome, nowEpochMs));
     }
 
     @Override
     public Uni<CommandEffectRecord> markFailed(String tenantId, String commandId, Throwable failure, long nowEpochMs) {
-        return update(tenantId, commandId, record -> record.failed(failure, nowEpochMs));
+        return update(tenantId, commandId, record -> {
+            CommandEffectRecord dispatching = legacyCompletionSource(record, nowEpochMs);
+            return dispatching.failed(dispatching.currentAttempt().attemptId(), failure, nowEpochMs);
+        });
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markFailed(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Throwable failure,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.failed(attemptId, failure, nowEpochMs));
     }
 
     @Override
     public Uni<CommandEffectRecord> markDlq(String tenantId, String commandId, Throwable failure, long nowEpochMs) {
-        return update(tenantId, commandId, record -> record.dlq(failure, nowEpochMs));
+        return update(tenantId, commandId, record -> {
+            CommandEffectRecord dispatching = legacyCompletionSource(record, nowEpochMs);
+            return dispatching.dlq(dispatching.currentAttempt().attemptId(), failure, nowEpochMs);
+        });
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markDlq(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        Throwable failure,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.dlq(attemptId, failure, nowEpochMs));
     }
 
     @Override
@@ -87,7 +191,26 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
         CommandOutcomeSnapshot outcome,
         long nowEpochMs
     ) {
-        return update(tenantId, commandId, record -> record.failedWithStatus(status, failure, outcome, nowEpochMs));
+        return update(tenantId, commandId, record -> {
+            CommandEffectRecord dispatching = legacyCompletionSource(record, nowEpochMs);
+            return dispatching.failedWithStatus(
+                dispatching.currentAttempt().attemptId(), status, failure, outcome, nowEpochMs);
+        });
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markOutcome(
+        String tenantId,
+        String commandId,
+        String attemptId,
+        CommandEffectStatus status,
+        Throwable failure,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return update(
+            tenantId, commandId,
+            record -> record.failedWithStatus(attemptId, status, failure, outcome, nowEpochMs));
     }
 
     public void clear() {
@@ -111,5 +234,11 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
 
     private static String key(String tenantId, String commandId) {
         return tenantId + ":" + commandId;
+    }
+
+    private static CommandEffectRecord legacyCompletionSource(CommandEffectRecord record, long nowEpochMs) {
+        return record.status() == CommandEffectStatus.PENDING
+            ? record.dispatching(record.currentAttempt().attemptId(), nowEpochMs)
+            : record;
     }
 }

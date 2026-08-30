@@ -3,7 +3,7 @@
 Operators let you compose pipelines from either:
 
 - local Java methods resolved at build time, or
-- remote v2 contract steps executed over Protobuf-over-HTTP.
+- remote v3 contract steps executed over Protobuf-over-HTTP.
 
 ## End-to-End Shape
 
@@ -30,33 +30,24 @@ Rules:
 - Class and method segments must be non-blank.
 - Method must resolve uniquely in the indexed class hierarchy.
 
-## Remote Operator Syntax (IDL v2)
+## Remote Operator Syntax
 
-Use a template-style v2 step with an `execution` block when the operator lives outside the current Java build, for example in a Python Lambda or another HTTP service.
+Use a v3 step with an `execution` block when the operator lives outside the current Java build, for example in a Python Lambda or another HTTP service. The compiler resolves the logical contracts to the canonical generated Java and wire types; authors do not add a second Java type declaration for the remote boundary.
 
 ```yaml
-version: 2
+version: 3
 
 types:
   ChargeRequest:
-    fields:
-      - number: 1
-        name: "orderId"
-        type: "uuid"
+    fields: [[orderId, uuid]]
   ChargeResult:
-    fields:
-      - number: 1
-        name: "paymentId"
-        type: "uuid"
+    fields: [[paymentId, uuid]]
 
 steps:
   - name: "Charge Card"
     cardinality: "ONE_TO_ONE"
     input: "ChargeRequest"
     output: "ChargeResult"
-    java:
-      input: com.example.domain.ChargeRequest
-      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"
@@ -75,9 +66,6 @@ steps:
     cardinality: "ONE_TO_ONE"
     input: "ChargeRequest"
     output: "ChargeResult"
-    java:
-      input: com.example.domain.ChargeRequest
-      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"
@@ -88,7 +76,8 @@ steps:
 ```
 
 Rules:
-- Remote execution is available only in `version: 2`.
+- New remote execution declarations use the compiler-owned logical contracts in `version: 3`.
+  Version 2 remains a temporary compatibility input until the v2 DSL removal.
 - Only unary `ONE_TO_ONE` remote execution is supported currently.
 - Remote execution is immediate request/response only. It does not persist durable waiting state or resume later from correlated completion.
 - Exactly one of `execution.target.url` or `execution.target.urlConfigKey` must be set.
@@ -104,9 +93,6 @@ steps:
     cardinality: "ONE_TO_ONE"
     input: "ParsedDocument"
     output: "ChunkResult"
-    java:
-      input: com.example.domain.ParsedDocument
-      output: com.example.domain.ChunkResult
     execution:
       mode: "REMOTE"
       operatorId: "chunker"
@@ -168,8 +154,8 @@ Validation fails fast in the following cases:
 
 Simple concrete parameterised returns such as `List<Foo>` and `Map<String, Foo>` are supported.
 
-For remote v2 operators, build-time validation is contract-only:
-- input/output messages must resolve from the v2 message table,
+For remote v3 operators, build-time validation is contract-only:
+- input/output contracts must resolve from the compiler-owned v3 type model,
 - the step must be unary,
 - the protocol must be `PROTOBUF_HTTP_V1` or `ENVELOPE_HTTP_V1`,
 - the remote target must be configured correctly,
@@ -177,7 +163,7 @@ For remote v2 operators, build-time validation is contract-only:
 
 ## External Step-Host Contract Pack
 
-When a v2 pipeline declares remote execution, proto generation also emits an external step-host contract pack next to the generated `.proto` files:
+When a v3 pipeline declares remote execution, proto generation also emits an external step-host contract pack next to the generated `.proto` files:
 
 - `external-step-hosts.json`: machine-readable step-host manifest.
 - `EXTERNAL-STEP-HOSTS.md`: human-readable implementer notes.

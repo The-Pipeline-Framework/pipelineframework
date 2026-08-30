@@ -12,8 +12,8 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.connector.CommandConfirmation;
 import org.pipelineframework.connector.CommandCapabilities;
 import org.pipelineframework.connector.CommandMachineConfirmation;
@@ -38,6 +38,9 @@ import org.pipelineframework.step.NonRetryableException;
  */
 @ApplicationScoped
 public class CommandStepSupport {
+    private final org.pipelineframework.connector.ConnectorOperationInvocationCoordinator invocationCoordinator =
+        new org.pipelineframework.connector.ConnectorOperationInvocationCoordinator();
+
     @Inject
     Instance<CommandEffectStore> stores;
 
@@ -111,14 +114,14 @@ public class CommandStepSupport {
         if (commandIdGenerator == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("commandIdGenerator must not be null"));
         }
-        AwaitExecutionContext context;
+        PipelineExecutionContext context;
         try {
             context = captureExecutionContext();
         } catch (RuntimeException failure) {
             return Uni.createFrom().failure(failure);
         }
         return descriptor.onItem().transformToUni(
-            resolved -> execute(resolved, commandIdGenerator, input, context));
+            resolved -> execute(resolved, commandIdGenerator, input, context, false));
     }
 
     public <I, O> Uni<O> execute(
@@ -132,20 +135,70 @@ public class CommandStepSupport {
         if (commandIdGenerator == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("commandIdGenerator must not be null"));
         }
-        AwaitExecutionContext context;
+        PipelineExecutionContext context;
         try {
             context = captureExecutionContext();
         } catch (RuntimeException e) {
             return Uni.createFrom().failure(e);
         }
-        return execute(descriptor, commandIdGenerator, input, context);
+        return execute(descriptor, commandIdGenerator, input, context, false);
+    }
+
+    /**
+     * Deliberately retries an existing logical Command effect whose latest attempt is
+     * {@link CommandEffectStatus#FAILED_RETRYABLE}.
+     */
+    public <I, O> Uni<O> retry(
+        Uni<CommandDescriptor> descriptor,
+        CommandIdGenerator<? super I> commandIdGenerator,
+        I input
+    ) {
+        if (descriptor == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
+        }
+        if (commandIdGenerator == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("commandIdGenerator must not be null"));
+        }
+        PipelineExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
+        }
+        return descriptor.onItem().transformToUni(
+            resolved -> execute(resolved, commandIdGenerator, input, context, true));
+    }
+
+    /**
+     * Deliberately retries an existing logical Command effect whose latest attempt is
+     * {@link CommandEffectStatus#FAILED_RETRYABLE}.
+     */
+    public <I, O> Uni<O> retry(
+        CommandDescriptor descriptor,
+        CommandIdGenerator<? super I> commandIdGenerator,
+        I input
+    ) {
+        if (descriptor == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
+        }
+        if (commandIdGenerator == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("commandIdGenerator must not be null"));
+        }
+        PipelineExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
+        }
+        return execute(descriptor, commandIdGenerator, input, context, true);
     }
 
     private <I, O> Uni<O> execute(
         CommandDescriptor descriptor,
         CommandIdGenerator<? super I> commandIdGenerator,
         I input,
-        AwaitExecutionContext context
+        PipelineExecutionContext context,
+        boolean deliberateRetry
     ) {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
@@ -166,20 +219,18 @@ public class CommandStepSupport {
                     + " returned a command id with leading or trailing whitespace"));
         }
         CommandRequest<I> request = new CommandRequest<>(
-            descriptor,
-            commandId,
-            input,
-            context,
-            descriptor.config());
+            descriptor, commandId, input, context, descriptor.config());
         CommandEffectStore store = selectStore();
         return store.find(context.tenantId(), request.commandId())
-            .onItem().transformToUni(existing -> handleExistingOrExecute(existing, store, request));
+            .onItem().transformToUni(existing -> handleExistingOrExecute(
+                existing, store, request, deliberateRetry));
     }
 
     private <I, O> Uni<O> handleExistingOrExecute(
         Optional<CommandEffectRecord> existing,
         CommandEffectStore store,
-        CommandRequest<I> request
+        CommandRequest<I> request,
+        boolean deliberateRetry
     ) {
         if (existing.isPresent()) {
             CommandEffectRecord record = existing.get();
@@ -189,6 +240,9 @@ public class CommandStepSupport {
                     return Uni.createFrom().failure(new NonRetryableException(
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
+                CommandRetryExecutionScope.claimRecorded(
+                    request.commandId(),
+                    record.currentAttempt().attemptId());
                 @SuppressWarnings("unchecked")
                 O recorded = (O) record.output();
                 CommandRecordedDuplicateMarker.mark(recorded);
@@ -201,7 +255,37 @@ public class CommandStepSupport {
                     "Command already in progress for commandId " + request.commandId()));
             }
             if (record.status() == CommandEffectStatus.FAILED_RETRYABLE) {
-                return Uni.createFrom().failure(new CommandRetryableOutcomeException(recordedOutcomeCode(record)));
+                CommandRequest<I> retryRequest = request;
+                boolean admittedRetry = deliberateRetry;
+                Optional<String> admittedAttempt = admittedRetry
+                    ? Optional.empty()
+                    : CommandRetryExecutionScope.claimAttempt(request.commandId());
+                if (admittedAttempt.isPresent()) {
+                    retryRequest = new CommandRequest<>(
+                        request.descriptor(),
+                        request.commandId(),
+                        admittedAttempt.orElseThrow(),
+                        request.input(),
+                        request.executionContext(),
+                        request.config());
+                    admittedRetry = true;
+                }
+                if (admittedRetry) {
+                    if (record.currentAttempt().attemptId().equals(retryRequest.attemptId())) {
+                        return Uni.createFrom().failure(new CommandRetryableOutcomeException(
+                            "retry-admission-already-attempted"));
+                    }
+                    if (!store.supportsRetryAttempts()) {
+                        return Uni.createFrom().failure(new UnsupportedOperationException(
+                            "deliberate Command retry requires a CommandEffectStore that persists attempt history"));
+                    }
+                    return retryRequest.descriptor().nativeSelector().isPresent()
+                        ? executeNative(
+                            store, retryRequest, retryRequest.descriptor().nativeSelector().orElseThrow(), true)
+                        : executeLegacy(store, retryRequest, true);
+                }
+                return Uni.createFrom().failure(CommandRetryableEffectException.mark(
+                    request.commandId(), new CommandRetryableOutcomeException(recordedOutcomeCode(record))));
             }
             if (record.status() == CommandEffectStatus.DLQ
                 || record.status() == CommandEffectStatus.AMBIGUOUS
@@ -211,12 +295,20 @@ public class CommandStepSupport {
             return Uni.createFrom().failure(new IllegalStateException(
                 "Command effect " + request.commandId() + " has unsupported retained state " + record.status()));
         }
+        if (deliberateRetry) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "No existing command effect found to retry for commandId " + request.commandId()));
+        }
         return request.descriptor().nativeSelector().isPresent()
-            ? executeNative(store, request, request.descriptor().nativeSelector().orElseThrow())
-            : executeLegacy(store, request);
+            ? executeNative(store, request, request.descriptor().nativeSelector().orElseThrow(), false)
+            : executeLegacy(store, request, false);
     }
 
-    private <I, O> Uni<O> executeLegacy(CommandEffectStore store, CommandRequest<I> request) {
+    private <I, O> Uni<O> executeLegacy(
+        CommandEffectStore store,
+        CommandRequest<I> request,
+        boolean deliberateRetry
+    ) {
         LegacyCommandConnectorProvider.LegacyCommandOperation operation;
         try {
             operation = requireLegacyOperation(request.descriptor().command());
@@ -224,24 +316,28 @@ public class CommandStepSupport {
             return Uni.createFrom().failure(failure);
         }
         long effectStartNanos = CommandEffectMetrics.startNanos();
-        return beginDispatch(store, request)
-            .onItem().<O>transformToUni(ignored -> dispatchLegacyConnector(operation, request))
-            .onItem().transformToUni(output -> store.markSucceeded(
-                    request.executionContext().tenantId(),
-                    request.commandId(),
-                    output,
-                    System.currentTimeMillis())
-                .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
-                    request.descriptor(), CommandEffectStatus.SUCCEEDED, effectStartNanos))
-                .replaceWith(output))
-            .onFailure().call(failure -> recordFailure(
-                store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid());
+        return beginDispatch(store, request, deliberateRetry)
+            .onItem().<O>transformToUni(ignored -> this.<I, O>dispatchLegacyConnector(operation, request)
+                .onFailure(failure -> !isNonRetryable(failure))
+                .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
+                .onItem().transformToUni(output -> store.markSucceeded(
+                        request.executionContext().tenantId(),
+                        request.commandId(),
+                        request.attemptId(),
+                        output,
+                        System.currentTimeMillis())
+                    .invoke(record -> CommandEffectMetrics.recordTerminalTransition(
+                        request.descriptor(), CommandEffectStatus.SUCCEEDED, effectStartNanos))
+                    .replaceWith(output))
+                .onFailure().call(failure -> recordFailure(
+                    store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid()));
     }
 
     private <I, O> Uni<O> executeNative(
         CommandEffectStore store,
         CommandRequest<I> request,
-        NativeCommandSelector selector
+        NativeCommandSelector selector,
+        boolean deliberateRetry
     ) {
         if (!store.supportsNativeOutcomeSnapshots()) {
             return Uni.createFrom().failure(new IllegalStateException(
@@ -251,14 +347,15 @@ public class CommandStepSupport {
         long effectStartNanos = CommandEffectMetrics.startNanos();
         return activateBinding(selector)
             .onItem().transformToUni(ignored -> executeActivatedNative(
-                store, request, selector, effectStartNanos));
+                store, request, selector, effectStartNanos, deliberateRetry));
     }
 
     private <I, O> Uni<O> executeActivatedNative(
         CommandEffectStore store,
         CommandRequest<I> request,
         NativeCommandSelector selector,
-        long effectStartNanos
+        long effectStartNanos,
+        boolean deliberateRetry
     ) {
         CommandOperation<?, ?, ?> operation;
         try {
@@ -268,6 +365,11 @@ public class CommandStepSupport {
                     selector.operationIdentity(), selector.providerMajorVersion(), selector.policy());
         } catch (IllegalStateException | IllegalArgumentException failure) {
             return Uni.createFrom().failure(failure);
+        }
+        if (deliberateRetry && !operation.capabilities().retryRedriveSupported()) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "native command operation " + selector.operationIdentity()
+                    + " does not support deliberate retry/redrive"));
         }
         ConnectorConfigurationDocument configuration = new ConnectorConfigurationDocument(request.config());
         Object boundConfiguration;
@@ -282,27 +384,40 @@ public class CommandStepSupport {
             return Uni.createFrom().failure(failure);
         }
         return activateProviderFirst(selector)
-            .onItem().transformToUni(ignored -> beginDispatch(store, request)
+            .onItem().transformToUni(ignored -> beginDispatch(store, request, deliberateRetry)
                 .onItem().transformToUni(dispatched -> dispatchNative(operation, request, selector, boundConfiguration)
                     .onFailure(CommandStepSupport::isCancellation)
-                    .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of())))
-                .onItem().transformToUni(outcome -> applyNativeOutcome(
-                    store, request, selector, snapshot, operation.capabilities(), selector.policy(), outcome, effectStartNanos))
-                .onFailure().call(failure -> isTypedOutcomeFailure(failure)
-                    ? Uni.createFrom().voidItem()
-                    : recordFailure(store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid()))
+                    .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of()))
+                    .onFailure(failure -> !isNonRetryable(failure))
+                    .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
+                    .onItem().transformToUni(outcome -> applyNativeOutcome(
+                        store, request, selector, snapshot, operation.capabilities(), selector.policy(), outcome, effectStartNanos))
+                    .onFailure(CommandRetryableOutcomeException.class)
+                    .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
+                    .onFailure().call(failure -> isTypedOutcomeFailure(failure)
+                        ? Uni.createFrom().voidItem()
+                        : recordFailure(
+                            store, request, failure, System.currentTimeMillis(), effectStartNanos).replaceWithVoid())))
             .map(value -> (O) value);
     }
 
-    private <I> Uni<Void> beginDispatch(CommandEffectStore store, CommandRequest<I> request) {
+    private <I> Uni<Void> beginDispatch(
+        CommandEffectStore store,
+        CommandRequest<I> request,
+        boolean deliberateRetry
+    ) {
         // Each effect transition records its own wall-clock time so the store can show dispatch/write duration.
-        return store.createPending(request, System.currentTimeMillis())
+        Uni<CommandEffectRecord> admitted = deliberateRetry
+            ? store.createRetryAttempt(request, System.currentTimeMillis())
+            : store.createPending(request, System.currentTimeMillis());
+        return admitted
             .invoke(ignored -> CommandEffectMetrics.recordTransition(
                 request.descriptor(),
                 CommandEffectStatus.PENDING))
             .onItem().transformToUni(ignored -> store.markDispatching(
                 request.executionContext().tenantId(),
                 request.commandId(),
+                request.attemptId(),
                 System.currentTimeMillis()))
             .invoke(ignored -> CommandEffectMetrics.recordTransition(
                 request.descriptor(),
@@ -318,17 +433,15 @@ public class CommandStepSupport {
         Object boundConfiguration
     ) {
         CommandOperation raw = operation;
-        CompletionStage<CommandOutcome<Object>> stage;
-        try {
-            stage = raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
-                request.input(), boundConfiguration, connectorExecutionContext(request)));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(unwrapTransportFailure(failure));
-        }
-        if (stage == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "native command operation " + selector.operationIdentity() + " returned a null CompletionStage"));
-        }
+        org.pipelineframework.connector.ConnectorBindingName binding = selector.binding().orElseGet(() ->
+            org.pipelineframework.connector.ConnectorBindingName.of(selector.operationIdentity().providerId().value()));
+        CompletionStage<CommandOutcome<Object>> stage = invocationCoordinator.invoke(binding, raw, () ->
+            raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
+                request.input(),
+                boundConfiguration,
+                connectorExecutionContext(request, selector, binding),
+                Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
+                    request.commandId(), request.attemptId())))));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(CommandStepSupport::unwrapTransportFailure);
     }
@@ -356,7 +469,8 @@ public class CommandStepSupport {
                     succeeded.confirmation(), succeeded.references());
                 CommandOutcomeException failure = new CommandOutcomeException(resolved.status(), resolved.code());
                 return store.markOutcome(
-                        request.executionContext().tenantId(), request.commandId(), resolved.status(), failure, snapshot,
+                        request.executionContext().tenantId(), request.commandId(), request.attemptId(),
+                        resolved.status(), failure, snapshot,
                         System.currentTimeMillis())
                     .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
                         request.descriptor(), resolved.status(), effectStartNanos))
@@ -368,7 +482,8 @@ public class CommandStepSupport {
             @SuppressWarnings("unchecked")
             O output = (O) succeeded.output();
             return store.markSucceeded(
-                    request.executionContext().tenantId(), request.commandId(), output, snapshot, System.currentTimeMillis())
+                    request.executionContext().tenantId(), request.commandId(), request.attemptId(),
+                    output, snapshot, System.currentTimeMillis())
                 .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
                     request.descriptor(), CommandEffectStatus.SUCCEEDED, effectStartNanos))
                 .replaceWith(output);
@@ -380,7 +495,8 @@ public class CommandStepSupport {
             ? new CommandRetryableOutcomeException(outcome.code())
             : new CommandOutcomeException(status, outcome.code());
         return store.markOutcome(
-                request.executionContext().tenantId(), request.commandId(), status, failure, snapshot, System.currentTimeMillis())
+                request.executionContext().tenantId(), request.commandId(), request.attemptId(),
+                status, failure, snapshot, System.currentTimeMillis())
             .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(request.descriptor(), status, effectStartNanos))
             .onItem().transformToUni(ignored -> Uni.createFrom().failure(failure));
     }
@@ -449,6 +565,7 @@ public class CommandStepSupport {
             return store.markDlq(
                 request.executionContext().tenantId(),
                 request.commandId(),
+                request.attemptId(),
                 failure,
                 nowEpochMs)
                 .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
@@ -459,6 +576,7 @@ public class CommandStepSupport {
         return store.markFailed(
             request.executionContext().tenantId(),
             request.commandId(),
+            request.attemptId(),
             failure,
             nowEpochMs)
             .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
@@ -479,7 +597,15 @@ public class CommandStepSupport {
     }
 
     private static boolean isTypedOutcomeFailure(Throwable failure) {
-        return failure instanceof CommandOutcomeException || failure instanceof CommandRetryableOutcomeException;
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof CommandOutcomeException || current instanceof CommandRetryableOutcomeException) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            current = cause == current ? null : cause;
+        }
+        return false;
     }
 
     private static String recordedOutcomeCode(CommandEffectRecord record) {
@@ -510,20 +636,15 @@ public class CommandStepSupport {
     private record ConfirmationBarrier(CommandEffectStatus status, String code) {
     }
 
-    private AwaitExecutionContext captureExecutionContext() {
+    private PipelineExecutionContext captureExecutionContext() {
         if (orchestratorConfig == null || orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             throw new IllegalStateException("Command steps require pipeline.orchestrator.mode=QUEUE_ASYNC.");
         }
-        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+        PipelineExecutionContext context = PipelineExecutionContextHolder.get().orElse(null);
         if (context == null) {
             throw new IllegalStateException("Command step executed without queue-async execution context.");
         }
-        return new AwaitExecutionContext(
-            context.tenantId(),
-            context.executionId(),
-            context.currentStepIndex(),
-            context.continuationMode(),
-            context.terminalOutputOwnership());
+        return context;
     }
 
     private LegacyCommandConnectorProvider.LegacyCommandOperation requireLegacyOperation(String command) {
@@ -596,13 +717,23 @@ public class CommandStepSupport {
         return context;
     }
 
-    private static ConnectorExecutionContext connectorExecutionContext(CommandRequest<?> request) {
-        AwaitExecutionContext context = request.executionContext();
-        return new ConnectorExecutionContext(
-            Optional.of(context.tenantId()),
-            Optional.of(context.executionId()),
-            Optional.of(request.descriptor().stepId()),
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+    private static ConnectorExecutionContext connectorExecutionContext(
+        CommandRequest<?> request,
+        NativeCommandSelector selector,
+        org.pipelineframework.connector.ConnectorBindingName binding
+    ) {
+        PipelineExecutionContext context = request.executionContext();
+        return ConnectorExecutionContext.managed(
+            context.tenantId(),
+            context.executionId(),
+            context.pipelineId(),
+            context.contractVersion(),
+            context.releaseVersion(),
+            request.descriptor().stepId(),
+            new org.pipelineframework.connector.ConnectorInvocationTarget(binding, selector.operationIdentity()),
+            context.correlationId(),
+            context.traceId(),
+            Optional.empty());
     }
 
     private <I, O> Uni<O> dispatchLegacyConnector(

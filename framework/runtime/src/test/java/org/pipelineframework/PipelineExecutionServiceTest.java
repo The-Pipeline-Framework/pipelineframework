@@ -10,6 +10,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.boundary.PipelineObjectNamingConfig;
+import org.pipelineframework.command.CommandRetryTestAccess;
 import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig;
@@ -26,6 +28,7 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
 import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
@@ -36,6 +39,7 @@ import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
+import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
@@ -298,6 +302,53 @@ class PipelineExecutionServiceTest {
         assertEquals(TransitionWorkerOutcome.COMPLETED, portableEnvelope.outcome());
         assertEquals(AwaitContinuationMode.DURABLE_HANDOFF, continuationMode.get());
         assertEquals(TerminalOutputOwnership.COORDINATOR, terminalOutputOwnership.get());
+    }
+
+    @Test
+    void duplicatePortableRetryDeliveryTargetsTheSameEffectAndDeterministicAttempt() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        List<Object> steps = List.of(new Object());
+        List<String> attemptIds = new CopyOnWriteArrayList<>();
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(1)))
+            .thenAnswer(invocation -> {
+                assertTrue(CommandRetryTestAccess.claimAttempt("notify:other").isEmpty());
+                attemptIds.add(CommandRetryTestAccess.claimAttempt(
+                    "archive:confirmation-7").orElseThrow());
+                return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
+            });
+        TransitionWorkerCommand worker = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-retry",
+            0,
+            -1,
+            3,
+            ExecutionResultShape.SINGLE,
+            8L,
+            "exec-retry:0:3",
+            "input",
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            0,
+            Optional.of("archive:confirmation-7"));
+        var payload = codec.encode("input");
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            worker,
+            PipelineContractDescriptor.DEFAULT_PIPELINE_ID,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            "trace-retry",
+            payload);
+
+        TransitionResultEnvelope first = service.executePortableTransition(envelope).await().indefinitely();
+        TransitionResultEnvelope duplicate = service.executePortableTransition(envelope).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, first.outcome());
+        assertEquals(TransitionWorkerOutcome.COMPLETED, duplicate.outcome());
+        assertEquals(2, attemptIds.size());
+        assertEquals(attemptIds.get(0), attemptIds.get(1));
     }
 
     @Test

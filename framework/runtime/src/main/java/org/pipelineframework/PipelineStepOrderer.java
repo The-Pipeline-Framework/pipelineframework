@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -62,23 +63,21 @@ class PipelineStepOrderer {
             return steps;
         }
 
+        List<Object> presentSteps = steps.stream().filter(Objects::nonNull).toList();
         Set<String> configuredNames = new HashSet<>(filteredPipelineOrder);
         // A partial generated order is unreliable: if any runtime step class is missing from the
         // metadata, preserve the original list to avoid applying an incomplete order to the pipeline.
-        boolean hasUnconfiguredSteps = steps.stream()
-            .map(step -> step != null ? step.getClass().getName() : null)
-            .anyMatch(name -> name != null && !configuredNames.contains(name));
+        boolean hasUnconfiguredSteps = presentSteps.stream()
+            .map(PipelineStepOrderer::runtimeStepClassName)
+            .anyMatch(name -> !configuredNames.contains(name));
         if (hasUnconfiguredSteps) {
             logger.debug("Pipeline order configured, but step list contains unconfigured entries; preserving existing order.");
-            return steps;
+            return presentSteps;
         }
 
         Map<String, List<Object>> stepMap = new HashMap<>();
-        for (Object step : steps) {
-            if (step == null) {
-                continue;
-            }
-            stepMap.computeIfAbsent(step.getClass().getName(), ignored -> new ArrayList<>()).add(step);
+        for (Object step : presentSteps) {
+            stepMap.computeIfAbsent(runtimeStepClassName(step), ignored -> new ArrayList<>()).add(step);
         }
 
         List<Object> orderedSteps = new ArrayList<>();
@@ -94,7 +93,7 @@ class PipelineStepOrderer {
             }
         }
 
-        for (Object step : steps) {
+        for (Object step : presentSteps) {
             if (!addedSteps.contains(step)) {
                 logger.debugf("Adding step %s that wasn't specified in pipeline order", step.getClass().getName());
                 orderedSteps.add(step);
@@ -102,5 +101,19 @@ class PipelineStepOrderer {
         }
 
         return orderedSteps;
+    }
+
+    private static String runtimeStepClassName(Object step) {
+        Class<?> stepClass = step.getClass();
+        while (isProxyClassName(stepClass.getName())
+            && stepClass.getSuperclass() != null
+            && stepClass.getSuperclass() != Object.class) {
+            stepClass = stepClass.getSuperclass();
+        }
+        return stepClass.getName();
+    }
+
+    private static boolean isProxyClassName(String name) {
+        return name.contains("_Subclass") || name.contains("$$") || name.contains("_ClientProxy");
     }
 }

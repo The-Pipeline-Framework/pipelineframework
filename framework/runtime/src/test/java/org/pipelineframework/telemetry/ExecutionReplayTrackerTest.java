@@ -217,6 +217,86 @@ class ExecutionReplayTrackerTest {
             .count());
     }
 
+    @Test
+    void oneToManyRetryRewindsOnlyTheRetriedLogicalExpansion() {
+        CollectingExporter exporter = new CollectingExporter();
+        ExecutionReplayTracker tracker = new ExecutionReplayTracker(
+            GlobalOpenTelemetry.getTracer("replay-test"),
+            exporter,
+            fanOutTopology(),
+            null,
+            null);
+        PipelineRunContext runContext = runContext();
+
+        Object upstreamA = upstreamItem(tracker, runContext);
+        Object upstreamB = upstreamItem(tracker, runContext);
+        var expansionA = tracker.beginStep("fan-out", runContext, true, upstreamA);
+        var expansionB = tracker.beginStep("fan-out", runContext, true, upstreamB);
+
+        tracker.recordOutput(expansionA, new Object());
+        tracker.recordOutput(expansionA, new Object());
+        tracker.recordOutput(expansionB, new Object());
+        List<String> firstAttemptA = exporter.emittedItemIds(expansionA.spanId());
+        List<String> beforeRetryB = exporter.emittedItemIds(expansionB.spanId());
+
+        tracker.recordRetry("fan-out", expansionA.spanId(), new IllegalStateException("retry A"));
+        tracker.recordOutput(expansionA, new Object());
+        tracker.recordOutput(expansionA, new Object());
+        tracker.recordOutput(expansionB, new Object());
+
+        List<String> allA = exporter.emittedItemIds(expansionA.spanId());
+        List<String> allB = exporter.emittedItemIds(expansionB.spanId());
+        assertEquals(firstAttemptA.get(0), allA.get(2));
+        assertEquals(firstAttemptA.get(1), allA.get(3));
+        assertEquals(2, allB.size());
+        assertFalse(beforeRetryB.getFirst().equals(allB.get(1)),
+            "retrying expansion A must not rewind expansion B's child ordinal");
+    }
+
+    private Object upstreamItem(
+        ExecutionReplayTracker tracker,
+        PipelineRunContext runContext
+    ) {
+        Object upstream = new Object();
+        var scope = tracker.beginStep("source-a", runContext, true, new Object());
+        tracker.recordOutput(scope, upstream);
+        tracker.completeSuccess(scope);
+        return upstream;
+    }
+
+    private PipelineRunContext runContext() {
+        return new PipelineRunContext(
+            "run-1",
+            Context.current(),
+            null,
+            System.nanoTime(),
+            Instant.now(),
+            Attributes.empty(),
+            true,
+            new AtomicLong(),
+            new AtomicLong(),
+            new LongAdder(),
+            new LongAdder(),
+            new LongAdder(),
+            new LongAdder(),
+            null,
+            new ExecutionReplayTracker.RunReplayState(),
+            new AtomicBoolean());
+    }
+
+    private PipelineReplayTopology fanOutTopology() {
+        return new PipelineReplayTopology(
+            "fan-out-test",
+            List.of(
+                new PipelineReplayTopology.Step(
+                    "source-a", "SourceA", "SourceAService", "one-to-one", 0, false, null, null),
+                new PipelineReplayTopology.Step(
+                    "fan-out", "FanOut", "FanOutService", "one-to-many", 1, false, null, null)),
+            List.of(new PipelineReplayTopology.Transition(
+                "source->fan-out", "source-a", "fan-out", "SourceA", "FanOut",
+                "SourceAService", "FanOutService", "one-to-many")));
+    }
+
     private PipelineReplayTopology topology() {
         return new PipelineReplayTopology(
             "csv-payments",
@@ -265,6 +345,13 @@ class ExecutionReplayTrackerTest {
                     && (spanId == null || spanId.equals(event.spanId())))
                 .findFirst()
                 .orElseThrow();
+        }
+
+        private List<String> emittedItemIds(String spanId) {
+            return events.stream()
+                .filter(event -> "emit".equals(event.event()) && spanId.equals(event.spanId()))
+                .map(PipelineExecutionEvent::itemId)
+                .toList();
         }
     }
 }

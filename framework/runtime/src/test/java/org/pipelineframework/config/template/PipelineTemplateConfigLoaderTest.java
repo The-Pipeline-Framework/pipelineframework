@@ -1724,6 +1724,84 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void compactAndVerboseV3FieldSemanticsNormalizeIdentically() throws Exception {
+        Path compact = tempDir.resolve("compact-field-semantics.yaml");
+        Files.writeString(compact, """
+            version: 3
+            appName: Fields
+            basePackage: com.example.fields
+            transport: GRPC
+            types:
+              Customer:
+                fields:
+                  - [name, string]
+                  - [nickname?, string]
+                  - [middleName, string?]
+                  - [note?, string?]
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Customer, output: Customer }]
+            """);
+        Path verbose = tempDir.resolve("verbose-field-semantics.yaml");
+        Files.writeString(verbose, """
+            version: 3
+            appName: Fields
+            basePackage: com.example.fields
+            transport: GRPC
+            types:
+              Customer:
+                fields:
+                  - { name: name, type: string, presence: required, nullability: non_null }
+                  - { name: nickname, type: string, presence: optional, nullability: non_null }
+                  - { name: middleName, type: string, presence: required, nullability: nullable }
+                  - { name: note, type: string, presence: optional, nullability: nullable }
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Customer, output: Customer }]
+            """);
+
+        PipelineIdlSnapshot compactSnapshot = PipelineIdlSnapshot.from(new PipelineTemplateConfigLoader().load(compact));
+        PipelineIdlSnapshot verboseSnapshot = PipelineIdlSnapshot.from(new PipelineTemplateConfigLoader().load(verbose));
+
+        assertEquals(compactSnapshot, verboseSnapshot);
+        assertEquals(List.of(
+                PipelineFieldPresence.REQUIRED, PipelineFieldPresence.OPTIONAL,
+                PipelineFieldPresence.REQUIRED, PipelineFieldPresence.OPTIONAL),
+            ((PipelineTemplateTypeDefinition.RecordType) new PipelineTemplateConfigLoader().load(compact)
+                .typeModel().definitions().get("Customer")).fields().stream()
+                .map(PipelineTemplateTypeDefinition.Field::presence).toList());
+    }
+
+    @Test
+    void compactFieldMarkersDoNotRewriteUnrelatedYamlScalars() throws Exception {
+        Path configPath = tempDir.resolve("field-marker-scope.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "[nickname?, string?]"
+            basePackage: com.example.fields
+            transport: GRPC
+            connectors:
+              model:
+                provider: llm.query
+                version: 1
+                config:
+                  types:
+                    nested:
+                      fields:
+                        - "[example?, string?]"
+            types:
+              Customer:
+                fields:
+                  - [nickname?, string?]
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Customer, output: Customer }]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.Field field = ((PipelineTemplateTypeDefinition.RecordType)
+            config.typeModel().definitions().get("Customer")).fields().getFirst();
+
+        assertEquals("[nickname?, string?]", config.appName());
+        assertEquals(PipelineFieldPresence.OPTIONAL, field.presence());
+        assertEquals(PipelineFieldNullability.NULLABLE, field.nullability());
+    }
+
+    @Test
     void rejectsAmbiguousAndLegacyV3RepeatedFieldForms() throws Exception {
         Path both = tempDir.resolve("v3-repeated-both.yaml");
         Files.writeString(both, repeatedFieldTemplate("type: LineItem\nrepeated: LineItem"));

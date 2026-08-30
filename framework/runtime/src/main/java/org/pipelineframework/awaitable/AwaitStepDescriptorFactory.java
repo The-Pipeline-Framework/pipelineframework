@@ -3,9 +3,6 @@ package org.pipelineframework.awaitable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -26,11 +23,12 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
+import org.pipelineframework.config.pipeline.PipelineYamlAwaitCompletion;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateStep;
-import org.yaml.snakeyaml.Yaml;
 
 /**
  * Builds await descriptors from runtime pipeline YAML.
@@ -280,7 +278,8 @@ public class AwaitStepDescriptorFactory {
                 binding.inputToTransport(),
                 binding.outputFromTransport());
         }
-        AwaitTypeIdentities identities = generatedLegacyTypeIdentities(config, serviceName)
+        AwaitTypeIdentities identities = authoredV3TypeIdentities(configPath, serviceName)
+            .or(() -> generatedLegacyTypeIdentities(config, serviceName))
             .orElseGet(() -> new AwaitTypeIdentities(
                 requiredType(step.inputType(), serviceName, "input"),
                 requiredType(step.outputType(), serviceName, "output")));
@@ -293,6 +292,22 @@ public class AwaitStepDescriptorFactory {
             identities.outputType(),
             Function.identity(),
             Function.identity());
+    }
+
+    private static Optional<AwaitTypeIdentities> authoredV3TypeIdentities(Path configPath, String serviceName) {
+        if (!isVersion3(configPath)) {
+            return Optional.empty();
+        }
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().stream()
+            .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No version 3 await step found for generated service " + serviceName));
+        String domainPackage = config.basePackage() + ".domain.";
+        return Optional.of(new AwaitTypeIdentities(
+            domainPackage + requiredType(step.inputTypeName(), serviceName, "input"),
+            domainPackage + requiredType(step.outputTypeName(), serviceName, "output")));
     }
 
     private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(
@@ -341,32 +356,33 @@ public class AwaitStepDescriptorFactory {
         String protoTypes = config.basePackage() + ".grpc.PipelineTypes";
         Class<?> canonicalInput = requiredGeneratedClass(domainPackage + inputLogicalType, serviceName, "canonical input");
         Class<?> canonicalOutput = requiredGeneratedClass(domainPackage + outputLogicalType, serviceName, "canonical output");
-        Class<?> transportInput = requiredGeneratedClass(protoTypes + "$" + inputLogicalType, serviceName, "transport input");
-        Class<?> transportOutput = requiredGeneratedClass(protoTypes + "$" + outputLogicalType, serviceName, "transport output");
-        Class<?> adapters = requiredGeneratedClass(domainPackage + "PipelineDomainProtoAdapters", serviceName, "domain protobuf adapters");
+        Optional<Class<?>> transportInput = loadClass(protoTypes + "$" + inputLogicalType);
+        Optional<Class<?>> transportOutput = loadClass(protoTypes + "$" + outputLogicalType);
+        Optional<Class<?>> adapters = loadClass(domainPackage + "PipelineDomainProtoAdapters");
+        if (transportInput.isEmpty() || transportOutput.isEmpty() || adapters.isEmpty()) {
+            return Optional.empty();
+        }
         return Optional.of(new V3AwaitTypeBinding(
             canonicalInput.getName(),
             canonicalOutput.getName(),
-            transportInput.getName(),
-            transportOutput.getName(),
-            generatedAdapter(adapters, "toProto", canonicalInput, transportInput, serviceName),
-            generatedAdapter(adapters, "fromProto", transportOutput, canonicalOutput, serviceName)));
+            transportInput.orElseThrow().getName(),
+            transportOutput.orElseThrow().getName(),
+            generatedAdapter(
+                adapters.orElseThrow(), "toProto", canonicalInput, transportInput.orElseThrow(), serviceName),
+            generatedAdapter(
+                adapters.orElseThrow(), "fromProto", transportOutput.orElseThrow(), canonicalOutput, serviceName)));
     }
 
     private static boolean isVersion3(Path configPath) {
-        try (Reader reader = Files.newBufferedReader(configPath)) {
-            Object document = new Yaml().load(reader);
-            if (!(document instanceof Map<?, ?> values)) {
-                return false;
-            }
-            Object version = values.get("version");
-            if (version instanceof Number number) {
-                return number.intValue() == 3;
-            }
-            return version != null && "3".equals(version.toString().trim());
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed reading pipeline configuration " + configPath, e);
+        Object document = new PipelineYamlDocumentLoader().load(configPath);
+        if (!(document instanceof Map<?, ?> values)) {
+            return false;
         }
+        Object version = values.get("version");
+        if (version instanceof Number number) {
+            return number.intValue() == 3;
+        }
+        return version != null && "3".equals(version.toString().trim());
     }
 
     private static Class<?> requiredGeneratedClass(String className, String serviceName, String role) {
@@ -511,6 +527,13 @@ public class AwaitStepDescriptorFactory {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
+        Optional<PipelineYamlAwaitCompletion> completion = step.awaitConfig().completion();
+        AwaitCompletionProjector<Object, Object, Object> completionProjector = completion
+            .map(value -> loadCompletionProjector(serviceName, value.projector()))
+            .orElseGet(() -> AwaitStepDescriptor.defaultCompletionProjector(outputFromTransport));
+        String effectiveTransportOutputType = completion
+            .map(PipelineYamlAwaitCompletion::type)
+            .orElse(transportOutputType);
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             serviceName,
             inputType,
@@ -522,10 +545,36 @@ public class AwaitStepDescriptorFactory {
             step.awaitConfig().transport().config(),
             step.idempotencyKeyFields(),
             transportInputType,
-            transportOutputType,
+            effectiveTransportOutputType,
             inputToTransport,
-            outputFromTransport);
+            outputFromTransport,
+            completion.map(PipelineYamlAwaitCompletion::projector).orElse(null),
+            completionProjector,
+            completion.isPresent());
         return descriptor;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static AwaitCompletionProjector<Object, Object, Object> loadCompletionProjector(
+        String serviceName,
+        String projectorClassName
+    ) {
+        Class<?> projectorClass = loadClass(projectorClassName).orElseThrow(() -> new IllegalArgumentException(
+            "Await step " + serviceName + " could not load completion projector " + projectorClassName));
+        if (!AwaitCompletionProjector.class.isAssignableFrom(projectorClass)) {
+            throw new IllegalArgumentException(
+                "Await step " + serviceName + " completion projector " + projectorClassName
+                    + " must implement " + AwaitCompletionProjector.class.getName());
+        }
+        try {
+            return (AwaitCompletionProjector<Object, Object, Object>) projectorClass
+                .getDeclaredConstructor()
+                .newInstance();
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException(
+                "Await step " + serviceName + " could not instantiate completion projector " + projectorClassName,
+                exception);
+        }
     }
 
     private static String requiredType(String typeName, String serviceName, String position) {
@@ -546,7 +595,8 @@ public class AwaitStepDescriptorFactory {
         if (!descriptor.inputType().equals(inputType)
             || !descriptor.outputType().equals(outputType)
             || !descriptor.transportInputType().equals(transportInputType)
-            || !descriptor.transportOutputType().equals(transportOutputType)) {
+            || (!descriptor.requestAwareCompletion()
+                && !descriptor.transportOutputType().equals(transportOutputType))) {
             throw new IllegalStateException(
                 "Conflicting await descriptor identities for stepId " + descriptor.stepId()
                     + ": canonical=" + descriptor.inputType() + " -> " + descriptor.outputType()

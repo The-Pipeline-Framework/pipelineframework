@@ -60,9 +60,6 @@ public final class ConnectorProviderArtifacts {
             .append(",\"version\":{\"major\":").append(provider.version().major())
             .append(",\"minor\":").append(provider.version().minor()).append('}');
         provider.configurationSchema().ifPresent(schema -> json.append(",\"configurationSchema\":").append(schema(schema)));
-        provider.executionCapabilities().ifPresent(capabilities -> json.append(",\"executionCapabilities\":{")
-            .append("\"executionStyle\":").append(quote(capabilities.executionStyle().name()))
-            .append(",\"concurrencyScope\":").append(quote(capabilities.concurrencyScope().name())).append('}'));
         json.append(",\"operations\":[");
         appendJoined(json, artifact.operations(), ConnectorProviderArtifacts::operation);
         return json.append("]}").toString();
@@ -77,6 +74,8 @@ public final class ConnectorProviderArtifacts {
             .append(commandCapabilities(capabilities)));
         operation.queryCapabilities().ifPresent(capabilities -> json.append(",\"queryCapabilities\":")
             .append(queryCapabilities(capabilities)));
+        operation.queryCardinality().ifPresent(cardinality -> json.append(",\"queryCardinality\":")
+            .append(quote(cardinality.name())));
         operation.typeContract().ifPresent(contract -> {
             json.append(",\"typeContract\":{\"input\":").append(quote(contract.inputType()));
             contract.outputType().ifPresent(output -> json.append(",\"output\":").append(quote(output)));

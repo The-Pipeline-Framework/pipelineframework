@@ -16,10 +16,20 @@
 
 package org.pipelineframework.runtime.core;
 
+import java.util.Objects;
+import java.util.concurrent.Callable;
+
 /**
  * Neutral abstraction for runtime-local execution metadata propagation.
  */
 public interface ExecutionContextCarrier {
+
+    /**
+     * Captures the caller's context and returns a task that installs it only while it executes.
+     */
+    default <T> Callable<T> contextualize(Callable<T> task) {
+        return Objects.requireNonNull(task, "contextualized task must not be null");
+    }
 
     /**
      * Reads a typed context value by key.

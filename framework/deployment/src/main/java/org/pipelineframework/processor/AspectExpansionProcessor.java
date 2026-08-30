@@ -117,7 +117,7 @@ public class AspectExpansionProcessor {
         String pluginPackage = extractPackage(pluginServiceClass);
         String pluginSimpleClassName = pluginServiceClass.substring(pluginServiceClass.lastIndexOf('.') + 1);
 
-        Set<GenerationTarget> recomputedTargets = Set.copyOf(originalModel.enabledTargets());
+        Set<GenerationTarget> recomputedTargets = resolveSyntheticTargets(aspect, originalModel);
 
         TypeMapping mapping = position == AspectPosition.BEFORE_STEP
             ? originalModel.inputMapping()
@@ -142,10 +142,40 @@ public class AspectExpansionProcessor {
                 .enabledTargets(recomputedTargets) // Recompute targets
                 .deploymentRole(DeploymentRole.PLUGIN_SERVER)
                 .sideEffect(true)
+                .aspectPosition(position)
                 .cacheKeyGenerator(originalModel.cacheKeyGenerator())
                 .build();
 
         return new ResolvedStep(syntheticModel, null, null);
+    }
+
+    private Set<GenerationTarget> resolveSyntheticTargets(
+            PipelineAspectModel aspect, PipelineStepModel originalModel) {
+        Object configured = aspect.config().get("enabledTargets");
+        if (configured == null) {
+            return Set.copyOf(originalModel.enabledTargets());
+        }
+        java.util.LinkedHashSet<GenerationTarget> targets = new java.util.LinkedHashSet<>();
+        Iterable<?> values = configured instanceof Iterable<?> iterable
+            ? iterable
+            : java.util.List.of(configured);
+        for (Object value : values) {
+            if (value == null || value.toString().isBlank()) {
+                continue;
+            }
+            try {
+                targets.add(GenerationTarget.valueOf(value.toString().trim().toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException failure) {
+                throw new IllegalArgumentException(
+                    "Aspect '" + aspect.name() + "' declares unknown enabled target '" + value + "'",
+                    failure);
+            }
+        }
+        if (targets.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Aspect '" + aspect.name() + "' must declare at least one enabled target");
+        }
+        return Set.copyOf(targets);
     }
     
     private void validateStepTargeting(

@@ -224,7 +224,7 @@ For real incidents:
 5. Confirm downstream idempotency before any re-drive.
 6. Re-drive a terminal execution with `POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive`.
 
-Re-drive reads the durable execution record and re-enqueues the original execution id. The DLQ message is evidence for triage and alerting; it is not consumed as the replay source. `FAILED` execution re-drive is opt-in (`allowFailed=true`) because those failures may not have exhausted the DLQ path.
+Re-drive reads the durable execution record and re-enqueues the original execution id. The DLQ message is evidence for triage and alerting; it is not consumed as the replay source. `FAILED` execution re-drive is opt-in (`allowFailed=true`) because those failures may not have exhausted the DLQ path. Ordinary re-drive does not authorize a new Command effect attempt. A known retryable Command failure may instead be admitted explicitly with `intent: RETRY_FAILED_COMMAND`; the normal transition worker resumes from the persisted segment input and consumes the intent only at the retained failed Command step, while `CommandEffectStore` atomically authorizes and records the next attempt under the stable logical effect identity.
 
 ### Process Restart Recovery
 

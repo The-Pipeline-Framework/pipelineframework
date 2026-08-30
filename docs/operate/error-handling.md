@@ -49,6 +49,31 @@ Content-Type: application/json
 
 The operation re-queues the durable `ExecutionRecord` for the same execution id. It does not consume, delete, or replay from DLQ messages. DLQ messages remain triage and audit evidence.
 
+That default request is ordinary execution replay. It never authorizes redispatch of a
+retained Command effect. To deliberately retry the retained failed Command step, submit a
+failed-execution re-drive with explicit intent:
+
+```http
+POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "expectedVersion": 12,
+  "reason": "SharePoint dependency restored",
+  "allowFailed": true,
+  "intent": "RETRY_FAILED_COMMAND"
+}
+```
+
+Admission fails unless the execution is `FAILED`, retains the actual failed step index, and the
+selected execution store supports durable retry intent. Replay resumes from the persisted segment
+input; the transition fails before invoking the target if that retained failed step is not a Command.
+At Command dispatch,
+`CommandEffectStore` must still contain a safely retryable `FAILED_RETRYABLE` effect and
+must atomically claim the next attempt. Success, terminal failure, in-flight, ambiguous,
+and user-action-required effects are never redispatched by this operation.
+
 ## Execution DLQ Envelope (Terminal Details)
 
 Execution DLQ entries include standard fields for triage across REST, gRPC, local, and function-style execution:
@@ -65,6 +90,21 @@ Terminal reason mapping:
 | `retry_exhausted` | retryable failure class reached terminal state after exhausting retry budget (includes zero-retry configurations (`maxRetries = 0`)) | Stabilise dependency/path, then re-drive bounded batches |
 | `non_retryable` | non-retryable failure class (for example `NonRetryableException`) | Correct payload/contract issue before replay |
 
+## Remote Transition Outcome Unknown
+
+For a long-running REST transition worker call, the coordinator logs `remote_transition_deadline_warning` once when 75% of `pipeline.orchestrator.worker.rest.request-timeout` has elapsed. This is a warning about elapsed transport time, not a stalled-worker diagnosis.
+
+If the caller deadline expires, the coordinator logs `remote_transition_outcome_unknown` and persists `REMOTE_OUTCOME_UNKNOWN` instead of scheduling an ordinary retry. The event contains execution id, tenant id, attempt, transition key, worker protocol/target, elapsed duration, configured deadline, and the decision. It excludes payload data.
+
+Treat this state as an ambiguous external-effect boundary:
+
+1. do not infer worker death from `HttpTimeoutException`;
+2. inspect the selected worker and any domain-side idempotency/effect evidence;
+3. use explicit failed-execution re-drive only after confirming the original invocation can no longer make effects;
+4. expect that re-drive to create a new attempt and require normal boundary idempotency.
+
+TPF does not currently provide transparent mid-transition worker takeover, remote result reconciliation, or live-stream resurrection after this state. Those need an explicit durable remote-attempt ownership/result protocol.
+
 ## Background Execution Crash Matrix
 
 | Crash point | Behaviour after restart/recovery | Duplicate risk | Required safeguard |
@@ -73,7 +113,8 @@ Terminal reason mapping:
 | After state commit, before next enqueue | Transition is stored, but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + stored state |
 | During retry scheduling | Retry can replay from the last stored version if scheduling details were not committed | Medium | Persist retry intent (`attempt`, `nextDue`) before enqueue |
 | After external side effect, before commit | Side effect may repeat on replay because effect and commit are not one transaction | High | Downstream dedupe keyed by transition identity |
-| Worker dies while lease held | Lease expires and another worker can claim execution | Low | Short lease window + conditional lease claim (OCC) |
+| Coordinator worker dies while lease held | Lease expires and another coordinator worker can claim execution | Low | Short lease window + conditional lease claim (OCC) |
+| Remote REST caller deadline expires | Execution is parked as `REMOTE_OUTCOME_UNKNOWN`; worker disposition remains unknown | Avoided automatically | Confirm disposition before explicit re-drive |
 
 Semantics summary:
 
@@ -103,5 +144,6 @@ For at-least-once boundaries (queue delivery, operator invocation, re-drive), en
 5. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
 6. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
 7. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before re-drive.
-8. If due executions stall, verify sweeper health and dispatcher lag.
-9. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation (retry attempts approaching the configured retry limit).
+8. For `REMOTE_OUTCOME_UNKNOWN`, do not re-drive until the original remote invocation has a confirmed disposition; a transport timeout is not that confirmation.
+9. If due executions stall, verify sweeper health and dispatcher lag.
+10. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation (retry attempts approaching the configured retry limit).

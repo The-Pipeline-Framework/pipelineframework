@@ -128,6 +128,23 @@ class StepDefinitionTest {
     }
 
     @Test
+    void awaitStepAllowsCompilerDeferredInputAndOutputTypesTogether() {
+        StepDefinition step = new StepDefinition(
+            "Await Step",
+            StepKind.AWAIT,
+            null, null,
+            Map.of(), "PT5M", List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            null,
+            null,
+            null);
+
+        assertNull(step.inputType());
+        assertNull(step.outputType());
+    }
+
+    @Test
     void awaitStepRejectsNullInputType() {
         assertThrows(NullPointerException.class, () -> new StepDefinition(
             "Await Step",

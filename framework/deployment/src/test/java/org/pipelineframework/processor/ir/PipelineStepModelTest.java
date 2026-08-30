@@ -138,6 +138,23 @@ class PipelineStepModelTest {
     }
 
     @Test
+    void toBuilderPreservesAspectPosition() {
+        PipelineStepModel original = new PipelineStepModel.Builder()
+                .serviceName("ObserveTestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "ObserveTestService"))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PLUGIN_SERVER)
+                .aspectPosition(AspectPosition.AFTER_STEP)
+                .build();
+
+        PipelineStepModel rebuilt = original.toBuilder().build();
+
+        assertEquals(java.util.Optional.of(AspectPosition.AFTER_STEP), rebuilt.aspectPosition());
+    }
+
+    @Test
     void toBuilderAllowsChangingMapperFallbackMode() {
         PipelineStepModel original = new PipelineStepModel.Builder()
                 .serviceName("TestService")

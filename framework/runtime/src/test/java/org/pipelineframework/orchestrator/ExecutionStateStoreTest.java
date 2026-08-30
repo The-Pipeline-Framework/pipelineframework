@@ -7,7 +7,9 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExecutionStateStoreTest {
 
@@ -65,16 +67,39 @@ class ExecutionStateStoreTest {
         assertNotNull(store.getExecution("tenant1", "exec1"));
         assertNotNull(store.getExecutionByKey("tenant1", "key1"));
         assertNotNull(store.claimLease("tenant1", "exec1", "worker1", now, 30000L));
+        assertFalse(store.supportsLeaseRenewal());
+        assertThrows(UnsupportedOperationException.class, () -> store.renewLease(
+                "tenant1", "exec1", 1L, "worker1", now, 30000L)
+            .await().indefinitely());
         assertNotNull(store.markSucceeded("tenant1", "exec1", 1L, "key1", "result", now));
         assertNotNull(store.markWaitingExternal("tenant1", "exec1", 1L, "key1", "unit1", 1, now));
         assertNotNull(store.markAwaitCompleted("tenant1", "exec1", "unit1", 2, now));
         assertNotNull(store.markAwaitItemContinuationsCompleted("tenant1", "exec1", "unit1", 2, "input", now));
         assertNotNull(store.scheduleRetry("tenant1", "exec1", 1L, 2, now + 5000, "key1", "Error", "msg", now));
+        assertNotNull(store.markRemoteOutcomeUnknown("tenant1", "exec1", 1L, "key1", "Error", "msg", now));
         assertNotNull(store.deferCircuit(
             "tenant1", "exec1", 1L, now + 5000, "key1", "pricing", "circuit_open", "msg", now, 1, now));
         assertNotNull(store.markTerminalFailure("tenant1", "exec1", 1L, ExecutionStatus.FAILED, "key1", "Error", "msg", now));
         assertNotNull(store.redriveTerminalExecution("tenant1", "exec1", 1L, true, "redrive", now));
         assertNotNull(store.findDueExecutions(now, 10));
+    }
+
+    @Test
+    void legacyTerminalFailureStoreFailsClosedForExactCommandIdentity() {
+        ExecutionStateStore store = new TestExecutionStateStore();
+
+        assertThrows(UnsupportedOperationException.class, () -> store.markTerminalFailure(
+                "tenant1",
+                "exec1",
+                1L,
+                ExecutionStatus.FAILED,
+                "key1",
+                "Error",
+                "msg",
+                4,
+                Optional.of("archive:confirmation-7"),
+                System.currentTimeMillis())
+            .await().indefinitely());
     }
 
     private static class TestExecutionStateStore implements ExecutionStateStore {
@@ -130,6 +155,13 @@ class ExecutionStateStoreTest {
         public Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
             String tenantId, String executionId, long expectedVersion, int nextAttempt,
             long nextDueEpochMs, String transitionKey, String errorCode, String errorMessage, long nowEpochMs) {
+            return Uni.createFrom().item(Optional.of(createTestRecord()));
+        }
+
+        @Override
+        public Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+            String tenantId, String executionId, long expectedVersion, String transitionKey,
+            String errorCode, String errorMessage, long nowEpochMs) {
             return Uni.createFrom().item(Optional.of(createTestRecord()));
         }
 

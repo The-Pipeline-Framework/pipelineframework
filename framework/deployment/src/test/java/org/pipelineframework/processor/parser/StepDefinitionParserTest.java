@@ -102,6 +102,15 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void preservesCheckedReadFailures() {
+        IOException failure = assertThrows(
+            IOException.class,
+            () -> new StepDefinitionParser().parseDefinitionCatalog(tempDir));
+
+        assertNotNull(failure.getMessage());
+    }
+
+    @Test
     void parsesLocalCatalogWhenRootStepsKeyIsAbsent() throws IOException {
         Path file = tempDir.resolve("catalog-without-root.yaml");
         Files.writeString(file, """
@@ -452,6 +461,9 @@ class StepDefinitionParserTest {
                 await:
                   correlation:
                     strategy: "interactionId"
+                  completion:
+                    type: "com.example.FraudCheckAnswer"
+                    projector: "com.example.FraudCheckProjector"
                   transport:
                     type: "webhook"
                     request:
@@ -468,10 +480,107 @@ class StepDefinitionParserTest {
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
         assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
+        assertEquals("com.example.FraudCheckAnswer",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("type"));
+        assertEquals("com.example.FraudCheckProjector",
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("projector"));
         assertEquals("https://partner.example/check",
             ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
+    }
+
+    @Test
+    void v3AwaitMayDeferJavaBindingsToSemanticCompilation() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: Test
+            basePackage: com.example
+            types:
+              Decision: { fields: [[id, string]] }
+              Result: { fields: [[id, string]] }
+            steps:
+              - name: Clarify
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: Decision
+                output: Result
+                timeout: PT10M
+                await:
+                  correlation: { strategy: interactionId }
+                  transport: { type: interaction-api }
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertNull(steps.getFirst().inputType());
+        assertNull(steps.getFirst().outputType());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
+    }
+
+    @Test
+    void v3AwaitRejectsPartialExplicitJavaBinding() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: Test
+            basePackage: com.example
+            types:
+              Decision: { fields: [[id, string]] }
+              Result: { fields: [[id, string]] }
+            steps:
+              - name: Clarify
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: Decision
+                output: Result
+                java: { input: com.example.domain.Decision }
+                timeout: PT10M
+                await:
+                  correlation: { strategy: interactionId }
+                  transport: { type: interaction-api }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "await steps must declare both java.input and java.output together")), diagnostics.toString());
+    }
+
+    @Test
+    void rejectsMalformedAwaitCompletionConfiguration() throws IOException {
+        for (String completion : List.of(
+            "completion: null",
+            "completion: answer",
+            "completion: {type: 7, projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: 7}",
+            "completion: {type: '   ', projector: com.example.Projector}",
+            "completion: {type: com.example.Answer, projector: '   '}",
+            "completion: {type: com.example.Answer, projector: com.example.Projector, extra: value}")) {
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: Test
+                basePackage: com.example
+                steps:
+                  - name: Fraud Check
+                    kind: await
+                    cardinality: ONE_TO_ONE
+                    input: com.example.Request
+                    output: com.example.Decision
+                    timeout: PT10M
+                    await:
+                      correlation:
+                        strategy: interactionId
+                      %s
+                      transport:
+                        type: interaction-api
+                """.formatted(completion), diagnostics);
+
+            assertTrue(steps.isEmpty(), completion);
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+                "await.completion must contain only non-blank string type and projector fields")),
+                completion + ": " + diagnostics);
+        }
     }
 
     @Test
@@ -597,7 +706,6 @@ class StepDefinitionParserTest {
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
             {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
-            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
             "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
             "reconciliationSupported":true,"executionPosture":"AUTOMATED",
@@ -621,8 +729,6 @@ class StepDefinitionParserTest {
                     requireIdempotency: true
                     requireReconciliation: true
                     requiredExecutionPosture: "AUTOMATED"
-                    requiredExecutionStyle: "PROVIDER_MANAGED"
-                    requiredConcurrencyScope: "PROVIDER_MANAGED"
                     minimumMachineConfirmation: "PROVIDER_ACKNOWLEDGED"
                 input: "com.example.SearchIndexDocument"
                 output: "com.example.SearchIndexWriteResult"
@@ -822,6 +928,65 @@ class StepDefinitionParserTest {
                 message.contains("negativeCacheTtl PT31S") && message.contains("maximum PT30S")),
                 invalidDiagnostics.toString());
         }
+    }
+
+    @Test
+    void derivesOneToManyQueryShapeFromProviderMetadataAndRejectsCardinalityMismatch() throws IOException {
+        Path metadataRoot = tempDir.resolve("streaming-query-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            "operations":[{"id":"invoice.find.many","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_MANY"}]}]}
+            """);
+        Path pipeline = tempDir.resolve("streaming-query.yaml");
+        Files.writeString(pipeline, streamingNativeQuery("ONE_TO_MANY"));
+        List<String> diagnostics = new ArrayList<>();
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> valid = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(1, valid.size(), diagnostics.toString());
+            assertEquals(StreamingShape.UNARY_STREAMING, valid.getFirst().streamingShapeHint());
+
+            Files.writeString(pipeline, streamingNativeQuery("ONE_TO_ONE"));
+            List<String> mismatchDiagnostics = new ArrayList<>();
+            List<StepDefinition> mismatch = new StepDefinitionParser(
+                (kind, message) -> mismatchDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+            assertTrue(mismatch.isEmpty());
+            assertTrue(mismatchDiagnostics.stream().anyMatch(message -> message.contains(
+                "does not match provider operation cardinality ONE_TO_MANY")), mismatchDiagnostics.toString());
+        }
+    }
+
+    private static String streamingNativeQuery(String cardinality) {
+        return """
+            version: 3
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Find invoices
+                kind: query
+                cardinality: %s
+                operation: invoice.find.many
+                using: work
+                capture:
+                  keyFields: [accountId]
+                input: FindInvoices
+                output: Invoice
+                java:
+                  input: com.example.FindInvoices
+                  output: com.example.Invoice
+            """.formatted(cardinality);
     }
 
     private static String nativeQueryWithNegativeCacheTtl(String ttl) {
@@ -1035,9 +1200,9 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsInvalidNativeCommandPolicyEnumValues() throws IOException {
-        assertNativeCommandPolicyRejected("requiredExecutionStyle: \"NOT_A_STYLE\"",
-            "requiredExecutionStyle has unsupported value 'NOT_A_STYLE'");
+    void rejectsDeletedAndInvalidNativeCommandPolicyFields() throws IOException {
+        assertNativeCommandPolicyRejected("requiredExecutionStyle: \"PROVIDER_MANAGED\"",
+            "unsupported field 'requiredExecutionStyle'");
         assertNativeCommandPolicyRejected("requiredExecutionPosture: \"ROBOT\"",
             "requiredExecutionPosture has unsupported value 'ROBOT'");
     }
@@ -2260,17 +2425,16 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void remoteStepStillRequiresExplicitJavaContractsWhenLogicalContractsAreDeclared() throws IOException {
-        List<String> diagnostics = new ArrayList<>();
+    void resolvesV3RemoteStepLogicalContractsToGeneratedJavaTypes() throws IOException {
         List<StepDefinition> steps = parse("""
-            version: 2
+            version: 3
             appName: "Test"
             basePackage: "com.example"
             types:
               ChargeRequest:
-                fields: [[1, id, uuid]]
+                fields: [[id, uuid]]
               ChargeResult:
-                fields: [[1, id, uuid]]
+                fields: [[id, uuid]]
             steps:
               - name: "charge-card"
                 cardinality: "ONE_TO_ONE"
@@ -2282,10 +2446,45 @@ class StepDefinitionParserTest {
                   protocol: "PROTOBUF_HTTP_V1"
                   target:
                     urlConfigKey: "remote.charge.url"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.REMOTE, step.kind());
+        assertEquals(ClassName.get("com.example.domain", "ChargeRequest"), step.inputType());
+        assertEquals(ClassName.get("com.example.domain", "ChargeResult"), step.outputType());
+    }
+
+    @Test
+    void rejectsV3RemoteJavaBindingsThatRedefineLogicalContracts() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 3
+            appName: "Test"
+            basePackage: "com.example"
+            types:
+              ChargeRequest:
+                fields: [[id, uuid]]
+              ChargeResult:
+                fields: [[id, uuid]]
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                input: ChargeRequest
+                output: ChargeResult
+                java:
+                  input: com.example.legacy.ChargeRequest
+                  output: com.example.legacy.ChargeResult
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    urlConfigKey: "remote.charge.url"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("explicit Java 'input' and 'output'")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("must not redefine that contract")),
             diagnostics.toString());
     }
 
@@ -2833,7 +3032,7 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsQueryStepWithNonOneToOneCardinalityOrServiceBinding() throws IOException {
+    void rejectsLegacyOneToManyQueryOrServiceBinding() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -2865,7 +3064,8 @@ class StepDefinitionParserTest {
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("support only ONE_TO_ONE")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "ONE_TO_MANY Query requires a native operation/using selection")),
             diagnostics.toString());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains("cannot declare 'service'")),
             diagnostics.toString());
@@ -3043,7 +3243,6 @@ class StepDefinitionParserTest {
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
             {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
-            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
             "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
             "reconciliationSupported":true,"maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",

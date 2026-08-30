@@ -209,7 +209,7 @@ FUNCTION generation supports unary and streaming step cardinalities through brid
 | Pipeline shape | Function bridge mapping | Failure semantics |
 |----------------|-------------------------------|-------------------|
 | `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation.<br>Retry/timeout behaviour is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
-| `UNARY_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeOneToMany`. | Adapter/bridge path returns list sink output and preserves transport metadata/idempotency policy. |
+| `UNARY_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeOneToMany`. | Adapter/bridge path returns bounded list-sink output and fails on `maxItems` overflow unless `DROP` was explicitly selected. |
 | `STREAMING_UNARY` | Generated handler delegates through `FunctionTransportBridge.invokeManyToOne`. | Adapter/bridge path reduces stream input to unary output with bounded collection policy. |
 | `STREAMING_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeManyToMany`. | Adapter/bridge path processes streaming input/output with bounded ingress/sink behavior. |
 

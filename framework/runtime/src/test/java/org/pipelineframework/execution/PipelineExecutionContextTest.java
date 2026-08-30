@@ -1,9 +1,13 @@
 package org.pipelineframework.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +34,27 @@ class PipelineExecutionContextTest {
         assertEquals("tenant-1", ctx.tenantId());
         assertEquals("exec-abc", ctx.executionId());
         assertEquals(3, ctx.currentStepIndex());
+        assertEquals("local-pipeline", ctx.pipelineId());
+        assertEquals("local-contract", ctx.contractVersion());
+        assertEquals("local-contract", ctx.releaseVersion());
+    }
+
+    @Test
+    void advancesStepWithoutLosingPinnedExecutionIdentity() {
+        PipelineExecutionContext context = new PipelineExecutionContext(
+            "tenant-1", "exec-abc", "mail-pipeline", "contract-3", "release-9", 2,
+            Optional.of("correlation-5"), Optional.of("trace-7"));
+
+        PipelineExecutionContext advanced = context.atStep(3);
+
+        assertEquals("tenant-1", advanced.tenantId());
+        assertEquals("exec-abc", advanced.executionId());
+        assertEquals("mail-pipeline", advanced.pipelineId());
+        assertEquals("contract-3", advanced.contractVersion());
+        assertEquals("release-9", advanced.releaseVersion());
+        assertEquals(Optional.of("correlation-5"), advanced.correlationId());
+        assertEquals(Optional.of("trace-7"), advanced.traceId());
+        assertEquals(3, advanced.currentStepIndex());
     }
 
     @Test
@@ -82,12 +107,26 @@ class PipelineExecutionContextTest {
     }
 
     @Test
-    void contextIsARecord() {
+    void contextsWithTheSameExecutionIdentityAreEqual() {
         PipelineExecutionContext ctx1 = new PipelineExecutionContext("tenant-1", "exec-abc", 2);
         PipelineExecutionContext ctx2 = new PipelineExecutionContext("tenant-1", "exec-abc", 2);
 
         assertEquals(ctx1, ctx2);
         assertEquals(ctx1.hashCode(), ctx2.hashCode());
+    }
+
+    @Test
+    void applicationExecutionContextExposesOnlyImmutableGeneralIdentity() {
+        Set<String> components = Arrays.stream(PipelineExecutionContext.class.getRecordComponents())
+            .map(component -> component.getName())
+            .collect(java.util.stream.Collectors.toSet());
+
+        assertEquals(Set.of(
+            "tenantId", "executionId", "pipelineId", "contractVersion", "releaseVersion",
+            "currentStepIndex", "correlationId", "traceId"), components);
+        assertFalse(Arrays.stream(PipelineExecutionContext.class.getMethods())
+            .map(java.lang.reflect.Method::getName)
+            .anyMatch(name -> name.toLowerCase(java.util.Locale.ROOT).contains("retry")));
     }
 
     @Test

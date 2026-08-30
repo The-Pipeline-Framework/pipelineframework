@@ -1,9 +1,14 @@
 package org.pipelineframework.command;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,8 +28,6 @@ import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorBindingName;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -92,10 +95,7 @@ public class CommandStepDescriptorFactory {
         String outputType,
         String commandIdGenerator
     ) {
-        Path base = resolveConfigBase();
-        Path configPath = new PipelineYamlConfigLocator().locate(base)
-            .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for command step " + serviceName));
-        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
+        PipelineYamlConfig config = loadPipelineConfig(serviceName);
         PipelineYamlStep step = config.steps().stream()
             .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
             .findFirst()
@@ -116,6 +116,39 @@ public class CommandStepDescriptorFactory {
             .orElseGet(() -> new CommandDescriptor(
                 serviceName, resolvedCommand, inputType, outputType, resolvedGenerator,
                 CommandDuplicatePolicy.fromString(step.duplicatePolicy()), configuration));
+    }
+
+    private static PipelineYamlConfig loadPipelineConfig(String serviceName) {
+        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
+        Optional<Path> configPath = new PipelineYamlConfigLocator().locate(resolveConfigBase());
+        if (configPath.isPresent()) {
+            return loader.load(configPath.orElseThrow());
+        }
+        Optional<InputStream> resource = Stream.of(
+                Thread.currentThread().getContextClassLoader(),
+                CommandStepDescriptorFactory.class.getClassLoader())
+            .filter(Objects::nonNull)
+            .distinct()
+            .map(classLoader -> new PipelineYamlConfigLocator().locateResource(classLoader))
+            .flatMap(Optional::stream)
+            .map(CommandStepDescriptorFactory::openResource)
+            .findFirst();
+        if (resource.isPresent()) {
+            try (InputStream stream = resource.orElseThrow()) {
+                return loader.load(stream);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to read pipeline YAML for command step " + serviceName, e);
+            }
+        }
+        throw new IllegalStateException("No pipeline YAML found for command step " + serviceName);
+    }
+
+    private static InputStream openResource(URL resource) {
+        try {
+            return resource.openStream();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to open pipeline YAML resource " + resource, e);
+        }
     }
 
     private static Path resolveConfigBase() {
@@ -176,8 +209,8 @@ public class CommandStepDescriptorFactory {
         values.keySet().stream()
             .map(String::valueOf)
             .filter(key -> !Set.of(
-                "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
-                "requiredExecutionPosture", "requiredConcurrencyScope", "minimumMachineConfirmation",
+                "requireRetryRedrive", "requireIdempotency", "requireReconciliation",
+                "requiredExecutionPosture", "minimumMachineConfirmation",
                 "requireUserConfirmation").contains(key))
             .sorted()
             .findFirst()
@@ -189,8 +222,6 @@ public class CommandStepDescriptorFactory {
             bool(values, "requireIdempotency"),
             bool(values, "requireReconciliation"),
             optionalEnum(values, "requiredExecutionPosture", CommandExecutionPosture.class),
-            optionalEnum(values, "requiredExecutionStyle", ConnectorExecutionStyle.class),
-            optionalEnum(values, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
             optionalEnum(values, "minimumMachineConfirmation", CommandMachineConfirmation.class),
             bool(values, "requireUserConfirmation"));
     }

@@ -6,6 +6,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -26,13 +27,17 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.TokenUsage;
 import dev.langchain4j.model.ollama.OllamaChatModel;
-import io.smallrye.config.ConfigMapping;
-import io.smallrye.config.WithDefault;
 import jakarta.enterprise.context.ApplicationScoped;
+import io.quarkus.arc.Unremovable;
 import jakarta.inject.Inject;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryTokenUsage;
+import org.pipelineframework.connector.llm.LlmDecision;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmQueryConnectorProvider;
@@ -40,8 +45,9 @@ import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmToolProposal;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
 
-/** LangChain4j adapter that observes one tool proposal and never invokes a tool executor. */
+/** LangChain4j/Ollama adapter that observes one model decision and never invokes a tool executor. */
 @ApplicationScoped
+@Unremovable
 public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProvider {
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
@@ -97,17 +103,6 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         ChatModel create(String baseUrl, String modelName, Duration timeout, boolean thinking, int maxRetries);
     }
 
-    @ConfigMapping(prefix = "pipeline.llm.langchain4j.ollama")
-    interface OllamaRuntimeConfiguration {
-        /** Maximum wall-clock time for one Ollama HTTP request. */
-        @WithDefault("PT30S")
-        Duration requestTimeout();
-
-        /** Whether Ollama should enable model thinking/reasoning output. */
-        @WithDefault("true")
-        boolean thinking();
-    }
-
     record OllamaRuntimeSettings(Duration requestTimeout, boolean thinking) {
         OllamaRuntimeSettings {
             Objects.requireNonNull(requestTimeout, "Ollama request timeout must not be null");
@@ -137,11 +132,11 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         }
 
         @Override
-        public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+        public java.util.concurrent.CompletionStage<LlmDecision> decide(LlmTurnRequest request) {
             return CompletableFuture.supplyAsync(() -> decideBlocking(request), executor);
         }
 
-        private LlmToolProposal decideBlocking(LlmTurnRequest request) {
+        private LlmDecision decideBlocking(LlmTurnRequest request) {
             if (request.structuredOutputSchema()
                 == org.pipelineframework.connector.llm.StructuredOutputSchemaMode.REQUIRED) {
                 return decideNativeCompletion(request);
@@ -149,10 +144,10 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             return decideToolProposal(request);
         }
 
-        private LlmToolProposal decideNativeCompletion(LlmTurnRequest request) {
+        private LlmDecision decideNativeCompletion(LlmTurnRequest request) {
             LlmToolDefinition completion = directCompletion(request.tools()).orElseThrow(() ->
                 new IllegalArgumentException(
-                    "Ollama native structured output requires one direct 'complete' alternative"));
+                    "Native structured output requires one direct 'complete' alternative"));
             ToolSpecification specification = tool(completion);
             ResponseFormat responseFormat = ResponseFormat.builder()
                 .type(ResponseFormatType.JSON)
@@ -168,11 +163,13 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
                     userMessage(request, true))
                 .responseFormat(responseFormat)
                 .build();
-            String arguments = model.chat(chat).aiMessage().text();
-            return new LlmToolProposal(completion.alias(), arguments == null ? "{}" : arguments);
+            ChatResponse response = model.chat(chat);
+            String arguments = response.aiMessage().text();
+            return decision(response, new LlmToolProposal(
+                completion.alias(), arguments == null ? "{}" : arguments));
         }
 
-        private LlmToolProposal decideToolProposal(LlmTurnRequest request) {
+        private LlmDecision decideToolProposal(LlmTurnRequest request) {
             List<ToolSpecification> tools = request.tools().stream().map(this::tool).toList();
             ChatRequest chat = ChatRequest.builder()
                 .messages(
@@ -180,15 +177,62 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
                     userMessage(request, false))
                 .toolSpecifications(tools)
                 .build();
-            List<ToolExecutionRequest> proposals = model.chat(chat).aiMessage().toolExecutionRequests();
+            ChatResponse response = model.chat(chat);
+            List<ToolExecutionRequest> proposals = response.aiMessage().toolExecutionRequests();
             proposals = proposals == null ? List.of() : proposals;
             if (proposals.size() != 1) {
-                return new LlmToolProposal("", "{}");
+                return decision(response, new LlmToolProposal("", "{}"));
             }
             ToolExecutionRequest proposal = proposals.getFirst();
             String name = proposal.name() == null ? "" : proposal.name();
             String arguments = proposal.arguments() == null ? "{}" : proposal.arguments();
-            return new LlmToolProposal(name, arguments);
+            return decision(response, new LlmToolProposal(name, arguments));
+        }
+
+        private static LlmDecision decision(ChatResponse response, LlmToolProposal proposal) {
+            return new LlmDecision(proposal, Optional.of(observation(response)));
+        }
+
+        private static QueryObservation observation(ChatResponse response) {
+            try {
+                Optional<QueryTokenUsage> usage = tokenUsage(response.tokenUsage());
+                Optional<String> model = boundedText(response.modelName(), 256);
+                Optional<String> finishReason = response.finishReason() == null
+                    ? Optional.empty()
+                    : boundedText(response.finishReason().name().toLowerCase(java.util.Locale.ROOT), 128);
+                return QueryObservation.live(usage, model, finishReason);
+            } catch (RuntimeException invalidMetadata) {
+                return QueryObservation.live(Optional.empty(), Optional.empty(), Optional.empty());
+            }
+        }
+
+        private static Optional<QueryTokenUsage> tokenUsage(TokenUsage usage) {
+            if (usage == null) {
+                return Optional.empty();
+            }
+            QueryTokenUsage reported = new QueryTokenUsage(
+                nonNegative(usage.inputTokenCount()),
+                nonNegative(usage.outputTokenCount()),
+                nonNegative(usage.totalTokenCount()));
+            return reported.inputTokens().isPresent()
+                || reported.outputTokens().isPresent()
+                || reported.totalTokens().isPresent()
+                ? Optional.of(reported)
+                : Optional.empty();
+        }
+
+        private static OptionalLong nonNegative(Integer value) {
+            return value == null || value < 0 ? OptionalLong.empty() : OptionalLong.of(value.longValue());
+        }
+
+        private static Optional<String> boundedText(String value, int maximumLength) {
+            if (value == null) {
+                return Optional.empty();
+            }
+            String normalized = value.trim();
+            return normalized.isEmpty() || normalized.length() > maximumLength
+                ? Optional.empty()
+                : Optional.of(normalized);
         }
 
         private static Optional<LlmToolDefinition> directCompletion(List<LlmToolDefinition> tools) {

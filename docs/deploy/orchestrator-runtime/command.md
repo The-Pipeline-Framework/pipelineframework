@@ -79,6 +79,46 @@ For operation-first native provider commands, implement `CommandOperation<I, C, 
 
 The generated command step calls these pieces. Application code does not call the effect store directly.
 
+## Effect Store Deployment
+
+The built-in effect-store provider is selected at build time:
+
+```properties
+# Tests, development, and local examples. This is the default.
+pipeline.command.effect-store.provider=memory
+
+# Restart-safe production storage.
+pipeline.command.effect-store.provider=dynamo
+pipeline.command.effect-store.dynamo.table=tpf_command_effect
+```
+
+Changing the provider requires rebuilding the application. Use `custom` to disable both built-in
+beans and supply exactly one CDI `CommandEffectStore` implementation. Multiple stores remain a
+configuration error because Command v1 has one effect authority rather than per-step store routing.
+
+The Dynamo provider uses the standard Quarkus DynamoDB client settings for its region, endpoint,
+and credentials. TPF does not create the table. Provision one table with this primary key:
+
+| Attribute | Dynamo type | Key role |
+| --- | --- | --- |
+| `command_key` | String | Partition key |
+| `revision` | Number | Sort key |
+
+Grant the runtime `dynamodb:Query` and `dynamodb:PutItem` for that table. Reads are strongly
+consistent. Initial admission and every state transition are conditional immutable writes; the
+store never uses `UpdateItem` or a mutable current-state pointer.
+
+Each revision carries the complete effect authority, declared and runtime input/output types,
+native outcome snapshot, and attempt history. A new runtime instance therefore preserves
+`RETURN_RECORDED`, in-flight barriers, retry claims, ambiguous success, and user-action-required
+state without provider redispatch. The encoded revision is limited to 300 KiB so key and metadata
+overhead remain below DynamoDB's item limit. Carry large content as `PayloadReference`; an
+oversized revision fails as a store failure before it is written.
+
+Replay decoding is strict. Unknown snapshot schema versions, unavailable or incompatible runtime
+types, corrupt JSON, and unknown stored protobuf fields fail as store corruption instead of being
+discarded or reconstructed as generic values.
+
 ## Duplicate Policy
 
 `RETURN_RECORDED` returns the stored output when the same command id has already succeeded. This is the usual replay-safe setting.
@@ -91,14 +131,20 @@ The generated command step calls these pieces. Application code does not call th
 | --- | --- |
 | Connector succeeds | Output is recorded and returned. |
 | Same command id already succeeded with `RETURN_RECORDED` | Stored output is returned; the connector is not called again. |
-| Connector throws a retryable failure | Effect is marked `FAILED_RETRYABLE`. Redispatching that same command id is currently not supported. |
+| Connector throws a retryable failure | The current attempt is marked `FAILED_RETRYABLE`. Ordinary admission does not redispatch it. |
+| Control plane deliberately retries a failed Command execution | The store atomically appends one attempt under the same command id and dispatches through the ordinary provider path. |
 | Connector throws a non-retryable failure | Effect is marked terminal/DLQ. |
 
 The external system still needs an idempotency key or deterministic external id. TPF can avoid repeat dispatch after success is recorded, but it cannot make a third-party system exactly-once.
 
 Command-step configuration is immutable application configuration passed to the connector. It does not configure framework-enforced per-command concurrency. Connectors own blocking offload and any provider-specific concurrency limit.
 
-Completed commands with `RETURN_RECORDED` replay their stored output without recalling the connector. Failed-effect redispatch/redrive with the same command id is not supported. Queue-Async does not perform an automatic retry for this case.
+Completed commands with `RETURN_RECORDED` replay their stored output without recalling the connector.
+Queue-Async does not automatically retry failed effects. Deliberate retry is admitted only for
+`FAILED_RETRYABLE`; terminal, ambiguous, in-flight, and user-action barriers are preserved.
+The configured execution store must preserve deliberate retry intent, and the configured
+`CommandEffectStore` must advertise retry-attempt history support. Older implementations fail this
+operation rather than silently emulating it or discarding attempt identity.
 
 ## Related Docs
 

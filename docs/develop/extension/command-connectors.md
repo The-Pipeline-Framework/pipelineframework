@@ -4,16 +4,22 @@ Command connectors adapt a typed pipeline command to an external system. Use one
 
 ## Blocking Work And Connector-Owned Limits
 
-`CommandConnector` execution is reactive. A connector that calls a blocking client must explicitly offload that work to an application-owned worker or executor; generated command steps do not offload it automatically. Defer the blocking invocation until subscription, then offload it:
+The legacy `CommandConnector` bridge remains provider-managed. A legacy connector that calls a
+blocking client must explicitly offload that work. Native provider operations instead implement
+`BlockingCommandOperation`; TPF invokes the method on a worker and flattens its returned
+`CompletionStage`, so provider code needs neither Mutiny nor a private offload executor.
+
+For the legacy bridge, defer the blocking invocation until subscription, then offload it:
 
 ```java
 return Uni.createFrom().item(() -> manager.callBlocking(request.input()))
     .runSubscriptionOn(applicationManager.workerExecutor());
 ```
 
-Do not call the blocking client while constructing the `Uni`; a connector test should assert the executing thread. `CommandStepSupport` captures the execution context before an asynchronously loaded descriptor resolves and supplies it in the `CommandRequest`. Long-lived clients, sessions, and provider-specific concurrency limits belong to the connector or its application-scoped manager.
+Do not call the blocking client while constructing the `Uni`; a connector test should assert the executing thread. `CommandStepSupport` captures the execution context before an asynchronously loaded descriptor resolves and supplies it in the `CommandRequest`.
 
-The command `config` map is immutable connector-visible application configuration. A value such as `maxConcurrency: 1` is not a framework-enforced named-command limit; the connector must implement any such limit itself.
+Implement `SerializedOperation` when one configured binding and operation must allow only one
+in-flight provider stage. Numeric and wider provider/connection limits remain provider-owned.
 
 For YAML setup, see [Command Steps](/deploy/orchestrator-runtime/command). This page covers the Java code.
 
@@ -60,8 +66,6 @@ steps:
       requireIdempotency: true
       requireReconciliation: true
       requiredExecutionPosture: AUTOMATED
-      requiredExecutionStyle: PROVIDER_MANAGED
-      requiredConcurrencyScope: PROVIDER_MANAGED
       minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
@@ -87,8 +91,6 @@ connector:
     requireIdempotency: true
     requireReconciliation: true
     requiredExecutionPosture: AUTOMATED
-    requiredExecutionStyle: PROVIDER_MANAGED
-    requiredConcurrencyScope: PROVIDER_MANAGED
     minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
 ```
 
@@ -135,8 +137,24 @@ non-identifier value shapes, but the provider remains responsible for classifyin
 kind as safe for durable storage.
 
 An existing `SUCCEEDED` record with `RETURN_RECORDED` is replayed before a provider is looked up.
-`FAILED_RETRYABLE` records are not redispatched. Native commands do not run with framework-managed
-blocking execution or bounded framework-managed concurrency.
+Ordinary admission and ordinary execution re-drive never redispatch a `FAILED_RETRYABLE` record.
+The queue-async control plane may deliberately re-drive a failed execution with
+`RETRY_FAILED_COMMAND` intent. The execution resumes from its persisted current-step input through
+the normal generated Command client, which consumes that intent only at the targeted Command step.
+`CommandStepSupport.retry(...)` remains the lower-level runtime primitive: a retry-capable effect
+store atomically appends and claims one new attempt under the same logical `CommandId`. `DLQ`,
+`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers. Ordinary native operations run directly;
+only `BlockingCommandOperation` receives framework worker execution. Only `SerializedOperation`
+receives framework-managed concurrency, scoped to its configured binding and operation for the full
+provider-stage lifetime.
+The transition identity and logical `CommandId` derive a stable attempt identity for that
+one admission. If the transition worker is recovered after the attempt has already failed,
+the same admission reports the recorded retryable failure instead of appending another attempt.
+
+The stable `CommandId` remains the provider idempotency identity across attempts. Legacy connectors
+receive the individual `attemptId` on `CommandRequest`; native operations receive both values through
+`CommandInvocation.dispatchIdentity()`. Attempt IDs are diagnostic dispatch identities, not new
+logical effects and not provider idempotency keys.
 
 ## Native Provider Queries
 
@@ -167,6 +185,13 @@ non-retryable `QueryNotFoundException`; `TemporarilyUnavailable` remains retryab
 `AuthenticationRequired` and `TerminalFailure` are non-retryable failures. Public provider code
 does not depend on Mutiny, CDI, or Quarkus.
 
+Every unary `QueryOutcome` can also carry an optional provider-neutral `QueryObservation`.
+`QueryTokenUsage` keeps independently reported input, output, and total counts; counts must be
+non-negative and providers must leave unavailable values absent rather than deriving them.
+Response model and finish reason are optional bounded metadata. A live operation uses
+`LIVE_PROVIDER`; Query capture reconstructs persisted metadata as `CAPTURE_REPLAY`. Existing
+one-argument outcome constructors remain valid and produce no observation.
+
 Query capabilities are conservative when omitted. `LIVE_ONLY` requires `BYPASS_CACHE`.
 `CACHEABLE` permits the ordinary pipeline cache policies; a declared `maximumCacheAge` requires
 the configured positive cache TTL to be no greater than that maximum. Without a provider maximum,
@@ -182,6 +207,40 @@ separate paths. A generic cache hit returns before Query runtime. After a cache 
 execution, an existing Query capture is replayed before resolving the provider. Only a miss in
 both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
 [Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
+
+Query capture persists observation metadata beside `outputJson` and `outputType`; it does not put
+metadata into the application value or the capture-key basis. Runtime records a completed live
+provider observation before capture arbitration, including an observation attached to an invalid
+terminal decision. Replay exposes the historical metadata for tracing but never records it as newly
+consumed token usage. Provider and operation identity are bounded telemetry attributes; prompts,
+completions, payloads, catalogue data, credentials, execution IDs, and response IDs are excluded.
+
+### Finite streaming Query
+
+An operation that observes an ordered finite sequence implements
+`StreamingQueryOperation<I, C, O>` and returns `QueryStream<O>`. Its row boundary is JDK
+`Flow.Publisher`, so provider code does not depend on Mutiny while still exposing demand and
+cancellation. The separate termination stage completes only after cancellation or row termination
+has released every provider-owned cursor, session, or similar resource.
+
+Select it from a `kind: query` step with `cardinality: ONE_TO_MANY`. The generated client implements
+the ordinary `StepOneToMany` contract: every row is a pipeline item, and provider fetch windows or
+pages are not visible in the pipeline. The operation must produce the same deterministic total row
+order when TPF retries by resubscribing. TPF then derives the same child ordinal and item identity for
+an emitted prefix on every attempt, independently for each concurrent upstream item.
+
+Streaming Query capture stages rows in order and commits only after successful completion. Failure
+or cancellation aborts the partial observation; a later attempt executes the Query again. Generic
+Query cache policies and `negativeCacheTtl` are unary semantics and are rejected for streaming
+operations. Dynamic operation dispatch is unary and cannot expose a streaming Query.
+
+For production restart safety, select `pipeline.query.capture-store.provider=dynamo` and provision
+the configured table with string key `capture_key` and numeric key `revision`. The default
+`memory` provider remains intended for tests and single-process development. Dynamo capture
+coordinates streaming writers across replicas, redacts Query inputs to fingerprints, and preserves
+the existing generic-cache-miss → capture-lookup → live-provider ordering. See
+[Capture, Replay, and Persistence](../../design/jpa-query-connector/capture-and-persistence.md#durable-dynamodb-capture)
+for provisioning, IAM, limits, and recovery behavior.
 
 ## Command Id Generator
 
@@ -297,6 +356,12 @@ search.index.opensearch.timeout-seconds=5
 ```
 
 Do not put endpoint URLs, credentials, or provider timeout tuning in the authored step unless the value is part of the pipeline contract.
+
+The framework-owned effect store is deployment configuration, not connector configuration and not
+an application repository. Production deployments can select the built-in durable DynamoDB store
+with `pipeline.command.effect-store.provider=dynamo`; local and test deployments default to
+`memory`. See [Command Steps](/deploy/orchestrator-runtime/command#effect-store-deployment) for the
+table schema, IAM operations, size limit, and custom-store selection.
 
 ## Testing
 

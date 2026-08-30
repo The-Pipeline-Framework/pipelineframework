@@ -54,6 +54,9 @@ class RestPipelineTransitionWorkerTest {
 
     @AfterEach
     void tearDown() {
+        if (worker != null) {
+            worker.close();
+        }
         if (client != null) {
             client.close();
         }
@@ -90,6 +93,29 @@ class RestPipelineTransitionWorkerTest {
         assertTrue(worker instanceof TransportBoundaryInvocation);
         assertEquals("rest", worker.transportBoundary().protocol());
         assertEquals("transition-worker.execute", worker.transportBoundary().target());
+    }
+
+    @Test
+    void classifiesTimedOutRemoteTransitionAsOutcomeUnknown() {
+        when(restConfig.requestTimeout()).thenReturn(Duration.ofMillis(100));
+        server.createContext("/pipeline/worker/transitions/execute", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                Thread.sleep(500);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while simulating a live worker", interrupted);
+            }
+        });
+
+        RemoteTransitionOutcomeUnknownException failure = assertThrows(
+            RemoteTransitionOutcomeUnknownException.class,
+            () -> worker.executeTransition(envelope()).await().indefinitely());
+
+        assertEquals("rest", failure.protocol());
+        assertTrue(failure.target().contains("localhost"));
+        assertEquals(100L, failure.deadlineMillis());
+        assertTrue(failure.elapsedMillis() >= 75L);
     }
 
     @Test

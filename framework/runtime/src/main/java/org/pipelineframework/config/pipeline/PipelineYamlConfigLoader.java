@@ -16,15 +16,12 @@
 
 package org.pipelineframework.config.pipeline;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -56,7 +53,6 @@ import org.pipelineframework.config.boundary.PipelineObjectSelectionConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
-import org.yaml.snakeyaml.Yaml;
 
 /**
  * Loads pipeline.yaml configuration for runtime usage.
@@ -96,7 +92,7 @@ public class PipelineYamlConfigLoader {
      * @return the parsed pipeline configuration
      */
     public PipelineYamlConfig load(Path configPath) {
-        Object root = loadYaml(configPath);
+        Object root = new PipelineYamlDocumentLoader().load(configPath);
         return parseRoot(root, "pipeline config: " + configPath);
     }
 
@@ -107,7 +103,7 @@ public class PipelineYamlConfigLoader {
      * @return the parsed pipeline configuration
      */
     public PipelineYamlConfig load(InputStream inputStream) {
-        Object root = loadYaml(inputStream);
+        Object root = new PipelineYamlDocumentLoader().load(inputStream);
         return parseRoot(root, "pipeline config resource");
     }
 
@@ -118,31 +114,8 @@ public class PipelineYamlConfigLoader {
      * @return the parsed pipeline configuration
      */
     public PipelineYamlConfig load(Reader reader) {
-        Object root = loadYaml(reader);
+        Object root = new PipelineYamlDocumentLoader().load(reader);
         return parseRoot(root, "pipeline config reader");
-    }
-
-    private Object loadYaml(Path configPath) {
-        Yaml yaml = new Yaml();
-        try (Reader reader = Files.newBufferedReader(configPath)) {
-            return yaml.load(reader);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline config: " + configPath, e);
-        }
-    }
-
-    private Object loadYaml(InputStream inputStream) {
-        Yaml yaml = new Yaml();
-        try (Reader reader = new InputStreamReader(inputStream)) {
-            return yaml.load(reader);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline config from input stream", e);
-        }
-    }
-
-    private Object loadYaml(Reader reader) {
-        Yaml yaml = new Yaml();
-        return yaml.load(reader);
     }
 
     /**
@@ -847,7 +820,26 @@ public class PipelineYamlConfigLoader {
         }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(correlation, transport);
+        Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
+        return new PipelineYamlAwaitConfig(correlation, transport, completion);
+    }
+
+    private Optional<PipelineYamlAwaitCompletion> readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {
+        if (!awaitMap.containsKey("completion")) {
+            return Optional.empty();
+        }
+        Object completionObj = awaitMap.get("completion");
+        if (!(completionObj instanceof Map<?, ?> completionMap)) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion must be defined as a map");
+        }
+        if (!completionMap.keySet().equals(java.util.Set.of("type", "projector"))) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' await.completion supports only type and projector");
+        }
+        String type = readString(completionMap, "type");
+        String projector = readString(completionMap, "projector");
+        return Optional.of(new PipelineYamlAwaitCompletion(type, projector));
     }
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {

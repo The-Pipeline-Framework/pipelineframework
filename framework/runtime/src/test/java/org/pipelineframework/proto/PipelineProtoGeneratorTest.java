@@ -257,6 +257,55 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void generatesDistinctPresenceAndNullabilityRepresentations() throws Exception {
+        Path configPath = tempDir.resolve("semantic-fields.yaml");
+        Path outputDir = tempDir.resolve("generated-semantic-fields");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Fields"
+            basePackage: "com.example.fields"
+            transport: "GRPC"
+            types:
+              Customer:
+                fields:
+                  - [name, string]
+                  - [nickname?, string]
+                  - [middleName, string?]
+                  - [note?, string?]
+            steps: [{ name: Process, cardinality: ONE_TO_ONE, input: Customer, output: Customer }]
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        String proto = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        String record = Files.readString(outputDir.resolve("com/example/fields/domain/Customer.java"));
+        String adapters = Files.readString(outputDir.resolve("com/example/fields/domain/PipelineDomainProtoAdapters.java"));
+        String idl = Files.readString(tempDir.resolve("semantic-fields.idl.json"));
+
+        assertTrue(proto.contains("import \"google/protobuf/struct.proto\";"));
+        assertTrue(proto.contains("optional string nickname"));
+        assertTrue(proto.contains("oneof middle_name_state"));
+        assertTrue(proto.contains("google.protobuf.NullValue middle_name_null"));
+        assertTrue(proto.contains("oneof note_state"));
+        assertTrue(record.contains("String name"));
+        assertTrue(record.contains("CanonicalFieldValue<String> nickname"));
+        assertTrue(record.contains("CanonicalFieldValue<String> middleName"));
+        assertTrue(record.contains("CanonicalFieldValue<String> note"));
+        assertTrue(record.contains("middleName.isAbsent()"));
+        assertTrue(record.contains("nickname.isNull()"));
+        assertTrue(adapters.contains("CanonicalFieldValue.nullValue()"));
+        assertTrue(adapters.contains("com.google.protobuf.NullValue.NULL_VALUE"));
+        assertTrue(idl.contains("\"presence\" : \"OPTIONAL\""));
+        assertTrue(idl.contains("\"nullability\" : \"NULLABLE\""));
+    }
+
+    @Test
     void generatedV3RepeatedFieldsAreImmutableOrderedListsAndRoundTripThroughProtobuf() throws Exception {
         Path configPath = tempDir.resolve("pipeline-repeated.yaml");
         Path outputDir = tempDir.resolve("generated-v3-repeated");
@@ -702,7 +751,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(wrapper.contains("com.google.protobuf.ByteString value"));
         assertTrue(union.contains("record Accepted(BinaryValue value) implements BinaryOutcome"));
         assertTrue(adapters.contains("builder.setRawContent(value.rawContent());"));
-        assertTrue(adapters.contains("value.hasRawContent() ? value.getRawContent() : null"));
+        assertTrue(adapters.contains("requireProtoField(value.hasRawContent(), value.getRawContent(), \"BinaryRecord.rawContent\")"));
         assertFalse(adapters.contains("ByteString.copyFrom"));
         assertFalse(adapters.contains(".toByteArray()"));
     }
@@ -1311,26 +1360,20 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesExternalStepHostContractPackForRemoteSteps() throws Exception {
         String yaml = """
-            version: 2
+            version: 3
             appName: "Remote Step Test"
             basePackage: "com.example.remote"
             transport: "REST"
-            messages:
+            types:
               ChargeRequest:
-                fields:
-                  - number: 1
-                    name: "orderId"
-                    type: "uuid"
+                fields: [[orderId, uuid]]
               ChargeResult:
-                fields:
-                  - number: 1
-                    name: "paymentId"
-                    type: "uuid"
+                fields: [[paymentId, uuid]]
             steps:
               - name: "Charge Card"
                 cardinality: "ONE_TO_ONE"
-                inputTypeName: "ChargeRequest"
-                outputTypeName: "ChargeResult"
+                input: "ChargeRequest"
+                output: "ChargeResult"
                 execution:
                   mode: "REMOTE"
                   operatorId: "charge-card"
@@ -1343,7 +1386,12 @@ class PipelineProtoGeneratorTest {
         Files.writeString(configPath, yaml);
         Path outputDir = tempDir.resolve("proto-remote-step-out");
 
-        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
 
         Path manifestPath = outputDir.resolve("external-step-hosts.json");
         Path readmePath = outputDir.resolve("EXTERNAL-STEP-HOSTS.md");

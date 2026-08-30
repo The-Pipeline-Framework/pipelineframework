@@ -77,7 +77,8 @@ public class QueryStepDescriptorFactory {
     private QueryStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
-        PipelineYamlStep step = config.steps().stream()
+        PipelineYamlStep step = config.stepDefinitions().values().stream()
+            .flatMap(java.util.Collection::stream)
             .filter(candidate -> matchesServiceName(serviceName, candidate.name()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No query YAML step found for generated service " + serviceName));
@@ -98,13 +99,39 @@ public class QueryStepDescriptorFactory {
                 selectedOperation.operation(),
                 ConnectorOperationKind.QUERY,
                 selectedOperation.operationVersion());
-            QueryCapabilities capabilities = providerManifestCatalog().requireQueryCapabilities(
-                identity, binding.version());
+            org.pipelineframework.connector.QueryOperationCardinality cardinality =
+                providerManifestCatalog().requireQueryCardinality(identity, binding.version());
+            String declaredCardinality = step.cardinality() == null || step.cardinality().isBlank()
+                ? "ONE_TO_ONE"
+                : step.cardinality().strip().toUpperCase(java.util.Locale.ROOT);
+            if (!cardinality.name().equals(declaredCardinality)) {
+                throw new IllegalStateException("Query step " + serviceName + " cardinality "
+                    + declaredCardinality + " does not match provider operation cardinality " + cardinality);
+            }
+            if (cardinality == org.pipelineframework.connector.QueryOperationCardinality.ONE_TO_MANY) {
+                if (step.negativeCacheTtl().isPresent()) {
+                    throw new IllegalStateException("Streaming Query step " + serviceName
+                        + " must not declare negative cache TTL");
+                }
+                return QueryStepDescriptor.nativeStreamingQuery(
+                    serviceName,
+                    inputType,
+                    outputType,
+                    new NativeQuerySelector(
+                        ConnectorBindingName.of(binding.name()),
+                        identity,
+                        binding.version()),
+                    step.operationConfig(),
+                    step.queryCapture() == null || step.queryCapture().keyFields() == null
+                        ? java.util.List.of()
+                        : step.queryCapture().keyFields());
+            }
+            QueryCapabilities capabilities = providerManifestCatalog().requireQueryCapabilities(identity, binding.version());
             return QueryStepDescriptor.nativeQuery(
                 serviceName,
                 inputType,
                 outputType,
-                step.cardinality(),
+                declaredCardinality,
                 new NativeQuerySelector(
                     ConnectorBindingName.of(binding.name()),
                     identity,
@@ -118,6 +145,10 @@ public class QueryStepDescriptorFactory {
         }
         if (step.queryId() == null || step.queryId().isBlank()) {
             throw new IllegalStateException("Query step " + serviceName + " is missing query");
+        }
+        if ("ONE_TO_MANY".equalsIgnoreCase(step.cardinality())) {
+            throw new IllegalStateException("Streaming Query step " + serviceName
+                + " requires a native operation/using selection");
         }
         PipelineYamlQuery query = config.queries().get(step.queryId());
         if (query == null) {

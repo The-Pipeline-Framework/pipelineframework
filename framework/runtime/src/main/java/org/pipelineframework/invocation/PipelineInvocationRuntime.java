@@ -139,6 +139,7 @@ public class PipelineInvocationRuntime {
             InvocationContextSnapshot context = new InvocationContextSnapshot(
                 strategy.pipelineContext(),
                 strategy.awaitContext(),
+                strategy.executionContext(),
                 strategy.runContext(),
                 strategy.inheritRunContext(),
                 strategy.invocationContext());
@@ -165,6 +166,7 @@ public class PipelineInvocationRuntime {
             InvocationContextSnapshot context = new InvocationContextSnapshot(
                 strategy.pipelineContext(),
                 strategy.awaitContext(),
+                strategy.executionContext(),
                 strategy.runContext(),
                 strategy.inheritRunContext(),
                 strategy.invocationContext());

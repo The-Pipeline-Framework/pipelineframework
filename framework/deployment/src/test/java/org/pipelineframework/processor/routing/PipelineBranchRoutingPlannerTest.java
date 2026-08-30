@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -24,6 +25,7 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
@@ -44,6 +46,51 @@ import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineReference;
 
 class PipelineBranchRoutingPlannerTest {
+
+    @Test
+    void resolvesScalarAliasesToCanonicalJavaBoundaryTypes() {
+        PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(Map.of(
+            "Description", new PipelineTemplateTypeDefinition.AliasType(
+                "Description", new PipelineTemplateTypeReference.Scalar("string"))));
+        PipelineTemplateConfig config = v3Config("Alias", "com.example.alias", List.of(), model);
+
+        assertEquals(ClassName.get("java.lang", "String"),
+            new V3JavaTypeResolver(config).resolve("Description").orElseThrow());
+    }
+
+    @Test
+    void preservesExplicitJavaBindingsAheadOfCanonicalV3Fallbacks() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        definitions.put("Request", new PipelineTemplateTypeDefinition.RecordType("Request", List.of()));
+        definitions.put("Accepted", new PipelineTemplateTypeDefinition.RecordType("Accepted", List.of()));
+        definitions.put("Rejected", new PipelineTemplateTypeDefinition.RecordType("Rejected", List.of()));
+        definitions.put("Result", new PipelineTemplateTypeDefinition.RecordType("Result", List.of()));
+        definitions.put("Decision", new PipelineTemplateTypeDefinition.UnionType("Decision", Map.of(
+            "accepted", new PipelineTemplateTypeDefinition.Variant(
+                "accepted", new PipelineTemplateTypeReference.Named("Accepted")),
+            "rejected", new PipelineTemplateTypeDefinition.Variant(
+                "rejected", new PipelineTemplateTypeReference.Named("Rejected")))));
+        ctx.setPipelineTemplateConfig(v3Config(
+            "Explicit bindings", "com.example.generated",
+            List.of(
+                step("classify", "Request", "Decision", List.of(), false),
+                step("finish", "Decision", "Result", List.of("Accepted", "Rejected"), true)),
+            new PipelineTemplateTypeModel(definitions)));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classify", "com.example.service", "com.example.boundary.RequestInput",
+                "com.example.boundary.DecisionOutput"),
+            stepDefinition("finish", "com.example.service", "com.example.boundary.DecisionOutput",
+                "com.example.boundary.ResultOutput")));
+
+        Optional<PipelineBranchingPlan> plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertEquals(List.of(ClassName.get("com.example.boundary", "RequestInput")),
+            plan.orElseThrow().steps().getFirst().acceptedDomainTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
 
     private final PipelineBranchRoutingPlanner planner = new PipelineBranchRoutingPlanner();
 
@@ -716,6 +763,22 @@ class PipelineBranchRoutingPlannerTest {
             ClassName.bestGuess(inputTypeName),
             ClassName.bestGuess(outputTypeName),
             StreamingShape.UNARY_UNARY);
+    }
+
+    private static PipelineTemplateConfig v3Config(
+        String appName,
+        String basePackage,
+        List<PipelineTemplateStep> steps,
+        PipelineTemplateTypeModel typeModel
+    ) {
+        PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
+        when(config.version()).thenReturn(3);
+        when(config.appName()).thenReturn(appName);
+        when(config.basePackage()).thenReturn(basePackage);
+        when(config.dialect()).thenReturn(PipelineTemplateDialect.V3);
+        when(config.steps()).thenReturn(steps);
+        when(config.typeModel()).thenReturn(typeModel);
+        return config;
     }
 
     private static String capitalize(String value) {

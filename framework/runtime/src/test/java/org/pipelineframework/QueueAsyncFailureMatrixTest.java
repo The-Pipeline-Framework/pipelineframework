@@ -21,6 +21,7 @@ import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.RemoteTransitionOutcomeUnknownException;
 import org.pipelineframework.orchestrator.TransitionFailureEnvelope;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
@@ -299,6 +300,94 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
+    void remoteOutcomeUnknownSuppressesAutomaticRetryAndDeadLettering() {
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-remote", 9L, 2);
+        RemoteTransitionOutcomeUnknownException failure = new RemoteTransitionOutcomeUnknownException(
+            "rest",
+            "http://worker:8182/pipeline/worker/transitions/execute",
+            180_001L,
+            180_000L,
+            new java.net.http.HttpTimeoutException("request timed out"));
+        when(executionStateStore.markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote"),
+            eq(9L),
+            eq("exec-remote:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-remote:0:2",
+            failure,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
+
+        verify(executionStateStore).markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote"),
+            eq(9L),
+            eq("exec-remote:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong());
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore, never()).markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong());
+        verify(workDispatcher, never()).enqueueDelayed(any(), any());
+        verify(deadLetterPublisher, never()).publish(any());
+    }
+
+    @Test
+    void remoteOutcomeUnknownTakesPrecedenceOverCircuitDeferral() {
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-remote-circuit", 9L, 2);
+        RemoteTransitionOutcomeUnknownException failure = new RemoteTransitionOutcomeUnknownException(
+            "rest",
+            "http://worker:8182/pipeline/worker/transitions/execute",
+            180_001L,
+            180_000L,
+            new java.net.http.HttpTimeoutException("request timed out"));
+        failure.addSuppressed(new CircuitOpenException(new CircuitOpen(
+            new CircuitIdentity("pricing"),
+            CircuitScope.SHARED_DEPENDENCY,
+            Instant.now().plusSeconds(30))));
+        when(executionStateStore.markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote-circuit"),
+            eq(9L),
+            eq("exec-remote-circuit:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-remote-circuit:0:2",
+            failure,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
+
+        verify(executionStateStore).markRemoteOutcomeUnknown(
+            eq("tenant-a"),
+            eq("exec-remote-circuit"),
+            eq(9L),
+            eq("exec-remote-circuit:0:2"),
+            eq("REMOTE_OUTCOME_UNKNOWN"),
+            anyString(),
+            anyLong());
+        verify(executionStateStore, never()).deferCircuit(
+            anyString(), anyString(), anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(),
+            anyLong(), anyInt(), anyLong());
+        verify(workDispatcher, never()).enqueueDelayed(any(), any());
+    }
+
+    @Test
     void retryableFailureWithNoBudgetPublishesRetryExhaustedTerminal() {
         when(orchestratorConfig.maxRetries()).thenReturn(0);
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-12", 5L, 0);
@@ -320,6 +409,42 @@ class QueueAsyncFailureMatrixTest {
         DeadLetterEnvelope envelope = envelopeCaptor.getValue();
         assertTrue(envelope.retryable());
         assertEquals("retry_exhausted", envelope.terminalReason());
+    }
+
+    @Test
+    void terminalRetryableCommandFailurePersistsRootAndLogicalEffectIdentity() {
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-command", 5L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(),
+            anyInt(), any(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+        RuntimeException failure = new TransitionFailureEnvelope(
+            IllegalStateException.class.getName(),
+            "archive failed",
+            6,
+            Optional.of("archive:confirmation-7")).toException();
+
+        failureHandler.handleExecutionFailure(
+            record,
+            "exec-command:0:0",
+            failure,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3));
+
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-command"),
+            eq(5L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-command:0:0"),
+            eq("TransitionWorkerFailureException"),
+            anyString(),
+            eq(6),
+            eq(Optional.of("archive:confirmation-7")),
+            anyLong());
     }
 
     private void configureRetryDefaults() {

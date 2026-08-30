@@ -1,6 +1,8 @@
 # JPA Query Connector Setup
 
-Add the connector where the generated query step runs:
+Choose one provider where the generated query step runs.
+
+For blocking Hibernate ORM/JPA:
 
 ```xml
 <dependency>
@@ -10,7 +12,20 @@ Add the connector where the generated query step runs:
 </dependency>
 ```
 
-The connector uses the application's Quarkus datasource, ORM configuration, and JPA entities. It remains separate from the [Persistence Plugin](/design/persistence), even when both features use the same database.
+For Hibernate Reactive:
+
+```xml
+<dependency>
+    <groupId>org.pipelineframework</groupId>
+    <artifactId>query-hibernate-reactive-connector</artifactId>
+    <version>${pipelineframework.version}</version>
+</dependency>
+```
+
+The blocking connector uses the application's JDBC datasource, Hibernate ORM configuration, and JPA
+entities. The reactive connector uses the application's reactive datasource and Hibernate Reactive
+`Mutiny.SessionFactory`; it does not require Hibernate ORM/JDBC or Panache. Both remain separate from
+the [Persistence Plugin](/design/persistence), even when they use the same database.
 
 ## YAML
 
@@ -62,9 +77,41 @@ steps:
 
 `version` participates in captured query identity. Bump it when the read meaning changes, such as a predicate or projection change that should not reuse earlier captured facts.
 
-This first-party captured JPA form remains supported and, in this release, continues to use its
-existing top-level `queries` definition. Provider-backed Query execution is not yet enabled in the
-runtime; do not select JPA queries through connector `operation`/`using` bindings yet.
+This legacy top-level JPA form remains supported by `query-jpa-connector` and is blocking. It is
+offloaded through framework blocking facilities.
+
+For native provider execution, select the database behavior through a connector binding:
+
+```yaml
+connectors:
+  database:
+    provider: hibernate.reactive.query # use jpa.query for blocking ORM/JPA
+    version: 1
+
+steps:
+  - name: Load Customer Risk Facts
+    kind: query
+    operation: find.one
+    operationVersion: 1
+    using: database
+    config:
+      entity: com.example.CustomerRiskEntity
+      where:
+        customerId:
+          operator: eq
+          values: [input.customerId]
+        score:
+          operator: gte
+          values: [input.minimumScore]
+      projection:
+        customerId: customerId
+        riskBand: riskBand
+        score: score
+      result: single
+```
+
+`jpa.query` and `hibernate.reactive.query` deliberately remain separate providers. There is no
+runtime mode switch and the reactive provider does not implement the legacy automatic JPA path.
 
 ## Java records
 

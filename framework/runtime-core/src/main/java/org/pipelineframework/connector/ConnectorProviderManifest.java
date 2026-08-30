@@ -7,7 +7,7 @@ import java.util.Objects;
  * Contents of {@code META-INF/pipeline/connector-providers.json}.
  */
 public record ConnectorProviderManifest(int schemaVersion, List<ConnectorProviderArtifactDescriptor> providers) {
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+    public static final int CURRENT_SCHEMA_VERSION = 4;
 
     public ConnectorProviderManifest {
         if (schemaVersion < 1 || schemaVersion > CURRENT_SCHEMA_VERSION) {

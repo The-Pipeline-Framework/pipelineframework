@@ -89,6 +89,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         List<PipelineCompilationPhase> phases = List.of(
             new org.pipelineframework.processor.phase.PipelineDiscoveryPhase(),
             new org.pipelineframework.processor.phase.RepresentationProviderPreparationPhase(),
+            new org.pipelineframework.processor.phase.PipelineBranchPlanningPhase(),
             new org.pipelineframework.processor.phase.ModelExtractionPhase(),
             new org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase(),
             new org.pipelineframework.processor.phase.RepresentationProviderGenerationPhase(),

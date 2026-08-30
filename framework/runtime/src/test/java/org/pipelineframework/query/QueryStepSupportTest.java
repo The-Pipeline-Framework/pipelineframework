@@ -4,29 +4,30 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Optional;
-import java.time.Instant;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
-import org.pipelineframework.execution.PipelineExecutionContext;
-import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorCompletionStages;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
-import org.pipelineframework.connector.ConnectorCompletionStages;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 
 class QueryStepSupportTest {
 
@@ -67,6 +68,20 @@ class QueryStepSupportTest {
 
         assertEquals(first, second);
         assertEquals(1, connector.calls.get());
+    }
+
+    @Test
+    void captureStoreFailurePreventsProviderInvocation() {
+        CountingFrameworkConnector connector = new CountingFrameworkConnector();
+        QueryStepSupport support = new QueryStepSupport(List.of(connector), List.of(new FailingCaptureStore()));
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant-1", "exec-1", 2));
+
+        QueryCaptureStoreException failure = assertThrows(QueryCaptureStoreException.class, () ->
+            support.queryOneToOne(descriptor(), new Lookup("customer-1", "US"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertTrue(failure.getMessage().contains("offline"));
+        assertEquals(0, connector.calls.get());
     }
 
     @Test
@@ -195,7 +210,9 @@ class QueryStepSupportTest {
         String basis = tenant + ":" + execution + ":" + stepIndex + ":"
             + descriptor.queryId() + ":" + descriptor.version() + ":" + inputJson;
         try {
-            return HexFormat.of().formatHex(
+            String tenantKey = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                tenant.getBytes(StandardCharsets.UTF_8));
+            return tenantKey + "." + HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(basis.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception failure) {
             throw new IllegalStateException("SHA-256 digest is unavailable to the test", failure);
@@ -251,6 +268,28 @@ class QueryStepSupportTest {
         @Override
         public CompletionStage<Void> clear() {
             return ConnectorCompletionStages.completed();
+        }
+    }
+
+    private static final class FailingCaptureStore implements QueryCaptureStore {
+        @Override
+        public CompletionStage<Optional<QueryCaptureRecord>> get(String captureKey) {
+            return CompletableFuture.failedFuture(new QueryCaptureStoreException("capture store offline"));
+        }
+
+        @Override
+        public CompletionStage<QueryCaptureRecord> putIfAbsent(QueryCaptureRecord record) {
+            return CompletableFuture.failedFuture(new QueryCaptureStoreException("capture store offline"));
+        }
+
+        @Override
+        public CompletionStage<Boolean> remove(String captureKey) {
+            return CompletableFuture.failedFuture(new QueryCaptureStoreException("capture store offline"));
+        }
+
+        @Override
+        public CompletionStage<Void> clear() {
+            return CompletableFuture.failedFuture(new QueryCaptureStoreException("capture store offline"));
         }
     }
 

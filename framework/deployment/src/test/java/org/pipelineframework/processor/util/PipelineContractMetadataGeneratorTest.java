@@ -29,6 +29,7 @@ import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateMaterialization;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
@@ -160,6 +161,50 @@ class PipelineContractMetadataGeneratorTest {
         assertEquals(repeated.get("canonicalCatalogFingerprint").getAsString(),
             repeatedReordered.get("canonicalCatalogFingerprint").getAsString());
         assertEquals(repeated.get("contractHash").getAsString(), repeatedReordered.get("contractHash").getAsString());
+    }
+
+    @Test
+    void presenceAndNullabilityAffectHashesButSyntaxOnlyRewritesDoNot() throws IOException {
+        Path compact = tempDir.resolve("compact.yaml");
+        Path verbose = tempDir.resolve("verbose.yaml");
+        String header = """
+            version: 3
+            appName: v3-contract
+            basePackage: org.example.v3
+            transport: REST
+            types:
+              Alpha:
+                fields: [[code, string]]
+              Zeta:
+                fields:
+            """;
+        Files.writeString(compact, header + "      - [description?, string?]\n"
+            + "steps: [{ name: ProcessV3, cardinality: ONE_TO_ONE, input: Alpha, output: Zeta }]\n");
+        Files.writeString(verbose, header + "      - { name: description, type: string, presence: optional, nullability: nullable }\n"
+            + "steps: [{ name: ProcessV3, cardinality: ONE_TO_ONE, input: Alpha, output: Zeta }]\n");
+
+        PipelineTemplateTypeModel compactModel = new PipelineTemplateConfigLoader().load(compact).typeModel();
+        PipelineTemplateTypeModel verboseModel = new PipelineTemplateConfigLoader().load(verbose).typeModel();
+        PipelineTemplateTypeModel strictModel = new PipelineTemplateTypeModel(Map.of(
+            "Alpha", compactModel.definitions().get("Alpha"),
+            "Zeta", new PipelineTemplateTypeDefinition.RecordType("Zeta", List.of(
+                new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"))))));
+
+        Path metadataPipeline = writePipelineYaml();
+        writeV3Metadata(metadataPipeline, tempDir.resolve("compact-output"), compactModel);
+        writeV3Metadata(metadataPipeline, tempDir.resolve("verbose-output"), verboseModel);
+        writeV3Metadata(metadataPipeline, tempDir.resolve("strict-output"), strictModel);
+
+        JsonObject compactContract = readContract(tempDir.resolve("compact-output"));
+        JsonObject verboseContract = readContract(tempDir.resolve("verbose-output"));
+        JsonObject strictContract = readContract(tempDir.resolve("strict-output"));
+        JsonObject field = compactContract.getAsJsonObject("canonicalTypes").getAsJsonObject("Zeta")
+            .getAsJsonObject("definition").getAsJsonArray("fields").get(0).getAsJsonObject();
+
+        assertEquals("OPTIONAL", field.get("presence").getAsString());
+        assertEquals("NULLABLE", field.get("nullability").getAsString());
+        assertEquals(compactContract.get("contractHash").getAsString(), verboseContract.get("contractHash").getAsString());
+        assertNotEquals(compactContract.get("contractHash").getAsString(), strictContract.get("contractHash").getAsString());
     }
 
     @Test

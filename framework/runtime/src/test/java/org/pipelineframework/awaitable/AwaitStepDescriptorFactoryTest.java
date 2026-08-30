@@ -86,6 +86,34 @@ class AwaitStepDescriptorFactoryTest {
     }
 
     @Test
+    void authoredV3JavaTypesWithoutGeneratedProtobufUseTheirCanonicalIdentity() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.authored-v3.yaml");
+        Files.writeString(explicit, v3PipelineYaml()
+            .replace("org.pipelineframework.awaitable.fixture", "org.pipelineframework.awaitable.authoredfixture"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+
+            assertEquals(
+                "org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord",
+                descriptor.inputType());
+            assertEquals(
+                "org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus",
+                descriptor.outputType());
+            assertEquals(descriptor.inputType(), descriptor.transportInputType());
+            assertEquals(descriptor.outputType(), descriptor.transportOutputType());
+            var input = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord("record-1");
+            assertEquals(input, descriptor.inputToTransport().apply(input));
+            var output = new org.pipelineframework.awaitable.authoredfixture.domain.PaymentStatus("APPROVED");
+            assertEquals(output, descriptor.outputFromTransport().apply(output));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
     void legacyDescriptorOverloadRejectsConflictingCachedTransportIdentity() throws Exception {
         Path explicit = tempDir.resolve("pipeline.yaml");
         Files.writeString(explicit, pipelineYaml("kafka", """
@@ -138,6 +166,50 @@ class AwaitStepDescriptorFactoryTest {
             assertEquals("interaction-api", descriptor.transportType());
         } finally {
             factory.shutdown();
+        }
+    }
+
+    @Test
+    void requestAwareCompletionOverridesActorPayloadTypeAndLoadsPureProjector() throws Exception {
+        Path explicit = tempDir.resolve("pipeline-completion.yaml");
+        Files.writeString(explicit, """
+            basePackage: org.example
+            transport: LOCAL
+            steps:
+              - name: Await Payment Provider
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: java.lang.String
+                output: java.lang.String
+                timeout: PT5M
+                await:
+                  correlation:
+                    strategy: interactionId
+                  completion:
+                    type: java.lang.Integer
+                    projector: %s
+                  transport:
+                    type: interaction-api
+            """.formatted(PrefixingProjector.class.getName()));
+        System.setProperty("pipeline.config", explicit.toString());
+        ClassLoader previousLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(new ClassLoader(null) { });
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitPaymentProviderService",
+                String.class.getName(),
+                String.class.getName()).await().indefinitely();
+
+            assertEquals(Integer.class.getName(), descriptor.transportOutputType());
+            assertTrue(descriptor.requestAwareCompletion());
+            assertEquals(PrefixingProjector.class.getName(), descriptor.completionProjectorId());
+            assertEquals("request:7", descriptor.completionProjector().project(
+                "request", 7, new AwaitCompletionMetadata("interaction-1", "alice", java.time.Instant.EPOCH)));
+        } finally {
+            factory.shutdown();
+            Thread.currentThread().setContextClassLoader(previousLoader);
         }
     }
 
@@ -223,6 +295,15 @@ class AwaitStepDescriptorFactoryTest {
             """.formatted(transportType, transportConfig);
     }
 
+    public static final class PrefixingProjector
+        implements AwaitCompletionProjector<String, Integer, String> {
+
+        @Override
+        public String project(String request, Integer completion, AwaitCompletionMetadata metadata) {
+            return request + ":" + completion;
+        }
+    }
+
     private static String v3PipelineYaml() {
         return """
             version: 3
@@ -232,7 +313,7 @@ class AwaitStepDescriptorFactoryTest {
             types:
               PaymentRecord:
                 fields:
-                  - [id, string]
+                  - [id?, string?]
               PaymentStatus:
                 fields:
                   - [status, string]

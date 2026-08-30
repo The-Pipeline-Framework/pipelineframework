@@ -18,7 +18,8 @@ The public host-neutral Connector Provider API uses JDK async types.
 - The new public SPI must not expose Mutiny `Uni` or `Multi`.
 - Quarkus/runtime adapters may use Mutiny internally.
 - Existing legacy APIs may remain Mutiny-based behind compatibility adapters.
-- Streaming contracts are not part of v1. A future streaming contract must be pinned separately using a host-neutral abstraction rather than defaulting to `Multi`.
+- Object streaming remains family-specific. Finite Query streaming is pinned separately through
+  host-neutral `StreamingQueryOperation`/`QueryStream` contracts rather than exposing `Multi` to providers.
 
 A universal `CompletionStage<O> execute(...)` is explicitly rejected. `CompletionStage` is the shared async mechanism, not the shared semantic contract.
 
@@ -30,6 +31,7 @@ Conceptually:
 ConnectorProvider<PC>
     ├── CommandOperation<I,OC,O>
     ├── QueryOperation<I,OC,O>
+    ├── StreamingQueryOperation<I,OC,O>
     ├── ObjectSourceOperation     // specialised list/read semantics
     └── ObjectTargetOperation     // specialised write-session semantics
 ```
@@ -101,19 +103,25 @@ Provider-defined configuration uses immutable typed Java records and generated/d
 
 A marker interface such as `ConnectorConfig` is **not required** unless implementation proves it enforces a real invariant.
 
-## Reconciliation decision 4 — capabilities are layered
+## Reconciliation decision 4 — execution mechanics are structural
 
-Capabilities are separated into shared execution mechanics and operation-family semantics.
+Execution behavior that changes framework invocation is expressed by operation interfaces:
 
-### Shared execution capabilities
+```java
+interface BlockingOperation extends ConnectorOperation {}
+interface BlockingQueryOperation<I, C, O> extends QueryOperation<I, C, O>, BlockingOperation {}
+interface BlockingCommandOperation<I, C, O> extends CommandOperation<I, C, O>, BlockingOperation {}
+interface SerializedOperation extends ConnectorOperation {}
+```
 
-`ConnectorExecutionCapabilities` covers only cross-family execution mechanics such as:
+Ordinary operations are invoked directly and may own their asynchronous execution. Blocking
+operations are invoked on a framework worker and their returned stage is flattened. Serialized
+operations admit one provider stage at a time for each configured binding and operation; the gate
+covers the full stage lifetime.
 
-- blocking / non-blocking / provider-managed execution;
-- concurrency scope;
-- statefulness/resource scope;
-- connection requirement;
-- I/O shape where genuinely shared.
+Provider manifests do not repeat these facts as capability metadata. Parameterized metadata is
+appropriate only where a runtime or compiler must validate a value that cannot be represented by a
+specialization, and only when TPF implements the corresponding enforcement.
 
 ### Command capabilities
 
@@ -135,28 +143,17 @@ Capabilities are separated into shared execution mechanics and operation-family 
 - consistency;
 - repeatability/capture behaviour;
 - timeout;
-- pagination/cardinality;
-- future streaming capability only after a separate contract is pinned.
+- pagination;
+- streaming cardinality is structural (`StreamingQueryOperation`), not a Query capability flag.
 
-Shared capabilities must not become a union of every Command and Query semantic axis.
+Operation-family capabilities must not become a union of execution mechanics and every Command or
+Query semantic axis.
 
-## Reconciliation decision 5 — concurrency vocabulary may be broader than v1 enforcement
+## Reconciliation decision 5 — concurrency claims follow enforcement
 
-The SPI may reserve vocabulary such as:
-
-```text
-UNBOUNDED
-PROVIDER_SCOPED(max)
-CONNECTION_SCOPED(max)
-OPERATION_SCOPED(max)
-PROVIDER_MANAGED
-```
-
-However v1 runtime implementation must claim enforcement only for modes actually implemented and tested.
-
-Initial runtime support may be limited to `UNBOUNDED` and `PROVIDER_MANAGED`; policy requiring framework-managed bounds must fail validation until #577 implements the relevant enforcement.
-
-Capability vocabulary and currently supported runtime enforcement must remain explicitly distinct.
+TPF currently enforces only structural per-binding, per-operation serialization. General numeric,
+provider-wide, and connection-wide limits are intentionally absent until a concrete provider needs
+them and the runtime can enforce them. Provider-managed limits remain ordinary provider behavior.
 
 ## Reconciliation decision 6 — Agent remains deferred
 
@@ -305,9 +302,8 @@ A Query represents a captured external observation, not an effect.
 
 ### V1 cardinality
 
-V1 Query is unary/at-most-one outcome at the operation boundary. Existing `ONE_TO_ONE` compatibility is preserved.
-
-Streaming, cursor APIs and reactive multi-item contracts are intentionally deferred.
+Unary Query is an at-most-one outcome. A finite multi-row observation uses
+`StreamingQueryOperation` and the existing ONE_TO_MANY runtime; it is not encoded as `List<O>`.
 
 ### Capture and cache
 

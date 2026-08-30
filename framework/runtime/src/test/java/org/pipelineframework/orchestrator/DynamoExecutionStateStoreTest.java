@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.context.PipelineContext;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
@@ -43,6 +44,48 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class DynamoExecutionStateStoreTest {
+
+    @Test
+    void writesAndRestoresAsyncPipelineContextWithTheExecutionInput() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new PaymentRecord("payment-1"),
+            PipelineContext.fromHeaders("release-17", "true", "require-cache"));
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "context-key", input, ExecutionResultShape.SINGLE, now, ttl)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> createdItem = created.getValue().transactItems().getFirst().put().item();
+        assertEquals("release-17", createdItem.get("input_pipeline_version").s());
+        assertEquals("true", createdItem.get("input_pipeline_replay_mode").s());
+        assertEquals("require-cache", createdItem.get("input_pipeline_cache_policy").s());
+
+        Map<String, AttributeValue> persisted = new HashMap<>(executionItem(
+            "tenant-a", "execution-context", "context-key", ttl, ExecutionStatus.RUNNING));
+        persisted.put("input_payload_json", createdItem.get("input_payload_json"));
+        persisted.put("input_payload_type_id", createdItem.get("input_payload_type_id"));
+        persisted.put("input_payload_encoding", createdItem.get("input_payload_encoding"));
+        persisted.put("input_shape", createdItem.get("input_shape"));
+        persisted.put("input_pipeline_version", createdItem.get("input_pipeline_version"));
+        persisted.put("input_pipeline_replay_mode", createdItem.get("input_pipeline_replay_mode"));
+        persisted.put("input_pipeline_cache_policy", createdItem.get("input_pipeline_cache_policy"));
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(persisted).build());
+
+        ExecutionInputSnapshot restored = assertInstanceOf(
+            ExecutionInputSnapshot.class,
+            store.getExecution("tenant-a", "execution-context").await().indefinitely().orElseThrow().inputPayload());
+        assertEquals(input.payload(), restored.payload());
+        assertEquals(input.pipelineContext(), restored.pipelineContext());
+    }
 
     @Test
     void writesAndRestoresTypedExecutionInputAndMaterializedChildResults() {
@@ -175,6 +218,24 @@ class DynamoExecutionStateStoreTest {
         assertEquals(PaymentStatus.class.getName(), update.getValue().expressionAttributeValues().get(":inputPayloadTypeId").s());
         assertEquals(JsonTransitionPayloadCodec.ENCODING,
             update.getValue().expressionAttributeValues().get(":inputPayloadEncoding").s());
+    }
+
+    @Test
+    void markAwaitCompletedClearsRedriveIntent() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            client, mockConfig("tpf_execution", "tpf_execution_key"));
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(Map.of()).build());
+
+        store.markAwaitCompleted(
+            "tenant-a", "execution-a", "await-unit", 3, System.currentTimeMillis())
+            .await().indefinitely();
+
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#redriveIntent")
+                && "redrive_intent".equals(
+                    request.expressionAttributeNames().get("#redriveIntent"))));
     }
 
     @Test
@@ -537,6 +598,37 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void marksRemoteOutcomeUnknownWithoutMakingTheExecutionDue() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder()
+                .attributes(executionItem("tenant-a", "exec-remote", "key-remote", ttl,
+                    ExecutionStatus.REMOTE_OUTCOME_UNKNOWN))
+                .build());
+
+        ExecutionRecord<Object, Object> parked = store.markRemoteOutcomeUnknown(
+                "tenant-a",
+                "exec-remote",
+                4L,
+                "exec-remote:2:1",
+                "REMOTE_OUTCOME_UNKNOWN",
+                "remote REST outcome is unknown",
+                now)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionStatus.REMOTE_OUTCOME_UNKNOWN, parked.status());
+        ArgumentCaptor<UpdateItemRequest> request = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(request.capture());
+        assertTrue(request.getValue().updateExpression().contains("#status = :outcomeUnknown"));
+        assertEquals(Long.toString(Long.MAX_VALUE),
+            request.getValue().expressionAttributeValues().get(":nextDue").n());
+    }
+
+    @Test
     void markSucceededPreservesCanonicalResultItemIdentity() throws Exception {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
@@ -726,7 +818,8 @@ class DynamoExecutionStateStoreTest {
         assertEquals("Request timeout", result.get().errorMessage());
         verify(client).updateItem(argThat((UpdateItemRequest request) ->
             !request.updateExpression().contains("#resume")
-                && !request.updateExpression().contains("#awaitInteraction")));
+                && !request.updateExpression().contains("#awaitInteraction")
+                && "redrive_intent".equals(request.expressionAttributeNames().get("#redriveIntent"))));
     }
 
     @Test
@@ -763,7 +856,10 @@ class DynamoExecutionStateStoreTest {
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;
-        Map<String, AttributeValue> failedItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED);
+        Map<String, AttributeValue> failedItem = new HashMap<>(
+            executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED));
+        failedItem.put("failed_step_index", AttributeValue.builder().n("13").build());
+        failedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
 
         when(client.updateItem(any(UpdateItemRequest.class)))
             .thenReturn(UpdateItemResponse.builder().attributes(failedItem).build());
@@ -776,11 +872,21 @@ class DynamoExecutionStateStoreTest {
                 "exec-1:0:0",
                 "FATAL",
                 "Fatal error",
+                13,
+                Optional.of("archive:confirmation-7"),
                 now)
             .await().indefinitely();
 
         assertTrue(result.isPresent());
         assertEquals(ExecutionStatus.FAILED, result.get().status());
+        assertEquals(13, result.get().failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.get().failedCommandId());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#failedStep = :failedStep")
+                && request.updateExpression().contains("#failedCommand = :failedCommand")
+                && "13".equals(request.expressionAttributeValues().get(":failedStep").n())
+                && "archive:confirmation-7".equals(
+                    request.expressionAttributeValues().get(":failedCommand").s())));
     }
 
     @Test
@@ -841,6 +947,46 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void deliberateCommandRetryPersistsIntentWithAtomicTerminalUpdate() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> queuedItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.QUEUED));
+        queuedItem.put("attempt", AttributeValue.builder().n("3").build());
+        queuedItem.put("redrive_intent", AttributeValue.builder()
+            .s(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name()).build());
+        queuedItem.put("failed_step_index", AttributeValue.builder().n("4").build());
+        queuedItem.put("failed_command_id", AttributeValue.builder().s("archive:confirmation-7").build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(queuedItem).build());
+
+        ExecutionRecord<Object, Object> result = store.redriveTerminalExecution(
+                "tenant-a",
+                "exec-1",
+                2L,
+                true,
+                ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+                "command-retry:exec-1:2",
+                now)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, result.redriveIntent());
+        assertEquals(4, result.failedStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.failedCommandId());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#redriveIntent = :redriveIntent")
+                && request.expressionAttributeValues().get(":redriveIntent").s()
+                    .equals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name())));
+    }
+
+    @Test
     void findDueExecutionsReturnsEmptyListWhenLimitIsZero() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
@@ -884,6 +1030,38 @@ class DynamoExecutionStateStoreTest {
         assertTrue(result.isPresent());
         assertEquals(ExecutionStatus.RUNNING, result.get().status());
         assertEquals("worker-1", result.get().leaseOwner());
+    }
+
+    @Test
+    void renewLeaseIsFencedByOwnerAndVersionWithoutChangingTheVersion() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> renewedItem = new HashMap<>(executionItem(
+            "tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.RUNNING));
+        renewedItem.put("lease_owner", AttributeValue.builder().s("worker-1").build());
+        renewedItem.put("lease_expires_epoch_ms", AttributeValue.builder().n(Long.toString(now + 30_000L)).build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(renewedItem).build());
+
+        ExecutionRecord<Object, Object> renewed = store.renewLease(
+                "tenant-a", "exec-1", 0L, "worker-1", now, 30_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(0L, renewed.version());
+        ArgumentCaptor<UpdateItemRequest> request = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(request.capture());
+        assertTrue(request.getValue().conditionExpression().contains("#status = :running"));
+        assertTrue(request.getValue().conditionExpression().contains("#version = :expectedVersion"));
+        assertTrue(request.getValue().conditionExpression().contains("#leaseOwner = :leaseOwner"));
+        assertTrue(request.getValue().conditionExpression().contains("#leaseExpires > :now"));
+        assertTrue(request.getValue().conditionExpression().contains(
+            "attribute_not_exists(#ttl) OR #ttl > :nowSec"));
+        assertEquals(Long.toString(now / 1000L),
+            request.getValue().expressionAttributeValues().get(":nowSec").n());
+        assertFalse(request.getValue().updateExpression().contains("#version"));
     }
 
     @Test

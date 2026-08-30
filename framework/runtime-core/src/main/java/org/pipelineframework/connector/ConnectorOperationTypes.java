@@ -8,6 +8,7 @@ import java.lang.reflect.WildcardType;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -19,13 +20,31 @@ final class ConnectorOperationTypes {
     static Optional<ConnectorOperationTypeContract> contract(ConnectorOperation operation) {
         Class<?> family = operation instanceof CommandOperation<?, ?, ?>
             ? CommandOperation.class
-            : operation instanceof QueryOperation<?, ?, ?> ? QueryOperation.class : null;
+            : operation instanceof QueryOperation<?, ?, ?>
+                ? QueryOperation.class
+                : operation instanceof StreamingQueryOperation<?, ?, ?> ? StreamingQueryOperation.class : null;
         if (family == null) {
             return Optional.empty();
         }
-        return findArguments(operation.getClass(), family)
+        return findArguments(operation.getClass(), family, Map.of())
             .map(arguments -> new ConnectorOperationTypeContract(
                 normalize(arguments[0]), output(arguments[2])));
+    }
+
+    static Optional<Class<?>> configurationType(ConnectorOperation operation, Class<?> family) {
+        return findArguments(operation.getClass(), family, Map.of())
+            .flatMap(arguments -> rawClass(arguments[1]));
+    }
+
+    private static Optional<Class<?>> rawClass(Type type) {
+        if (type instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        if (type instanceof ParameterizedType parameterized
+            && parameterized.getRawType() instanceof Class<?> raw) {
+            return Optional.of(raw);
+        }
+        return Optional.empty();
     }
 
     private static Optional<String> output(Type type) {
@@ -35,24 +54,77 @@ final class ConnectorOperationTypes {
         return Optional.of(normalize(type));
     }
 
-    private static Optional<Type[]> findArguments(Type candidate, Class<?> family) {
+    private static Optional<Type[]> findArguments(
+        Type candidate,
+        Class<?> family,
+        Map<TypeVariable<?>, Type> inheritedBindings
+    ) {
         if (candidate instanceof ParameterizedType parameterized) {
-            if (parameterized.getRawType().equals(family)) {
-                return Optional.of(parameterized.getActualTypeArguments());
+            if (!(parameterized.getRawType() instanceof Class<?> rawType)) {
+                return Optional.empty();
             }
-            return findArguments(parameterized.getRawType(), family);
+            Type[] actualArguments = parameterized.getActualTypeArguments();
+            TypeVariable<?>[] variables = rawType.getTypeParameters();
+            Map<TypeVariable<?>, Type> bindings = new HashMap<>(inheritedBindings);
+            for (int index = 0; index < variables.length; index++) {
+                bindings.put(variables[index], resolve(actualArguments[index], inheritedBindings));
+            }
+            if (rawType.equals(family)) {
+                return Optional.of(java.util.Arrays.stream(actualArguments)
+                    .map(argument -> resolve(argument, inheritedBindings))
+                    .toArray(Type[]::new));
+            }
+            return findArguments(rawType, family, bindings);
         }
         if (!(candidate instanceof Class<?> type)) {
             return Optional.empty();
         }
         for (Type implemented : type.getGenericInterfaces()) {
-            Optional<Type[]> found = findArguments(implemented, family);
+            Optional<Type[]> found = findArguments(implemented, family, inheritedBindings);
             if (found.isPresent()) {
                 return found;
             }
         }
         Type parent = type.getGenericSuperclass();
-        return parent == null ? Optional.empty() : findArguments(parent, family);
+        return parent == null ? Optional.empty() : findArguments(parent, family, inheritedBindings);
+    }
+
+    private static Type resolve(Type type, Map<TypeVariable<?>, Type> bindings) {
+        if (type instanceof TypeVariable<?> variable) {
+            Type resolved = bindings.get(variable);
+            return resolved == null || resolved.equals(variable) ? variable : resolve(resolved, bindings);
+        }
+        if (type instanceof ParameterizedType parameterized) {
+            return new ResolvedParameterizedType(
+                parameterized.getRawType(),
+                java.util.Arrays.stream(parameterized.getActualTypeArguments())
+                    .map(argument -> resolve(argument, bindings))
+                    .toArray(Type[]::new),
+                parameterized.getOwnerType());
+        }
+        return type;
+    }
+
+    private record ResolvedParameterizedType(Type rawType, Type[] arguments, Type ownerType)
+        implements ParameterizedType {
+        private ResolvedParameterizedType {
+            arguments = arguments.clone();
+        }
+
+        @Override
+        public Type[] getActualTypeArguments() {
+            return arguments.clone();
+        }
+
+        @Override
+        public Type getRawType() {
+            return rawType;
+        }
+
+        @Override
+        public Type getOwnerType() {
+            return ownerType;
+        }
     }
 
     private static String normalize(Type type) {

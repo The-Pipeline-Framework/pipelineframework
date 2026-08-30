@@ -226,6 +226,25 @@ class FunctionTransportBridgeTest {
     }
 
     @Test
+    void boundedFunctionMaterializationRejectsBufferOverflowInsteadOfTruncating() {
+        CollectListFunctionSinkAdapter<Integer> sink = new CollectListFunctionSinkAdapter<>(
+            new BatchingPolicy(2, 1024, Duration.ofMillis(50), 1, BatchOverflowPolicy.BUFFER));
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeManyToMany(
+                "event",
+                context,
+                createStreamingSourceAdapter(1, 2, 3),
+                createManyToManyInvokeAdapter(),
+                sink));
+
+        assertEquals(
+            "Function sink overflow: received at least 3 items with maxItems=2 and overflowPolicy=BUFFER",
+            ex.getMessage());
+    }
+
+    @Test
     void propagatesInvokeExceptionsAcrossShapes() {
         RuntimeException boom = new RuntimeException("invoke boom");
 

@@ -43,6 +43,73 @@ steps:
 
 The input type is what the pipeline sends to external reality. The output type is what the pipeline expects before it can continue. TPF handles the interaction identity, correlation, persistence, replay, and transport adapter around that contract.
 
+### Constructing output from the suspended request
+
+Human interfaces and external providers should submit only the facts they own. When
+the canonical Await output also needs trusted fields from the suspended request,
+declare a smaller completion type and a pure projector:
+
+```yaml
+steps:
+  - name: Confirm Property
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PendingConfirmation
+    output: ConfirmedInvoice
+    timeout: PT8H
+    await:
+      correlation:
+        strategy: interactionId
+      completion:
+        type: com.example.PropertyChoice
+        projector: com.example.ConfirmedInvoiceProjector
+      transport:
+        type: interaction-api
+```
+
+The projector implements `AwaitCompletionProjector<PendingConfirmation,
+PropertyChoice, ConfirmedInvoice>`. It receives the canonical request, the admitted
+actor payload, and framework-authored completion metadata such as `completedAt`.
+It must be public, have a public no-argument constructor, and remain deterministic
+and side-effect free.
+
+TPF persists the request and projected completion as canonical values. Recovery
+therefore rebuilds the descriptor and resumes from the already projected output;
+it does not ask the browser to echo trusted invoice state and does not call the
+projector again for normally admitted canonical completions.
+
+### Await on a union alternative
+
+In v3, `accepts` selects the union alternatives that invoke an Await step, just as it
+selects the alternatives that invoke an ordinary step:
+
+```yaml
+steps:
+  - name: Clarify
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PreparationDecision
+    accepts: [ClarificationRequired]
+    output: Prepared
+    timeout: PT8H
+    await:
+      correlation: { strategy: interactionId }
+      completion:
+        type: com.example.ClarificationAnswer
+        projector: com.example.ClarificationProjector
+      transport: { type: interaction-api }
+```
+
+Here the projector implements `AwaitCompletionProjector<ClarificationRequired,
+ClarificationAnswer, Prepared>`. The compiler proves all three generic arguments and
+generates the Await boundary with `ClarificationRequired` as its request type. If the
+step accepts multiple variants, or omits `accepts`, the projector input remains the
+declared `PreparationDecision` union.
+
+Alternatives not accepted by the Await do not invoke it and continue unchanged through
+the ordinary v3 pipeline flow. There is no Await-specific pass-through mapper and no implicit
+collection-to-stream or stream-to-collection conversion.
+
 ## Cardinality Shapes
 
 Cardinality defines what the pipeline is waiting for and what must be replayable after completion.

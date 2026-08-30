@@ -21,8 +21,6 @@ import org.pipelineframework.connector.ConnectorBindingDefinition;
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
-import org.pipelineframework.connector.ConnectorConcurrencyScope;
-import org.pipelineframework.connector.ConnectorExecutionStyle;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
@@ -145,9 +143,6 @@ class FilesystemPayloadMaterializationTest {
         scheduled.get().run();
         assertArrayEquals(expected, pending.toCompletableFuture().join().bytes());
 
-        var capabilities = new FilesystemObjectConnector().executionCapabilities();
-        assertEquals(ConnectorExecutionStyle.PROVIDER_MANAGED, capabilities.executionStyle());
-        assertEquals(ConnectorConcurrencyScope.PROVIDER_MANAGED, capabilities.concurrencyScope());
     }
 
     private PipelineObjectSourceConfig source() {

@@ -566,8 +566,15 @@ public record StepDefinition(
             if (executionClass != null || remoteExecution != null) {
                 throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
             }
-            Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
-            Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            if (kind != StepKind.AWAIT) {
+                Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
+                Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            } else if ((inputType == null) != (outputType == null)) {
+                Objects.requireNonNull(inputType,
+                    "AWAIT input and output Java types must either both be declared or both be compiler-resolved");
+                Objects.requireNonNull(outputType,
+                    "AWAIT input and output Java types must either both be declared or both be compiler-resolved");
+            }
             if (kind == StepKind.PIPELINE && pipelineReference.isEmpty()) {
                 throw new IllegalArgumentException("pipelineReference cannot be blank for PIPELINE steps");
             }

@@ -17,11 +17,14 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding;
 import org.pipelineframework.config.pipeline.PipelineYamlOperationSelection;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -31,9 +34,12 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.phase.NamingPolicy;
+import org.pipelineframework.processor.representation.PersistenceRepresentationMappingResolver;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
+import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 
 /**
@@ -51,7 +57,12 @@ public class QueryClientStepRenderer {
             : model.generatedName();
         String className = baseName + "QueryClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
-        Optional<NativeCacheRequirements> nativeCacheRequirements = resolveNativeCacheRequirements(model, ctx);
+        boolean streaming = model.streamingShape() == StreamingShape.UNARY_STREAMING;
+        Optional<NativeCacheRequirements> nativeCacheRequirements = streaming
+            ? Optional.empty()
+            : resolveNativeCacheRequirements(model, ctx);
+        Optional<QueryPersistenceRepresentation> persistenceRepresentation =
+            resolveQueryPersistenceRepresentation(model, ctx, configHints);
         TypeName inputType = clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage());
         TypeName outputType = clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage());
 
@@ -72,17 +83,23 @@ public class QueryClientStepRenderer {
             .addStatement("return $T.class", outputType)
             .build();
 
-        MethodSpec apply = MethodSpec.methodBuilder("applyOneToOne")
+        MethodSpec.Builder apply = MethodSpec.methodBuilder(streaming ? "applyOneToMany" : "applyOneToOne")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
-            .addParameter(inputType, "input")
-            .addStatement("return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
-                model.serviceName(),
-                inputType.toString(),
-                outputType.toString(),
-                outputType)
-            .build();
+            .returns(ParameterizedTypeName.get(ClassName.get(streaming ? Multi.class : Uni.class), outputType))
+            .addParameter(inputType, "input");
+        persistenceRepresentation.ifPresentOrElse(
+            mapping -> apply.addStatement(
+                streaming
+                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)"
+                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)",
+                model.serviceName(), inputType.toString(), outputType.toString(), outputType,
+                mapping.representationType()),
+            () -> apply.addStatement(
+                streaming
+                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class)"
+                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
+                model.serviceName(), inputType.toString(), outputType.toString(), outputType));
 
         TypeSpec.Builder type = TypeSpec.classBuilder(className)
             .addModifiers(Modifier.PUBLIC)
@@ -98,13 +115,22 @@ public class QueryClientStepRenderer {
                 .addMember("threadSafety", "$T.$L", ClassName.get(ThreadSafety.class), ThreadSafety.SAFE.name())
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
-            .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
+            .addSuperinterface(ParameterizedTypeName.get(
+                ClassName.get(streaming ? StepOneToMany.class : StepOneToOne.class), inputType, outputType))
             .addField(support)
             .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
-            .addMethod(cacheKeyTargetType)
-            .addMethod(apply);
+            .addMethod(apply.build());
+
+        if (!streaming) {
+            type.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
+                .addMethod(cacheKeyTargetType);
+        }
+
+        persistenceRepresentation.ifPresent(mapping -> type.addField(
+            FieldSpec.builder(mapping.mapperType(), "representationMapper", Modifier.PRIVATE)
+                .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
+                .build()));
 
         nativeCacheRequirements.ifPresent(requirements -> type
             .addSuperinterface(ClassName.get("org.pipelineframework.query", "ProviderQueryStep"))
@@ -237,6 +263,45 @@ public class QueryClientStepRenderer {
             step.negativeCacheTtl()));
     }
 
+    private Optional<QueryPersistenceRepresentation> resolveQueryPersistenceRepresentation(
+        PipelineStepModel model,
+        GenerationContext ctx,
+        PipelineConfigHints configHints
+    ) {
+        if (configHints.transportMode() != PipelineTransport.LOCAL
+            || !(model.outboundDomainType() instanceof ClassName domainType)
+            || ctx.processingEnv() == null
+            || ctx.processingEnv().getOptions() == null) {
+            return Optional.empty();
+        }
+        String configuredPath = ctx.processingEnv().getOptions().get("pipeline.config");
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return Optional.empty();
+        }
+        Path path = Path.of(configuredPath);
+        PipelineYamlConfig yaml = new PipelineYamlConfigLoader(
+            ctx.processingEnv().getOptions()::get, System::getenv).load(path);
+        PipelineYamlStep step = yaml.steps().stream()
+            .filter(candidate -> matchesServiceName(model.serviceName(), candidate.name()))
+            .filter(candidate -> "query".equalsIgnoreCase(candidate.kind()))
+            .findFirst()
+            .orElse(null);
+        if (step == null || step.operationSelection().isEmpty()) {
+            return Optional.empty();
+        }
+        PipelineYamlOperationSelection operation = step.operationSelection().orElseThrow();
+        PipelineYamlConnectorBinding binding = yaml.connectors().get(operation.using());
+        if (binding == null || !"jpa.query".equals(binding.provider()) || !"find.one".equals(operation.operation())) {
+            return Optional.empty();
+        }
+        PipelineTemplateConfig template = new PipelineTemplateConfigLoader(
+            ctx.processingEnv().getOptions()::get, System::getenv).load(path);
+        return PersistenceRepresentationMappingResolver.resolve(template, domainType, ctx.processingEnv())
+            .filter(mapping -> mapping.representationType().canonicalName().equals(step.commandConfig().get("entity")))
+            .map(mapping -> new QueryPersistenceRepresentation(
+                mapping.representationType(), mapping.mapperType()));
+    }
+
     private static ClassLoader metadataClassLoader() {
         return ConnectorProviderManifestLoader.metadataClassLoader(QueryClientStepRenderer.class);
     }
@@ -333,5 +398,8 @@ public class QueryClientStepRenderer {
         QueryCapabilities capabilities,
         Optional<java.time.Duration> negativeCacheTtl
     ) {
+    }
+
+    private record QueryPersistenceRepresentation(ClassName representationType, ClassName mapperType) {
     }
 }

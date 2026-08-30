@@ -63,9 +63,11 @@ public final class PipelineInvocationSteps {
      *
      * <p>Generated invocation beans call this factory from each reactive application; they must not
      * cache the returned adapter across parent invocations. The parent is captured from
-     * {@link PipelineInvocationContextHolder}, and the child frame is entered when the returned
-     * {@link Uni} is subscribed. Recursive descent and return signals use Mutiny's default executor
-     * as a trampoline so the configured depth does not consume the JVM call stack.
+     * {@link PipelineInvocationContextHolder} together with the complete runtime context snapshot,
+     * and the child frame is entered when the returned {@link Uni} is subscribed. The snapshot is
+     * restored while the child graph is created on Mutiny's default executor; ordinary contextual
+     * step wrappers preserve it for later emissions. Recursive descent and return signals use that
+     * executor as a trampoline so the configured depth does not consume the JVM call stack.
      *
      * @throws IllegalStateException when no parent invocation context is active
      */
@@ -81,7 +83,8 @@ public final class PipelineInvocationSteps {
                 "Recursive pipeline invocation executed without an invocation context"));
         return new OneToOneInvocationStep<>(
             runner, definitionId, definitionTerminalStepIndex, linkedChildSteps,
-            Optional.of(new RecursiveCall(required(callsiteId, "callsiteId"), parentContext)));
+            Optional.of(new RecursiveCall(
+                required(callsiteId, "callsiteId"), parentContext, InvocationContextSnapshot.capture())));
     }
 
     public static <I, O> StepOneToOne<I, O> recursiveOneToOne(
@@ -176,14 +179,28 @@ public final class PipelineInvocationSteps {
         @SuppressWarnings("unchecked")
         public Uni<O> applyOneToOne(I input) {
             if (recursiveCall.isPresent()) {
-                return Uni.createFrom().deferred(() -> {
-                    PipelineInvocationContext active = activeParentContext(recursiveCall.orElseThrow());
-                    return Uni.createFrom().deferred(() -> invokeOneToOne(input, Optional.of(active)))
-                        .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                        .emitOn(Infrastructure.getDefaultExecutor());
-                });
+                RecursiveCall call = recursiveCall.orElseThrow();
+                requireMatchingParentWhenActive(call);
+                return Uni.createFrom().deferred(() -> invokeWithParentContext(input, call))
+                    .runSubscriptionOn(Infrastructure.getDefaultExecutor())
+                    .emitOn(Infrastructure.getDefaultExecutor());
             }
             return invokeOneToOne(input, Optional.empty());
+        }
+
+        private Uni<O> invokeWithParentContext(I input, RecursiveCall call) {
+            requireMatchingParentWhenActive(call);
+            return call.context().call(
+                () -> invokeOneToOne(input, Optional.of(call.parentContext())));
+        }
+
+        private void requireMatchingParentWhenActive(RecursiveCall call) {
+            PipelineInvocationContextHolder.get().ifPresent(active -> {
+                if (!active.equals(call.parentContext())) {
+                    throw new IllegalStateException(
+                        "Recursive pipeline invocation adapter does not belong to the active parent invocation");
+                }
+            });
         }
 
         @SuppressWarnings("unchecked")
@@ -198,22 +215,17 @@ public final class PipelineInvocationSteps {
             throw new IllegalStateException("Linked ONE_TO_ONE pipeline returned a streaming result");
         }
 
-        private PipelineInvocationContext activeParentContext(RecursiveCall call) {
-            PipelineInvocationContext active = PipelineInvocationContextHolder.get()
-                .orElseThrow(() -> new IllegalStateException(
-                    "Recursive pipeline invocation subscribed without an invocation context"));
-            if (!active.equals(call.parentContext())) {
-                throw new IllegalStateException(
-                    "Recursive pipeline invocation adapter does not belong to the active parent invocation");
-            }
-            return active;
-        }
     }
 
-    private record RecursiveCall(String callsiteId, PipelineInvocationContext parentContext) {
+    private record RecursiveCall(
+        String callsiteId,
+        PipelineInvocationContext parentContext,
+        InvocationContextSnapshot context
+    ) {
         private RecursiveCall {
             callsiteId = required(callsiteId, "callsiteId");
             parentContext = Objects.requireNonNull(parentContext, "parentContext must not be null");
+            context = Objects.requireNonNull(context, "context must not be null");
         }
     }
 

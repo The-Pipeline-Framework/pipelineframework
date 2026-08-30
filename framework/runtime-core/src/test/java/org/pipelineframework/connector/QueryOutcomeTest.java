@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
 
 class QueryOutcomeTest {
@@ -48,5 +49,42 @@ class QueryOutcomeTest {
 
         assertTrue(leading.getMessage().contains("start with a lowercase letter"), leading.getMessage());
         assertTrue(longCode.getMessage().contains("at most 128 characters"), longCode.getMessage());
+    }
+
+    @Test
+    void tokenUsagePreservesIndependentProviderCounts() {
+        QueryTokenUsage usage = new QueryTokenUsage(
+            OptionalLong.of(12), OptionalLong.empty(), OptionalLong.of(99));
+
+        assertEquals(OptionalLong.of(12), usage.inputTokens());
+        assertEquals(OptionalLong.empty(), usage.outputTokens());
+        assertEquals(OptionalLong.of(99), usage.totalTokens());
+        assertThrows(IllegalArgumentException.class, () -> new QueryTokenUsage(
+            OptionalLong.of(-1), OptionalLong.empty(), OptionalLong.empty()));
+    }
+
+    @Test
+    void observationsConvertOriginWithoutChangingHistoricalMetadata() {
+        QueryTokenUsage usage = new QueryTokenUsage(
+            OptionalLong.of(4), OptionalLong.of(2), OptionalLong.empty());
+        QueryObservation live = QueryObservation.live(
+            Optional.of(usage), Optional.of("provider-model"), Optional.of("stop"));
+
+        QueryObservation replay = live.asReplay();
+
+        assertEquals(QueryObservationOrigin.LIVE_PROVIDER, live.origin());
+        assertEquals(QueryObservationOrigin.CAPTURE_REPLAY, replay.origin());
+        assertEquals(live.tokenUsage(), replay.tokenUsage());
+        assertEquals(live.responseModel(), replay.responseModel());
+        assertEquals(live.finishReason(), replay.finishReason());
+    }
+
+    @Test
+    void legacyOutcomeConstructorsLeaveObservationAbsent() {
+        assertTrue(new QueryOutcome.Found<>("value").observation().isEmpty());
+        assertTrue(new QueryOutcome.NotFound<>("missing").observation().isEmpty());
+        assertTrue(new QueryOutcome.TemporarilyUnavailable<>("busy").observation().isEmpty());
+        assertTrue(new QueryOutcome.AuthenticationRequired<>("auth-required").observation().isEmpty());
+        assertTrue(new QueryOutcome.TerminalFailure<>("failed").observation().isEmpty());
     }
 }

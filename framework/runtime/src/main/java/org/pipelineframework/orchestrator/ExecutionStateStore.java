@@ -113,6 +113,47 @@ public interface ExecutionStateStore {
         long leaseMs);
 
     /**
+     * Reports whether this store can renew a live execution lease without changing its version.
+     *
+     * <p>Queue-async execution requires this capability so a transition cannot outlive its claim.
+     * Existing providers remain source compatible but fail closed when selected for queue mode until
+     * they implement {@link #renewLease(String, String, long, String, long, long)}.</p>
+     *
+     * @return {@code true} when live lease renewal is supported
+     */
+    default boolean supportsLeaseRenewal() {
+        return false;
+    }
+
+    /**
+     * Extends a live execution lease without changing the claimed record version.
+     *
+     * <p>The renewal must succeed only while the execution is still {@link ExecutionStatus#RUNNING},
+     * the expected record version still matches, {@code leaseOwner} still owns an unexpired lease,
+     * and the renewal wins before expiry. This
+     * keeps the original optimistic-concurrency token valid for the eventual segment commit while
+     * preventing another worker from reclaiming a transition that is still executing.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param expectedVersion claimed execution record version
+     * @param leaseOwner current lease owner
+     * @param nowEpochMs current timestamp
+     * @param leaseMs lease duration in ms
+     * @return renewed execution when ownership still matches, otherwise empty
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String leaseOwner,
+        long nowEpochMs,
+        long leaseMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "ExecutionStateStore provider '" + providerName() + "' does not support live lease renewal"));
+    }
+
+    /**
      * Marks an execution as succeeded if expected version matches.
      *
      * @param tenantId tenant identifier
@@ -228,6 +269,21 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Records a remote transition whose caller deadline elapsed without confirming that the
+     * remote worker stopped or completed. This state must not be eligible for automatic retry.
+     *
+     * @return the updated execution when its version still matches
+     */
+    Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        long nowEpochMs);
+
+    /**
      * Defers an execution whose dependency invocation was denied before it started.
      *
      * <p>This transition deliberately preserves {@code attempt}; circuit deferrals are bounded by
@@ -273,6 +329,45 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Marks an execution terminal while retaining the pipeline step that actually failed.
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, nowEpochMs);
+    }
+
+    /** Marks an execution terminal while retaining both resume and logical Command identities. */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        Optional<String> failedCommandId,
+        long nowEpochMs) {
+        if (failedCommandId.flatMap(value -> value.isBlank() ? Optional.empty() : Optional.of(value)).isPresent()) {
+            return Uni.createFrom().failure(new UnsupportedOperationException(
+                "Execution state store does not preserve exact failed Command identity"));
+        }
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, failedStepIndex, nowEpochMs);
+    }
+
+    /**
      * Re-queues a terminal execution for operator-controlled re-drive.
      *
      * @param tenantId tenant identifier
@@ -290,6 +385,29 @@ public interface ExecutionStateStore {
         boolean allowFailed,
         String transitionKey,
         long nowEpochMs);
+
+    /**
+     * Re-queues a terminal execution with an explicit redrive intent.
+     *
+     * <p>Stores that have not added durable intent support remain compatible with ordinary
+     * {@link ExecutionRedriveIntent#REPLAY} redrives, but must fail rather than silently discard
+     * deliberate Command retry intent.</p>
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String transitionKey,
+        long nowEpochMs) {
+        if (intent == null || intent == ExecutionRedriveIntent.REPLAY) {
+            return redriveTerminalExecution(
+                tenantId, executionId, expectedVersion, allowFailed, transitionKey, nowEpochMs);
+        }
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support durable deliberate Command retry intent"));
+    }
 
     /**
      * Finds executions due for dispatch.

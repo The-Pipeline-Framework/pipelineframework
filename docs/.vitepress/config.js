@@ -16,6 +16,7 @@
 
 import {defineConfig} from 'vitepress'
 import {withMermaid} from "vitepress-plugin-mermaid"
+import {isCoffeeMachinePage, stripAuthorOnlyFrontmatter} from './coffee-machine/visibility-policy.js'
 
 // Use withMermaid to wrap the entire configuration - this enables GitHub-style mermaid code blocks
 // Note: This adds significant size to the bundle due to Mermaid's dependencies
@@ -27,6 +28,17 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/value/'},
+            {
+                text: 'Coffee Machine',
+                link: '/value/coffee-machine/',
+                collapsed: true,
+                items: [
+                    {text: 'Coffee Machine', link: '/value/coffee-machine/'},
+                    {text: 'Search', link: '/value/coffee-machine/search'},
+                    {text: 'Quotes', link: '/value/coffee-machine/quotes'},
+                    {text: 'Personas', link: '/value/coffee-machine/personas'}
+                ]
+            },
             {text: 'Business Value', link: '/value/business-value'},
             {text: 'Developer Joy', link: '/value/developer-experience'},
             {text: 'Performance', link: '/value/runtime-efficiency'},
@@ -42,6 +54,18 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/design/'},
+            {text: 'Architectural Decisions', link: '/decisions/'},
+            {
+                text: 'Data Architecture',
+                link: '/design/data-architecture/',
+                collapsed: true,
+                items: [
+                    {text: 'Immutable Dataflow', link: '/design/data-architecture/'},
+                    {text: 'Data coupling', link: '/design/data-architecture/carry-data-computation'},
+                    {text: 'Query and Command', link: '/design/data-architecture/query-command'},
+                    {text: 'Effects and comparisons', link: '/design/data-architecture/workflow-effects'}
+                ]
+            },
             {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
             {text: 'State Model', link: '/design/state-model'},
             {text: 'Application Structure', link: '/design/application-structure'},
@@ -137,6 +161,7 @@ const mainSidebar = [
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
                     {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
+                    {text: 'Host-authenticated Connectors', link: '/develop/extension/host-authenticated-connectors'},
                     {text: 'One-turn LLM Query', link: '/develop/extension/llm-query'},
                     {text: 'Reactive Services', link: '/develop/extension/reactive-services'},
                     {text: 'REST Resources', link: '/develop/extension/rest-resources'}
@@ -547,6 +572,10 @@ export default withMermaid(
     },
 
     transformPageData: (pageData, { siteConfig }) => {
+        if (isCoffeeMachinePage(pageData.relativePath)) {
+            stripAuthorOnlyFrontmatter(pageData.frontmatter)
+        }
+
         // Initialize the `head` frontmatter if it doesn't exist.
         pageData.frontmatter.head ??= []
 

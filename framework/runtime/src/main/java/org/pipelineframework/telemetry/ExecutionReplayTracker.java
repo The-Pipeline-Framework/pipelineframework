@@ -350,6 +350,13 @@ final class ExecutionReplayTracker {
             if (!scope.started()) {
                 return;
             }
+            // ONE_TO_MANY retries resubscribe the source expansion. The sequence belongs to
+            // this StepExecutionScope (one logical upstream item), not to the step, so only
+            // the retried expansion is rewound. Stable provider ordering then recreates the
+            // same deterministic child identities for a re-emitted prefix.
+            if ("one-to-many".equals(scope.descriptor().cardinality())) {
+                scope.outputSequence().set(-1L);
+            }
             int attempt = scope.retryAttempt().incrementAndGet();
             double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
             PipelineExecutionEvent event = newEvent(

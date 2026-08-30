@@ -8,8 +8,11 @@ import java.util.Set;
 import com.google.protobuf.Int32Value;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.context.PipelineContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -22,7 +25,9 @@ class TransitionCommandEnvelopeTest {
     @Test
     void preservesTypedUniInputPayloadAcrossEnvelopeRoundTrip() {
         SamplePayload payload = new SamplePayload("order-1", 42);
-        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(ExecutionInputShape.UNI, payload));
+        PipelineContext pipelineContext = PipelineContext.fromHeaders("v2", "true", "require-cache");
+        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI, payload, pipelineContext));
 
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             command,
@@ -43,6 +48,7 @@ class TransitionCommandEnvelopeTest {
         SamplePayload decodedPayload = assertInstanceOf(SamplePayload.class, snapshot.payload());
         assertEquals("order-1", decodedPayload.id());
         assertEquals(42, decodedPayload.amount());
+        assertEquals(Optional.of(pipelineContext), snapshot.pipelineContext());
     }
 
     @Test
@@ -70,6 +76,58 @@ class TransitionCommandEnvelopeTest {
         assertEquals(5, envelope.currentStepIndex());
         assertEquals(7, envelope.stopBeforeStepIndex());
         assertEquals(7, decoded.stopBeforeStepIndex());
+    }
+
+    @Test
+    void preservesDeliberateCommandRetryIntentAcrossEnvelopeRoundTrip() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            3,
+            -1,
+            0,
+            ExecutionResultShape.SINGLE,
+            7L,
+            "command-retry:exec-1:6",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            5,
+            Optional.of("archive:payment-1"));
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+        TransitionWorkerCommand decoded = envelope.toCommand(payloadCodec);
+
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, envelope.redriveIntent());
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, decoded.redriveIntent());
+        assertEquals(3, decoded.currentStepIndex());
+        assertEquals(5, envelope.redriveStepIndex());
+        assertEquals(5, decoded.redriveStepIndex());
+        assertEquals(Optional.of("archive:payment-1"), envelope.redriveCommandId());
+        assertEquals(Optional.of("archive:payment-1"), decoded.redriveCommandId());
+    }
+
+    @Test
+    void intentAwareWorkerConstructorCarriesExactRetryCommandIdentity() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            3,
+            0,
+            ExecutionResultShape.SINGLE,
+            7L,
+            "command-retry:exec-1:6",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
+            ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            Optional.of("archive:payment-1"));
+
+        assertEquals(3, command.redriveStepIndex());
+        assertEquals(Optional.of("archive:payment-1"), command.redriveCommandId());
     }
 
     @Test

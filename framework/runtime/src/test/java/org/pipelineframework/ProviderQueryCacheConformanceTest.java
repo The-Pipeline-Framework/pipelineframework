@@ -59,7 +59,7 @@ class ProviderQueryCacheConformanceTest {
     @Test
     void preferAndRequireHitsArePipelineReplayWithoutLiveObservation() {
         QueryOutput cached = new QueryOutput("cached");
-        RecordingCache cache = new RecordingCache(Map.of("v1:key", cached));
+        RecordingCache cache = new RecordingCache(Map.of("2:v1:key", cached));
         GeneratedLikeQueryStep preferStep = step(QueryCapabilities.cacheable(), Optional.empty(), false);
         GeneratedLikeQueryStep requireStep = step(QueryCapabilities.cacheable(), Optional.empty(), false);
 
@@ -85,7 +85,7 @@ class ProviderQueryCacheConformanceTest {
 
     @Test
     void bypassPerformsNoGenericCacheIo() {
-        RecordingCache cache = new RecordingCache(Map.of("v1:key", new QueryOutput("old")));
+        RecordingCache cache = new RecordingCache(Map.of("2:v1:key", new QueryOutput("old")));
         GeneratedLikeQueryStep step = step(QueryCapabilities.conservative(), Optional.empty(), false);
 
         assertEquals(new QueryOutput("live-input"), run(step, cache, "bypass-cache", Optional.empty()));
@@ -96,7 +96,7 @@ class ProviderQueryCacheConformanceTest {
 
     @Test
     void rejectsSkipIfPresentAndLiveOnlyReuseBeforeQueryExecution() {
-        RecordingCache cache = new RecordingCache(Map.of("v1:key", new QueryOutput("old")));
+        RecordingCache cache = new RecordingCache(Map.of("2:v1:key", new QueryOutput("old")));
         GeneratedLikeQueryStep cacheable = step(QueryCapabilities.cacheable(), Optional.empty(), false);
         GeneratedLikeQueryStep liveOnly = step(QueryCapabilities.conservative(), Optional.empty(), false);
 
@@ -184,7 +184,7 @@ class ProviderQueryCacheConformanceTest {
         assertEquals("missing", first.outcomeCode());
         assertEquals(1, live.calls.get());
         assertEquals(negativeTtl, cache.lastTtl);
-        assertEquals(new QueryNotFoundCacheEntry("missing"), cache.values.get("v1:key"));
+        assertEquals(new QueryNotFoundCacheEntry("missing"), cache.values.get("2:v1:key"));
 
         GeneratedLikeQueryStep replay = step(capabilities, Optional.of(negativeTtl), true);
         QueryNotFoundException replayed = assertThrows(QueryNotFoundException.class,
@@ -205,7 +205,7 @@ class ProviderQueryCacheConformanceTest {
             () -> run(cacheOnly, cacheOnlyCache, "cache-only", Optional.empty()));
         assertEquals(0, cacheOnlyCache.getCalls.get());
         assertEquals(1, cacheOnlyCache.putCalls.get());
-        assertEquals(new QueryNotFoundCacheEntry("missing"), cacheOnlyCache.values.get("v1:key"));
+        assertEquals(new QueryNotFoundCacheEntry("missing"), cacheOnlyCache.values.get("2:v1:key"));
         assertEquals(CacheStatus.BYPASS, cacheOnly.observedCacheStatus);
 
         RecordingCache bypassCache = new RecordingCache(Map.of());
@@ -218,7 +218,7 @@ class ProviderQueryCacheConformanceTest {
 
     @Test
     void negativeQueryMarkerCannotCrossAnOrdinaryPipelineOutputBoundary() {
-        RecordingCache cache = new RecordingCache(Map.of("v1:key", new QueryNotFoundCacheEntry("missing")));
+        RecordingCache cache = new RecordingCache(Map.of("2:v1:key", new QueryNotFoundCacheEntry("missing")));
         OrdinaryStep ordinary = new OrdinaryStep();
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
@@ -240,6 +240,7 @@ class ProviderQueryCacheConformanceTest {
                 .queryOneToOne(descriptor, new QueryInput("input"), QueryOutput.class)
                 .await().atMost(Duration.ofSeconds(2));
             assertEquals(new QueryOutput("provider-input"), captured);
+            PipelineExecutionContextHolder.clear();
             seedBindings.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
             operation.invocations.set(0);
             operation.starts.set(0);
@@ -247,7 +248,7 @@ class ProviderQueryCacheConformanceTest {
             ConnectorBindingRegistry unavailable = unavailableProviderBindings();
             GeneratedProviderBackedQueryStep replayStep =
                 new GeneratedProviderBackedQueryStep(new QueryStepSupport(List.of(), List.of(captures), unavailable), descriptor);
-            RecordingCache cacheHit = new RecordingCache(Map.of("v1:key", new QueryOutput("cache")));
+            RecordingCache cacheHit = new RecordingCache(Map.of("2:v1:key", new QueryOutput("cache")));
             assertEquals(new QueryOutput("cache"), run(replayStep, cacheHit, "prefer-cache", Optional.empty()));
             assertEquals(0, replayStep.calls.get());
 

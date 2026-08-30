@@ -178,6 +178,8 @@ public class PipelineContractMetadataGenerator {
         Map<String, Object> encoded = new LinkedHashMap<>();
         encoded.put("name", field.name());
         encoded.put("type", typeExpression(field.type()));
+        encoded.put("presence", field.presence().name());
+        encoded.put("nullability", field.nullability().name());
         if (field.repeated()) {
             encoded.put("repeated", true);
         }
@@ -293,6 +295,11 @@ public class PipelineContractMetadataGenerator {
             }
             indexed.put(normalizeStepToken(step.name()), step);
         }
+        config.localPipelines().values().stream()
+            .flatMap(List::stream)
+            .filter(Objects::nonNull)
+            .filter(step -> step.name() != null)
+            .forEach(step -> indexed.put(normalizeStepToken(step.name()), step));
         return indexed;
     }
 

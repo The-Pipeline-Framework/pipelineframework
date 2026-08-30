@@ -192,7 +192,8 @@ public final class CanonicalTypeCatalogue {
         fields.stream().sorted(Comparator.comparing(field -> text(field, "name"))).forEach(field -> {
             String name = text(field, "name");
             properties.set(name, fieldSchema(field));
-            if (!field.path("repeated").asBoolean(false)) {
+            if (!field.path("repeated").asBoolean(false)
+                && "REQUIRED".equals(field.path("presence").asText("REQUIRED"))) {
                 required.add(name);
             }
         });
@@ -203,7 +204,12 @@ public final class CanonicalTypeCatalogue {
     private ObjectNode fieldSchema(JsonNode field) {
         ObjectNode element = referenceSchema(field.path("type"));
         if (!field.path("repeated").asBoolean(false)) {
-            return element;
+            if (!"NULLABLE".equals(field.path("nullability").asText("NON_NULL"))) {
+                return element;
+            }
+            ObjectNode nullable = JSON.createObjectNode();
+            nullable.putArray("oneOf").add(element).addObject().put("type", "null");
+            return nullable;
         }
         ObjectNode array = JSON.createObjectNode();
         array.put("type", "array");
@@ -306,13 +312,23 @@ public final class CanonicalTypeCatalogue {
             }
         }
         fields.forEach((name, definitionField) -> {
+            boolean present = value.has(name);
             JsonNode field = value.get(name);
-            if (field == null || field.isNull()) {
+            if (!present) {
                 if (definitionField.path("repeated").asBoolean(false)) {
                     ((ObjectNode) value).putArray(name);
                     return;
                 }
+                if ("OPTIONAL".equals(definitionField.path("presence").asText("REQUIRED"))) {
+                    return;
+                }
                 throw invalid(path + "." + name, "missing required field");
+            }
+            if (field.isNull()) {
+                if ("NULLABLE".equals(definitionField.path("nullability").asText("NON_NULL"))) {
+                    return;
+                }
+                throw invalid(path + "." + name, "null is not allowed");
             }
             validateField(definitionField, field, path + "." + name, stack);
         });

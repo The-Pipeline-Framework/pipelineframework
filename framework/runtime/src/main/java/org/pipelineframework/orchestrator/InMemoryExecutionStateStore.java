@@ -34,6 +34,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public boolean supportsLeaseRenewal() {
+        return true;
+    }
+
+    @Override
     public Uni<CreateExecutionResult> createOrGetExecution(ExecutionCreateCommand command) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
@@ -141,7 +146,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
                 ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
-                if (current == null || current.status().terminal() || current.status() == ExecutionStatus.WAITING_EXTERNAL) {
+                if (current == null
+                    || current.status().terminal()
+                    || current.status() == ExecutionStatus.WAITING_EXTERNAL
+                    || current.status() == ExecutionStatus.REMOTE_OUTCOME_UNKNOWN) {
                     return Optional.empty();
                 }
                 boolean leaseExpired = current.leaseOwner() == null || current.leaseExpiresEpochMs() <= nowEpochMs;
@@ -175,9 +183,70 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.redriveIntent(),
+                    current.failedStepIndex(),
+                    current.failedCommandId());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String leaseOwner,
+        long nowEpochMs,
+        long leaseMs) {
+        if (leaseMs <= 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("leaseMs must be > 0 for renewLease."));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null
+                    || current.status() != ExecutionStatus.RUNNING
+                    || current.version() != expectedVersion
+                    || !Objects.equals(current.leaseOwner(), leaseOwner)
+                    || current.leaseExpiresEpochMs() <= nowEpochMs) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> renewed = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    current.pipelineId(),
+                    current.contractVersion(),
+                    current.releaseVersion(),
+                    current.resultShape(),
+                    current.status(),
+                    current.version(),
+                    current.currentStepIndex(),
+                    current.attempt(),
+                    current.leaseOwner(),
+                    nowEpochMs + leaseMs,
+                    current.nextDueEpochMs(),
+                    current.lastTransitionKey(),
+                    current.inputPayload(),
+                    current.awaitUnitId(),
+                    current.resultPayload(),
+                    current.errorCode(),
+                    current.errorMessage(),
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity(),
+                    current.redriveIntent(),
+                    current.failedStepIndex(),
+                    current.failedCommandId());
+                executionsByScopedId.put(scopedId, renewed);
+                return Optional.of(renewed);
             }
         });
     }
@@ -387,7 +456,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private static ExecutionInputSnapshot normalizeExecutionInputPayload(Object inputPayload) {
         if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
-            return new ExecutionInputSnapshot(snapshot.shape(), copySnapshotPayload(snapshot.payload()));
+            return new ExecutionInputSnapshot(
+                snapshot.shape(), copySnapshotPayload(snapshot.payload()), snapshot.pipelineContext());
         }
         return new ExecutionInputSnapshot(ExecutionInputShape.RAW, copySnapshotPayload(inputPayload));
     }
@@ -451,6 +521,55 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markRemoteOutcomeUnknown(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        long nowEpochMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null || current.version() != expectedVersion) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    current.pipelineId(),
+                    current.contractVersion(),
+                    current.releaseVersion(),
+                    current.resultShape(),
+                    ExecutionStatus.REMOTE_OUTCOME_UNKNOWN,
+                    current.version() + 1,
+                    current.currentStepIndex(),
+                    current.attempt(),
+                    null,
+                    0L,
+                    Long.MAX_VALUE,
+                    transitionKey,
+                    current.inputPayload(),
+                    current.awaitUnitId(),
+                    null,
+                    errorCode,
+                    truncate(errorMessage),
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
+                executionsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> deferCircuit(
         String tenantId,
         String executionId,
@@ -494,6 +613,39 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         String errorCode,
         String errorMessage,
         long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, -1, Optional.empty(), nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        long nowEpochMs) {
+        return markTerminalFailure(
+            tenantId, executionId, expectedVersion, finalStatus, transitionKey,
+            errorCode, errorMessage, failedStepIndex, Optional.empty(), nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        ExecutionStatus finalStatus,
+        String transitionKey,
+        String errorCode,
+        String errorMessage,
+        int failedStepIndex,
+        Optional<String> failedCommandId,
+        long nowEpochMs) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
             return Uni.createFrom().item(Optional.empty());
         }
@@ -530,7 +682,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    ExecutionRedriveIntent.REPLAY,
+                    failedStepIndex,
+                    failedCommandId);
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -545,6 +700,26 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         boolean allowFailed,
         String transitionKey,
         long nowEpochMs) {
+        return redriveTerminalExecution(
+            tenantId,
+            executionId,
+            expectedVersion,
+            allowFailed,
+            ExecutionRedriveIntent.REPLAY,
+            transitionKey,
+            nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String transitionKey,
+        long nowEpochMs) {
+        ExecutionRedriveIntent resolvedIntent = Objects.requireNonNull(intent, "intent must not be null");
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
@@ -580,7 +755,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    resolvedIntent,
+                    current.failedStepIndex(),
+                    current.failedCommandId());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -601,7 +779,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                         executionIdByScopedKey.remove(scopedExecutionKey(record.tenantId(), record.executionKey()));
                         continue;
                     }
-                    if (record.status().terminal() || record.status() == ExecutionStatus.WAITING_EXTERNAL) {
+                    if (record.status().terminal()
+                        || record.status() == ExecutionStatus.WAITING_EXTERNAL
+                        || record.status() == ExecutionStatus.REMOTE_OUTCOME_UNKNOWN) {
                         continue;
                     }
                     boolean dueNow = record.nextDueEpochMs() <= nowEpochMs;
@@ -632,7 +812,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
-        return status == ExecutionStatus.DLQ || (allowFailed && status == ExecutionStatus.FAILED);
+        return status == ExecutionStatus.DLQ
+            || (allowFailed && (status == ExecutionStatus.FAILED
+                || status == ExecutionStatus.REMOTE_OUTCOME_UNKNOWN));
     }
 
     private ExecutionRecord<Object, Object> getActiveRecord(String scopedId, long nowEpochMs) {

@@ -13,10 +13,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.command.CommandDescriptor;
 import org.pipelineframework.command.CommandDuplicatePolicy;
 import org.pipelineframework.command.CommandRequest;
+import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.search.common.domain.SearchIndexDocument;
 import org.pipelineframework.search.common.domain.SearchIndexWriteResult;
 
@@ -53,7 +53,7 @@ class OpenSearchIndexDocumentCommandConnectorTest {
             descriptor(),
             "cmd-1",
             document,
-            new AwaitExecutionContext("tenant", "exec-1", 4),
+            new PipelineExecutionContext("tenant", "exec-1", 4),
             Map.of()))
         .await().atMost(Duration.ofSeconds(5));
 
@@ -116,7 +116,7 @@ class OpenSearchIndexDocumentCommandConnectorTest {
         descriptor(),
         "cmd-1",
         document,
-        new AwaitExecutionContext("tenant", "exec-1", 4),
+        new PipelineExecutionContext("tenant", "exec-1", 4),
         Map.of());
   }
 

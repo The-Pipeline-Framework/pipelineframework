@@ -15,6 +15,8 @@
 
 ## Explore Tracks
 
+- [Coffee-machine Questions](/value/coffee-machine/) — skeptical architectural conversations, organized around the questions people actually ask.
+
 - [Business Value](/value/business-value)
 - [Developer Joy](/value/developer-experience)
 - [Performance](/value/runtime-efficiency)

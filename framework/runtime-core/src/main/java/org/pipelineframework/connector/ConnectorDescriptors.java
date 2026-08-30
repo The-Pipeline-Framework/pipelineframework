@@ -14,15 +14,18 @@ final class ConnectorDescriptors {
         return new ConnectorProviderDescriptor(
             provider.id(),
             provider.version(),
-            provider.configurationSchema().map(ConnectorConfigSchema::descriptor),
-            optional(provider.executionCapabilities(), ConnectorExecutionCapabilities.conservative(),
-                "connector provider execution capabilities"));
+            provider.configurationSchema().map(ConnectorConfigSchema::descriptor));
     }
 
     static ConnectorOperationDescriptor operation(ConnectorOperation operation) {
         Optional<ConnectorConfigSchemaDescriptor> configurationSchema = Optional.empty();
         Optional<CommandCapabilities> commandCapabilities = Optional.empty();
         Optional<QueryCapabilities> queryCapabilities = Optional.empty();
+        Optional<QueryOperationCardinality> queryCardinality = Optional.empty();
+        if (operation instanceof QueryOperation<?, ?, ?> && operation instanceof StreamingQueryOperation<?, ?, ?>) {
+            throw new IllegalArgumentException("connector operation must not implement both unary and streaming Query contracts: "
+                + operation.getClass().getName());
+        }
         if (operation instanceof CommandOperation<?, ?, ?> command) {
             configurationSchema = command.configurationSchema().map(ConnectorConfigSchema::descriptor);
             commandCapabilities = optional(
@@ -31,17 +34,21 @@ final class ConnectorDescriptors {
             configurationSchema = query.configurationSchema().map(ConnectorConfigSchema::descriptor);
             queryCapabilities = optional(
                 query.capabilities(), QueryCapabilities.conservative(), "query operation capabilities");
+            queryCardinality = Optional.of(QueryOperationCardinality.ONE_TO_ONE);
+        } else if (operation instanceof StreamingQueryOperation<?, ?, ?> query) {
+            configurationSchema = query.configurationSchema().map(ConnectorConfigSchema::descriptor);
+            queryCardinality = Optional.of(QueryOperationCardinality.ONE_TO_MANY);
         }
         return new ConnectorOperationDescriptor(
             operation.id(), kind(operation), operation.majorVersion(), configurationSchema,
-            commandCapabilities, queryCapabilities, ConnectorOperationTypes.contract(operation));
+            commandCapabilities, queryCapabilities, queryCardinality, ConnectorOperationTypes.contract(operation));
     }
 
     static ConnectorOperationKind kind(ConnectorOperation operation) {
         if (operation instanceof CommandOperation<?, ?, ?>) {
             return ConnectorOperationKind.COMMAND;
         }
-        if (operation instanceof QueryOperation<?, ?, ?>) {
+        if (operation instanceof QueryOperation<?, ?, ?> || operation instanceof StreamingQueryOperation<?, ?, ?>) {
             return ConnectorOperationKind.QUERY;
         }
         if (operation instanceof ObjectSourceOperation) {

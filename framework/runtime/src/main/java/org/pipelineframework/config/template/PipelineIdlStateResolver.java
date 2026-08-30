@@ -58,6 +58,9 @@ public final class PipelineIdlStateResolver {
             PipelineTemplateTypeDefinition definition = entry.getValue();
             PipelineIdlSnapshot.TypeSnapshot previous = baseline == null ? null : baseline.types().get(name);
             if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
+                Map<String, PipelineIdlSnapshot.TypeFieldSnapshot> priorFields = previous == null ? Map.of()
+                    : previous.fields().stream().collect(java.util.stream.Collectors.toMap(
+                        PipelineIdlSnapshot.TypeFieldSnapshot::name, java.util.function.Function.identity()));
                 Map<String, Integer> priorNumbers = previous == null ? Map.of() : previous.fields().stream()
                     .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeFieldSnapshot::name,
                         PipelineIdlSnapshot.TypeFieldSnapshot::number));
@@ -66,6 +69,10 @@ public final class PipelineIdlStateResolver {
                         PipelineIdlSnapshot.TypeFieldSnapshot::protoName));
                 Set<Integer> unavailable = previous == null ? new HashSet<>() : previous.fields().stream()
                     .map(PipelineIdlSnapshot.TypeFieldSnapshot::number).collect(java.util.stream.Collectors.toSet());
+                if (previous != null) {
+                    previous.fields().stream().map(PipelineIdlSnapshot.TypeFieldSnapshot::nullMarkerNumber)
+                        .flatMap(Optional::stream).forEach(unavailable::add);
+                }
                 List<Integer> reservedNumbers = previous == null ? new ArrayList<>() : new ArrayList<>(previous.reservedNumbers());
                 List<String> reservedNames = previous == null ? new ArrayList<>() : new ArrayList<>(previous.reservedNames());
                 Set<String> currentNames = record.fields().stream().map(PipelineTemplateTypeDefinition.Field::name)
@@ -92,6 +99,9 @@ public final class PipelineIdlStateResolver {
                             reservedNumbers.add(field.number());
                             reservedNames.add(field.protoName());
                             unavailable.add(field.number());
+                            field.nullMarkerNumber().ifPresent(reservedNumbers::add);
+                            field.nullMarkerProtoName().ifPresent(reservedNames::add);
+                            field.nullMarkerNumber().ifPresent(unavailable::add);
                         }
                     }
                 }
@@ -106,8 +116,38 @@ public final class PipelineIdlStateResolver {
                     if (protoName.isBlank() || !protoNames.add(protoName)) {
                         throw new IllegalStateException("Type '" + name + "' has colliding protobuf field name '" + protoName + "'.");
                     }
+                    PipelineIdlSnapshot.TypeFieldSnapshot oldField = priorFields.get(field.name());
+                    Optional<Integer> nullMarkerNumber = Optional.empty();
+                    Optional<String> nullMarkerProtoName = Optional.empty();
+                    if (field.nullability() == PipelineFieldNullability.NULLABLE) {
+                        String stateName = protoName + "_state";
+                        if (!protoNames.add(stateName)) {
+                            throw new IllegalStateException("Type '" + name
+                                + "' has colliding protobuf nullable state name '" + stateName + "'.");
+                        }
+                        Optional<Integer> priorMarker = oldField == null
+                            ? Optional.empty() : oldField.nullMarkerNumber();
+                        int markerNumber = priorMarker.isPresent()
+                            ? priorMarker.orElseThrow() : allocator.allocate(unavailable);
+                        unavailable.add(markerNumber);
+                        String markerName = oldField == null
+                            ? protoName + "_null" : oldField.nullMarkerProtoName().orElse(protoName + "_null");
+                        if (markerName.isBlank() || !protoNames.add(markerName)) {
+                            throw new IllegalStateException("Type '" + name
+                                + "' has colliding protobuf null marker name '" + markerName + "'.");
+                        }
+                        nullMarkerNumber = Optional.of(markerNumber);
+                        nullMarkerProtoName = Optional.of(markerName);
+                    } else if (oldField != null && oldField.nullMarkerNumber().isPresent()) {
+                        reservedNumbers.add(oldField.nullMarkerNumber().orElseThrow());
+                        String markerName = oldField.nullMarkerProtoName().orElseThrow();
+                        reservedNames.add(markerName);
+                        protoNames.add(markerName);
+                        protoNames.add(protoName + "_state");
+                    }
                     fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(
-                        number, field.name(), protoName, field.type().name(), field.repeated()));
+                        number, field.name(), protoName, field.type().name(), field.repeated(),
+                        field.presence(), field.nullability(), nullMarkerNumber, nullMarkerProtoName));
                 }
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList(),

@@ -31,7 +31,6 @@ import org.pipelineframework.csv.domain.PaymentOutputBranch;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.UnapprovedPaymentOutput;
 import org.pipelineframework.csv.domain.UnapprovedPaymentStatus;
-import org.pipelineframework.step.NonRetryableException;
 
 class PaymentStatusBranchingServicesTest {
 
@@ -117,32 +116,25 @@ class PaymentStatusBranchingServicesTest {
   }
 
   @Test
-  void approvedStatusWithoutPaymentRecordFailsFast() {
-    ApprovedPaymentStatus status = new ApprovedPaymentStatus("provider-ref", "Complete", "settled", new BigDecimal("0.12"), UUID.randomUUID(), 202L, null, null);
-
-    NonRetryableException failure =
+  void approvedStatusWithoutPaymentRecordIsRejectedAtConstruction() {
+    NullPointerException failure =
         assertThrows(
-            NonRetryableException.class,
-            () -> approvedService.process(status).await().indefinitely());
+            NullPointerException.class,
+            () -> new ApprovedPaymentStatus("provider-ref", "Complete", "settled", new BigDecimal("0.12"),
+                UUID.randomUUID(), 202L, UUID.randomUUID(), null));
 
-    assertEquals(
-        "ApprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath",
-        failure.getMessage());
+    assertEquals("ApprovedPaymentStatus.paymentRecord must not be null", failure.getMessage());
   }
 
   @Test
-  void unapprovedStatusWithoutInputFilePathFailsFast() {
-    PaymentRecord record = new PaymentRecord(UUID.randomUUID(), "csv-1", "alice", new BigDecimal("12.34"), Currency.getInstance("EUR"), null);
-    UnapprovedPaymentStatus status = new UnapprovedPaymentStatus("provider-ref", "Rejected", "declined", BigDecimal.ZERO, UUID.randomUUID(), 400L, record.id(), record);
-
-    NonRetryableException failure =
+  void paymentRecordWithoutInputFilePathIsRejectedAtConstruction() {
+    NullPointerException failure =
         assertThrows(
-            NonRetryableException.class,
-            () -> unapprovedService.process(status).await().indefinitely());
+            NullPointerException.class,
+            () -> new PaymentRecord(UUID.randomUUID(), "csv-1", "alice", new BigDecimal("12.34"),
+                Currency.getInstance("EUR"), null));
 
-    assertEquals(
-        "UnapprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath",
-        failure.getMessage());
+    assertEquals("PaymentRecord.csvPaymentsInputFilePath must not be null", failure.getMessage());
   }
 
   private static PaymentRecord paymentRecord() {

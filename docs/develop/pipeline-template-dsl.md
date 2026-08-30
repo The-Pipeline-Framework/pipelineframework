@@ -89,6 +89,86 @@ types:
 
 Field names are unique within a product type. A singular or repeated field can reference a semantic scalar or another named type. `type` and `repeated` are mutually exclusive; `repeated: true` is not valid v3 syntax.
 
+For singular fields, presence and value nullability are independent. A `?` after the field name
+controls whether the key may be absent; a `?` after the type controls whether an explicitly present
+value may be null:
+
+```yaml
+types:
+  Customer:
+    fields:
+      - [name, string]
+      - [nickname?, string]
+      - [middleName, string?]
+      - [note?, string?]
+```
+
+| Declaration | Presence | Value | Canonical JSON states |
+| --- | --- | --- | --- |
+| `[name, string]` | required | non-null | value only |
+| `[nickname?, string]` | optional | non-null | absent or value |
+| `[middleName, string?]` | required | nullable | null or value; key required |
+| `[note?, string?]` | optional | nullable | absent, null, or value |
+
+The verbose equivalent uses explicit normalized terms:
+
+```yaml
+- name: nickname
+  type: string
+  presence: optional
+  nullability: non_null
+```
+
+Do not combine compact `?` markers with verbose semantic properties on the same field. Compact and
+verbose forms normalize identically. The normalized IDL and hashed canonical contract contain
+`REQUIRED`/`OPTIONAL` and `NON_NULL`/`NULLABLE`; authored punctuation does not survive normalization.
+An unmarked field keeps the existing strongest semantics: required presence and a non-null value.
+
+Generated Java keeps unmarked required/non-null fields as `T`. Any other singular state uses
+`CanonicalFieldValue<T>`, whose `Absent`, `NullValue`, and `Value` cases preserve the distinction.
+Generated constructors enforce the declared state. Nullable protobuf fields use a compiler-owned
+`oneof` with a value arm and a `google.protobuf.NullValue` arm; no selected arm means absent.
+Compiler-owned tags and names are persisted in `pipeline.idl.json` and reserved when retired.
+
+Defaults are not part of this feature. In particular, an absent field is not silently materialized
+as a default value. Repeated fields retain their existing missing-to-empty-list behavior and cannot
+currently declare presence or nullability modifiers.
+
+Compatibility diagnostics name their surface. For example, adding a required field is safe for the
+protobuf wire because it adds a tag, but it breaks canonical data produced by the previous contract
+because those payloads lack the new required key. Changing required to optional or non-null to
+nullable widens canonical input while changing generated Java APIs; the reverse transitions break
+existing canonical payloads.
+
+For the matrix below, `RNN`, `ONN`, `RN`, and `ON` mean required/non-null,
+optional/non-null, required/nullable, and optional/nullable. Rows are the previous contract and
+columns are the current contract. This is backward canonical-data compatibility: can every payload
+accepted by the previous contract still be accepted?
+
+| Previous \ Current | RNN | ONN | RN | ON |
+| --- | --- | --- | --- | --- |
+| RNN | unchanged | widening | widening | widening |
+| ONN | breaking: absent | unchanged | breaking: absent; null widened | widening |
+| RN | breaking: null | breaking: null; absence widened | unchanged | widening |
+| ON | breaking: absent/null | breaking: null | breaking: absent | unchanged |
+
+The normalized-IDL classification follows the same accepted-value relationship. Protobuf presence
+changes retain the same field tag and are wire compatible. Non-null to nullable retains the value tag
+and adds a null-marker tag, so it is wire compatible. Nullable to non-null is wire-readable but lossy:
+old explicit-null marker values become an unselected value field. Every state transition changes the
+generated Java/domain contract under the conservative source-compatibility policy; transitions to or
+from `RNN` also change between `T` and `CanonicalFieldValue<T>`.
+
+Other record evolution is classified separately:
+
+| Change | Protobuf wire | Canonical data | Generated Java/domain |
+| --- | --- | --- | --- |
+| add required singular field | compatible | breaking | breaking constructor/component surface |
+| add optional singular field | compatible | compatible | breaking constructor/component surface |
+| remove field with reserved tags/names | compatible for readers | breaking for closed record JSON | breaking |
+| singular ↔ repeated | lossy | breaking scalar/array shape | breaking `T`/`List<T>` shape |
+| change type | depends on protobuf wire type; review required | breaking | breaking |
+
 `repeated` describes multiplicity inside one domain value. Generated Java records expose it as an immutable, non-null `List<T>`; generated protobuf uses a `repeated` field; and generated JSON Schema uses an array whose missing value normalizes to an empty array. Order and duplicates are preserved. Adding a repeated field is therefore compatible with an older pinned IDL snapshot and with protobuf/JSON readers: old payloads observe the field as empty. Changing an existing field between singular and repeated is incompatible.
 
 Repeated fields do not imply reactive cardinality. Expanding a `List<T>` into a `Multi<T>` or collecting a `Multi<T>` into a list is application logic and must be explicit in the step implementation, for example:
@@ -264,6 +344,44 @@ steps:
 
 TPF records the union name, declared discriminator, and payload contract in generated branching, replay, and checkpoint-handoff metadata. This makes an observed alternative identifiable without exposing protobuf field numbers. Routing remains payload-type based: if two declared variants intentionally share a payload type, they route together under `accepts`; discriminators are not accepted as routing predicates.
 
+### Await projector typing with unions
+
+A v3 Await step uses the same branch plan as every other step. When `accepts` names one
+union alternative, the compiler narrows the generated Await request and projector input
+to that alternative:
+
+```yaml
+- name: Clarify
+  kind: await
+  cardinality: ONE_TO_ONE
+  input: PreparationDecision
+  accepts: [ClarificationRequired]
+  output: Prepared
+  timeout: PT8H
+  await:
+    correlation: { strategy: interactionId }
+    completion:
+      type: com.example.ClarificationAnswer
+      projector: com.example.ClarificationProjector
+    transport: { type: interaction-api }
+```
+
+`ClarificationProjector` must implement
+`AwaitCompletionProjector<ClarificationRequired, ClarificationAnswer, Prepared>`.
+For multiple accepted alternatives, or all alternatives when `accepts` is omitted, its
+input type remains `PreparationDecision`. The projector must be a public concrete class
+with a public no-argument constructor. Raw, wildcard, unresolved, or incompatible
+generic arguments fail compilation.
+
+When `accepts` selects only some union alternatives, the omitted alternatives do not
+invoke the Await step. They bypass it and continue unchanged through the ordinary v3
+pipeline flow.
+
+The `java` block is optional for a v3 Await boundary because these Java types are
+inferred from the compiler-owned semantic model and projector. If supplied, both
+`java.input` and `java.output` are required and must agree with that inference. A Java
+binding never requests an implicit conversion.
+
 ## Wire identity and compatibility
 
 Names, field names, and variant discriminators are the DSL-facing identities. The compiler allocates protobuf tags and records them in the sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`). YAML never contains field or variant numbers.
@@ -288,7 +406,7 @@ Generated Java sources live under `<basePackage>.domain`. A record field keeps i
 
 The generated `PipelineDomainProtoAdapters` class converts generated records, wrappers, and unions to and from the generated protobuf types. It is public application-facing generated code, but its exact class and method shape remains provisional while the Java target continues to evolve.
 
-Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. Repeated components are different: their generated compact constructor normalizes `null` to `List.of()` and defensively copies supplied values with `List.copyOf(...)`. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
+Unmarked required/non-null record components use `T` and reject Java null. Every optional or nullable singular component uses `CanonicalFieldValue<T>`: `Absent` means no canonical key, `NullValue` means an explicitly present null, and `Value` carries `T`. The generated compact constructor enforces the declared state, independently of protobuf presence. Repeated components retain their separate list semantics: their generated compact constructor normalizes Java null to `List.of()` and defensively copies supplied values with `List.copyOf(...)`. A wrapper such as `Currency(null)` remains invalid. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
 
 Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
 
@@ -389,7 +507,7 @@ Step `input` and `output` always name logical pipeline contracts. For an inspect
     output: com.example.domain.PaymentOutcome
 ```
 
-For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding.
+For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding. V3 Await is the exception: its generated boundary is inferred from its semantic input/output types, `accepts`, and typed completion projector as described above.
 
 ::: tip Compilation visibility is topology-scoped
 Java-type and mapper discovery runs in the annotation-processing compilation unit currently being built. It sees only services and mappers on that module's compile classpath; sibling modules in the same repository are not automatically visible.

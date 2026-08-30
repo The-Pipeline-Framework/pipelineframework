@@ -92,6 +92,26 @@ class CallableOperationSnapshotProjectorTest {
     }
 
     @Test
+    void rejectsStreamingQueryFromTheUnaryCallableSnapshot() {
+        ConnectorOperationDescriptor streaming = new ConnectorOperationDescriptor(
+            "find.many",
+            ConnectorOperationKind.QUERY,
+            1,
+            Optional.empty(),
+            Optional.empty(),
+            Optional.empty(),
+            Optional.of(QueryOperationCardinality.ONE_TO_MANY),
+            Optional.of(TYPES));
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () ->
+            new CallableOperationSnapshotProjector().project(
+                catalog(streaming),
+                new CallableOperationAuthorization(Set.of(identity(streaming)))));
+
+        assertTrue(failure.getMessage().contains("not callable in unary snapshot"));
+    }
+
+    @Test
     void digestIsOrderIndependentAndChangesWithModelVisibleMetadata() {
         CallableOperationDefinition baseline = queryDefinition(
             new ConnectorOperationIdentity(PROVIDER_ID, "lookup", ConnectorOperationKind.QUERY, 1), TYPES,
