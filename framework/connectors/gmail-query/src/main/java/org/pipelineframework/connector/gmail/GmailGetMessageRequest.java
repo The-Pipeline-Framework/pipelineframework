@@ -6,7 +6,7 @@ import java.util.Objects;
 public record GmailGetMessageRequest(String messageId) {
     public GmailGetMessageRequest {
         messageId = Objects.requireNonNull(messageId, "Gmail message ID must not be null");
-        if (messageId.isBlank() || !messageId.equals(messageId.trim())) {
+        if (messageId.isBlank() || !messageId.equals(messageId.strip())) {
             throw new IllegalArgumentException("Gmail message ID must not be blank or have surrounding whitespace");
         }
     }

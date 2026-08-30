@@ -7,7 +7,7 @@ import java.util.Optional;
 public record GmailSearchMessagesRequest(String query, Optional<String> pageToken) {
     public GmailSearchMessagesRequest {
         query = Objects.requireNonNull(query, "Gmail search query must not be null");
-        if (query.isBlank() || !query.equals(query.trim())) {
+        if (query.isBlank() || !query.equals(query.strip())) {
             throw new IllegalArgumentException("Gmail search query must not be blank or have surrounding whitespace");
         }
         pageToken = GmailListMessagesRequest.nonBlank(pageToken, "Gmail page token");

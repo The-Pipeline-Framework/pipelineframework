@@ -30,6 +30,9 @@ known:
 - connector binding plus stable provider and operation identity;
 - correlation, trace, and deadline context.
 
+Deadline context is optional. It remains empty when an invocation path has no absolute connector
+deadline; TPF does not synthesize one from retry timing or a remote-operator dispatch timeout.
+
 The connector combines that context with its deployment-owned `ConnectionRef`:
 
 ```java
@@ -146,6 +149,8 @@ Keep these values out of pipeline inputs and mappings:
 - connected-account database keys or user email addresses used to select authority;
 - provider SDK clients or resolved connection objects.
 
-This contract does not let caller-controlled invocation data widen a configured connection's
-destination. Generic HTTP destinations and centralized outbound authority require a separate
-configuration-versus-invocation policy decision. See [ADR-0021](/decisions/0021-host-owned-connector-authentication).
+This contract does not define or enforce whether caller-controlled invocation data may widen a
+configured connection's destination. That outbound-authority boundary is unimplemented. Generic
+HTTP destinations and centralized outbound authority require a separate
+configuration-versus-invocation policy decision. See
+[ADR-0021](/decisions/0021-host-owned-connector-authentication).

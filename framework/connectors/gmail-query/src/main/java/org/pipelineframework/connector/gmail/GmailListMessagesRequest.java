@@ -12,7 +12,7 @@ public record GmailListMessagesRequest(Optional<String> pageToken) {
     static Optional<String> nonBlank(Optional<String> value, String label) {
         Objects.requireNonNull(value, label + " must not be null");
         value.ifPresent(item -> {
-            if (item.isBlank() || !item.equals(item.trim())) {
+            if (item.isBlank() || !item.equals(item.strip())) {
                 throw new IllegalArgumentException(label + " must not be blank or have surrounding whitespace");
             }
         });

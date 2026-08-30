@@ -273,6 +273,7 @@ public final class GmailQueryConnector implements ConnectorProvider<GmailProvide
             if (status == 408 || status == 429 || status >= 500) {
                 return new QueryOutcome.TemporarilyUnavailable<>("gmail-temporarily-unavailable");
             }
+            return new QueryOutcome.TerminalFailure<>("gmail-query-failed");
         }
         if (cause instanceof IOException) {
             return new QueryOutcome.TemporarilyUnavailable<>("gmail-temporarily-unavailable");

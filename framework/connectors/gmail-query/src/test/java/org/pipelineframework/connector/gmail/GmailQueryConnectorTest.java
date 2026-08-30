@@ -3,6 +3,7 @@ package org.pipelineframework.connector.gmail;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -247,6 +248,33 @@ class GmailQueryConnectorTest {
         assertEquals(List.of(invocationContext, invocationContext), requests.stream()
             .map(ConnectionResolutionRequest::invocationContext)
             .toList());
+    }
+
+    @Test
+    void permanentGmailClientErrorsAreTerminal() {
+        Gmail client = client(url -> jsonResponse(400, "{\"error\":{\"code\":400,\"message\":\"bad query\"}}"));
+        GmailQueryConnector connector = startedConnector(
+            resolver(Map.of("tenant-a", client), new ArrayList<>(), new AtomicInteger()));
+        QueryOperation<GmailSearchMessagesRequest, GmailListMessagesConfiguration, GmailMessagePage> operation =
+            operation(connector, "search.messages");
+
+        QueryOutcome<GmailMessagePage> outcome = operation.query(new QueryInvocation<>(
+            new GmailSearchMessagesRequest("invalid-query", Optional.empty()),
+            new GmailListMessagesConfiguration(Optional.empty(), false),
+            GmailMessagePage.class,
+            context("tenant-a", "search.messages"))).toCompletableFuture().join();
+
+        assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome);
+        assertEquals("gmail-query-failed", outcome.code());
+    }
+
+    @Test
+    void invocationRecordsRejectUnicodeSurroundingWhitespace() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new GmailListMessagesRequest(Optional.of("\u2003page-token")));
+        assertThrows(IllegalArgumentException.class, () -> new GmailGetMessageRequest("message-id\u2003"));
+        assertThrows(IllegalArgumentException.class,
+            () -> new GmailSearchMessagesRequest("\u2003from:alice@example.com", Optional.empty()));
     }
 
     @Test
