@@ -16,20 +16,26 @@
 
 package org.pipelineframework.config.pipeline;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.JarURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 /**
  * Locates pipeline.yaml configuration files starting from a module directory.
@@ -166,15 +172,21 @@ public class PipelineYamlConfigLocator {
     private Optional<URL> locateCanvasConfig(ClassLoader classLoader) {
         try {
             List<URL> matches = new ArrayList<>();
-            for (URL root : Collections.list(classLoader.getResources(""))) {
-                if ("file".equals(root.getProtocol())) {
-                    scanClasspathDirectory(root.toURI(), matches);
-                }
-            }
+            Map<String, URL> classpathEntries = new LinkedHashMap<>();
+            List<URL> loaderUrls = classLoaderUrls(classLoader).toList();
+            Stream<URL> discoverableEntries = loaderUrls.isEmpty()
+                ? systemClasspathUrls()
+                : loaderUrls.stream();
+            discoverableEntries.forEach(url -> classpathEntries.putIfAbsent(url.toExternalForm(), url));
             for (URL manifest : Collections.list(classLoader.getResources("META-INF/MANIFEST.MF"))) {
                 if ("jar".equals(manifest.getProtocol())) {
-                    scanClasspathJar((JarURLConnection) manifest.openConnection(), matches);
+                    JarURLConnection connection = (JarURLConnection) manifest.openConnection();
+                    URL jarUrl = connection.getJarFileURL();
+                    classpathEntries.putIfAbsent(jarUrl.toExternalForm(), jarUrl);
                 }
+            }
+            for (URL entry : classpathEntries.values()) {
+                scanClasspathEntry(entry, matches);
             }
             return matches.stream()
                 .distinct()
@@ -182,6 +194,34 @@ public class PipelineYamlConfigLocator {
                 .findFirst();
         } catch (IOException | URISyntaxException e) {
             throw new IllegalStateException("Failed to scan classpath for pipeline config", e);
+        }
+    }
+
+    private Stream<URL> classLoaderUrls(ClassLoader classLoader) {
+        return Stream.iterate(classLoader, Objects::nonNull, ClassLoader::getParent)
+            .filter(URLClassLoader.class::isInstance)
+            .map(URLClassLoader.class::cast)
+            .flatMap(loader -> Arrays.stream(loader.getURLs()));
+    }
+
+    private Stream<URL> systemClasspathUrls() {
+        return Optional.ofNullable(System.getProperty("java.class.path"))
+            .stream()
+            .flatMap(classpath -> Arrays.stream(classpath.split(File.pathSeparator)))
+            .filter(entry -> !entry.isBlank())
+            .map(Path::of)
+            .map(this::toUrl);
+    }
+
+    private void scanClasspathEntry(URL entry, List<URL> matches) throws IOException, URISyntaxException {
+        if (!"file".equals(entry.getProtocol())) {
+            return;
+        }
+        Path path = Path.of(entry.toURI());
+        if (Files.isDirectory(path)) {
+            scanClasspathDirectory(path.toUri(), matches);
+        } else if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jar")) {
+            scanClasspathJar(path, matches);
         }
     }
 
@@ -194,10 +234,9 @@ public class PipelineYamlConfigLocator {
         }
     }
 
-    private void scanClasspathJar(JarURLConnection connection, List<URL> matches) throws IOException {
-        connection.setUseCaches(false);
-        URL jarUrl = connection.getJarFileURL();
-        try (JarFile jar = connection.getJarFile()) {
+    private void scanClasspathJar(Path jarPath, List<URL> matches) throws IOException {
+        URL jarUrl = jarPath.toUri().toURL();
+        try (JarFile jar = new JarFile(jarPath.toFile())) {
             jar.stream()
                 .filter(entry -> !entry.isDirectory())
                 .map(entry -> entry.getName())

@@ -6,10 +6,8 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -103,7 +101,7 @@ class PipelineYamlConfigLocatorTest {
     }
 
     @Test
-    void locatesCanvasPipelineConfigFromPackagedClasspath() throws IOException {
+    void locatesCanvasPipelineConfigFromManifestFreePackagedClasspath() throws IOException {
         Path jar = createJarWithResource("search-canvas-config.yaml");
 
         try (URLClassLoader classLoader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, null)) {
@@ -176,9 +174,7 @@ class PipelineYamlConfigLocatorTest {
 
     private Path createJarWithResource(String resourceName) throws IOException {
         Path jar = tempDir.resolve("application.jar");
-        Manifest manifest = new Manifest();
-        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
-        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar), manifest)) {
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
             output.putNextEntry(new JarEntry(resourceName));
             output.write("appName: classpath\n".getBytes(StandardCharsets.UTF_8));
             output.closeEntry();
