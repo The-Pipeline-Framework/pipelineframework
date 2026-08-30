@@ -42,6 +42,7 @@ import org.springframework.transaction.PlatformTransactionManager;
  */
 @AutoConfiguration
 @ConditionalOnClass(RuntimeAdapters.class)
+@SuppressWarnings("removal")
 public class SpringRuntimeAdaptersAutoConfiguration {
 
     @Bean

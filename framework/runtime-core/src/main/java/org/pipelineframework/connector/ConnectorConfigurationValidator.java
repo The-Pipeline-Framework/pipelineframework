@@ -8,6 +8,7 @@ import java.util.Set;
 /**
  * Pure static validation of an untyped configuration document against manifest schema metadata.
  */
+@SuppressWarnings("removal")
 public final class ConnectorConfigurationValidator {
     private ConnectorConfigurationValidator() {
     }

@@ -14,6 +14,7 @@ import java.util.Optional;
  * Quarkus/CDI adapter that supplies the provider-lifetime core runtime context.
  */
 @ApplicationScoped
+@SuppressWarnings("removal")
 public class ConnectorRuntimeContextProducer {
     @Produces
     @ApplicationScoped

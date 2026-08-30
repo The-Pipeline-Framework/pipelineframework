@@ -39,6 +39,7 @@ import org.pipelineframework.connector.QueryObservation;
 import org.pipelineframework.connector.QueryTokenUsage;
 import org.pipelineframework.connector.llm.LlmDecision;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
+import org.pipelineframework.connector.llm.LlmDecisionClientResolver;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmQueryConnectorProvider;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
@@ -85,7 +86,7 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
     }
 
     @Override
-    protected LlmDecisionClient createClient(
+    protected LlmDecisionClientResolver createClientResolver(
         LlmProviderConfiguration configuration,
         ConnectorRuntimeContext context
     ) {
@@ -95,7 +96,8 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             runtimeSettings.requestTimeout(),
             runtimeSettings.thinking(),
             0);
-        return new LangChain4jDecisionClient(model, context.executor());
+        LlmDecisionClient client = new LangChain4jDecisionClient(model, context.executor());
+        return ignored -> CompletableFuture.completedStage(client);
     }
 
     @FunctionalInterface

@@ -18,11 +18,11 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
 public abstract class LlmQueryConnectorProvider implements ConnectorProvider<LlmProviderConfiguration> {
     public static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("llm.query");
     private static final ConnectorConfigSchema<LlmProviderConfiguration> PROVIDER_SCHEMA =
-        ConnectorConfigSchema.record(LlmProviderConfiguration.class, "llm.query.provider", 1);
+        ConnectorConfigSchema.record(LlmProviderConfiguration.class, "llm.query.provider", 2);
 
     private final ConnectorProviderId providerId;
-    private final AtomicReference<LlmDecisionClient> client = new AtomicReference<>();
-    private final LlmQueryOperation operation = new LlmQueryOperation(() -> Optional.ofNullable(client.get()));
+    private final AtomicReference<LlmDecisionClientResolver> clientResolver = new AtomicReference<>();
+    private final LlmQueryOperation operation = new LlmQueryOperation(this::resolveClient);
 
     protected LlmQueryConnectorProvider() {
         this(PROVIDER_ID);
@@ -55,7 +55,9 @@ public abstract class LlmQueryConnectorProvider implements ConnectorProvider<Llm
     @Override
     public final CompletionStage<Void> start(ConnectorRuntimeContext context, LlmProviderConfiguration configuration) {
         try {
-            client.set(createClient(configuration, context));
+            clientResolver.set(java.util.Objects.requireNonNull(
+                createClientResolver(configuration, context),
+                "LLM decision client resolver must not be null"));
             return CompletableFuture.completedFuture(null);
         } catch (RuntimeException failure) {
             return CompletableFuture.failedStage(failure);
@@ -64,13 +66,28 @@ public abstract class LlmQueryConnectorProvider implements ConnectorProvider<Llm
 
     @Override
     public final CompletionStage<Void> stop(ConnectorRuntimeContext context) {
-        client.set(null);
+        clientResolver.set(null);
         return CompletableFuture.completedFuture(null);
     }
 
-    /** Construct one adapter client for this configured binding. */
-    protected abstract LlmDecisionClient createClient(
+    /** Construct the adapter-specific client resolver for this configured binding. */
+    protected abstract LlmDecisionClientResolver createClientResolver(
         LlmProviderConfiguration configuration,
         ConnectorRuntimeContext context
     );
+
+    private CompletionStage<LlmDecisionClient> resolveClient(
+        org.pipelineframework.connector.ConnectorExecutionContext executionContext
+    ) {
+        LlmDecisionClientResolver active = clientResolver.get();
+        if (active == null) {
+            return CompletableFuture.failedStage(new IllegalStateException("LLM Query binding is not active"));
+        }
+        try {
+            return java.util.Objects.requireNonNull(
+                active.resolve(executionContext), "LLM decision client resolver returned a null stage");
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedStage(failure);
+        }
+    }
 }

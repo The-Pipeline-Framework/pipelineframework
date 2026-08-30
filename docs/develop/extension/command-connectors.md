@@ -74,9 +74,15 @@ configuration; the pipeline item remains the dynamic invocation input. Every ste
 shares that named binding, while different bindings receive distinct provider instances. Bindings
 activate on first live use, so replay of an already recorded outcome does not start the provider.
 
-`using` is a pipeline-local binding name, not a provider ID. `ConnectionRef` and `SecretRef` values
-remain logical deployment-owned references and are resolved only at provider start or operation
-invocation, never while parsing or compiling. `operationVersion` defaults to `1` when omitted.
+`using` is a pipeline-local binding name, not a provider ID. `ConnectionRef` values remain logical
+deployment-owned references and are resolved only at provider start or operation invocation, never
+while parsing or compiling. `operationVersion` defaults to `1` when omitted.
+
+`SecretRef` and its context-free `SecretResolver` are deprecated for removal. Do not use them for
+Command or Query authentication: they cannot receive tenant or invocation identity. New
+authenticated connectors must resolve a typed connection from `ConnectionRef` plus
+`ConnectorExecutionContext`, as described in
+[Host-authenticated Connectors](/develop/extension/host-authenticated-connectors).
 
 The deprecated provider-first form remains readable during migration and is not silently
 reinterpreted. Select it instead of `command`, never alongside it:
