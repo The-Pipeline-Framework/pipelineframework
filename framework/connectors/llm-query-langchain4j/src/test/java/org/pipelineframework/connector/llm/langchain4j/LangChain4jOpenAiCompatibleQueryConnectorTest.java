@@ -3,20 +3,33 @@ package org.pipelineframework.connector.llm.langchain4j;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.connector.ConnectionRef;
+import org.pipelineframework.connector.ConnectionResolutionException;
+import org.pipelineframework.connector.ConnectionResolutionRequest;
+import org.pipelineframework.connector.ConnectionResolver;
+import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
+import org.pipelineframework.connector.ResolvedConnection;
+import org.pipelineframework.connector.llm.LlmDecisionClient;
+import org.pipelineframework.connector.llm.LlmDecisionClientResolver;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 
 class LangChain4jOpenAiCompatibleQueryConnectorTest {
@@ -32,57 +45,117 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
     @Test
     void rejectsNonPositiveRequestTimeouts() {
         assertThrows(IllegalArgumentException.class,
-            () -> new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(
-                Optional.of("secret"), Duration.ZERO));
+            () -> new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ZERO));
     }
 
     @Test
-    void configuresModelIdentityFromTheBindingAndSecretFromRuntimeConfiguration() {
-        AtomicReference<String> baseUrl = new AtomicReference<>();
-        AtomicReference<String> modelName = new AtomicReference<>();
-        AtomicReference<String> apiKey = new AtomicReference<>();
-        AtomicReference<Duration> timeout = new AtomicReference<>();
-        AtomicInteger maxRetries = new AtomicInteger(-1);
-        ChatModel model = model();
+    void resolvesTenantAwareAuthenticatedConnectionsForEveryInvocation() {
+        List<ConnectionResolutionRequest<?>> requests = new ArrayList<>();
+        List<ModelSettings> models = new ArrayList<>();
+        AtomicInteger generations = new AtomicInteger();
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                requests.add(request);
+                int generation = generations.incrementAndGet();
+                AuthenticatedOpenAiCompatibleConnection connection =
+                    new AuthenticatedOpenAiCompatibleConnection((baseUrl, modelName, timeout, maxRetries) -> {
+                        models.add(new ModelSettings(baseUrl, modelName, timeout, maxRetries, generation));
+                        return model();
+                    });
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
         var connector = new LangChain4jOpenAiCompatibleQueryConnector(
-            (configuredBaseUrl, configuredModel, configuredApiKey, configuredTimeout, configuredMaxRetries) -> {
-                baseUrl.set(configuredBaseUrl);
-                modelName.set(configuredModel);
-                apiKey.set(configuredApiKey);
-                timeout.set(configuredTimeout);
-                maxRetries.set(configuredMaxRetries);
-                return model;
-            },
-            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(
-                Optional.of("openrouter-secret"), Duration.ofSeconds(75)));
+            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75)));
+        LlmProviderConfiguration configuration = new LlmProviderConfiguration(
+            "google/gemini-3.1-flash-lite",
+            Optional.of("https://openrouter.ai/api/v1"),
+            Optional.of(new ConnectionRef("hosted-llm.primary")));
+        LlmDecisionClientResolver clientResolver = connector.createClientResolver(
+            configuration, runtimeContext(Optional.of(resolver)));
 
-        assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class,
-            connector.createClient(
-                new LlmProviderConfiguration(
-                    "google/gemini-3.1-flash-lite",
-                    Optional.of("https://openrouter.ai/api/v1")),
-                ConnectorRuntimeContext.empty()));
-        assertEquals("https://openrouter.ai/api/v1", baseUrl.get());
-        assertEquals("google/gemini-3.1-flash-lite", modelName.get());
-        assertEquals("openrouter-secret", apiKey.get());
-        assertEquals(Duration.ofSeconds(75), timeout.get());
-        assertEquals(0, maxRetries.get());
+        ConnectorExecutionContext firstInvocation = invocation("tenant-a");
+        ConnectorExecutionContext secondInvocation = invocation("tenant-b");
+        LlmDecisionClient first = clientResolver.resolve(firstInvocation).toCompletableFuture().join();
+        LlmDecisionClient second = clientResolver.resolve(secondInvocation).toCompletableFuture().join();
+
+        assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class, first);
+        assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class, second);
+        assertNotSame(first, second);
+        assertEquals(2, requests.size());
+        assertEquals(List.of(firstInvocation, secondInvocation), requests.stream()
+            .map(ConnectionResolutionRequest::invocationContext).toList());
+        assertTrue(requests.stream().allMatch(request ->
+            request.reference().equals(new ConnectionRef("hosted-llm.primary"))
+                && request.connectionType() == AuthenticatedOpenAiCompatibleConnection.class));
+        assertEquals(List.of(
+            new ModelSettings(
+                "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
+                Duration.ofSeconds(75), 0, 1),
+            new ModelSettings(
+                "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
+                Duration.ofSeconds(75), 0, 2)), models);
     }
 
     @Test
-    void rejectsStartupWithoutARuntimeApiKey() {
-        var connector = new LangChain4jOpenAiCompatibleQueryConnector(
-            (baseUrl, modelName, apiKey, timeout, maxRetries) -> model(),
-            LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings.defaults());
+    void rejectsMissingConnectionConfigurationOrHostResolverBeforeInference() {
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector();
 
-        IllegalStateException failure = assertThrows(IllegalStateException.class,
-            () -> connector.createClient(
+        ConnectionResolutionException missingReference = assertThrows(ConnectionResolutionException.class, () ->
+            connector.createClientResolver(
+                new LlmProviderConfiguration("provider-model", Optional.empty()),
+                runtimeContext(Optional.of(failingResolver()))));
+        ConnectionResolutionException missingResolver = assertThrows(ConnectionResolutionException.class, () ->
+            connector.createClientResolver(
                 new LlmProviderConfiguration(
-                    "google/gemini-3.1-flash-lite",
-                    Optional.of("https://openrouter.ai/api/v1")),
-                ConnectorRuntimeContext.empty()));
+                    "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+                runtimeContext(Optional.empty())));
 
-        assertTrue(failure.getMessage().contains("openai-compatible.api-key"));
+        assertTrue(missingReference.getMessage().contains("connection reference"));
+        assertTrue(missingResolver.getMessage().contains("ConnectionResolver"));
+    }
+
+    @Test
+    void rejectsInvocationWithoutTenantContextBeforeResolution() {
+        AtomicInteger resolutions = new AtomicInteger();
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                resolutions.incrementAndGet();
+                return CompletableFuture.failedStage(new AssertionError("resolver must not be called"));
+            }
+        };
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector();
+        LlmDecisionClientResolver clientResolver = connector.createClientResolver(
+            new LlmProviderConfiguration(
+                "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+            runtimeContext(Optional.of(resolver)));
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () ->
+            clientResolver.resolve(ConnectorExecutionContext.empty()).toCompletableFuture().join());
+
+        assertInstanceOf(ConnectionResolutionException.class, failure.getCause());
+        assertEquals(0, resolutions.get());
+    }
+
+    private static ConnectorRuntimeContext runtimeContext(Optional<ConnectionResolver> resolver) {
+        return ConnectorRuntimeContext.of("test", Runnable::run, Clock.systemUTC(), resolver);
+    }
+
+    private static ConnectionResolver failingResolver() {
+        return new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                return CompletableFuture.failedStage(new AssertionError("resolver must not be called"));
+            }
+        };
+    }
+
+    private static ConnectorExecutionContext invocation(String tenantId) {
+        return new ConnectorExecutionContext(
+            Optional.of(tenantId), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     private static ChatModel model() {
@@ -92,5 +165,14 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 return ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
             }
         };
+    }
+
+    private record ModelSettings(
+        String baseUrl,
+        String modelName,
+        Duration timeout,
+        int maxRetries,
+        int generation
+    ) {
     }
 }

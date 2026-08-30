@@ -30,6 +30,7 @@ import dev.langchain4j.model.output.TokenUsage;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
+import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.QueryObservationOrigin;
@@ -61,9 +62,10 @@ class LangChain4jOllamaQueryConnectorTest {
         }, new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(Duration.ofSeconds(90), false));
 
         assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class,
-            connector.createClient(
+            connector.createClientResolver(
                 new LlmProviderConfiguration("qwen3", Optional.of("http://ollama.internal:11434")),
-                ConnectorRuntimeContext.empty()));
+                ConnectorRuntimeContext.empty())
+                .resolve(ConnectorExecutionContext.empty()).toCompletableFuture().join());
         assertEquals("http://ollama.internal:11434", baseUrl.get());
         assertEquals("qwen3", modelName.get());
         assertEquals(Duration.ofSeconds(90), timeout.get());
@@ -84,8 +86,9 @@ class LangChain4jOllamaQueryConnectorTest {
             return model(AiMessage.from("unused"));
         });
 
-        connector.createClient(new LlmProviderConfiguration("qwen3", Optional.empty()),
-            ConnectorRuntimeContext.empty());
+        connector.createClientResolver(new LlmProviderConfiguration("qwen3", Optional.empty()),
+                ConnectorRuntimeContext.empty())
+            .resolve(ConnectorExecutionContext.empty()).toCompletableFuture().join();
 
         assertEquals(Duration.ofSeconds(30), timeout.get());
         assertEquals(true, thinking.get());

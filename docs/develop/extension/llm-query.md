@@ -230,17 +230,25 @@ connectors:
     config:
       model: google/gemini-3.1-flash-lite
       baseUrl: https://openrouter.ai/api/v1
+      connection: hosted-llm-primary
 ```
 
-The API key is a runtime secret and must not be placed in the connector binding:
+`connection` is an opaque logical `ConnectionRef`, not a credential or account identifier. The
+application's tenant-aware `ConnectionResolver` turns it into an
+`AuthenticatedOpenAiCompatibleConnection` for each live invocation. That typed connection creates
+an authenticated LangChain4j `ChatModel`; API keys, vault paths, Keychain aliases, refresh behavior,
+and provider security configuration remain entirely behind the host boundary.
+
+Only non-sensitive adapter tuning is configured as a runtime property:
 
 ```properties
-pipeline.llm.langchain4j.openai-compatible.api-key=${OPENROUTER_API_KEY}
 pipeline.llm.langchain4j.openai-compatible.request-timeout=PT60S
 ```
 
-The key is required only when an `llm.query.openai.compatible` binding starts.
-Missing credentials and non-positive timeouts fail before inference.
+The connection reference and one host `ConnectionResolver` are required when an
+`llm.query.openai.compatible` binding starts. Tenant context and the typed authenticated connection
+are required for each live inference. Missing resolution context and non-positive timeouts fail
+before inference. Captured replay does not resolve the connection again.
 Applications should pin a model whose provider advertises native JSON Schema
 support when `structuredOutputSchema` remains `REQUIRED`.
 

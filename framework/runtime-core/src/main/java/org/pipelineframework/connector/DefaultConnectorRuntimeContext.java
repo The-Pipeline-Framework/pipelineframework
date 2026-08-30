@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
+@SuppressWarnings("removal")
 record DefaultConnectorRuntimeContext(
     String runtimeIdentity,
     Executor executor,

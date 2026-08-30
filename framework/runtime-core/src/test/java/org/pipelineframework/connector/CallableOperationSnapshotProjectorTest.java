@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("removal")
 class CallableOperationSnapshotProjectorTest {
     private static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("snapshot.provider");
     private static final ConnectorProviderDescriptor PROVIDER = new ConnectorProviderDescriptor(

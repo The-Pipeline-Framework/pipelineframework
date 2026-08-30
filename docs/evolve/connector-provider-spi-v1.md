@@ -331,9 +331,15 @@ Schema resources and generated pipeline metadata contain schema identity, saniti
 
 `ConnectionRef` is a logical deployment-owned connection name.
 
-`SecretRef` is the only configuration-level secret reference shape. Resolved credentials/tokens/cookies/browser sessions/SDK clients remain runtime-only.
+> **Superseded by [ADR-0021](/decisions/0021-host-owned-connector-authentication):**
+> `SecretRef`, `SecretResolver`, and `ResolvedSecret` are deprecated for removal. Their
+> context-free lookup must not be used for authenticated external connector access. Existing
+> configurations remain readable only as a migration aid.
 
-`ConnectionResolver` and `SecretResolver` are lightweight runtime boundaries, **not** OAuth, consent, token-refresh, account-management or vault platforms.
+Authenticated connectors use `ConnectionResolver` with a typed `ConnectionResolutionRequest`, so
+the host receives both the logical `ConnectionRef` and the current tenant/invocation context. The
+resolver is a lightweight runtime boundary, **not** OAuth, consent, token-refresh,
+account-management, or a vault platform.
 
 Durable records may contain provider/operation identity, versions, sanitized config digest and only those logical connection identities explicitly required for replay. They must not serialize resolved secrets or runtime handles.
 

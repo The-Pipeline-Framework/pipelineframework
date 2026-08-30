@@ -299,7 +299,7 @@ class GmailQueryConnectorTest {
 
     private static ConnectorRuntimeContext runtimeContext(ConnectionResolver resolver) {
         return ConnectorRuntimeContext.of(
-            "test", Runnable::run, Clock.systemUTC(), Optional.of(resolver), Optional.empty());
+            "test", Runnable::run, Clock.systemUTC(), Optional.of(resolver));
     }
 
     private static ConnectionResolver resolver(

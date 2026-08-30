@@ -12,7 +12,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -40,19 +39,20 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final LlmModelInput MODEL_INPUT = new LlmModelInput(JSON);
     private static final System.Logger LOG = System.getLogger(LlmQueryOperation.class.getName());
-    private final Supplier<Optional<LlmDecisionClient>> client;
+    private final LlmDecisionClientResolver clientResolver;
     private final Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader;
     private final Map<DecisionContractKey, DecisionContract> contracts = new ConcurrentHashMap<>();
 
-    LlmQueryOperation(Supplier<Optional<LlmDecisionClient>> client) {
-        this(client, CanonicalTypeCatalogue::load);
+    LlmQueryOperation(LlmDecisionClientResolver clientResolver) {
+        this(clientResolver, CanonicalTypeCatalogue::load);
     }
 
     LlmQueryOperation(
-        Supplier<Optional<LlmDecisionClient>> client,
+        LlmDecisionClientResolver clientResolver,
         Function<ClassLoader, CanonicalTypeCatalogue> catalogueLoader
     ) {
-        this.client = Objects.requireNonNull(client, "LLM decision client supplier must not be null");
+        this.clientResolver = Objects.requireNonNull(
+            clientResolver, "LLM decision client resolver must not be null");
         this.catalogueLoader = Objects.requireNonNull(catalogueLoader, "canonical catalogue loader must not be null");
     }
 
@@ -73,10 +73,6 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
 
     @Override
     public CompletionStage<QueryOutcome<Object>> query(QueryInvocation<Object, LlmTurnConfiguration, Object> invocation) {
-        LlmDecisionClient active = client.get().orElse(null);
-        if (active == null) {
-            return CompletableFuture.failedStage(new IllegalStateException("LLM Query binding is not active"));
-        }
         final DecisionContract contract;
         final String applicationStateJson;
         try {
@@ -91,27 +87,41 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         } catch (Exception failure) {
             return CompletableFuture.failedStage(failure);
         }
-        if (invocation.configuration().structuredOutputMode() == StructuredOutputSchemaMode.REQUIRED
-            && !active.supportsNativeStructuredOutput(contract.tools())) {
-            return CompletableFuture.completedStage(new QueryOutcome.TerminalFailure<>("structured-output-unavailable"));
-        }
-        return CompletableFuture.completedStage(invocation)
-            .thenCompose(this::materializePayloads)
-            .thenCompose(media -> decide(
-                active,
-                new LlmTurnRequest(
-                    invocation.configuration().instructions(),
-                    applicationStateJson,
-                    media,
-                    contract.tools(),
-                    invocation.configuration().structuredOutputMode()),
-                contract,
-                invocation.input()))
+        return resolveClient(invocation.executionContext())
+            .thenCompose(active -> {
+                if (invocation.configuration().structuredOutputMode() == StructuredOutputSchemaMode.REQUIRED
+                    && !active.supportsNativeStructuredOutput(contract.tools())) {
+                    return CompletableFuture.completedStage(
+                        new QueryOutcome.TerminalFailure<Object>("structured-output-unavailable"));
+                }
+                return materializePayloads(invocation)
+                    .thenCompose(media -> decide(
+                        active,
+                        new LlmTurnRequest(
+                            invocation.configuration().instructions(),
+                            applicationStateJson,
+                            media,
+                            contract.tools(),
+                            invocation.configuration().structuredOutputMode()),
+                        contract,
+                        invocation.input()));
+            })
             .exceptionally(failure -> {
                 LOG.log(System.Logger.Level.WARNING,
-                    "LLM Query failed without a repair or retry inference", failure);
+                    "LLM Query failed without a repair or retry inference");
                 return new QueryOutcome.TerminalFailure<>("llm-query-failed");
             });
+    }
+
+    private CompletionStage<LlmDecisionClient> resolveClient(
+        org.pipelineframework.connector.ConnectorExecutionContext executionContext
+    ) {
+        try {
+            return Objects.requireNonNull(
+                clientResolver.resolve(executionContext), "LLM decision client resolver returned a null stage");
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedStage(failure);
+        }
     }
 
     private CompletionStage<QueryOutcome<Object>> decide(
