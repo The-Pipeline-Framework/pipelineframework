@@ -104,6 +104,15 @@ class PipelineYamlDocumentLoaderTest {
                 fields:
                   - [note?, string]
             """)));
+        assertThrows(YAMLException.class, () -> loader.load(new StringReader("""
+            version: 2
+            metadata:
+              version: 3
+            types:
+              Customer:
+                fields:
+                  - [note?, string]
+            """)));
     }
 
     @Test

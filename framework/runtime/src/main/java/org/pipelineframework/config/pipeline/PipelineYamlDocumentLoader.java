@@ -36,7 +36,7 @@ import org.yaml.snakeyaml.error.YAMLException;
 public final class PipelineYamlDocumentLoader {
     private static final int MAX_CODE_POINTS = 3_000_000;
     private static final Pattern V3_DOCUMENT = Pattern.compile(
-        "(?m)^\\s*version:\\s*(?:3|\"3\"|'3')\\s*(?:#.*)?$");
+        "(?m)^version\\s*:\\s*(?:3|\"3\"|'3')\\s*(?:#.*)?$");
     private static final Pattern V3_COMPACT_OPTIONAL_NAME = Pattern.compile(
         "(?m)(\\[\\s*)([A-Za-z_][A-Za-z0-9_]*\\?)(\\s*,)");
     private static final Pattern V3_COMPACT_NULLABLE_TYPE = Pattern.compile(
