@@ -198,7 +198,7 @@ class PipelineStepExecutorTest {
 
         assertEquals("cached", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
         assertEquals(1, cacheReads.get());
-        assertEquals("v1:right", requestedKey.get());
+        assertEquals("2:v1:right", requestedKey.get());
     }
 
     @Test

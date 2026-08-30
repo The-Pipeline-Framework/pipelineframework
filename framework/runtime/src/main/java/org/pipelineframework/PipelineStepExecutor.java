@@ -667,7 +667,8 @@ class PipelineStepExecutor {
         if (cacheReadSupport == null) {
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
-                return step.apply(Uni.createFrom().item(item));
+                return step.apply(scopedUniInput(
+                    Uni.createFrom().item(item), contextSnapshot, awaitContextSnapshot));
             });
         }
         if (step instanceof ProviderQueryStep queryStep) {
@@ -680,7 +681,8 @@ class PipelineStepExecutor {
         if (step instanceof CacheReadBypass) {
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
-                return step.apply(Uni.createFrom().item(item));
+                return step.apply(scopedUniInput(
+                    Uni.createFrom().item(item), contextSnapshot, awaitContextSnapshot));
             });
         }
         if (!cacheReadSupport.shouldRead(policy)) {
@@ -703,14 +705,17 @@ class PipelineStepExecutor {
             }
             return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, invocationContext, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
-                return step.apply(Uni.createFrom().item(item));
+                return step.apply(scopedUniInput(
+                    Uni.createFrom().item(item), contextSnapshot, awaitContextSnapshot));
             });
         }
         java.util.Optional<String> resolvedKey = resolveCacheKey(step, item, cacheReadSupport, contextSnapshot);
         if (resolvedKey.isEmpty()) {
             if (policy == CachePolicy.REQUIRE_CACHE) {
                 return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
-                    new IllegalStateException("Cache key required but could not be resolved")));
+                    new IllegalStateException(
+                        "Cache key required but could not be resolved for step " + step.getClass().getName()
+                            + " from input type " + (item == null ? "null" : item.getClass().getName()))));
             }
             if (step instanceof ProviderQueryStep queryStep
                 && queryStep.queryCacheRequirements().negativeCacheTtl().isPresent()) {
@@ -791,7 +796,8 @@ class PipelineStepExecutor {
     ) {
         Uni<O> execution = withStepExecutionUni(
             contextSnapshot, awaitContextSnapshot, invocationContext,
-            () -> step.apply(Uni.createFrom().item(item)));
+            () -> step.apply(scopedUniInput(
+                Uni.createFrom().item(item), contextSnapshot, awaitContextSnapshot)));
         if (!(step instanceof ProviderQueryStep queryStep)
             || policy == CachePolicy.BYPASS_CACHE
             || policy == CachePolicy.REQUIRE_CACHE

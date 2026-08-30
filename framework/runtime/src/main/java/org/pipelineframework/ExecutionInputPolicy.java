@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.text.MessageFormat;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -14,6 +15,8 @@ import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineContextHolder;
 
 /**
  * Input normalization and idempotency-key policy for queue orchestration paths.
@@ -41,14 +44,19 @@ class ExecutionInputPolicy {
   }
 
   Uni<ExecutionInputSnapshot> resolveExecutionInputPayload(Object input) {
+    return resolveExecutionInputPayload(input, PipelineContextHolder.get());
+  }
+
+  Uni<ExecutionInputSnapshot> resolveExecutionInputPayload(Object input, PipelineContext pipelineContext) {
     if (input instanceof Uni<?> uni) {
-      return uni.onItem().transform(item -> new ExecutionInputSnapshot(ExecutionInputShape.UNI, item));
+      return uni.onItem().transform(item ->
+          new ExecutionInputSnapshot(ExecutionInputShape.UNI, item, pipelineContext));
     }
     if (input instanceof Multi<?> multi) {
       return multi.collect().asList().onItem().transform(list ->
-          new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(list)));
+          new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(list), pipelineContext));
     }
-    return Uni.createFrom().item(new ExecutionInputSnapshot(ExecutionInputShape.RAW, input));
+    return Uni.createFrom().item(new ExecutionInputSnapshot(ExecutionInputShape.RAW, input, pipelineContext));
   }
 
   String normalizeTenant(String tenantId) {
@@ -74,24 +82,37 @@ class ExecutionInputPolicy {
   }
 
   Object toReplayInput(Object inputPayload) {
+    return rehydrateExecutionInput(inputPayload).reactiveInput();
+  }
+
+  RehydratedExecutionInput rehydrateExecutionInput(Object inputPayload) {
     if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
       if (snapshot.shape() == ExecutionInputShape.MULTI) {
         Object payload = snapshot.payload();
         if (payload == null) {
-          return Multi.createFrom().empty();
+          return new RehydratedExecutionInput(Multi.createFrom().empty(), snapshot.pipelineContext());
         }
         if (payload instanceof Iterable<?> iterable) {
-          return Multi.createFrom().iterable(iterable);
+          return new RehydratedExecutionInput(
+              Multi.createFrom().iterable(iterable), snapshot.pipelineContext());
         }
-        return Multi.createFrom().item(payload);
+        return new RehydratedExecutionInput(Multi.createFrom().item(payload), snapshot.pipelineContext());
       }
-      return Uni.createFrom().item(snapshot.payload());
+      return new RehydratedExecutionInput(
+          Uni.createFrom().item(snapshot.payload()), snapshot.pipelineContext());
     }
     // Backward-compatible replay for records persisted before shape metadata.
     if (inputPayload instanceof List<?> list) {
-      return Multi.createFrom().iterable(list);
+      return new RehydratedExecutionInput(Multi.createFrom().iterable(list), Optional.empty());
     }
-    return Uni.createFrom().item(inputPayload);
+    return new RehydratedExecutionInput(Uni.createFrom().item(inputPayload), Optional.empty());
+  }
+
+  record RehydratedExecutionInput(Object reactiveInput, Optional<PipelineContext> pipelineContext) {
+    RehydratedExecutionInput {
+      java.util.Objects.requireNonNull(reactiveInput, "reactiveInput must not be null");
+      pipelineContext = Optional.ofNullable(pipelineContext).orElseGet(Optional::empty);
+    }
   }
 
   private String normalizeOptional(String value) {

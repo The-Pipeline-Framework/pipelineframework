@@ -64,7 +64,7 @@ class PipelineCacheSupportFactoryTest {
         PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         assertNotNull(support);
-        Uni<Optional<Object>> readUni = support.reader().get("v1:key");
+        Uni<Optional<Object>> readUni = support.reader().get("2:v1:key");
         Optional<Object> cached = readUni.await().atMost(Duration.ofSeconds(5));
         Object actual = cached.orElseThrow();
         assertEquals("cached-high", actual);

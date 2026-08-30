@@ -8,6 +8,7 @@ import java.util.Set;
 import com.google.protobuf.Int32Value;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.context.PipelineContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -24,7 +25,9 @@ class TransitionCommandEnvelopeTest {
     @Test
     void preservesTypedUniInputPayloadAcrossEnvelopeRoundTrip() {
         SamplePayload payload = new SamplePayload("order-1", 42);
-        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(ExecutionInputShape.UNI, payload));
+        PipelineContext pipelineContext = PipelineContext.fromHeaders("v2", "true", "require-cache");
+        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI, payload, pipelineContext));
 
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             command,
@@ -45,6 +48,7 @@ class TransitionCommandEnvelopeTest {
         SamplePayload decodedPayload = assertInstanceOf(SamplePayload.class, snapshot.payload());
         assertEquals("order-1", decodedPayload.id());
         assertEquals(42, decodedPayload.amount());
+        assertEquals(Optional.of(pipelineContext), snapshot.pipelineContext());
     }
 
     @Test

@@ -52,6 +52,8 @@ import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.command.CommandRetryExecutionScope;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
@@ -597,7 +599,10 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Multi.createFrom().deferred(() -> {
       Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
-        Object reactiveInput = executionInputPolicy.toReplayInput(payload);
+        ExecutionInputPolicy.RehydratedExecutionInput rehydratedInput =
+            executionInputPolicy.rehydrateExecutionInput(payload);
+        Object reactiveInput = rehydratedInput.reactiveInput();
+        PipelineContext previousPipeline = PipelineContextHolder.get();
         AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
         java.util.Optional<PipelineExecutionContext> previousExecution = PipelineExecutionContextHolder.get();
         CommandRetryExecutionScope.Snapshot previousCommandRetry = CommandRetryExecutionScope.capture();
@@ -619,21 +624,24 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             terminalOutputOwnership,
             java.util.Map.of()));
         PipelineExecutionContextHolder.set(executionContext);
+        rehydratedInput.pipelineContext().ifPresentOrElse(
+            PipelineContextHolder::set,
+            PipelineContextHolder::clear);
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {
-            restoreExecutionContexts(previous, previousExecution, previousCommandRetry);
+            restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry);
             return Multi.createFrom().failure(healthFailure);
           }
           RuntimeException inputFailure = validateInputShape(reactiveInput);
           if (inputFailure != null) {
-            restoreExecutionContexts(previous, previousExecution, previousCommandRetry);
+            restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry);
             return Multi.createFrom().failure(inputFailure);
           }
           List<Object> steps = loadStepsForExecution();
           int requestedStopBeforeStepIndex = command.stopBeforeStepIndex();
           if (requestedStopBeforeStepIndex > steps.size()) {
-            restoreExecutionContexts(previous, previousExecution, previousCommandRetry);
+            restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry);
             return Multi.createFrom().failure(new IllegalArgumentException(
                 "stopBeforeStepIndex " + requestedStopBeforeStepIndex
                     + " exceeds pipeline step count " + steps.size()));
@@ -647,14 +655,14 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
               terminalInputPassthrough.set(true);
               return requireCommandRetryConsumed(Multi.createFrom().empty(), commandRetryAdmission)
                   .onTermination().invoke((failure, cancelled) ->
-                      restoreExecutionContexts(previous, previousExecution, previousCommandRetry));
+                      restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry));
             }
             Multi<?> unchanged = reactiveInput instanceof Multi<?> multi
                 ? multi
                 : ((Uni<?>) reactiveInput).toMulti();
             return requireCommandRetryConsumed(unchanged, commandRetryAdmission)
                 .onTermination().invoke((failure, cancelled) ->
-                    restoreExecutionContexts(previous, previousExecution, previousCommandRetry));
+                    restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry));
           }
           PipelineRunner.ExecutionResult executionResult = executePipelineStreamingInternalFromStep(
               reactiveInput,
@@ -669,14 +677,14 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
           } else if (result instanceof Uni<?> uni) {
             stream = uni.toMulti();
           } else {
-            restoreExecutionContexts(previous, previousExecution, previousCommandRetry);
+            restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry);
             return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
           }
           return requireCommandRetryConsumed(stream, commandRetryAdmission)
               .onTermination().invoke((failure, cancelled) ->
-                  restoreExecutionContexts(previous, previousExecution, previousCommandRetry));
+                  restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry));
         } catch (Throwable failure) {
-          restoreExecutionContexts(previous, previousExecution, previousCommandRetry);
+          restoreExecutionContexts(previousPipeline, previous, previousExecution, previousCommandRetry);
           return Multi.createFrom().failure(failure);
         }
       });
@@ -857,9 +865,15 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   }
 
   private void restoreExecutionContexts(
+      PipelineContext previousPipeline,
       AwaitExecutionContext previousAwait,
       java.util.Optional<PipelineExecutionContext> previousExecution,
       CommandRetryExecutionScope.Snapshot previousCommandRetry) {
+    if (previousPipeline == null) {
+      PipelineContextHolder.clear();
+    } else {
+      PipelineContextHolder.set(previousPipeline);
+    }
     restoreAwaitContext(previousAwait);
     previousExecution.ifPresentOrElse(
         PipelineExecutionContextHolder::set,

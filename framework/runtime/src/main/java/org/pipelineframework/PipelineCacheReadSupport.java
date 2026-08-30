@@ -24,6 +24,7 @@ import java.util.function.Predicate;
 
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CachePolicy;
+import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.cache.PipelineCacheReader;
 import org.pipelineframework.cache.PipelineCacheWriter;
 import org.pipelineframework.context.PipelineContext;
@@ -105,11 +106,7 @@ class PipelineCacheReadSupport {
         if (key == null || context == null) {
             return key;
         }
-        String versionTag = context.versionTag();
-        if (versionTag == null || versionTag.isBlank()) {
-            return key;
-        }
-        return versionTag + ":" + key;
+        return PipelineCacheKeyFormat.applyVersionTag(key, context.versionTag());
     }
 
     PipelineCacheReader reader() {

@@ -71,6 +71,12 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("executePipelineStreaming"));
         assertTrue(source.contains("public Uni<RunAsyncAcceptedDto> runAsync(List<InputTypeDto> input"));
         assertTrue(source.contains("executePipelineAsync(Multi.createFrom().iterable(input)"));
+        assertTrue(source.contains("@HeaderParam(\"x-pipeline-version\") String versionTag"));
+        assertTrue(source.contains("@HeaderParam(\"x-pipeline-replay\") String replayMode"));
+        assertTrue(source.contains("@HeaderParam(\"x-pipeline-cache-policy\") String cachePolicy"));
+        assertTrue(source.contains("PipelineContext.fromHeaders(versionTag, replayMode, cachePolicy)"));
+        assertTrue(source.contains("PipelineContext previousPipelineContext = PipelineContextHolder.get()"));
+        assertTrue(source.contains("PipelineContextHolder.clear()"));
         assertTrue(source.contains("@Path(\"/executions/{executionId}\")"));
         assertTrue(source.contains("@Path(\"/executions/{executionId}/result\")"));
         assertTrue(source.contains("@Path(\"/ingest\")"));

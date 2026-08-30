@@ -24,6 +24,8 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineContextHolder;
 
 class QueueAsyncSubmissionFlow {
 
@@ -114,6 +116,7 @@ class QueueAsyncSubmissionFlow {
       String pipelineId,
       String contractVersion,
       String releaseVersion) {
+    PipelineContext pipelineContext = PipelineContextHolder.get();
     return Uni.createFrom().deferred(() -> {
       Optional<RuntimeException> guardFailure = guardSubmission(outputStreaming);
       if (guardFailure.isPresent()) {
@@ -139,7 +142,7 @@ class QueueAsyncSubmissionFlow {
       long now = System.currentTimeMillis();
       long ttlEpochS = ttlEpochS(now);
       return releaseActivation.apply(submission)
-          .chain(() -> executionInputPolicy.resolveExecutionInputPayload(executionInput))
+          .chain(() -> executionInputPolicy.resolveExecutionInputPayload(executionInput, pipelineContext))
           .onItem().transformToUni(snapshot -> createPlan(submission, snapshot, now, ttlEpochS))
           .onItem().transform(PipelineRunSubmissionPlan::createCommand)
           .onItem().transformToUni(command -> executionStateStore.createOrGetExecution(command)

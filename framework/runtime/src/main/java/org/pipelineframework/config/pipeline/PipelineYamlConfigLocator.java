@@ -16,13 +16,26 @@
 
 package org.pipelineframework.config.pipeline;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.JarURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 /**
  * Locates pipeline.yaml configuration files starting from a module directory.
@@ -73,6 +86,23 @@ public class PipelineYamlConfigLocator {
         validateSingleMatch(matches);
 
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
+    }
+
+    /**
+     * Locate a pipeline configuration at the root of the supplied class loader.
+     *
+     * @param classLoader the class loader whose root resources should be searched
+     * @return the first matching pipeline configuration, in filename-contract order
+     */
+    public Optional<URL> locateResource(ClassLoader classLoader) {
+        Objects.requireNonNull(classLoader, "classLoader must not be null");
+        for (String filename : EXACT_FILENAMES) {
+            URL resource = classLoader.getResource(filename);
+            if (resource != null) {
+                return Optional.of(resource);
+            }
+        }
+        return locateCanvasConfig(classLoader);
     }
 
     /**
@@ -136,6 +166,100 @@ public class PipelineYamlConfigLocator {
                 });
         } catch (IOException e) {
             throw new IllegalStateException("Failed to scan pipeline config directory: " + directory, e);
+        }
+    }
+
+    private Optional<URL> locateCanvasConfig(ClassLoader classLoader) {
+        try {
+            List<URL> matches = new ArrayList<>();
+            Map<String, URL> classpathEntries = new LinkedHashMap<>();
+            List<URL> loaderUrls = classLoaderUrls(classLoader).toList();
+            Stream<URL> discoverableEntries = loaderUrls.isEmpty()
+                ? systemClasspathUrls()
+                : loaderUrls.stream();
+            discoverableEntries.forEach(url -> classpathEntries.putIfAbsent(url.toExternalForm(), url));
+            for (URL manifest : Collections.list(classLoader.getResources("META-INF/MANIFEST.MF"))) {
+                if ("jar".equals(manifest.getProtocol())) {
+                    JarURLConnection connection = (JarURLConnection) manifest.openConnection();
+                    URL jarUrl = connection.getJarFileURL();
+                    classpathEntries.putIfAbsent(jarUrl.toExternalForm(), jarUrl);
+                }
+            }
+            for (URL entry : classpathEntries.values()) {
+                scanClasspathEntry(entry, matches);
+            }
+            return matches.stream()
+                .distinct()
+                .sorted(Comparator.comparing(URL::toExternalForm))
+                .findFirst();
+        } catch (IOException | URISyntaxException e) {
+            throw new IllegalStateException("Failed to scan classpath for pipeline config", e);
+        }
+    }
+
+    private Stream<URL> classLoaderUrls(ClassLoader classLoader) {
+        return Stream.iterate(classLoader, Objects::nonNull, ClassLoader::getParent)
+            .filter(URLClassLoader.class::isInstance)
+            .map(URLClassLoader.class::cast)
+            .flatMap(loader -> Arrays.stream(loader.getURLs()));
+    }
+
+    private Stream<URL> systemClasspathUrls() {
+        return Optional.ofNullable(System.getProperty("java.class.path"))
+            .stream()
+            .flatMap(classpath -> Arrays.stream(classpath.split(File.pathSeparator)))
+            .filter(entry -> !entry.isBlank())
+            .map(Path::of)
+            .map(this::toUrl);
+    }
+
+    private void scanClasspathEntry(URL entry, List<URL> matches) throws IOException, URISyntaxException {
+        if (!"file".equals(entry.getProtocol())) {
+            return;
+        }
+        Path path = Path.of(entry.toURI());
+        if (Files.isDirectory(path)) {
+            scanClasspathDirectory(path.toUri(), matches);
+        } else if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jar")) {
+            scanClasspathJar(path, matches);
+        }
+    }
+
+    private void scanClasspathDirectory(URI root, List<URL> matches) throws IOException {
+        try (var stream = Files.list(Path.of(root))) {
+            stream.filter(Files::isRegularFile)
+                .filter(path -> path.getFileName().toString().endsWith("-canvas-config.yaml"))
+                .map(this::toUrl)
+                .forEach(matches::add);
+        }
+    }
+
+    private void scanClasspathJar(Path jarPath, List<URL> matches) throws IOException {
+        URL jarUrl = jarPath.toUri().toURL();
+        try (JarFile jar = new JarFile(jarPath.toFile())) {
+            jar.stream()
+                .filter(entry -> !entry.isDirectory())
+                .map(entry -> entry.getName())
+                .filter(name -> !name.contains("/"))
+                .filter(name -> name.endsWith("-canvas-config.yaml"))
+                .map(name -> toJarUrl(jarUrl, name))
+                .forEach(matches::add);
+        }
+    }
+
+    private URL toUrl(Path path) {
+        try {
+            return path.toUri().toURL();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to resolve pipeline config resource " + path, e);
+        }
+    }
+
+    private URL toJarUrl(URL jarUrl, String entry) {
+        try {
+            return URI.create("jar:" + jarUrl.toExternalForm() + "!/" + entry).toURL();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to resolve pipeline config resource " + entry, e);
         }
     }
 
