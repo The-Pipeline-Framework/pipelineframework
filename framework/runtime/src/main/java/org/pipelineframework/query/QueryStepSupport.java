@@ -32,12 +32,14 @@ import org.pipelineframework.connector.ConnectorOperationInvocationCoordinator;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
+import org.pipelineframework.connector.QueryObservation;
 import org.pipelineframework.connector.QueryOutcome;
 import org.pipelineframework.connector.StreamingQueryOperation;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.mapper.Mapper;
+import org.pipelineframework.telemetry.QueryObservationTelemetry;
 
 /**
  * Runtime support for generated captured query client steps.
@@ -48,6 +50,7 @@ public class QueryStepSupport {
     private final List<QueryCaptureStore> stores;
     private final Optional<ConnectorBindingRegistry> bindingRegistry;
     private final ConnectorRuntimeContext runtimeContext;
+    private final QueryObservationTelemetry observationTelemetry;
     private final ObjectMapper json = PipelineJson.mapper();
     private final QueryCapturePayloadCodec capturePayloadCodec = new QueryCapturePayloadCodec(json);
     private final ConnectorOperationInvocationCoordinator invocationCoordinator =
@@ -60,11 +63,13 @@ public class QueryStepSupport {
         ConnectorBindingRegistry bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
-        this(toList(connectors), toList(stores), Optional.of(bindingRegistry), runtimeContext, false);
+        this(
+            toList(connectors), toList(stores), Optional.of(bindingRegistry), runtimeContext,
+            QueryObservationTelemetry.global(), false);
     }
 
     public QueryStepSupport(Collection<FrameworkQueryConnector> connectors, Collection<QueryCaptureStore> stores) {
-        this(connectors, stores, Optional.empty(), ConnectorRuntimeContext.empty());
+        this(connectors, stores, Optional.empty(), ConnectorRuntimeContext.empty(), QueryObservationTelemetry.global());
     }
 
     public QueryStepSupport(
@@ -72,7 +77,9 @@ public class QueryStepSupport {
         Collection<QueryCaptureStore> stores,
         ConnectorBindingRegistry bindingRegistry
     ) {
-        this(connectors, stores, Optional.ofNullable(bindingRegistry), ConnectorRuntimeContext.empty());
+        this(
+            connectors, stores, Optional.ofNullable(bindingRegistry), ConnectorRuntimeContext.empty(),
+            QueryObservationTelemetry.global());
     }
 
     public QueryStepSupport(
@@ -81,16 +88,19 @@ public class QueryStepSupport {
         ConnectorBindingRegistry bindingRegistry,
         ConnectorRuntimeContext runtimeContext
     ) {
-        this(connectors, stores, Optional.ofNullable(bindingRegistry), runtimeContext);
+        this(
+            connectors, stores, Optional.ofNullable(bindingRegistry), runtimeContext,
+            QueryObservationTelemetry.global());
     }
 
-    private QueryStepSupport(
+    QueryStepSupport(
         Collection<FrameworkQueryConnector> connectors,
         Collection<QueryCaptureStore> stores,
         Optional<ConnectorBindingRegistry> bindingRegistry,
-        ConnectorRuntimeContext runtimeContext
+        ConnectorRuntimeContext runtimeContext,
+        QueryObservationTelemetry observationTelemetry
     ) {
-        this(connectors, stores, bindingRegistry, runtimeContext, true);
+        this(connectors, stores, bindingRegistry, runtimeContext, observationTelemetry, true);
     }
 
     private QueryStepSupport(
@@ -98,6 +108,7 @@ public class QueryStepSupport {
         Collection<QueryCaptureStore> stores,
         Optional<ConnectorBindingRegistry> bindingRegistry,
         ConnectorRuntimeContext runtimeContext,
+        QueryObservationTelemetry observationTelemetry,
         boolean allowUnmanagedMemoryDefault
     ) {
         this.connectors = connectors == null ? List.of() : List.copyOf(connectors);
@@ -111,6 +122,8 @@ public class QueryStepSupport {
         this.bindingRegistry = java.util.Objects.requireNonNull(
             bindingRegistry, "connector binding registry selection must not be null");
         this.runtimeContext = java.util.Objects.requireNonNull(runtimeContext, "connector runtime context must not be null");
+        this.observationTelemetry = java.util.Objects.requireNonNull(
+            observationTelemetry, "query observation telemetry must not be null");
     }
 
     public <I, O> Uni<O> queryOneToOne(Uni<QueryStepDescriptor> descriptor, I input, Class<O> outputType) {
@@ -255,7 +268,7 @@ public class QueryStepSupport {
             String captureKey = captureKey(executionContext, descriptor, inputJson);
             return getCaptured(store, captureKey).onItem().transformToUni(existing -> {
                 if (existing.isPresent()) {
-                    return replayCaptured(existing.orElseThrow(), outputType);
+                    return replayCaptured(descriptor, existing.orElseThrow(), outputType);
                 }
                 NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
                 return executeMappedNative(
@@ -288,7 +301,7 @@ public class QueryStepSupport {
         return getCaptured(store, captureKey)
             .onItem().transformToUni(existing -> {
                 if (existing.isPresent()) {
-                    return replayCaptured(existing.get(), outputType);
+                    return replayCaptured(descriptor, existing.get(), outputType);
                 }
                 return executeAndCapture(
                     descriptor, input, outputType, store, executionContext, captureKey, inputJson);
@@ -321,7 +334,7 @@ public class QueryStepSupport {
             String captureKey = captureKey(executionContext, descriptor, inputJson);
             return getCaptured(store, captureKey).onItem().transformToUni(existing -> {
                 if (existing.isPresent()) {
-                    return replayCapturedOutcome(existing.orElseThrow(), outputType);
+                    return replayCapturedOutcome(descriptor, existing.orElseThrow(), outputType);
                 }
                 NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
                 return executeNative(descriptor, input, outputType)
@@ -402,7 +415,8 @@ public class QueryStepSupport {
             throw new IllegalStateException(
                 "persistence representation mapper returned null for canonical output " + outputType.getName());
         }
-        return (QueryOutcome<Object>) (QueryOutcome<?>) new QueryOutcome.Found<>(outputType.cast(canonical));
+        return (QueryOutcome<Object>) (QueryOutcome<?>) new QueryOutcome.Found<>(
+            outputType.cast(canonical), found.observation());
     }
 
     private <I, O> Uni<O> executeAndCapture(
@@ -424,7 +438,7 @@ public class QueryStepSupport {
             FrameworkQueryConnector connector = resolveConnector(descriptor.connector());
             return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType)
                 .onItem().transformToUni(output -> captureFound(
-                    store, executionContext, descriptor, captureKey, inputJson, output, outputType));
+                    store, executionContext, descriptor, captureKey, inputJson, output, outputType, Optional.empty()));
         } catch (RuntimeException failure) {
             return Uni.createFrom().failure(failure);
         }
@@ -549,7 +563,15 @@ public class QueryStepSupport {
                 Optional.of(bindings::materialize),
                 localResultMapper)));
         return Uni.createFrom().completionStage(stage)
+            .onItem().invoke(outcome -> observeLive(selector, outcome))
             .onFailure().transform(QueryStepSupport::unwrapTransportFailure);
+    }
+
+    private void observeLive(NativeQuerySelector selector, QueryOutcome<Object> outcome) {
+        if (outcome != null) {
+            outcome.observation().ifPresent(observation ->
+                observationTelemetry.record(selector.operationIdentity(), observation));
+        }
     }
 
     private QueryOperation<?, ?, ?> requireBoundQueryOperation(
@@ -622,7 +644,8 @@ public class QueryStepSupport {
             }
             NativeCapture resolved = capture.orElseThrow();
             return captureFound(
-                resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), output, outputType);
+                resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), output,
+                outputType, found.observation());
         }
         if (outcome instanceof QueryOutcome.NotFound<Object> notFound) {
             if (capture.isEmpty()) {
@@ -631,7 +654,7 @@ public class QueryStepSupport {
             NativeCapture resolved = capture.orElseThrow();
             return captureNotFound(
                 resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(),
-                notFound.code(), outputType);
+                notFound.code(), outputType, notFound.observation());
         }
         if (outcome instanceof QueryOutcome.TemporarilyUnavailable<Object> unavailable) {
             return Uni.createFrom().failure(new QueryTemporarilyUnavailableException(unavailable.code()));
@@ -668,21 +691,23 @@ public class QueryStepSupport {
                         + found.output().getClass().getName() + " but step expected " + outputType.getName(), failure));
             }
             if (capture.isEmpty()) {
-                return Uni.createFrom().item(new QueryOutcome.Found<>(output));
+                return Uni.createFrom().item(new QueryOutcome.Found<>(output, found.observation()));
             }
             NativeCapture resolved = capture.orElseThrow();
             return captureFound(
-                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), output, outputType)
-                .replaceWith(new QueryOutcome.Found<>(output));
+                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), output,
+                    outputType, found.observation())
+                .replaceWith(new QueryOutcome.Found<>(output, found.observation()));
         }
         if (outcome instanceof QueryOutcome.NotFound<Object> notFound) {
             if (capture.isEmpty()) {
-                return Uni.createFrom().item(new QueryOutcome.NotFound<>(notFound.code()));
+                return Uni.createFrom().item(new QueryOutcome.NotFound<>(notFound.code(), notFound.observation()));
             }
             NativeCapture resolved = capture.orElseThrow();
             return captureNotFoundRecord(
-                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(), notFound.code())
-                .replaceWith(new QueryOutcome.NotFound<>(notFound.code()));
+                    resolved.store(), resolved.context(), descriptor, resolved.captureKey(), resolved.inputJson(),
+                    notFound.code(), notFound.observation())
+                .replaceWith(new QueryOutcome.NotFound<>(notFound.code(), notFound.observation()));
         }
         return Uni.createFrom().item((QueryOutcome<O>) outcome);
     }
@@ -853,7 +878,8 @@ public class QueryStepSupport {
         String captureKey,
         String inputJson,
         O output,
-        Class<O> outputType
+        Class<O> outputType,
+        Optional<QueryObservation> observation
     ) {
         try {
             String outputJson = capturePayloadCodec.encode(output, outputType);
@@ -869,8 +895,9 @@ public class QueryStepSupport {
                 outputType.getName(),
                 Instant.now(),
                 QueryCaptureStatus.FOUND,
-                "found");
-            return putCaptured(store, record).onItem().transformToUni(captured -> replayCaptured(captured, outputType));
+                "found",
+                observation);
+            return putCaptured(store, record).onItem().transformToUni(captured -> decodeCaptured(captured, outputType));
         } catch (Exception ex) {
             return Uni.createFrom().failure(ex);
         }
@@ -883,10 +910,11 @@ public class QueryStepSupport {
         String captureKey,
         String inputJson,
         String outcomeCode,
-        Class<O> outputType
+        Class<O> outputType,
+        Optional<QueryObservation> observation
     ) {
-        return captureNotFoundRecord(store, context, descriptor, captureKey, inputJson, outcomeCode)
-            .onItem().transformToUni(captured -> replayCaptured(captured, outputType));
+        return captureNotFoundRecord(store, context, descriptor, captureKey, inputJson, outcomeCode, observation)
+            .onItem().transformToUni(captured -> decodeCaptured(captured, outputType));
     }
 
     private Uni<QueryCaptureRecord> captureNotFoundRecord(
@@ -895,7 +923,8 @@ public class QueryStepSupport {
         QueryStepDescriptor descriptor,
         String captureKey,
         String inputJson,
-        String outcomeCode
+        String outcomeCode,
+        Optional<QueryObservation> observation
     ) {
         QueryCaptureRecord record = new QueryCaptureRecord(
             context.tenantId(),
@@ -909,18 +938,41 @@ public class QueryStepSupport {
             "",
             Instant.now(),
             QueryCaptureStatus.NOT_FOUND,
-            outcomeCode);
+            outcomeCode,
+            observation);
         return putCaptured(store, record);
     }
 
-    private <O> Uni<QueryOutcome<O>> replayCapturedOutcome(QueryCaptureRecord record, Class<O> outputType) {
+    private <O> Uni<QueryOutcome<O>> replayCapturedOutcome(
+        QueryStepDescriptor descriptor,
+        QueryCaptureRecord record,
+        Class<O> outputType
+    ) {
+        Optional<QueryObservation> observation = recordReplay(descriptor, record);
         if (record.status() == QueryCaptureStatus.NOT_FOUND) {
-            return Uni.createFrom().item(new QueryOutcome.NotFound<>(record.outcomeCode()));
+            return Uni.createFrom().item(new QueryOutcome.NotFound<>(record.outcomeCode(), observation));
         }
-        return replayCaptured(record, outputType).onItem().transform(output -> new QueryOutcome.Found<>(output));
+        return decodeCaptured(record, outputType)
+            .onItem().transform(output -> new QueryOutcome.Found<>(output, observation));
     }
 
-    private <O> Uni<O> replayCaptured(QueryCaptureRecord record, Class<O> outputType) {
+    private <O> Uni<O> replayCaptured(
+        QueryStepDescriptor descriptor,
+        QueryCaptureRecord record,
+        Class<O> outputType
+    ) {
+        recordReplay(descriptor, record);
+        return decodeCaptured(record, outputType);
+    }
+
+    private Optional<QueryObservation> recordReplay(QueryStepDescriptor descriptor, QueryCaptureRecord record) {
+        Optional<QueryObservation> replayed = record.observation().map(QueryObservation::asReplay);
+        replayed.ifPresent(observation -> observationTelemetry.record(
+            descriptor.nativeSelector().orElseThrow().operationIdentity(), observation));
+        return replayed;
+    }
+
+    private <O> Uni<O> decodeCaptured(QueryCaptureRecord record, Class<O> outputType) {
         if (record.status() == QueryCaptureStatus.NOT_FOUND) {
             return Uni.createFrom().failure(new QueryNotFoundException(record.outcomeCode()));
         }

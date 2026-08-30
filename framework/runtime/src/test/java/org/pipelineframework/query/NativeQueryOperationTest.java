@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletionException;
@@ -28,7 +29,10 @@ import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryObservationOrigin;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.QueryTokenUsage;
 import org.pipelineframework.connector.TestConnectorBindingRegistries;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
@@ -79,6 +83,30 @@ class NativeQueryOperationTest {
             descriptor, new Lookup("customer-1"), Snapshot.class).await().atMost(Duration.ofSeconds(2));
 
         assertEquals(first, replayed);
+        assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
+    void capturesLiveObservationAndMarksSemanticReplayWithoutAnotherProviderCall() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "observed-execution", 3));
+        QueryObservation observation = observation();
+        operation.outcome = new QueryOutcome.Found<>(
+            new Snapshot("customer-1", "MEDIUM"), Optional.of(observation));
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
+
+        QueryOutcome.Found<?> live = assertInstanceOf(QueryOutcome.Found.class,
+            support.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        QueryOutcome.Found<?> replayed = assertInstanceOf(QueryOutcome.Found.class,
+            replayWithoutProvider.queryOutcomeOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertEquals(QueryObservationOrigin.LIVE_PROVIDER, live.observation().orElseThrow().origin());
+        assertEquals(QueryObservationOrigin.CAPTURE_REPLAY, replayed.observation().orElseThrow().origin());
+        assertEquals(observation.tokenUsage(), replayed.observation().orElseThrow().tokenUsage());
+        assertEquals(live.output(), replayed.output());
         assertEquals(1, operation.invocations.get());
     }
 
@@ -139,7 +167,7 @@ class NativeQueryOperationTest {
     @Test
     void exposesCapturedNotFoundAsAValidSemanticObservationWithoutChangingOrdinaryQueryBehavior() {
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 5));
-        operation.outcome = new QueryOutcome.NotFound<>("customer-missing");
+        operation.outcome = new QueryOutcome.NotFound<>("customer-missing", Optional.of(observation()));
         QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"));
 
         QueryOutcome.NotFound<?> first = assertInstanceOf(QueryOutcome.NotFound.class,
@@ -153,6 +181,8 @@ class NativeQueryOperationTest {
 
         assertEquals("customer-missing", first.code());
         assertEquals(first.code(), replayed.code());
+        assertEquals(QueryObservationOrigin.LIVE_PROVIDER, first.observation().orElseThrow().origin());
+        assertEquals(QueryObservationOrigin.CAPTURE_REPLAY, replayed.observation().orElseThrow().origin());
         assertEquals(1, operation.invocations.get());
     }
 
@@ -253,6 +283,13 @@ class NativeQueryOperationTest {
             descriptor(Map.of("index", "customers")), new Lookup("customer-1"), Snapshot.class)
             .await().atMost(Duration.ofSeconds(2)));
         assertInstanceOf(expected, failure);
+    }
+
+    private static QueryObservation observation() {
+        return QueryObservation.live(
+            Optional.of(new QueryTokenUsage(
+                OptionalLong.of(8), OptionalLong.of(5), OptionalLong.of(17))),
+            Optional.of("provider-model"), Optional.of("stop"));
     }
 
     private QueryStepDescriptor descriptor(Map<String, Object> configuration) {

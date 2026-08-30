@@ -26,6 +26,10 @@ typed input.
 
 Telemetry boundary identity and available instrumentation are build-produced. Sampling,
 enablement, exporters, backends, and operational thresholds are runtime/deployment policy.
+Framework-owned Query observation metadata is the source for Query telemetry. Pure derivation
+selects bounded values, while separate metric and tracing adapters emit them: live reported input
+and output counts are usage metrics, and live or replayed historical metadata is trace context.
+Replay never represents new token consumption.
 This decision governs `framework/deployment`, runtime mapping, runtime configuration,
 telemetry in `framework/runtime*`, packaging, and `docs/deploy`.
 

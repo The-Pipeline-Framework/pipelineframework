@@ -5,9 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Instant;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryTokenUsage;
 
 class QueryCaptureRecordTest {
 
@@ -61,6 +65,27 @@ class QueryCaptureRecordTest {
         assertEquals(QueryCaptureStatus.FOUND, record.status());
         assertEquals("found", record.outcomeCode());
         assertEquals("{\"riskScore\":42}", record.outputJson());
+        assertEquals(Optional.empty(), record.observation());
+    }
+
+    @Test
+    void serializesObservationBesideUnchangedApplicationOutput() throws Exception {
+        QueryObservation observation = QueryObservation.live(
+            Optional.of(new QueryTokenUsage(
+                OptionalLong.of(11), OptionalLong.of(3), OptionalLong.of(20))),
+            Optional.of("provider-model"), Optional.of("stop"));
+        QueryCaptureRecord record = new QueryCaptureRecord(
+            "tenant-1", "exec-abc", 2, "customer-risk-by-id", "v1", "stable-capture-key", "{}",
+            "{\"riskScore\":42}", "com.example.CustomerRiskSnapshot", FIXED_TIME,
+            QueryCaptureStatus.FOUND, "found", Optional.of(observation));
+
+        String encoded = PipelineJson.mapper().writeValueAsString(record);
+        QueryCaptureRecord decoded = PipelineJson.mapper().readValue(encoded, QueryCaptureRecord.class);
+
+        assertEquals("stable-capture-key", decoded.captureKey());
+        assertEquals("{\"riskScore\":42}", decoded.outputJson());
+        assertEquals("com.example.CustomerRiskSnapshot", decoded.outputType());
+        assertEquals(Optional.of(observation), decoded.observation());
     }
 
     @Test

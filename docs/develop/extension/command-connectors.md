@@ -185,6 +185,13 @@ non-retryable `QueryNotFoundException`; `TemporarilyUnavailable` remains retryab
 `AuthenticationRequired` and `TerminalFailure` are non-retryable failures. Public provider code
 does not depend on Mutiny, CDI, or Quarkus.
 
+Every unary `QueryOutcome` can also carry an optional provider-neutral `QueryObservation`.
+`QueryTokenUsage` keeps independently reported input, output, and total counts; counts must be
+non-negative and providers must leave unavailable values absent rather than deriving them.
+Response model and finish reason are optional bounded metadata. A live operation uses
+`LIVE_PROVIDER`; Query capture reconstructs persisted metadata as `CAPTURE_REPLAY`. Existing
+one-argument outcome constructors remain valid and produce no observation.
+
 Query capabilities are conservative when omitted. `LIVE_ONLY` requires `BYPASS_CACHE`.
 `CACHEABLE` permits the ordinary pipeline cache policies; a declared `maximumCacheAge` requires
 the configured positive cache TTL to be no greater than that maximum. Without a provider maximum,
@@ -200,6 +207,13 @@ separate paths. A generic cache hit returns before Query runtime. After a cache 
 execution, an existing Query capture is replayed before resolving the provider. Only a miss in
 both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
 [Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
+
+Query capture persists observation metadata beside `outputJson` and `outputType`; it does not put
+metadata into the application value or the capture-key basis. Runtime records a completed live
+provider observation before capture arbitration, including an observation attached to an invalid
+terminal decision. Replay exposes the historical metadata for tracing but never records it as newly
+consumed token usage. Provider and operation identity are bounded telemetry attributes; prompts,
+completions, payloads, catalogue data, credentials, execution IDs, and response IDs are excluded.
 
 ### Finite streaming Query
 

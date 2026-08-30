@@ -175,7 +175,11 @@ class TelemetryArchitectureTest {
 
     @Test
     void metricsAdaptersDoNotManipulateSpansAndPureCoreDoesNotManipulateInstruments() throws Exception {
-        for (String name : List.of("PipelineMetricsRecorder.java", "orchestrator/TransitionWorkerMetrics.java")) {
+        Path pure = Path.of("src", "main", "java", "org", "pipelineframework", "telemetry");
+        for (String name : List.of(
+            "PipelineMetricsRecorder.java",
+            "QueryObservationMetrics.java",
+            "orchestrator/TransitionWorkerMetrics.java")) {
             Path path = name.startsWith("orchestrator/")
                 ? Path.of("src", "main", "java", "org", "pipelineframework", name)
                 : Path.of("src", "main", "java", "org", "pipelineframework", "telemetry", name);
@@ -183,7 +187,9 @@ class TelemetryArchitectureTest {
             assertFalse(source.contains("Span.current()"), name);
             assertFalse(source.contains("SpanBuilder"), name);
         }
-        Path pure = Path.of("src", "main", "java", "org", "pipelineframework", "telemetry");
+        String queryTracing = Files.readString(pure.resolve("QueryObservationTracing.java"));
+        assertFalse(queryTracing.contains("LongHistogram"));
+        assertFalse(queryTracing.contains(".meter("));
         for (String directory : List.of("observation", "derivation")) {
             try (var paths = Files.walk(pure.resolve(directory))) {
                 for (Path path : paths.filter(value -> value.toString().endsWith(".java")).toList()) {
