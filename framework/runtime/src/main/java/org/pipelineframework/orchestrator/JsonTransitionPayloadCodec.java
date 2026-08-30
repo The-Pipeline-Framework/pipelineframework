@@ -152,8 +152,11 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
                 ? new EncodedExecutionInputSnapshot(
                     snapshot.shape(),
                     null,
-                    multiPayload.stream().map(this::encode).toList())
-                : new EncodedExecutionInputSnapshot(snapshot.shape(), encode(snapshot.payload()), List.of());
+                    multiPayload.stream().map(this::encode).toList(),
+                    snapshot.pipelineContext().orElse(null))
+                : new EncodedExecutionInputSnapshot(
+                    snapshot.shape(), encode(snapshot.payload()), List.of(),
+                    snapshot.pipelineContext().orElse(null));
             return new SerializedTransitionPayload(
                 ExecutionInputSnapshot.class.getName(),
                 ENCODING,
@@ -174,7 +177,7 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
             Object decodedPayload = encoded.shape() == ExecutionInputShape.MULTI
                 ? encoded.items().stream().map(this::decode).toList()
                 : decode(encoded.payload());
-            return new ExecutionInputSnapshot(encoded.shape(), decodedPayload);
+            return new ExecutionInputSnapshot(encoded.shape(), decodedPayload, encoded.pipelineContext());
         } catch (Exception e) {
             throw new IllegalArgumentException(
                 "Failed to decode transition input snapshot " + snapshotTypeSummary(encoded),
@@ -333,7 +336,8 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
     private record EncodedExecutionInputSnapshot(
         ExecutionInputShape shape,
         SerializedTransitionPayload payload,
-        List<SerializedTransitionPayload> items) {
+        List<SerializedTransitionPayload> items,
+        org.pipelineframework.context.PipelineContext pipelineContext) {
         private EncodedExecutionInputSnapshot {
             items = items == null ? List.of() : List.copyOf(items);
         }

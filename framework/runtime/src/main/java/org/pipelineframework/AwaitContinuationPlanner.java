@@ -106,7 +106,12 @@ class AwaitContinuationPlanner {
         parent,
         unit,
         aggregateStepIndex,
-        new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(orderedOutputs))));
+        new ExecutionInputSnapshot(
+            ExecutionInputShape.MULTI,
+            List.copyOf(orderedOutputs),
+            parent.inputPayload() instanceof ExecutionInputSnapshot snapshot
+                ? snapshot.pipelineContext()
+                : java.util.Optional.empty())));
   }
 
   private static Object decodePayload(Object payload, TransitionPayloadCodec payloadCodec) {
@@ -196,6 +201,6 @@ class AwaitContinuationPlanner {
     if (payload instanceof List<?> list) {
       payload = List.copyOf(list);
     }
-    return new ExecutionInputSnapshot(snapshot.shape(), payload);
+    return new ExecutionInputSnapshot(snapshot.shape(), payload, snapshot.pipelineContext());
   }
 }

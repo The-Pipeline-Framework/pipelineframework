@@ -26,7 +26,7 @@ class PipelineRunnerCacheReadTest {
     void cacheHitReturnsCachedValueAndSkipsStep() {
         CountingStep step = new CountingStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-value")),
+            new FixedReader(Map.of("2:v1:key", "cached-value")),
             List.of(new FixedKeyStrategy()),
             "prefer-cache");
 
@@ -100,7 +100,7 @@ class PipelineRunnerCacheReadTest {
     void cacheOnlyExecutesCommandWithoutReadingWarmEntry() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-value")),
+            new FixedReader(Map.of("2:v1:key", "cached-value")),
             List.of(new FixedKeyStrategy()),
             "cache-only");
 
@@ -125,7 +125,7 @@ class PipelineRunnerCacheReadTest {
     void preferCacheHitIsPipelineReplayAndSkipsCommandRuntime() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:target", "cached-command-output")),
+            new FixedReader(Map.of("2:v1:target", "cached-command-output")),
             List.of(new TargetedKeyStrategy()),
             "prefer-cache");
 
@@ -139,7 +139,7 @@ class PipelineRunnerCacheReadTest {
     void preferCacheVersionChangeFallsThroughToCommandRuntime() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:target", "cached-command-output")),
+            new FixedReader(Map.of("2:v1:target", "cached-command-output")),
             List.of(new TargetedKeyStrategy()),
             "prefer-cache");
 
@@ -153,7 +153,7 @@ class PipelineRunnerCacheReadTest {
     void skipIfPresentRejectsCommandBeforeCacheOrLiveExecution() {
         CountingCommandStep step = new CountingCommandStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-command-output")),
+            new FixedReader(Map.of("2:v1:key", "cached-command-output")),
             List.of(new FixedKeyStrategy()),
             "skip-if-present");
 
@@ -211,7 +211,7 @@ class PipelineRunnerCacheReadTest {
     void liveExecutionWhenPolicySkipsReadResetsStaleCacheStatusToBypass() {
         StatusCapturingStep step = new StatusCapturingStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-value")),
+            new FixedReader(Map.of("2:v1:key", "cached-value")),
             List.of(new FixedKeyStrategy()),
             "prefer-cache");
         PipelineContext context = new PipelineContext("v1", null, "bypass-cache");
@@ -295,7 +295,7 @@ class PipelineRunnerCacheReadTest {
     void targetedStrategyPreferredWhenStepProvidesTargetType() {
         CountingTargetStep step = new CountingTargetStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:target", "cached-target")),
+            new FixedReader(Map.of("2:v1:target", "cached-target")),
             List.of(new FallbackKeyStrategy(), new TargetedKeyStrategy()),
             "prefer-cache");
 
@@ -320,7 +320,7 @@ class PipelineRunnerCacheReadTest {
     void cacheReadBypassIgnoresCacheHit() {
         CountingBypassStep step = new CountingBypassStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:key", "cached-value")),
+            new FixedReader(Map.of("2:v1:key", "cached-value")),
             List.of(new FixedKeyStrategy()),
             "prefer-cache");
 
@@ -344,7 +344,7 @@ class PipelineRunnerCacheReadTest {
     @Test
     void targetedStrategyReturningBlankSkipsFallbackResolution() {
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FixedReader(Map.of("v1:fallback", "cached-fallback")),
+            new FixedReader(Map.of("2:v1:fallback", "cached-fallback")),
             List.of(new EmptyTargetKeyStrategy(), new FallbackKeyStrategy()),
             "prefer-cache");
 
@@ -524,13 +524,13 @@ class PipelineRunnerCacheReadTest {
     static final class HighPriorityReader implements PipelineCacheReader {
         @Override
         public Uni<Optional<Object>> get(String key) {
-            Object value = "v1:key".equals(key) ? "cached-high" : null;
+            Object value = "2:v1:key".equals(key) ? "cached-high" : null;
             return Uni.createFrom().item(Optional.ofNullable(value));
         }
 
         @Override
         public Uni<Boolean> exists(String key) {
-            return Uni.createFrom().item("v1:key".equals(key));
+            return Uni.createFrom().item("2:v1:key".equals(key));
         }
 
         @Override
@@ -542,13 +542,13 @@ class PipelineRunnerCacheReadTest {
     static final class LowPriorityReader implements PipelineCacheReader {
         @Override
         public Uni<Optional<Object>> get(String key) {
-            Object value = "v1:key".equals(key) ? "cached-low" : null;
+            Object value = "2:v1:key".equals(key) ? "cached-low" : null;
             return Uni.createFrom().item(Optional.ofNullable(value));
         }
 
         @Override
         public Uni<Boolean> exists(String key) {
-            return Uni.createFrom().item("v1:key".equals(key));
+            return Uni.createFrom().item("2:v1:key".equals(key));
         }
 
         @Override

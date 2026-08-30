@@ -393,7 +393,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private static ExecutionInputSnapshot normalizeExecutionInputPayload(Object inputPayload) {
         if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
-            return new ExecutionInputSnapshot(snapshot.shape(), copySnapshotPayload(snapshot.payload()));
+            return new ExecutionInputSnapshot(
+                snapshot.shape(), copySnapshotPayload(snapshot.payload()), snapshot.pipelineContext());
         }
         return new ExecutionInputSnapshot(ExecutionInputShape.RAW, copySnapshotPayload(inputPayload));
     }

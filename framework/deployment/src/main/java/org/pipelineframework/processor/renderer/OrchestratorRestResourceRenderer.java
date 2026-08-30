@@ -56,6 +56,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName uni = ClassName.get("io.smallrye.mutiny", "Uni");
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName pipelineContext = ClassName.get("org.pipelineframework.context", "PipelineContext");
+        ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
         ClassName runAsyncAcceptedDto = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
         ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
@@ -156,7 +158,27 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 .addAnnotation(AnnotationSpec.builder(headerParam)
                     .addMember("value", "$S", "Idempotency-Key")
                     .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "versionTag")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-version")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "replayMode")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-replay")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "cachePolicy")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-cache-policy")
+                    .build())
                 .build());
+        runAsyncMethod
+            .addStatement("$T previousPipelineContext = $T.get()", pipelineContext, pipelineContextHolder)
+            .addStatement("$T.set($T.fromHeaders(versionTag, replayMode, cachePolicy))",
+                pipelineContextHolder, pipelineContext)
+            .beginControlFlow("try");
         if (binding.inputStreaming()) {
             runAsyncMethod.addStatement(
                 "return pipelineExecutionService.executePipelineAsync($T.createFrom().iterable(input), tenantId, idempotencyKey, $L)",
@@ -167,6 +189,14 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 "return pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey, $L)",
                 binding.outputStreaming());
         }
+        runAsyncMethod
+            .nextControlFlow("finally")
+            .beginControlFlow("if (previousPipelineContext == null)")
+            .addStatement("$T.clear()", pipelineContextHolder)
+            .nextControlFlow("else")
+            .addStatement("$T.set(previousPipelineContext)", pipelineContextHolder)
+            .endControlFlow()
+            .endControlFlow();
 
         MethodSpec statusMethod = MethodSpec.methodBuilder("status")
             .addModifiers(Modifier.PUBLIC)

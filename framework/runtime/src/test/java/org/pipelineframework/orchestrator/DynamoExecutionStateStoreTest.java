@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.context.PipelineContext;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
@@ -43,6 +44,48 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class DynamoExecutionStateStoreTest {
+
+    @Test
+    void writesAndRestoresAsyncPipelineContextWithTheExecutionInput() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new PaymentRecord("payment-1"),
+            PipelineContext.fromHeaders("release-17", "true", "require-cache"));
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "context-key", input, ExecutionResultShape.SINGLE, now, ttl)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> createdItem = created.getValue().transactItems().getFirst().put().item();
+        assertEquals("release-17", createdItem.get("input_pipeline_version").s());
+        assertEquals("true", createdItem.get("input_pipeline_replay_mode").s());
+        assertEquals("require-cache", createdItem.get("input_pipeline_cache_policy").s());
+
+        Map<String, AttributeValue> persisted = new HashMap<>(executionItem(
+            "tenant-a", "execution-context", "context-key", ttl, ExecutionStatus.RUNNING));
+        persisted.put("input_payload_json", createdItem.get("input_payload_json"));
+        persisted.put("input_payload_type_id", createdItem.get("input_payload_type_id"));
+        persisted.put("input_payload_encoding", createdItem.get("input_payload_encoding"));
+        persisted.put("input_shape", createdItem.get("input_shape"));
+        persisted.put("input_pipeline_version", createdItem.get("input_pipeline_version"));
+        persisted.put("input_pipeline_replay_mode", createdItem.get("input_pipeline_replay_mode"));
+        persisted.put("input_pipeline_cache_policy", createdItem.get("input_pipeline_cache_policy"));
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(persisted).build());
+
+        ExecutionInputSnapshot restored = assertInstanceOf(
+            ExecutionInputSnapshot.class,
+            store.getExecution("tenant-a", "execution-context").await().indefinitely().orElseThrow().inputPayload());
+        assertEquals(input.payload(), restored.payload());
+        assertEquals(input.pipelineContext(), restored.pipelineContext());
+    }
 
     @Test
     void writesAndRestoresTypedExecutionInputAndMaterializedChildResults() {

@@ -28,6 +28,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.context.PipelineContext;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -77,6 +78,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String INPUT_PAYLOAD_DIGEST = "input_payload_digest";
     private static final String INPUT_PAYLOAD_TYPE_ID = "input_payload_type_id";
     private static final String INPUT_PAYLOAD_ENCODING = "input_payload_encoding";
+    private static final String INPUT_PIPELINE_VERSION = "input_pipeline_version";
+    private static final String INPUT_PIPELINE_REPLAY_MODE = "input_pipeline_replay_mode";
+    private static final String INPUT_PIPELINE_CACHE_POLICY = "input_pipeline_cache_policy";
     private static final int BATCH_GET_MAX_ATTEMPTS = 4;
     private static final long BATCH_GET_RETRY_BUDGET_MS = 750L;
     private static final long BATCH_GET_RETRY_INITIAL_DELAY_MS = 50L;
@@ -1514,6 +1518,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
         if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
             item.put(INPUT_SHAPE, avS(snapshot.shape().name()));
+            snapshot.pipelineContext().ifPresent(context -> {
+                putIfPresent(item, INPUT_PIPELINE_VERSION, context.versionTag());
+                putIfPresent(item, INPUT_PIPELINE_REPLAY_MODE, context.replayMode());
+                putIfPresent(item, INPUT_PIPELINE_CACHE_POLICY, context.cachePolicy());
+            });
             putSerializedInputPayload(item, record, inputCanonicalTypeId, "create", inputPayload, snapshot.payload());
             return;
         }
@@ -1887,10 +1896,26 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
         try {
             ExecutionInputShape shape = ExecutionInputShape.valueOf(shapeValue);
-            return new ExecutionInputSnapshot(shape, decodedPayload);
+            return readPipelineContext(item)
+                .<Object>map(context -> new ExecutionInputSnapshot(shape, decodedPayload, context))
+                .orElseGet(() -> new ExecutionInputSnapshot(shape, decodedPayload));
         } catch (IllegalArgumentException ignored) {
             return decodedPayload;
         }
+    }
+
+    private Optional<PipelineContext> readPipelineContext(Map<String, AttributeValue> item) {
+        String versionTag = readString(item, INPUT_PIPELINE_VERSION);
+        String replayMode = readString(item, INPUT_PIPELINE_REPLAY_MODE);
+        String cachePolicy = readString(item, INPUT_PIPELINE_CACHE_POLICY);
+        if (isBlank(versionTag) && isBlank(replayMode) && isBlank(cachePolicy)) {
+            return Optional.empty();
+        }
+        return Optional.of(PipelineContext.fromHeaders(versionTag, replayMode, cachePolicy));
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private Object readSerializedInputPayload(ExecutionRecord<Object, Object> execution, Map<String, AttributeValue> item, String payload) {

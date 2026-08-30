@@ -38,6 +38,7 @@ import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.search.common.domain.ParsedDocument;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.testcontainers.containers.*;
@@ -53,6 +54,8 @@ class SearchPipelineEndToEndIT {
     private static final Logger LOG = Logger.getLogger(SearchPipelineEndToEndIT.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Network NETWORK = Network.newNetwork();
+    private static final String TENANT_ID = "search-e2e";
+    private static final Duration EXECUTION_TIMEOUT = Duration.ofSeconds(90);
     private static final String CACHE_PREFIX = "pipeline-cache:";
     private static final Path DEV_CERTS_DIR =
         Paths.get(System.getProperty("user.dir"))
@@ -385,10 +388,7 @@ class SearchPipelineEndToEndIT {
         ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
         assertExitSuccess(warm, "Expected prefer-cache run to succeed");
 
-        UUID docId = stableDocId(input);
-        String rawContentHash = rawContentHashFor(input, docId);
-        String key = cacheKeyForParsedDocument(version, rawContentHash);
-        assertRedisKeyState(key, true, "Expected prefer-cache to warm cache before require-cache");
+        assertRedisVersionState(version, true, "Expected prefer-cache to warm cache before require-cache");
 
         ProcessResult require = orchestratorTriggerRun(input, "require-cache", version, false);
         assertExitSuccess(require, "Expected require-cache to succeed after warm cache");
@@ -572,7 +572,7 @@ class SearchPipelineEndToEndIT {
      * @param cachePolicy the cache policy header value to send (e.g., "require-cache", "prefer-cache", "bypass-cache", "cache-only")
      * @param versionTag the pipeline version tag to send as `x-pipeline-version` to isolate replay/caching
      * @param replay when true, includes the `x-pipeline-replay: true` header to request replay behavior
-     * @return a ProcessResult whose exitCode is `0` if the orchestrator returned an HTTP 2xx status or `1` otherwise, and whose output is the response body
+     * @return a ProcessResult whose exitCode is `0` if the queue-async execution succeeded or `1` otherwise, and whose output is the terminal response body
      * @throws Exception if building/sending the HTTP request or receiving the response fails
      */
     private ProcessResult orchestratorTriggerRun(
@@ -581,22 +581,55 @@ class SearchPipelineEndToEndIT {
         String versionTag,
         boolean replay
     ) throws Exception {
-        String url = "http://" + orchestratorService.getHost() + ":" +
-            orchestratorService.getMappedPort(8080) + "/pipeline/run";
+        String baseUrl = "http://" + orchestratorService.getHost() + ":" +
+            orchestratorService.getMappedPort(8080) + "/pipeline";
         String payload = "{\"docId\":\"" + stableDocId(input) + "\",\"sourceUrl\":\"" + input + "\"}";
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+        String idempotencyKey = "search-e2e:" + UUID.randomUUID();
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + "/run-async"))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
+            .header("x-tenant-id", TENANT_ID)
+            .header("Idempotency-Key", idempotencyKey)
             .header("x-pipeline-version", versionTag)
             .header("x-pipeline-cache-policy", cachePolicy)
             .POST(HttpRequest.BodyPublishers.ofString(payload));
         if (replay) {
             builder.header("x-pipeline-replay", "true");
         }
-        HttpResponse<String> response = insecureHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
-        String output = response.body();
-        LOG.infof("Orchestrator response:%n%s", output);
-        return new ProcessResult(response.statusCode() >= 200 && response.statusCode() < 300 ? 0 : 1, output);
+        HttpClient client = insecureHttpClient();
+        HttpResponse<String> accepted = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        if (accepted.statusCode() < 200 || accepted.statusCode() >= 300) {
+            return new ProcessResult(1, "HTTP " + accepted.statusCode() + ": " + accepted.body());
+        }
+        String executionId = OBJECT_MAPPER.readTree(accepted.body()).path("executionId").asText();
+        long deadlineNanos = System.nanoTime() + EXECUTION_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            HttpResponse<String> statusResponse = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/executions/" + executionId))
+                    .header("Accept", "application/json")
+                    .header("x-tenant-id", TENANT_ID)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+            JsonNode status = OBJECT_MAPPER.readTree(statusResponse.body());
+            String state = status.path("status").asText();
+            if ("SUCCEEDED".equals(state)) {
+                HttpResponse<String> result = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/executions/" + executionId + "/result"))
+                        .header("Accept", "application/json")
+                        .header("x-tenant-id", TENANT_ID)
+                        .GET()
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString());
+                LOG.infof("Orchestrator result:%n%s", result.body());
+                return new ProcessResult(result.statusCode() >= 200 && result.statusCode() < 300 ? 0 : 1, result.body());
+            }
+            if ("FAILED".equals(state) || "DLQ".equals(state)) {
+                return new ProcessResult(1, statusResponse.body());
+            }
+            Thread.sleep(100);
+        }
+        return new ProcessResult(1, "Execution did not reach a terminal state: " + executionId);
     }
 
     private int countRows(String table) throws SQLException {
@@ -709,7 +742,8 @@ class SearchPipelineEndToEndIT {
             }
             Thread.sleep(200);
         }
-        assertTrue(exists == expected, message);
+        Container.ExecResult keys = redis.execInContainer("redis-cli", "--scan", "--pattern", CACHE_PREFIX + "*");
+        assertTrue(exists == expected, message + "; observed Redis keys: " + keys.getStdout().trim());
     }
 
     private boolean redisKeyExists(String key) throws Exception {
@@ -717,8 +751,17 @@ class SearchPipelineEndToEndIT {
         return "1".equals(result.getStdout().trim());
     }
 
+    private void assertRedisVersionState(String versionTag, boolean expected, String message) throws Exception {
+        Container.ExecResult result = redis.execInContainer(
+            "redis-cli", "--scan", "--pattern", CACHE_PREFIX + "*" + versionTag + ":*");
+        boolean exists = result.getStdout() != null && !result.getStdout().isBlank();
+        assertTrue(exists == expected, message + "; observed Redis keys: " + result.getStdout().trim());
+    }
+
     private String cacheKeyForParsedDocument(String versionTag, String rawContentHash) {
-        return versionTag + ":" + ParsedDocument.class.getName() + ":" + rawContentHash;
+        return PipelineCacheKeyFormat.applyVersionTag(
+            ParsedDocument.class.getName() + ":" + rawContentHash,
+            versionTag);
     }
 
     private UUID stableDocId(String input) {
@@ -745,7 +788,7 @@ class SearchPipelineEndToEndIT {
 
     private String diagnosticLogTail() {
         return "\n\nContainer log tails:"
-            + "\n- orchestrator-svc:\n" + tailLogs(orchestratorService.getLogs(), 40)
+            + "\n- orchestrator-svc:\n" + tailLogs(orchestratorService.getLogs(), 200)
             + "\n- crawl-source-svc:\n" + tailLogs(crawlService.getLogs(), 25)
             + "\n- parse-document-svc:\n" + tailLogs(parseService.getLogs(), 25)
             + "\n- tokenize-content-svc:\n" + tailLogs(tokenizeService.getLogs(), 25)

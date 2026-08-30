@@ -38,6 +38,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,6 +65,8 @@ class SearchReplayEndToEndIT {
     private static final Logger LOG = Logger.getLogger(SearchReplayEndToEndIT.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Network NETWORK = Network.newNetwork();
+    private static final String TENANT_ID = "search-replay-e2e";
+    private static final Duration EXECUTION_TIMEOUT = Duration.ofSeconds(90);
     private static final Path DEV_CERTS_DIR =
         Paths.get(System.getProperty("user.dir"))
             .resolve("../target/dev-certs")
@@ -410,23 +413,56 @@ class SearchReplayEndToEndIT {
     }
 
     private static ProcessResult orchestratorTriggerRun(String input, String versionTag, boolean replay) throws Exception {
-        String url = "http://" + orchestratorService.getHost() + ":" +
-            orchestratorService.getMappedPort(8080) + "/pipeline/run";
+        String baseUrl = "http://" + orchestratorService.getHost() + ":" +
+            orchestratorService.getMappedPort(8080) + "/pipeline";
         String payload = OBJECT_MAPPER.writeValueAsString(CrawlRequestDto.builder()
             .docId(stableDocId(input))
             .sourceUrl(input)
             .build());
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(baseUrl + "/run-async"))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
+            .header("x-tenant-id", TENANT_ID)
+            .header("Idempotency-Key", "search-replay-e2e:" + UUID.randomUUID())
             .header("x-pipeline-version", versionTag)
             .header("x-pipeline-cache-policy", "prefer-cache")
             .POST(HttpRequest.BodyPublishers.ofString(payload));
         if (replay) {
             builder.header("x-pipeline-replay", "true");
         }
-        HttpResponse<String> response = insecureHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
-        return new ProcessResult(response.statusCode() >= 200 && response.statusCode() < 300, response.body());
+        HttpClient client = insecureHttpClient();
+        HttpResponse<String> accepted = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        if (accepted.statusCode() < 200 || accepted.statusCode() >= 300) {
+            return new ProcessResult(false, "HTTP " + accepted.statusCode() + ": " + accepted.body());
+        }
+        String executionId = OBJECT_MAPPER.readTree(accepted.body()).path("executionId").asText();
+        long deadlineNanos = System.nanoTime() + EXECUTION_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            HttpResponse<String> statusResponse = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/executions/" + executionId))
+                    .header("Accept", "application/json")
+                    .header("x-tenant-id", TENANT_ID)
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+            JsonNode status = OBJECT_MAPPER.readTree(statusResponse.body());
+            String state = status.path("status").asText();
+            if ("SUCCEEDED".equals(state)) {
+                HttpResponse<String> result = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/executions/" + executionId + "/result"))
+                        .header("Accept", "application/json")
+                        .header("x-tenant-id", TENANT_ID)
+                        .GET()
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString());
+                return new ProcessResult(result.statusCode() >= 200 && result.statusCode() < 300, result.body());
+            }
+            if ("FAILED".equals(state) || "DLQ".equals(state)) {
+                return new ProcessResult(false, statusResponse.body());
+            }
+            Thread.sleep(100);
+        }
+        return new ProcessResult(false, "Execution did not reach a terminal state: " + executionId);
     }
 
     private static PipelineReplayDocument mergeReplayDocuments(Path replayDir, Path outputFile) throws Exception {
