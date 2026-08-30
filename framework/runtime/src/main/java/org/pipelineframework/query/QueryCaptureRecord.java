@@ -1,9 +1,13 @@
 package org.pipelineframework.query;
 
 import java.time.Instant;
+import java.util.Objects;
+import java.util.Optional;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryObservationOrigin;
 
 /**
  * Captured output for a query step in one managed pipeline execution.
@@ -20,7 +24,8 @@ public record QueryCaptureRecord(
     String outputType,
     Instant capturedAt,
     QueryCaptureStatus status,
-    String outcomeCode
+    String outcomeCode,
+    Optional<QueryObservation> observation
 ) {
     public QueryCaptureRecord {
         requireText(tenantId, "tenantId");
@@ -31,8 +36,14 @@ public record QueryCaptureRecord(
         requireText(queryId, "queryId");
         requireText(queryVersion, "queryVersion");
         requireText(captureKey, "captureKey");
-        status = java.util.Objects.requireNonNull(status, "status must not be null");
+        status = Objects.requireNonNull(status, "status must not be null");
         outcomeCode = QueryFailureCode.require(outcomeCode);
+        observation = Objects.requireNonNull(observation, "observation must not be null");
+        if (observation.map(QueryObservation::origin)
+            .filter(QueryObservationOrigin.CAPTURE_REPLAY::equals)
+            .isPresent()) {
+            throw new IllegalArgumentException("query captures must persist live provider observations");
+        }
         if (outputJson == null) {
             throw new IllegalArgumentException("outputJson must not be null");
         }
@@ -64,7 +75,8 @@ public record QueryCaptureRecord(
         @JsonProperty("outputType") String outputType,
         @JsonProperty("capturedAt") Instant capturedAt,
         @JsonProperty("status") QueryCaptureStatus status,
-        @JsonProperty("outcomeCode") String outcomeCode
+        @JsonProperty("outcomeCode") String outcomeCode,
+        @JsonProperty("observation") QueryObservation observation
     ) {
         QueryCaptureStatus resolvedStatus = status == null ? QueryCaptureStatus.FOUND : status;
         String resolvedCode = outcomeCode == null && resolvedStatus == QueryCaptureStatus.FOUND
@@ -82,7 +94,8 @@ public record QueryCaptureRecord(
             outputType,
             capturedAt,
             resolvedStatus,
-            resolvedCode);
+            resolvedCode,
+            Optional.ofNullable(observation));
     }
 
     public QueryCaptureRecord(
@@ -109,7 +122,38 @@ public record QueryCaptureRecord(
             outputType,
             capturedAt,
             QueryCaptureStatus.FOUND,
-            "found");
+            "found",
+            Optional.empty());
+    }
+
+    public QueryCaptureRecord(
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String queryId,
+        String queryVersion,
+        String captureKey,
+        String inputJson,
+        String outputJson,
+        String outputType,
+        Instant capturedAt,
+        QueryCaptureStatus status,
+        String outcomeCode
+    ) {
+        this(
+            tenantId,
+            executionId,
+            stepIndex,
+            queryId,
+            queryVersion,
+            captureKey,
+            inputJson,
+            outputJson,
+            outputType,
+            capturedAt,
+            status,
+            outcomeCode,
+            Optional.empty());
     }
 
     private static void requireText(String value, String field) {

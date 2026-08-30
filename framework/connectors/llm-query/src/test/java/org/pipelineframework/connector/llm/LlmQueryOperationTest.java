@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,7 +16,9 @@ import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.QueryInvocation;
+import org.pipelineframework.connector.QueryObservation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.QueryTokenUsage;
 import org.pipelineframework.repository.PayloadReference;
 import org.pipelineframework.type.CanonicalTypeCatalogue;
 
@@ -43,12 +46,14 @@ class LlmQueryOperationTest {
     @Test
     void performsOneInferenceAndConstructsTrustedBoundAgentCall() {
         AtomicInteger calls = new AtomicInteger();
+        QueryObservation observation = observation();
         LlmDecisionClient client = request -> {
             calls.incrementAndGet();
             assertEquals(java.util.List.of("charge", "complete"),
                 request.tools().stream().map(LlmToolDefinition::alias).toList());
-            return CompletableFuture.completedFuture(new LlmToolProposal(
-                "charge", "{\"note\":\"invoice 7\",\"amount\":42}"));
+            return CompletableFuture.completedFuture(new LlmDecision(
+                new LlmToolProposal("charge", "{\"note\":\"invoice 7\",\"amount\":42}"),
+                Optional.of(observation)));
         };
 
         QueryOutcome<Object> outcome = query(client);
@@ -58,16 +63,29 @@ class LlmQueryOperationTest {
         assertEquals("payments", call.value().binding());
         assertEquals("charge.create", call.value().operation());
         assertEquals("{\"amount\":42,\"note\":\"invoice 7\"}", call.value().argumentsJson());
+        assertEquals(Optional.of(observation), outcome.observation());
         assertEquals(1, calls.get());
     }
 
     @Test
     void invalidArgumentsAreAModelDecisionFailureRatherThanProviderFailure() {
+        QueryObservation observation = observation();
         QueryOutcome<Object> outcome = query(request -> CompletableFuture.completedFuture(
-            new LlmToolProposal("charge", "{\"amount\":42,\"unexpected\":true}")));
+            new LlmDecision(
+                new LlmToolProposal("charge", "{\"amount\":42,\"unexpected\":true}"),
+                Optional.of(observation))));
 
         QueryOutcome.TerminalFailure<?> failure = assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome);
         assertEquals("invalid-model-decision", failure.code());
+        assertEquals(Optional.of(observation), failure.observation());
+    }
+
+    private static QueryObservation observation() {
+        return QueryObservation.live(
+            Optional.of(new QueryTokenUsage(
+                OptionalLong.of(21), OptionalLong.of(8), OptionalLong.of(41))),
+            Optional.of("provider-model"),
+            Optional.of("stop"));
     }
 
     @Test
@@ -91,7 +109,8 @@ class LlmQueryOperationTest {
             CONFIGURATION.instructions(), CONFIGURATION.callableCatalogue());
         LlmDecisionClient unsupported = request -> {
             calls.incrementAndGet();
-            return CompletableFuture.completedFuture(new LlmToolProposal("complete", "{\"status\":\"ok\"}"));
+            return CompletableFuture.completedFuture(
+                new LlmDecision(new LlmToolProposal("complete", "{\"status\":\"ok\"}")));
         };
 
         QueryOutcome<?> outcome = operation(unsupported).query(invocation(required)).toCompletableFuture().join();
@@ -104,7 +123,7 @@ class LlmQueryOperationTest {
     @Test
     void bindsTheCompiledYamlCatalogueIntoTypedOperationConfiguration() {
         LlmQueryOperation operation = operation(request -> CompletableFuture.completedFuture(
-            new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}")));
+            new LlmDecision(new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}"))));
 
         LlmTurnConfiguration bound = ConnectorConfigurationBinder.bind(
             operation.configurationSchema().orElseThrow(),
@@ -126,7 +145,7 @@ class LlmQueryOperationTest {
     @Test
     void bindsDirectCompletionProjectionFromConnectorConfiguration() {
         LlmQueryOperation operation = operation(request -> CompletableFuture.completedFuture(
-            new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
+            new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"))));
 
         LlmTurnConfiguration bound = ConnectorConfigurationBinder.bind(
             operation.configurationSchema().orElseThrow(),
@@ -174,7 +193,7 @@ class LlmQueryOperationTest {
         CanonicalTypeCatalogue catalogue = CanonicalTypeCatalogue.load(Decision.class.getClassLoader());
         LlmQueryOperation operation = new LlmQueryOperation(
             () -> Optional.of(request -> CompletableFuture.completedFuture(
-                new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}"))),
+                new LlmDecision(new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}")))),
             ignored -> {
                 loads.incrementAndGet();
                 return catalogue;
@@ -202,10 +221,10 @@ class LlmQueryOperationTest {
             }
 
             @Override
-            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+            public java.util.concurrent.CompletionStage<LlmDecision> decide(LlmTurnRequest request) {
                 observed.set(request);
                 return CompletableFuture.completedFuture(
-                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                    new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
             }
         };
         LlmTurnConfiguration completion = new LlmTurnConfiguration(
@@ -242,10 +261,10 @@ class LlmQueryOperationTest {
             }
 
             @Override
-            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+            public java.util.concurrent.CompletionStage<LlmDecision> decide(LlmTurnRequest request) {
                 observed.set(request);
                 return CompletableFuture.completedFuture(
-                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                    new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
             }
         };
         LlmTurnConfiguration completion = new LlmTurnConfiguration(
@@ -281,9 +300,9 @@ class LlmQueryOperationTest {
             }
 
             @Override
-            public java.util.concurrent.CompletionStage<LlmToolProposal> decide(LlmTurnRequest request) {
+            public java.util.concurrent.CompletionStage<LlmDecision> decide(LlmTurnRequest request) {
                 return CompletableFuture.completedFuture(
-                    new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                    new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
             }
         };
         LlmTurnConfiguration completion = new LlmTurnConfiguration(
@@ -323,7 +342,7 @@ class LlmQueryOperationTest {
         QueryOutcome<Object> outcome = operation(request -> {
             calls.incrementAndGet();
             return CompletableFuture.completedFuture(
-                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
         }).query(invocation).toCompletableFuture().join();
 
         assertEquals("llm-query-failed",
@@ -347,7 +366,7 @@ class LlmQueryOperationTest {
         QueryOutcome<Object> outcome = operation(request -> {
             observed.set(request);
             return CompletableFuture.completedFuture(
-                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
         }).query(new QueryInvocation<>(
             new TextFirstInput(reference, "searchable invoice text"),
             completion,
@@ -396,7 +415,7 @@ class LlmQueryOperationTest {
         QueryOutcome<Object> outcome = operation(request -> {
             calls.incrementAndGet();
             return CompletableFuture.completedFuture(
-                new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}"));
+                new LlmDecision(new LlmToolProposal("complete", "{\"supplier\":\"Acme\"}")));
         }).query(invocation).toCompletableFuture().join();
 
         assertEquals("llm-query-failed",

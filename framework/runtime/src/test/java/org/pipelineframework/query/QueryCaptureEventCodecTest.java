@@ -5,10 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 import com.google.protobuf.StringValue;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryTokenUsage;
 
 class QueryCaptureEventCodecTest {
     private final QueryCaptureEventCodec codec = new QueryCaptureEventCodec();
@@ -79,6 +84,38 @@ class QueryCaptureEventCodecTest {
         QueryCaptureRecord decoded = codec.toRecord(codec.decode(codec.encode(codec.unary(record))));
 
         assertEquals(value, payloadCodec.decode(decoded.outputJson(), StringValue.class));
+    }
+
+    @Test
+    void durableUnaryEventPreservesProviderReportedObservation() {
+        QueryObservation observation = QueryObservation.live(
+            Optional.of(new QueryTokenUsage(
+                OptionalLong.of(13), OptionalLong.empty(), OptionalLong.of(31))),
+            Optional.of("provider-model"), Optional.of("length"));
+        QueryCaptureRecord record = new QueryCaptureRecord(
+            "tenant", "execution", 1, "customer.find", "v1", "capture-key", "input",
+            "{\"value\":\"safe\"}", TestOutput.class.getName(), Instant.ofEpochMilli(10),
+            QueryCaptureStatus.FOUND, "found", Optional.of(observation));
+
+        QueryCaptureRecord decoded = codec.toRecord(codec.decode(codec.encode(codec.unary(record))));
+
+        assertEquals(Optional.of(observation), decoded.observation());
+        assertEquals(record.outputJson(), decoded.outputJson());
+        assertEquals(record.outputType(), decoded.outputType());
+    }
+
+    @Test
+    void decodesLegacyDurableEventWithoutObservationFields() throws Exception {
+        com.fasterxml.jackson.databind.node.ObjectNode legacy =
+            (com.fasterxml.jackson.databind.node.ObjectNode) PipelineJson.mapper().readTree(
+                codec.encode(codec.unary(found("input", "{\"value\":\"safe\"}", TestOutput.class.getName()))));
+        List.of(
+            "observationPresent", "inputTokens", "outputTokens", "totalTokens", "responseModel", "finishReason")
+            .forEach(legacy::remove);
+
+        QueryCaptureRecord decoded = codec.toRecord(codec.decode(PipelineJson.mapper().writeValueAsString(legacy)));
+
+        assertEquals(Optional.empty(), decoded.observation());
     }
 
     private static QueryCaptureRecord found(String input, String output, String outputType) {

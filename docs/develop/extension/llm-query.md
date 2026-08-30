@@ -244,9 +244,26 @@ Missing credentials and non-positive timeouts fail before inference.
 Applications should pin a model whose provider advertises native JSON Schema
 support when `structuredOutputSchema` remains `REQUIRED`.
 
-The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
+The adapter uses LangChain4j's low-level chat/tool-proposal API. It performs one chat call, returns
+one proposed alias plus arguments, and never installs a tool executor or autonomous Agent loop.
+When the provider reports token usage, response model, or finish reason, the adapter retains those
+values as framework-owned Query observation metadata. Input, output, and total token counts are
+independently optional; TPF neither estimates missing counts nor recomputes the provider total.
 
-Operational model/provider failures remain exceptional Query failures. A syntactically or structurally invalid model decision is instead a typed terminal Query outcome. Query capture records the successful application decision, not prompts, credentials, SDK objects, or hidden reasoning. The durable DynamoDB store persists only a SHA-256 input fingerprint and the canonical typed decision; its 300 KiB event limit requires `PayloadReference` for larger values.
+Operational model/provider failures remain exceptional Query failures. A syntactically or
+structurally invalid model decision is instead a typed terminal Query outcome, while its completed
+provider observation remains available for usage telemetry. Query capture records the successful
+application decision plus optional observation metadata, not prompts, credentials, SDK objects, or
+hidden reasoning. Observation metadata does not enter the application output type, canonical schema,
+or capture key. The durable DynamoDB store persists only a SHA-256 input fingerprint, the canonical
+typed decision, and the optional bounded observation; its 300 KiB event limit requires
+`PayloadReference` for larger values.
+
+Live input and output counts produce `gen_ai.client.token.usage` metric points with `{token}` units.
+Captured replay retains historical values on a `tpf.query.observation` span marked
+`tpf.query.replayed=true`, but emits no new usage metric because replay consumes no provider tokens.
+Telemetry excludes prompts, completions, application payloads, catalogue entries, credentials,
+execution IDs, and provider response IDs.
 
 ## Deliberate limits
 

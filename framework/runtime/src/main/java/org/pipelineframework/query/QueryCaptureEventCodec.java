@@ -6,10 +6,14 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.Message;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.connector.QueryObservation;
+import org.pipelineframework.connector.QueryTokenUsage;
 
 /** Versioned durable representation of immutable Query capture events. */
 final class QueryCaptureEventCodec {
@@ -66,7 +70,16 @@ final class QueryCaptureEventCodec {
             record.queryId(), record.queryVersion(), record.captureKey(), digest(record.inputJson()),
             record.outputJson(), record.outputType(), runtimeType, encoding(record.outputType()),
             record.capturedAt().toEpochMilli(), record.status(), record.outcomeCode(),
-            NO_NUMBER, NO_VALUE, NO_NUMBER, NO_NUMBER, NO_NUMBER);
+            NO_NUMBER, NO_VALUE, NO_NUMBER, NO_NUMBER, NO_NUMBER,
+            record.observation().isPresent(),
+            record.observation().flatMap(QueryObservation::tokenUsage)
+                .map(QueryTokenUsage::inputTokens).map(QueryCaptureEventCodec::number).orElse(NO_NUMBER),
+            record.observation().flatMap(QueryObservation::tokenUsage)
+                .map(QueryTokenUsage::outputTokens).map(QueryCaptureEventCodec::number).orElse(NO_NUMBER),
+            record.observation().flatMap(QueryObservation::tokenUsage)
+                .map(QueryTokenUsage::totalTokens).map(QueryCaptureEventCodec::number).orElse(NO_NUMBER),
+            record.observation().flatMap(QueryObservation::responseModel).orElse(NO_VALUE),
+            record.observation().flatMap(QueryObservation::finishReason).orElse(NO_VALUE));
     }
 
     Event streamOpen(StreamingQueryCaptureRequest request, long generation, String ownerToken, long leaseExpiresAt) {
@@ -75,7 +88,8 @@ final class QueryCaptureEventCodec {
             request.queryId(), request.queryVersion(), request.captureKey(), digest(request.inputJson()),
             NO_VALUE, request.outputType(), request.outputType(), encoding(request.outputType()),
             Instant.now().toEpochMilli(), QueryCaptureStatus.FOUND, "found", generation, ownerToken,
-            leaseExpiresAt, NO_NUMBER, NO_NUMBER);
+            leaseExpiresAt, NO_NUMBER, NO_NUMBER, false,
+            NO_NUMBER, NO_NUMBER, NO_NUMBER, NO_VALUE, NO_VALUE);
     }
 
     Event streamItem(Event authority, StreamingQueryCaptureItem item, long leaseExpiresAt) {
@@ -85,7 +99,8 @@ final class QueryCaptureEventCodec {
             authority.inputDigest(), item.outputJson(), authority.outputType(),
             runtimeType(item.outputJson(), authority.outputType()), authority.encoding(),
             Instant.now().toEpochMilli(), authority.status(), authority.outcomeCode(),
-            authority.generation(), authority.ownerToken(), leaseExpiresAt, item.ordinal(), NO_NUMBER);
+            authority.generation(), authority.ownerToken(), leaseExpiresAt, item.ordinal(), NO_NUMBER,
+            false, NO_NUMBER, NO_NUMBER, NO_NUMBER, NO_VALUE, NO_VALUE);
     }
 
     Event streamTerminal(Event authority, Kind kind, long itemCount) {
@@ -103,7 +118,7 @@ final class QueryCaptureEventCodec {
         return new QueryCaptureRecord(
             event.tenantId(), event.executionId(), event.stepIndex(), event.queryId(), event.queryVersion(),
             event.captureKey(), REDACTED_INPUT_PREFIX + event.inputDigest(), event.outputJson(), event.outputType(),
-            Instant.ofEpochMilli(event.capturedAtEpochMs()), event.status(), event.outcomeCode());
+            Instant.ofEpochMilli(event.capturedAtEpochMs()), event.status(), event.outcomeCode(), observation(event));
     }
 
     StreamingQueryCaptureItem toItem(Event event) {
@@ -163,6 +178,58 @@ final class QueryCaptureEventCodec {
             if (event.generation() < 0) {
                 throw new QueryCaptureStoreException("Streaming Query generation must be non-negative");
             }
+        }
+        if (event.observationPresent()) {
+            requireOptionalNumber(event.inputTokens(), "input token count");
+            requireOptionalNumber(event.outputTokens(), "output token count");
+            requireOptionalNumber(event.totalTokens(), "total token count");
+            boundedOptionalText(event.responseModel(), "response model", 256);
+            boundedOptionalText(event.finishReason(), "finish reason", 128);
+        }
+    }
+
+    private static Optional<QueryObservation> observation(Event event) {
+        if (!event.observationPresent()) {
+            return Optional.empty();
+        }
+        QueryTokenUsage usage = new QueryTokenUsage(
+            optionalNumber(event.inputTokens()),
+            optionalNumber(event.outputTokens()),
+            optionalNumber(event.totalTokens()));
+        Optional<QueryTokenUsage> reportedUsage = usage.inputTokens().isPresent()
+            || usage.outputTokens().isPresent()
+            || usage.totalTokens().isPresent()
+            ? Optional.of(usage)
+            : Optional.empty();
+        return Optional.of(QueryObservation.live(
+            reportedUsage,
+            optionalText(event.responseModel()),
+            optionalText(event.finishReason())));
+    }
+
+    private static long number(OptionalLong value) {
+        return value.orElse(NO_NUMBER);
+    }
+
+    private static OptionalLong optionalNumber(long value) {
+        return value == NO_NUMBER ? OptionalLong.empty() : OptionalLong.of(value);
+    }
+
+    private static Optional<String> optionalText(String value) {
+        return value == null || value.isEmpty() ? Optional.empty() : Optional.of(value);
+    }
+
+    private static void requireOptionalNumber(long value, String field) {
+        if (value < NO_NUMBER) {
+            throw new QueryCaptureStoreException("Durable Query capture " + field + " must be non-negative when present");
+        }
+    }
+
+    private static void boundedOptionalText(String value, String field, int maximumLength) {
+        if (value != null && !value.isEmpty() && (value.isBlank() || value.length() > maximumLength)) {
+            throw new QueryCaptureStoreException(
+                "Durable Query capture " + field + " must be non-blank and at most "
+                    + maximumLength + " characters when present");
         }
     }
 
@@ -268,14 +335,21 @@ final class QueryCaptureEventCodec {
         String ownerToken,
         long leaseExpiresAtEpochMs,
         long itemOrdinal,
-        long itemCount
+        long itemCount,
+        boolean observationPresent,
+        long inputTokens,
+        long outputTokens,
+        long totalTokens,
+        String responseModel,
+        String finishReason
     ) {
         Event withStreamState(Kind nextKind, String nextOutputJson, long nextLease, long ordinal, long count) {
             return new Event(
                 schemaVersion, nextKind, tenantId, executionId, stepIndex, queryId, queryVersion,
                 captureKey, inputDigest, nextOutputJson, outputType, runtimeType, encoding,
                 Instant.now().toEpochMilli(), status, outcomeCode, generation, ownerToken,
-                nextLease, ordinal, count);
+                nextLease, ordinal, count, observationPresent, inputTokens, outputTokens,
+                totalTokens, responseModel, finishReason);
         }
     }
 }

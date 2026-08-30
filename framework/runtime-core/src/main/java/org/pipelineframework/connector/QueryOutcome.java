@@ -1,6 +1,7 @@
 package org.pipelineframework.connector;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /** Typed semantic result of a unary Query operation. */
@@ -10,9 +11,16 @@ public sealed interface QueryOutcome<O>
 
     String code();
 
-    record Found<O>(O output) implements QueryOutcome<O> {
+    Optional<QueryObservation> observation();
+
+    record Found<O>(O output, Optional<QueryObservation> observation) implements QueryOutcome<O> {
         public Found {
             output = Objects.requireNonNull(output, "query outcome output must not be null");
+            observation = Objects.requireNonNull(observation, "query observation must not be null");
+        }
+
+        public Found(O output) {
+            this(output, Optional.empty());
         }
 
         @Override
@@ -21,27 +29,47 @@ public sealed interface QueryOutcome<O>
         }
     }
 
-    record NotFound<O>(String code) implements QueryOutcome<O> {
+    record NotFound<O>(String code, Optional<QueryObservation> observation) implements QueryOutcome<O> {
         public NotFound {
             code = outcomeCode(code);
+            observation = Objects.requireNonNull(observation, "query observation must not be null");
+        }
+
+        public NotFound(String code) {
+            this(code, Optional.empty());
         }
     }
 
-    record TemporarilyUnavailable<O>(String code) implements QueryOutcome<O> {
+    record TemporarilyUnavailable<O>(String code, Optional<QueryObservation> observation) implements QueryOutcome<O> {
         public TemporarilyUnavailable {
             code = outcomeCode(code);
+            observation = Objects.requireNonNull(observation, "query observation must not be null");
+        }
+
+        public TemporarilyUnavailable(String code) {
+            this(code, Optional.empty());
         }
     }
 
-    record AuthenticationRequired<O>(String code) implements QueryOutcome<O> {
+    record AuthenticationRequired<O>(String code, Optional<QueryObservation> observation) implements QueryOutcome<O> {
         public AuthenticationRequired {
             code = outcomeCode(code);
+            observation = Objects.requireNonNull(observation, "query observation must not be null");
+        }
+
+        public AuthenticationRequired(String code) {
+            this(code, Optional.empty());
         }
     }
 
-    record TerminalFailure<O>(String code) implements QueryOutcome<O> {
+    record TerminalFailure<O>(String code, Optional<QueryObservation> observation) implements QueryOutcome<O> {
         public TerminalFailure {
             code = outcomeCode(code);
+            observation = Objects.requireNonNull(observation, "query observation must not be null");
+        }
+
+        public TerminalFailure(String code) {
+            this(code, Optional.empty());
         }
     }
 

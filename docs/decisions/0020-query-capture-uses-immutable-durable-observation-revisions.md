@@ -22,12 +22,14 @@ Durable Query capture uses one DynamoDB partition per execution-scoped capture i
 append-only numeric revision sequence. A strongly consistent read finds the latest authority event;
 competing transitions conditionally create the same next revision, so only one wins.
 
-Unary `Found` and `NotFound` observations commit in one revision. Streaming capture appends a writer
+Unary `Found` and `NotFound` observations commit in one revision, including optional bounded
+provider observation metadata stored separately from the application output. Streaming capture appends a writer
 lease and ordered item revisions, then makes exactly one generation visible with a terminal commit.
 Abort, cancellation, expiry, and tombstones are also immutable revisions. Replay reads only the
 committed generation and preserves downstream demand.
 
-The durable representation stores typed canonical output and only a fingerprint of Query input.
+The durable representation stores typed canonical output, optional provider-neutral observation
+metadata, and only a fingerprint of Query input. Observation metadata is not part of capture identity.
 Provider configuration, credentials, SDK objects, runtime handles, prompts, and hidden reasoning do
 not belong to the observation record.
 
@@ -40,7 +42,8 @@ while leaving generic cache policy and Command effect semantics unchanged.
 ## Consequences
 
 - A concurrent unary miss can call the provider more than once before one capture wins; every replay
-  afterwards uses the winner.
+  afterward uses the winner. Each completed live observation is recorded before arbitration, while
+  decoding the winning record does not relabel the just-completed call as replay.
 - An incomplete streaming generation is never replayed. An expired lease permits a new generation
   to observe the provider again.
 - DynamoDB table provisioning, IAM, retention, and maintenance clear remain deployment concerns.

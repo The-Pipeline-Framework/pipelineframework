@@ -16,6 +16,12 @@ Query represents one genuinely new, current, or historical external observation.
 fact is already known upstream, carry it instead. Query capture is the authority for
 replaying that observation and is distinct from generic pipeline-result cache.
 
+Provider-reported metadata about that observation belongs to the framework-owned Query outcome,
+not the application output contract. Optional token counts remain independent and are never
+estimated or reconciled. Capture persists metadata beside the typed output without changing the
+capture identity, and reconstructs it with replay origin so historical usage is not treated as new
+provider consumption.
+
 Trusted identifiers, permissions, policy, and prior context remain framework/application
 owned. Model, browser, and provider output is untrusted new input. One LLM Query performs
 one inference unless the pipeline explicitly models another turn. Required structured
@@ -35,3 +41,4 @@ from being trusted to reproduce authoritative application context.
 - Query is not a generic data-coupling escape hatch.
 - Provider-specific tuning stays below portable Query semantics.
 - Query capture identity must distinguish the semantic observation and release/version.
+- Application schemas and values remain stable when observation metadata evolves.

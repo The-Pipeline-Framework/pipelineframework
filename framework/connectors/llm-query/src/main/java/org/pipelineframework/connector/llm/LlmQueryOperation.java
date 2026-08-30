@@ -120,19 +120,21 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         DecisionContract contract,
         Object input
     ) {
-        CompletionStage<LlmToolProposal> decision;
+        CompletionStage<LlmDecision> decision;
         try {
             decision = Objects.requireNonNull(active.decide(request), "LLM adapter returned a null decision stage");
         } catch (RuntimeException failure) {
             return CompletableFuture.failedStage(failure);
         }
-        return decision.thenApply(proposal -> {
+        return decision.thenApply(result -> {
             try {
-                return new QueryOutcome.Found<>(contract.materialize(proposal, input));
+                return new QueryOutcome.Found<>(
+                    contract.materialize(result.proposal(), input),
+                    result.observation());
             } catch (InvalidModelDecisionException failure) {
                 LOG.log(System.Logger.Level.WARNING,
                     "LLM Query rejected an invalid model decision: " + failure.getMessage(), failure);
-                return new QueryOutcome.TerminalFailure<>("invalid-model-decision");
+                return new QueryOutcome.TerminalFailure<>("invalid-model-decision", result.observation());
             }
         });
     }

@@ -15,5 +15,5 @@ public interface LlmDecisionClient {
         return supportsNativeStructuredOutput();
     }
 
-    CompletionStage<LlmToolProposal> decide(LlmTurnRequest request);
+    CompletionStage<LlmDecision> decide(LlmTurnRequest request);
 }
