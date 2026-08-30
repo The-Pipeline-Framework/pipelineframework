@@ -158,6 +158,9 @@ The resolved connection exposes a host-supplied factory for an authenticated Lan
 keys from environment configuration, macOS Keychain, Vault, a cloud secret manager, or another
 host facility without encoding that facility in `pipeline.yaml`. Credential rotation takes effect
 on the next live invocation because the connector resolves the connection per invocation.
+The factory must apply every supplied `ModelConfiguration` setting, including
+`strictJsonSchema`. Authentication is host-owned, but the connector's required structured-output
+semantics still govern the authenticated model that the host creates.
 
 Model and base URL remain connector binding semantics. They identify the external model contract
 whose observations TPF captures; they are not credential-selection or security-policy fields.

@@ -237,7 +237,9 @@ connectors:
 application's tenant-aware `ConnectionResolver` turns it into an
 `AuthenticatedOpenAiCompatibleConnection` for each live invocation. That typed connection creates
 an authenticated LangChain4j `ChatModel`; API keys, vault paths, Keychain aliases, refresh behavior,
-and provider security configuration remain entirely behind the host boundary.
+and provider security configuration remain entirely behind the host boundary. Its host model
+factory must preserve all supplied non-secret model settings, including strict JSON Schema for
+required structured output.
 
 Only non-sensitive adapter tuning is configured as a runtime property:
 

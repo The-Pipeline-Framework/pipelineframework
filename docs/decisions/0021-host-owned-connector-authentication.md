@@ -56,6 +56,8 @@ model, optional base URL, and logical `ConnectionRef`; it contains no API key or
 selector. The host returns an `AuthenticatedOpenAiCompatibleConnection` whose factory creates an
 authenticated LangChain4j `ChatModel`. Resolution occurs for every live invocation so tenant
 selection and credential rotation remain host-owned, while captured replay performs no resolution.
+The factory must preserve the connector-supplied non-secret model settings, including strict JSON
+Schema, so moving credential attachment to the host does not weaken required structured output.
 
 This decision does not schedule outbound-authority controls as a follow-on feature. If a concrete
 connector later demonstrates a need for destination, account, or egress restrictions, that

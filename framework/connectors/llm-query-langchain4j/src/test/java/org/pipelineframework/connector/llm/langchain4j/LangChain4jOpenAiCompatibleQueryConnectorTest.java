@@ -59,8 +59,8 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 requests.add(request);
                 int generation = generations.incrementAndGet();
                 AuthenticatedOpenAiCompatibleConnection connection =
-                    new AuthenticatedOpenAiCompatibleConnection((baseUrl, modelName, timeout, maxRetries) -> {
-                        models.add(new ModelSettings(baseUrl, modelName, timeout, maxRetries, generation));
+                    new AuthenticatedOpenAiCompatibleConnection(modelConfiguration -> {
+                        models.add(new ModelSettings(modelConfiguration, generation));
                         return model();
                     });
                 return CompletableFuture.completedStage(request.connectionType().cast(connection));
@@ -91,11 +91,15 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 && request.connectionType() == AuthenticatedOpenAiCompatibleConnection.class));
         assertEquals(List.of(
             new ModelSettings(
-                "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
-                Duration.ofSeconds(75), 0, 1),
+                new AuthenticatedOpenAiCompatibleConnection.ModelConfiguration(
+                    "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
+                    Duration.ofSeconds(75), 0, true),
+                1),
             new ModelSettings(
-                "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
-                Duration.ofSeconds(75), 0, 2)), models);
+                new AuthenticatedOpenAiCompatibleConnection.ModelConfiguration(
+                    "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
+                    Duration.ofSeconds(75), 0, true),
+                2)), models);
     }
 
     @Test
@@ -168,10 +172,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
     }
 
     private record ModelSettings(
-        String baseUrl,
-        String modelName,
-        Duration timeout,
-        int maxRetries,
+        AuthenticatedOpenAiCompatibleConnection.ModelConfiguration configuration,
         int generation
     ) {
     }
