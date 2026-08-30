@@ -102,6 +102,15 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void preservesCheckedReadFailures() {
+        IOException failure = assertThrows(
+            IOException.class,
+            () -> new StepDefinitionParser().parseDefinitionCatalog(tempDir));
+
+        assertNotNull(failure.getMessage());
+    }
+
+    @Test
     void parsesLocalCatalogWhenRootStepsKeyIsAbsent() throws IOException {
         Path file = tempDir.resolve("catalog-without-root.yaml");
         Files.writeString(file, """

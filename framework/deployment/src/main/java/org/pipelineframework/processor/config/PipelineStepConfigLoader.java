@@ -1,9 +1,5 @@
 package org.pipelineframework.processor.config;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +10,7 @@ import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
-import org.yaml.snakeyaml.Yaml;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 
 /**
  * Loads pipeline step configuration metadata from a YAML file.
@@ -92,7 +88,7 @@ public class PipelineStepConfigLoader {
      * @throws IllegalStateException if the YAML file cannot be read
      */
     public StepConfig load(Path configPath) {
-        Object root = loadYaml(configPath);
+        Object root = new PipelineYamlDocumentLoader().load(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             return new StepConfig("", "", List.of(), List.of());
         }
@@ -164,15 +160,6 @@ public class PipelineStepConfigLoader {
         }
 
         return new StepConfig(basePackage, transport, platform, inputTypes, outputTypes);
-    }
-
-    private Object loadYaml(Path configPath) {
-        Yaml yaml = new Yaml();
-        try (Reader reader = Files.newBufferedReader(configPath, StandardCharsets.UTF_8)) {
-            return yaml.load(reader);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline config: " + configPath, e);
-        }
     }
 
     /**

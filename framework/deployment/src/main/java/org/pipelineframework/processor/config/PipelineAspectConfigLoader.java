@@ -1,16 +1,12 @@
 package org.pipelineframework.processor.config;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.AspectScope;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
-import org.yaml.snakeyaml.Yaml;
 
 /**
  * Loads pipeline aspect configuration from a YAML file.
@@ -30,7 +26,7 @@ public class PipelineAspectConfigLoader {
      * @return list of enabled aspect models, possibly empty
      */
     public List<PipelineAspectModel> load(Path configPath) {
-        Object root = loadYaml(configPath);
+        Object root = new PipelineYamlDocumentLoader().load(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             return List.of();
         }
@@ -67,15 +63,6 @@ public class PipelineAspectConfigLoader {
         }
 
         return aspects;
-    }
-
-    private Object loadYaml(Path configPath) {
-        Yaml yaml = new Yaml();
-        try (Reader reader = Files.newBufferedReader(configPath, StandardCharsets.UTF_8)) {
-            return yaml.load(reader);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline config: " + configPath, e);
-        }
     }
 
     private boolean getBoolean(Object value, boolean defaultValue) {

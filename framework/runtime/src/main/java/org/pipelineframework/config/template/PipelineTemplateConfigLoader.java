@@ -16,12 +16,10 @@
 
 package org.pipelineframework.config.template;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
@@ -36,14 +34,12 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
 import org.pipelineframework.protocol.ProtocolTypeRegistry;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * Loads the pipeline template configuration used by the template generator.
@@ -54,14 +50,6 @@ public class PipelineTemplateConfigLoader {
     private static final String DEFAULT_TRANSPORT = "GRPC";
     private static final String AGENT_CALL_PROTOCOL_TYPE = "tpf.llm.AgentCall";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
-    private static final Pattern V3_DOCUMENT = Pattern.compile("(?m)^\\s*version:\\s*3\\s*(?:#.*)?$");
-    private static final Pattern V3_COMPACT_OPTIONAL_NAME = Pattern.compile(
-        "(?m)(\\[\\s*)([A-Za-z_][A-Za-z0-9_]*\\?)(\\s*,)");
-    private static final Pattern V3_COMPACT_NULLABLE_TYPE = Pattern.compile(
-        "(?m)(,\\s*)([A-Za-z_][A-Za-z0-9_.:-]*\\?)(\\s*\\])");
-    private static final Pattern YAML_TYPES_BLOCK = Pattern.compile("^types\\s*:\\s*(?:#.*)?$");
-    private static final Pattern YAML_FIELDS_BLOCK = Pattern.compile("^fields\\s*:(.*)$");
-    private static final Pattern YAML_COMPACT_FIELD_ITEM = Pattern.compile("^-\\s*\\[");
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
@@ -135,7 +123,7 @@ public class PipelineTemplateConfigLoader {
         warnedAuthoredFieldNumber = false;
         warnedOptional = false;
         warnedAuthoredUnionNumber = false;
-        Object root = loadYaml(configPath);
+        Object root = new PipelineYamlDocumentLoader().load(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline template config root is not a map");
         }
@@ -907,94 +895,6 @@ public class PipelineTemplateConfigLoader {
      * assignable to that payload in ordinary Java terms, so keep that rule local to pipeline flow
      * validation rather than weakening the type model's general assignability contract.
      */
-    /**
-     * Load and parse a YAML document from the given file path.
-     *
-     * @param configPath the path to the YAML configuration file
-     * @return the parsed YAML document as an Object (for example, a Map, List, or scalar)
-     * @throws IllegalStateException if the file cannot be read or opened
-     */
-    private Object loadYaml(Path configPath) {
-        LoaderOptions loaderOptions = new LoaderOptions();
-        loaderOptions.setCodePointLimit(3_000_000);
-        loaderOptions.setMaxAliasesForCollections(50);
-        loaderOptions.setAllowDuplicateKeys(false);
-        Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
-        try {
-            String source = Files.readString(configPath);
-            return yaml.load(normalizeV3QuestionMarkers(source));
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read pipeline template config: " + configPath, e);
-        }
-    }
-
-    private String normalizeV3QuestionMarkers(String source) {
-        if (!V3_DOCUMENT.matcher(source).find()) {
-            return source;
-        }
-        StringBuilder normalized = new StringBuilder(source.length());
-        int typesIndent = -1;
-        int typeIndent = -1;
-        int memberIndent = -1;
-        int fieldsIndent = -1;
-        for (String line : source.split("(?<=\\n)", -1)) {
-            String content = line.stripLeading();
-            String structural = content.stripTrailing();
-            if (structural.isBlank() || structural.startsWith("#")) {
-                normalized.append(line);
-                continue;
-            }
-            int indent = line.length() - content.length();
-            if (typesIndent < 0) {
-                if (indent == 0 && YAML_TYPES_BLOCK.matcher(structural).matches()) {
-                    typesIndent = indent;
-                }
-                normalized.append(line);
-                continue;
-            }
-            if (indent <= typesIndent) {
-                typesIndent = -1;
-                typeIndent = -1;
-                memberIndent = -1;
-                fieldsIndent = -1;
-                normalized.append(line);
-                continue;
-            }
-            if (typeIndent < 0 || indent <= typeIndent) {
-                typeIndent = indent;
-                memberIndent = -1;
-                fieldsIndent = -1;
-                normalized.append(line);
-                continue;
-            }
-            if (fieldsIndent >= 0 && indent > fieldsIndent) {
-                normalized.append(YAML_COMPACT_FIELD_ITEM.matcher(structural).find()
-                    ? normalizeV3FieldTuple(line)
-                    : line);
-                continue;
-            }
-            fieldsIndent = -1;
-            if (memberIndent < 0 || indent < memberIndent) {
-                memberIndent = indent;
-            }
-            java.util.regex.Matcher fields = YAML_FIELDS_BLOCK.matcher(structural);
-            if (indent == memberIndent && fields.matches()) {
-                fieldsIndent = indent;
-                normalized.append(fields.group(1).stripLeading().startsWith("[")
-                    ? normalizeV3FieldTuple(line)
-                    : line);
-            } else {
-                normalized.append(line);
-            }
-        }
-        return normalized.toString();
-    }
-
-    private String normalizeV3FieldTuple(String source) {
-        String namesQuoted = V3_COMPACT_OPTIONAL_NAME.matcher(source).replaceAll("$1\"$2\"$3");
-        return V3_COMPACT_NULLABLE_TYPE.matcher(namesQuoted).replaceAll("$1\"$2\"$3");
-    }
-
     private int readVersion(Map<?, ?> rootMap) {
         Object rawVersion = rootMap.get("version");
         if (rawVersion == null) {

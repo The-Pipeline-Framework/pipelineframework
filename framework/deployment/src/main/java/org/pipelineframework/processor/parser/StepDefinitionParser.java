@@ -25,12 +25,10 @@ import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepContractSyntax;
@@ -52,6 +50,7 @@ import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.routing.V3JavaTypeResolver;
+import org.yaml.snakeyaml.error.YAMLException;
 
 /**
  * Parser for extracting StepDefinition objects from pipeline template YAML files.
@@ -59,8 +58,6 @@ import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
-        new YAMLFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION));
     private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
     private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
         "eq",
@@ -186,9 +183,22 @@ public class StepDefinitionParser {
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
 
-        String yamlContent = Files.readString(templatePath);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
+        Object root;
+        try {
+            root = new PipelineYamlDocumentLoader().load(templatePath);
+        } catch (YAMLException e) {
+            throw new IOException(e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            if (e.getCause() instanceof IOException readFailure) {
+                throw readFailure;
+            }
+            throw e;
+        }
+        if (!(root instanceof Map<?, ?> rootMap)) {
+            throw new IOException("Pipeline template root must be a map");
+        }
+        Map<String, Object> templateData = new LinkedHashMap<>();
+        rootMap.forEach((key, value) -> templateData.put(String.valueOf(key), value));
         String basePackage = getStringValue(templateData, "basePackage");
         int version = parseVersion(templateData);
         Optional<V3JavaTypeResolver> v3JavaTypes = version == 3 && containsRemoteExecution(templateData)
