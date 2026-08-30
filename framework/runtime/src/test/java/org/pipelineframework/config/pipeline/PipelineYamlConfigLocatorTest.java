@@ -1,11 +1,20 @@
 package org.pipelineframework.config.pipeline;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -70,6 +79,41 @@ class PipelineYamlConfigLocatorTest {
         assertTrue(locator.locate(missing).isEmpty());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"pipeline.yaml", "pipeline.yml", "pipeline-config.yaml"})
+    void locatesExactPipelineConfigNamesFromClasspath(String filename) throws IOException {
+        Files.writeString(tempDir.resolve(filename), "appName: classpath\n");
+
+        try (URLClassLoader classLoader = isolatedClassLoader(tempDir)) {
+            URL resolved = new PipelineYamlConfigLocator().locateResource(classLoader).orElseThrow();
+
+            assertEquals(filename, Path.of(resolved.getPath()).getFileName().toString());
+        }
+    }
+
+    @Test
+    void locatesCanvasPipelineConfigFromClasspath() throws IOException {
+        Files.writeString(tempDir.resolve("search-canvas-config.yaml"), "appName: classpath\n");
+
+        try (URLClassLoader classLoader = isolatedClassLoader(tempDir)) {
+            URL resolved = new PipelineYamlConfigLocator().locateResource(classLoader).orElseThrow();
+
+            assertEquals("search-canvas-config.yaml", Path.of(resolved.getPath()).getFileName().toString());
+        }
+    }
+
+    @Test
+    void locatesCanvasPipelineConfigFromPackagedClasspath() throws IOException {
+        Path jar = createJarWithResource("search-canvas-config.yaml");
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, null)) {
+            URL resolved = new PipelineYamlConfigLocator().locateResource(classLoader).orElseThrow();
+
+            assertEquals("jar", resolved.getProtocol());
+            assertTrue(resolved.toExternalForm().endsWith("!/search-canvas-config.yaml"));
+        }
+    }
+
     @Test
     void resolvesConfigFromGrandparentProject() throws IOException {
         Path grandparent = createPomProject(tempDir.resolve("grandparent"));
@@ -124,5 +168,21 @@ class PipelineYamlConfigLocatorTest {
             </project>
             """);
         return moduleDir;
+    }
+
+    private URLClassLoader isolatedClassLoader(Path root) throws IOException {
+        return new URLClassLoader(new URL[]{root.toUri().toURL()}, null);
+    }
+
+    private Path createJarWithResource(String resourceName) throws IOException {
+        Path jar = tempDir.resolve("application.jar");
+        Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar), manifest)) {
+            output.putNextEntry(new JarEntry(resourceName));
+            output.write("appName: classpath\n".getBytes(StandardCharsets.UTF_8));
+            output.closeEntry();
+        }
+        return jar;
     }
 }

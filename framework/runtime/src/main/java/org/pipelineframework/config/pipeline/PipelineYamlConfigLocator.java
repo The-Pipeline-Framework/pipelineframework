@@ -17,12 +17,19 @@
 package org.pipelineframework.config.pipeline;
 
 import java.io.IOException;
+import java.net.JarURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.jar.JarFile;
 
 /**
  * Locates pipeline.yaml configuration files starting from a module directory.
@@ -73,6 +80,23 @@ public class PipelineYamlConfigLocator {
         validateSingleMatch(matches);
 
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
+    }
+
+    /**
+     * Locate a pipeline configuration at the root of the supplied class loader.
+     *
+     * @param classLoader the class loader whose root resources should be searched
+     * @return the first matching pipeline configuration, in filename-contract order
+     */
+    public Optional<URL> locateResource(ClassLoader classLoader) {
+        Objects.requireNonNull(classLoader, "classLoader must not be null");
+        for (String filename : EXACT_FILENAMES) {
+            URL resource = classLoader.getResource(filename);
+            if (resource != null) {
+                return Optional.of(resource);
+            }
+        }
+        return locateCanvasConfig(classLoader);
     }
 
     /**
@@ -136,6 +160,67 @@ public class PipelineYamlConfigLocator {
                 });
         } catch (IOException e) {
             throw new IllegalStateException("Failed to scan pipeline config directory: " + directory, e);
+        }
+    }
+
+    private Optional<URL> locateCanvasConfig(ClassLoader classLoader) {
+        try {
+            List<URL> matches = new ArrayList<>();
+            for (URL root : Collections.list(classLoader.getResources(""))) {
+                if ("file".equals(root.getProtocol())) {
+                    scanClasspathDirectory(root.toURI(), matches);
+                }
+            }
+            for (URL manifest : Collections.list(classLoader.getResources("META-INF/MANIFEST.MF"))) {
+                if ("jar".equals(manifest.getProtocol())) {
+                    scanClasspathJar((JarURLConnection) manifest.openConnection(), matches);
+                }
+            }
+            return matches.stream()
+                .distinct()
+                .sorted(Comparator.comparing(URL::toExternalForm))
+                .findFirst();
+        } catch (IOException | URISyntaxException e) {
+            throw new IllegalStateException("Failed to scan classpath for pipeline config", e);
+        }
+    }
+
+    private void scanClasspathDirectory(URI root, List<URL> matches) throws IOException {
+        try (var stream = Files.list(Path.of(root))) {
+            stream.filter(Files::isRegularFile)
+                .filter(path -> path.getFileName().toString().endsWith("-canvas-config.yaml"))
+                .map(this::toUrl)
+                .forEach(matches::add);
+        }
+    }
+
+    private void scanClasspathJar(JarURLConnection connection, List<URL> matches) throws IOException {
+        connection.setUseCaches(false);
+        URL jarUrl = connection.getJarFileURL();
+        try (JarFile jar = connection.getJarFile()) {
+            jar.stream()
+                .filter(entry -> !entry.isDirectory())
+                .map(entry -> entry.getName())
+                .filter(name -> !name.contains("/"))
+                .filter(name -> name.endsWith("-canvas-config.yaml"))
+                .map(name -> toJarUrl(jarUrl, name))
+                .forEach(matches::add);
+        }
+    }
+
+    private URL toUrl(Path path) {
+        try {
+            return path.toUri().toURL();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to resolve pipeline config resource " + path, e);
+        }
+    }
+
+    private URL toJarUrl(URL jarUrl, String entry) {
+        try {
+            return URI.create("jar:" + jarUrl.toExternalForm() + "!/" + entry).toURL();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to resolve pipeline config resource " + entry, e);
         }
     }
 

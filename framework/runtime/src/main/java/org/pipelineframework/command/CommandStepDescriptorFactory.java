@@ -2,6 +2,7 @@ package org.pipelineframework.command;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.LinkedHashMap;
@@ -128,8 +129,9 @@ public class CommandStepDescriptorFactory {
                 CommandStepDescriptorFactory.class.getClassLoader())
             .filter(Objects::nonNull)
             .distinct()
-            .map(classLoader -> classLoader.getResourceAsStream("pipeline.yaml"))
-            .filter(Objects::nonNull)
+            .map(classLoader -> new PipelineYamlConfigLocator().locateResource(classLoader))
+            .flatMap(Optional::stream)
+            .map(CommandStepDescriptorFactory::openResource)
             .findFirst();
         if (resource.isPresent()) {
             try (InputStream stream = resource.orElseThrow()) {
@@ -139,6 +141,14 @@ public class CommandStepDescriptorFactory {
             }
         }
         throw new IllegalStateException("No pipeline YAML found for command step " + serviceName);
+    }
+
+    private static InputStream openResource(URL resource) {
+        try {
+            return resource.openStream();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to open pipeline YAML resource " + resource, e);
+        }
     }
 
     private static Path resolveConfigBase() {
