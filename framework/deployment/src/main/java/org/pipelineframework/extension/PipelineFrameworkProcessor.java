@@ -17,8 +17,11 @@
 package org.pipelineframework.extension;
 
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.builditem.ConfigMappingBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.IndexDependencyBuildItem;
+import org.pipelineframework.command.CommandEffectStoreConfig;
+import org.pipelineframework.query.QueryCaptureStoreConfig;
 
 /**
  * The main Quarkus extension processor for the Pipeline Framework.
@@ -41,5 +44,15 @@ public class PipelineFrameworkProcessor {
     @BuildStep
     IndexDependencyBuildItem indexDependency() {
         return new IndexDependencyBuildItem("org.pipelineframework", "pipelineframework");
+    }
+
+    @BuildStep
+    ConfigMappingBuildItem queryCaptureStoreConfig() {
+        return new ConfigMappingBuildItem(QueryCaptureStoreConfig.class, "pipeline.query.capture-store");
+    }
+
+    @BuildStep
+    ConfigMappingBuildItem commandEffectStoreConfig() {
+        return new ConfigMappingBuildItem(CommandEffectStoreConfig.class, "pipeline.command.effect-store");
     }
 }
