@@ -30,6 +30,7 @@ authoritative for exact syntax and release support.
 | [0019](./0019-finite-streaming-query-reuses-one-to-many.md) | Express finite streaming Query through the existing ONE_TO_MANY runtime and deterministic child lineage. |
 | [0020](./0020-query-capture-uses-immutable-durable-observation-revisions.md) | Persist Query observation authority as immutable conditional revisions with terminal streaming commit. |
 | [0021](./0021-host-owned-connector-authentication.md) | Expose connector invocation semantics while leaving external authentication and credential resolution with the host. |
+| [0022](./0022-hibernate-find-many-provider-strategy.md) | Preserve finite row streaming and declared total order in both Hibernate `find.many` providers. |
 
 ## Maintenance
 

@@ -44,8 +44,9 @@ Keep ordinary repository code for local implementation details that do not defin
 - `hibernate.reactive.query` is the non-blocking Hibernate Reactive provider and uses
   `Mutiny.SessionFactory` internally without making Mutiny part of the provider SPI.
 - `kind: "query"` is the framework-owned step type.
-- The currently shipped database operations are `find.one`, with `cardinality: "ONE_TO_ONE"` and
-  `result: "single"`.
+- Both providers expose unary `find.one` and finite streaming `find.many` operations.
+- `find.one` has `cardinality: "ONE_TO_ONE"` and `result: "single"`; `find.many` has
+  `cardinality: "ONE_TO_MANY"`, required total ordering, and no `result` field.
 - Java record projection is the supported output shape.
 - App developers do not implement connector classes or call Hibernate sessions from the query step.
 
@@ -55,8 +56,9 @@ execution and composes with TPF admission, while the blocking provider isolates 
 work on workers. Applications using Panache entities can use the reactive provider, but the
 connector itself does not depend on Panache.
 
-TPF also has a separate finite streaming Query SPI for `find.many`: rows cross a demand-aware
-publisher boundary and become ordinary ONE_TO_MANY pipeline items. The current database providers
-do not expose `find.many`. Finite does not imply safely materializable.
+For `find.many`, rows cross a demand-aware publisher boundary and become ordinary ONE_TO_MANY
+pipeline items. The blocking provider reads a JPA result stream on framework workers. The reactive
+provider fetches bounded, demand-sized windows internally while keeping one reactive session for
+the observation; those windows are not pipeline pages. Finite does not imply safely materializable.
 
 For the architectural rationale behind captured query steps, see [I/O Shell Absorption](/evolve/io-shell-absorption#captured-query-steps-for-dbapi-reads).

@@ -100,10 +100,12 @@ The query connector is not bundled into the persistence plugin and does not requ
 
 ## Runtime boundaries
 
-The public provider `QueryOperation` and query connector/store contracts use JDK `CompletionStage`
-for unary boundaries. The Quarkus JPA connector runs ordinary Jakarta Persistence reads on
-framework-owned virtual threads, so applications can share the same JDBC datasource and JPA
-entities used by blocking persistence providers without exposing blocking work to pipeline threads.
+The public provider `QueryOperation` contract uses JDK `CompletionStage` for unary boundaries.
+`StreamingQueryOperation` uses a demand-aware row publisher plus a resource-termination stage. The
+Quarkus JPA connector runs Jakarta Persistence cursor work on framework-owned workers, so
+applications can share the same JDBC datasource and JPA entities used by blocking persistence
+providers without exposing blocking work to pipeline threads. Hibernate Reactive keeps Mutiny and
+session mechanics internal to its provider.
 
 When the Query output type declares a `mappings.persistence` representation matching the configured
 JPA entity, the generated Query client requests that entity and applies the existing
@@ -115,12 +117,15 @@ captured values use the canonical Query output type.
 
 ## Current limits
 
-- `connector: "jpa"` is the only first-party query connector.
-- Unary and finite `ONE_TO_MANY` Query runtime capture are supported; first-party database
-  `find.many` providers remain separate connector work.
+- The legacy `connector: "jpa"` declaration remains the blocking unary compatibility path. Native
+  bindings select either first-party Hibernate provider.
+- Unary and finite `ONE_TO_MANY` Query runtime capture are supported.
 - Java record projection is the supported output shape.
 - Predicates are `AND` only; no `OR` groups.
-- The database providers currently expose only unary `find.one`; their `find.many` implementations
-  have not yet been added to the framework-neutral streaming Query contract.
+- Both database providers expose finite streaming `find.many`. Successful observations, including
+  empty ones, commit their ordered capture atomically. Failure or cancellation aborts the staged
+  observation; retry re-evaluates the deterministic source and may re-emit its prefix with the same
+  ordinary TPF child lineage.
+- Generic Query cache is unavailable for `find.many`; streaming capture is the replay authority.
 - JPA declarations still do not support JPQL, named queries, aggregates, optional results, or list results.
 - Simple dotted paths are accepted syntactically; invalid JPA paths fail deterministically when the connector executes the query.

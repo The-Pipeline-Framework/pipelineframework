@@ -684,6 +684,10 @@ class PipelineYamlConfigLoaderTest {
                 using: work
                 config:
                   index: invoices
+                  orderBy:
+                    observedAt: asc
+                    id: asc
+                  uniqueBy: [id]
             """));
 
         PipelineYamlConnectorBinding binding = config.connectors().get("work");
@@ -699,6 +703,9 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("native-binding:work/invoice.find", query.queryId());
         assertEquals(2, query.operationSelection().orElseThrow().operationVersion());
         assertEquals("invoices", query.commandConfig().get("index"));
+        @SuppressWarnings("unchecked")
+        var orderBy = (java.util.Map<String, Object>) query.commandConfig().get("orderBy");
+        assertEquals(List.of("observedAt", "id"), List.copyOf(orderBy.keySet()));
     }
 
     @Test

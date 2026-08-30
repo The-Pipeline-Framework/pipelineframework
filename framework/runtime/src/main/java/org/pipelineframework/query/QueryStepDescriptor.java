@@ -1,6 +1,8 @@
 package org.pipelineframework.query;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,7 +78,8 @@ public final class QueryStepDescriptor {
         if (this.jpa.isPresent() == this.nativeSelector.isPresent()) {
             throw new IllegalArgumentException("query descriptor must declare exactly one of jpa or native selector");
         }
-        this.config = Map.copyOf(Objects.requireNonNull(config, "query operation config must not be null"));
+        this.config = Collections.unmodifiableMap(new LinkedHashMap<>(
+            Objects.requireNonNull(config, "query operation config must not be null")));
         this.queryCapabilities = Objects.requireNonNull(queryCapabilities, "query capabilities must not be null");
         this.negativeCacheTtl = Objects.requireNonNull(negativeCacheTtl, "negative cache TTL must not be null");
         if (this.nativeSelector.isPresent() && "ONE_TO_ONE".equalsIgnoreCase(this.cardinality)

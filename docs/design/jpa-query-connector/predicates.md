@@ -101,3 +101,25 @@ limit: 1
 ```
 
 Without `limit: 1`, the connector reads at most two rows and fails if more than one row matches. Zero rows also fail. That keeps `result: "single"` deterministic.
+
+## Total ordering for `find.many`
+
+A finite streaming Query must reproduce the same row order when TPF retries its ONE_TO_MANY source
+expansion. Declare a non-empty `orderBy` and a non-empty `uniqueBy` suffix:
+
+```yaml
+orderBy:
+  observedAt: asc
+  accountId: asc
+  eventId: asc
+uniqueBy: [accountId, eventId]
+```
+
+`uniqueBy` names the ordered unique suffix; its paths must appear, in the same order, at the end of
+`orderBy`. Paths and duplicates are validated. While reading, the provider also compares adjacent
+complete ordering tuples and fails if two rows have the same tuple. This protects stable ordinal
+lineage from a uniqueness declaration the observed data does not satisfy.
+
+Provider fetch windows do not affect the order or produce pipeline page items. A positive `limit`
+stops the observation after that many rows. Deterministic order is still required because retry may
+re-evaluate and re-emit an already observed prefix with the same logical child ordinals.

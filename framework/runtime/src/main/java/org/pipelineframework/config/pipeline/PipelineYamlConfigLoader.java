@@ -895,7 +895,7 @@ public class PipelineYamlConfigLoader {
                     normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue(), depth + 1));
                 }
             }
-            return java.util.Map.copyOf(normalized);
+            return java.util.Collections.unmodifiableMap(normalized);
         }
         if (value instanceof Iterable<?> iterable) {
             java.util.ArrayList<Object> normalized = new java.util.ArrayList<>();
@@ -1311,7 +1311,7 @@ public class PipelineYamlConfigLoader {
                 normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue()));
             }
         }
-        return Map.copyOf(normalized);
+        return java.util.Collections.unmodifiableMap(normalized);
     }
 
     /**

@@ -2,12 +2,15 @@ package org.pipelineframework.blocking;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.service.blocking.BlockingService;
@@ -213,6 +216,162 @@ class BlockingExecutionSupportTest {
         subscriber.assertItems("item-1", "item-2", "item-3");
         subscriber.awaitCompletion(Duration.ofSeconds(5));
         subscriber.assertCompleted();
+    }
+
+    @Test
+    void openIteratorTerminationWaitsForResourceClosure() throws Exception {
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch allowClose = new CountDownLatch(1);
+        BlockingIteratorPublisher<String> opened = support.openIterator(false, () -> new CloseableIterator<>() {
+            private boolean emitted;
+
+            @Override
+            public boolean hasNext() {
+                return !emitted;
+            }
+
+            @Override
+            public String next() {
+                emitted = true;
+                return "row";
+            }
+
+            @Override
+            public void close() throws Exception {
+                closeStarted.countDown();
+                assertTrue(allowClose.await(5, TimeUnit.SECONDS));
+            }
+        });
+        AssertSubscriber<String> subscriber = Multi.createFrom().publisher(opened.rows())
+            .subscribe().withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+
+        subscriber.awaitItems(1);
+        assertTrue(closeStarted.await(5, TimeUnit.SECONDS));
+        assertFalse(opened.termination().toCompletableFuture().isDone());
+        allowClose.countDown();
+
+        subscriber.awaitCompletion(Duration.ofSeconds(5)).assertCompleted();
+        opened.termination().toCompletableFuture().get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void openIteratorCancellationDuringAcquisitionClosesBeforeTermination() throws Exception {
+        CountDownLatch acquisitionStarted = new CountDownLatch(1);
+        CountDownLatch allowAcquisition = new CountDownLatch(1);
+        CountDownLatch closed = new CountDownLatch(1);
+        BlockingIteratorPublisher<String> opened = support.openIterator(false, () -> {
+            acquisitionStarted.countDown();
+            try {
+                assertTrue(allowAcquisition.await(5, TimeUnit.SECONDS));
+            } catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(failure);
+            }
+            return new CloseableIterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return true;
+                }
+
+                @Override
+                public String next() {
+                    return "unexpected";
+                }
+
+                @Override
+                public void close() {
+                    closed.countDown();
+                }
+            };
+        });
+        CompletableFuture<Flow.Subscription> subscription = new CompletableFuture<>();
+        opened.rows().subscribe(new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription value) {
+                subscription.complete(value);
+                value.request(1);
+            }
+
+            @Override
+            public void onNext(String item) {
+                throw new AssertionError("cancelled acquisition emitted " + item);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onComplete() {
+            }
+        });
+
+        assertTrue(acquisitionStarted.await(5, TimeUnit.SECONDS));
+        subscription.get(5, TimeUnit.SECONDS).cancel();
+        allowAcquisition.countDown();
+
+        assertTrue(closed.await(5, TimeUnit.SECONDS));
+        opened.termination().toCompletableFuture().get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void openIteratorCancellationBeforeDemandSkipsAcquisition() throws Exception {
+        AtomicBoolean acquired = new AtomicBoolean();
+        BlockingIteratorPublisher<String> opened = support.openIterator(false, () -> {
+            acquired.set(true);
+            throw new AssertionError("cancelled iterator must not be acquired");
+        });
+        CompletableFuture<Flow.Subscription> subscription = new CompletableFuture<>();
+        opened.rows().subscribe(new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription value) {
+                subscription.complete(value);
+            }
+
+            @Override
+            public void onNext(String item) {
+                throw new AssertionError("cancelled iterator emitted " + item);
+            }
+
+            @Override
+            public void onError(Throwable failure) {
+            }
+
+            @Override
+            public void onComplete() {
+            }
+        });
+
+        subscription.get(5, TimeUnit.SECONDS).cancel();
+        opened.termination().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertFalse(acquired.get());
+    }
+
+    @Test
+    void openIteratorClosesAnEmptyResourceBeforeCompletingTermination() throws Exception {
+        AtomicBoolean closed = new AtomicBoolean();
+        BlockingIteratorPublisher<String> opened = support.openIterator(false, () -> new CloseableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                return false;
+            }
+
+            @Override
+            public String next() {
+                throw new AssertionError("empty iterator has no row");
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        });
+        AssertSubscriber<String> subscriber = Multi.createFrom().publisher(opened.rows())
+            .subscribe().withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+
+        subscriber.awaitCompletion(Duration.ofSeconds(5)).assertCompleted().assertHasNotReceivedAnyItem();
+        opened.termination().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertTrue(closed.get());
     }
 
     @Test
