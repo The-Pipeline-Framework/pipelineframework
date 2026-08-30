@@ -113,6 +113,47 @@ public interface ExecutionStateStore {
         long leaseMs);
 
     /**
+     * Reports whether this store can renew a live execution lease without changing its version.
+     *
+     * <p>Queue-async execution requires this capability so a transition cannot outlive its claim.
+     * Existing providers remain source compatible but fail closed when selected for queue mode until
+     * they implement {@link #renewLease(String, String, long, String, long, long)}.</p>
+     *
+     * @return {@code true} when live lease renewal is supported
+     */
+    default boolean supportsLeaseRenewal() {
+        return false;
+    }
+
+    /**
+     * Extends a live execution lease without changing the claimed record version.
+     *
+     * <p>The renewal must succeed only while the execution is still {@link ExecutionStatus#RUNNING},
+     * the expected record version still matches, {@code leaseOwner} still owns an unexpired lease,
+     * and the renewal wins before expiry. This
+     * keeps the original optimistic-concurrency token valid for the eventual segment commit while
+     * preventing another worker from reclaiming a transition that is still executing.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param expectedVersion claimed execution record version
+     * @param leaseOwner current lease owner
+     * @param nowEpochMs current timestamp
+     * @param leaseMs lease duration in ms
+     * @return renewed execution when ownership still matches, otherwise empty
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> renewLease(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String leaseOwner,
+        long nowEpochMs,
+        long leaseMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "ExecutionStateStore provider '" + providerName() + "' does not support live lease renewal"));
+    }
+
+    /**
      * Marks an execution as succeeded if expected version matches.
      *
      * @param tenantId tenant identifier

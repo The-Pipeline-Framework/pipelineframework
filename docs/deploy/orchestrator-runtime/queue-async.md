@@ -10,6 +10,12 @@ For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Perfor
 
 Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a coordinator worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.
 
+While a claimed transition is still running, the coordinator renews its execution lease before
+expiry. Renewal is conditional on the same worker, execution version, and an unexpired current
+lease. If that ownership check fails, the worker cancels the transition path and cannot commit with
+its stale version. This lets legitimate long-running transitions exceed one lease interval without
+preventing takeover after a worker actually stops.
+
 The in-memory execution, await, and event providers are also supported for a single-process,
 attended `QUEUE_ASYNC` application. They preserve the queue-async and await lifecycle while that
 process remains alive, but they are not durable execution providers: a restart loses execution,

@@ -176,6 +176,7 @@ class QueueAsyncCoordinatorTest {
         lenient().when(workerConfig.executionMode()).thenReturn(TransitionWorkerExecutionMode.SAME_THREAD);
         lenient().when(workerConfig.maxInFlight()).thenReturn(64);
         lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
+        lenient().when(executionStateStore.supportsLeaseRenewal()).thenReturn(true);
         lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
         lenient().when(awaitLiveCompletionRegistry.signal(any()))
             .thenReturn(Uni.createFrom().item(false));
@@ -214,6 +215,26 @@ class QueueAsyncCoordinatorTest {
 
         IllegalStateException error = assertThrows(IllegalStateException.class, coordinator::initializeQueueMode);
         assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
+    }
+
+    @Test
+    void initializeQueueModeFailsFastWhenSelectedStoreCannotRenewLeases() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.stateProvider()).thenReturn("legacy");
+        when(orchestratorConfig.dispatcherProvider()).thenReturn("event");
+        when(orchestratorConfig.dlqProvider()).thenReturn("log");
+        when(orchestratorConfig.strictStartup()).thenReturn(true);
+        when(executionStateStore.providerName()).thenReturn("legacy");
+        when(executionStateStore.supportsLeaseRenewal()).thenReturn(false);
+        when(executionStateStore.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+
+        when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));
+        when(workDispatchers.stream()).thenReturn(Stream.of(new EventWorkDispatcher()));
+        when(deadLetterPublishers.stream()).thenReturn(Stream.of(new LoggingDeadLetterPublisher()));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, coordinator::initializeQueueMode);
+
+        assertTrue(error.getMessage().contains("live lease renewal is not supported"));
     }
 
     @Test
