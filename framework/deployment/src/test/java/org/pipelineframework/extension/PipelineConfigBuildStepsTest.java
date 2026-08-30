@@ -130,6 +130,24 @@ class PipelineConfigBuildStepsTest {
     }
 
     @Test
+    void loadsV3ConfigWithCompactFieldMarkers() throws Exception {
+        Path config = tempDir.resolve("pipeline-v3-compact.yaml");
+        Files.writeString(config, """
+            version: 3
+            types:
+              Customer:
+                fields:
+                  - [note?, string]
+                  - [middleName, string?]
+            steps: []
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+
+        assertFalse(new PipelineConfigBuildSteps().loadPipelineConfig().branchAware());
+    }
+
+    @Test
     void doesNotTreatNonIntegralVersionAsV3ForRawBranchPreflight() throws Exception {
         Path config = tempDir.resolve("pipeline-non-integral.yaml");
         Files.writeString(config, """

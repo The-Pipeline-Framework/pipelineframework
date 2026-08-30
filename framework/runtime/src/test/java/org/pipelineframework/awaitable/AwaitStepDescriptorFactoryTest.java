@@ -313,7 +313,7 @@ class AwaitStepDescriptorFactoryTest {
             types:
               PaymentRecord:
                 fields:
-                  - [id, string]
+                  - [id?, string?]
               PaymentStatus:
                 fields:
                   - [status, string]

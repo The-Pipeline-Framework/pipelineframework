@@ -3,9 +3,6 @@ package org.pipelineframework.awaitable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -26,12 +23,12 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlAwaitCompletion;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateStep;
-import org.yaml.snakeyaml.Yaml;
 
 /**
  * Builds await descriptors from runtime pipeline YAML.
@@ -377,19 +374,15 @@ public class AwaitStepDescriptorFactory {
     }
 
     private static boolean isVersion3(Path configPath) {
-        try (Reader reader = Files.newBufferedReader(configPath)) {
-            Object document = new Yaml().load(reader);
-            if (!(document instanceof Map<?, ?> values)) {
-                return false;
-            }
-            Object version = values.get("version");
-            if (version instanceof Number number) {
-                return number.intValue() == 3;
-            }
-            return version != null && "3".equals(version.toString().trim());
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed reading pipeline configuration " + configPath, e);
+        Object document = new PipelineYamlDocumentLoader().load(configPath);
+        if (!(document instanceof Map<?, ?> values)) {
+            return false;
         }
+        Object version = values.get("version");
+        if (version instanceof Number number) {
+            return number.intValue() == 3;
+        }
+        return version != null && "3".equals(version.toString().trim());
     }
 
     private static Class<?> requiredGeneratedClass(String className, String serviceName, String role) {
