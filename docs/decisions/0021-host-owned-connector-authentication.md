@@ -44,6 +44,12 @@ The first proof is provider `google.gmail` with read-only `list.messages`, `get.
 an already-authenticated Google `Gmail` SDK client. The connector declares Google's read-only
 scope as a connector-local constant; TPF adds no portable authentication or scope metadata.
 
+This decision does not schedule outbound-authority controls as a follow-on feature. If a concrete
+connector later demonstrates a need for destination, account, or egress restrictions, that
+security policy remains host/runtime deployment configuration. `pipeline.yaml` continues to
+select a configured connector binding and typed operation; it does not acquire security-policy
+fields.
+
 ## Rationale
 
 The request joins the two facts required for safe resolution: the deployment-selected logical
@@ -84,5 +90,6 @@ authority problem of caller-controlled destinations.
   connected-account persistence, and the Quarkus/Spring security configuration they choose.
 - Portable scope strings, generic authentication metadata, live secret-backed tests, and full
   Spring connector execution remain roadmap items, not implied current support.
-- Caller-controlled destination widening is a separate outbound-authority decision and is not
-  solved by this resolver seam.
+- Caller-controlled destination widening is not solved by this resolver seam and has no planned
+  follow-on work. Reconsider it only when a concrete connector, such as generic HTTP with a
+  caller-selected destination, demonstrates the risk.
