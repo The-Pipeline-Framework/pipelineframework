@@ -182,6 +182,10 @@ This composition follows the existing decisions for [bounded recursion](../../de
 [Command effects](../../decisions/0006-command-owns-logical-effects.md), and
 [generated connector boundaries](../../decisions/0010-generated-boundaries-and-connectors.md).
 
+For non-agentic retrieval-augmented generation, compose the same LLM Query after an ordinary
+[embedding and vector retrieval flow](./embedding-and-vector-connectors.md). Vector search remains an
+authorized Query capability if that flow is later placed inside the reducer-driven agent loop.
+
 ## Adapter boundary
 
 Add the LangChain4j adapter:

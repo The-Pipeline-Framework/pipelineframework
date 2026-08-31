@@ -162,6 +162,7 @@ const mainSidebar = [
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
                     {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
                     {text: 'Host-authenticated Connectors', link: '/develop/extension/host-authenticated-connectors'},
+                    {text: 'Embedding and Vector Connectors', link: '/develop/extension/embedding-and-vector-connectors'},
                     {text: 'One-turn LLM Query', link: '/develop/extension/llm-query'},
                     {text: 'Reactive Services', link: '/develop/extension/reactive-services'},
                     {text: 'REST Resources', link: '/develop/extension/rest-resources'}
