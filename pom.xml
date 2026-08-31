@@ -87,6 +87,8 @@
         <module>examples/local-command-proof</module>
         <module>examples/agent-composition-proof/connectors</module>
         <module>examples/agent-composition-proof</module>
+        <module>examples/rag-composition-proof/connectors</module>
+        <module>examples/rag-composition-proof</module>
     </modules>
 
     <dependencyManagement>

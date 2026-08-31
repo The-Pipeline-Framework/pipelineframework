@@ -96,7 +96,8 @@ public class CommandStepDescriptorFactory {
         String commandIdGenerator
     ) {
         PipelineYamlConfig config = loadPipelineConfig(serviceName);
-        PipelineYamlStep step = config.steps().stream()
+        PipelineYamlStep step = config.stepDefinitions().values().stream()
+            .flatMap(java.util.Collection::stream)
             .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No command YAML step found for generated service " + serviceName));
@@ -173,7 +174,7 @@ public class CommandStepDescriptorFactory {
     }
 
     private static Optional<NativeCommandSelector> nativeSelector(String command, Map<String, Object> configuration) {
-        if (!command.startsWith("native:")) {
+        if (!configuration.containsKey("__tpf_native_provider")) {
             return Optional.empty();
         }
         String provider = requiredString(configuration, "__tpf_native_provider");

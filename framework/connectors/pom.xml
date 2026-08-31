@@ -5,7 +5,7 @@
     <artifactId>framework-connectors</artifactId>
     <packaging>pom</packaging>
     <properties><maven.deploy.skip>true</maven.deploy.skip></properties>
-    <modules><module>object-ingest</module><module>query-hibernate-common</module><module>query-jpa</module><module>query-hibernate-reactive</module><module>llm-query</module><module>llm-query-langchain4j</module><module>gmail-query</module></modules>
+    <modules><module>object-ingest</module><module>query-hibernate-common</module><module>query-jpa</module><module>query-hibernate-reactive</module><module>embedding-query</module><module>vector-store</module><module>llm-query</module><module>llm-query-langchain4j</module><module>gmail-query</module></modules>
     <build><plugins><plugin><artifactId>maven-deploy-plugin</artifactId><configuration><skip>true</skip></configuration></plugin></plugins></build>
     <profiles>
         <profile><id>central-publishing</id><properties><maven.deploy.skip>true</maven.deploy.skip></properties><build><plugins><plugin><artifactId>maven-deploy-plugin</artifactId><configuration><skip>true</skip></configuration></plugin><plugin><groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><configuration><skipPublishing>true</skipPublishing></configuration></plugin></plugins></build></profile>

@@ -1,0 +1,78 @@
+version: 3
+appName: RAG Composition Proof
+basePackage: org.pipelineframework.examples.ragproof
+transport: LOCAL
+platform: COMPUTE
+contract: { input: Document, output: IndexReceipt }
+
+connectors:
+  embedder:
+    provider: proof.embedding
+    version: 1
+    config: { model: proof-token-hash-v1, dimensions: 8 }
+  vectors:
+    provider: proof.vector
+    version: 1
+    config: { dimensions: 8 }
+  answer-model:
+    provider: proof.rag.llm
+    version: 1
+    config: { model: proof-answer-v1 }
+
+types:
+  Document: { fields: [[documentId, string], [text, string]] }
+  Chunk: { fields: [[chunkId, string], [content, string]] }
+  Question: { fields: [[questionId, string], [text, string]] }
+  IndexReceipt: { fields: [[documentId, string], [chunks, int32]] }
+  RetrievedContext:
+    fields:
+      - [questionId, string]
+      - [question, string]
+      - { name: passages, repeated: string }
+  Answer: { fields: [[questionId, string], [text, string]] }
+
+pipelines:
+  index:
+    input: Document
+    output: IndexReceipt
+    steps:
+      - { name: Chunk document, service: org.pipelineframework.examples.ragproof.ChunkDocumentService, cardinality: ONE_TO_MANY, input: Document, output: Chunk, java: { input: org.pipelineframework.examples.ragproof.domain.Document, output: org.pipelineframework.examples.ragproof.domain.Chunk } }
+      - { name: Prepare chunk embedding, service: org.pipelineframework.examples.ragproof.ChunkEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Chunk, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.ragproof.domain.Chunk, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
+      - { name: Embed chunk, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }
+      - { name: Prepare vector upsert, service: org.pipelineframework.examples.ragproof.VectorUpsertRequestService, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingResult>, output: <tpf.vector.VectorUpsertRequest>, java: { input: org.pipelineframework.connector.embedding.EmbeddingResult, output: org.pipelineframework.connector.vector.VectorUpsertRequest } }
+      - name: Upsert vector
+        kind: command
+        cardinality: ONE_TO_ONE
+        input: <tpf.vector.VectorUpsertRequest>
+        output: <tpf.vector.VectorUpsertResult>
+        using: vectors
+        operation: upsert
+        operationVersion: 1
+        commandIdGenerator: org.pipelineframework.examples.ragproof.VectorUpsertCommandIdGenerator
+        duplicatePolicy: RETURN_RECORDED
+        config: {}
+        java: { input: org.pipelineframework.connector.vector.VectorUpsertRequest, output: org.pipelineframework.connector.vector.VectorUpsertResult }
+      - { name: Summarize index, service: org.pipelineframework.examples.ragproof.IndexReceiptService, cardinality: MANY_TO_ONE, input: <tpf.vector.VectorUpsertResult>, output: IndexReceipt, java: { input: org.pipelineframework.connector.vector.VectorUpsertResult, output: org.pipelineframework.examples.ragproof.domain.IndexReceipt } }
+  retrieve:
+    input: Question
+    output: Answer
+    steps:
+      - { name: Prepare question embedding, service: org.pipelineframework.examples.ragproof.QuestionEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Question, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.ragproof.domain.Question, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
+      - { name: Embed question, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }
+      - { name: Prepare vector search, service: org.pipelineframework.examples.ragproof.VectorSearchRequestService, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingResult>, output: <tpf.vector.VectorSearchRequest>, java: { input: org.pipelineframework.connector.embedding.EmbeddingResult, output: org.pipelineframework.connector.vector.VectorSearchRequest } }
+      - { name: Search vectors, kind: query, cardinality: ONE_TO_ONE, input: <tpf.vector.VectorSearchRequest>, output: <tpf.vector.VectorSearchResult>, using: vectors, operation: search, operationVersion: 1, capture: { keyFields: [queryId, queryText, values, limit] }, java: { input: org.pipelineframework.connector.vector.VectorSearchRequest, output: org.pipelineframework.connector.vector.VectorSearchResult } }
+      - { name: Build retrieved context, service: org.pipelineframework.examples.ragproof.RetrievedContextService, cardinality: ONE_TO_ONE, input: <tpf.vector.VectorSearchResult>, output: RetrievedContext, java: { input: org.pipelineframework.connector.vector.VectorSearchResult, output: org.pipelineframework.examples.ragproof.domain.RetrievedContext } }
+      - name: Answer question
+        kind: query
+        cardinality: ONE_TO_ONE
+        input: RetrievedContext
+        output: Answer
+        using: answer-model
+        operation: decide
+        operationVersion: 1
+        capture: { keyFields: [questionId, question, passages] }
+        config: { instructions: Answer from the supplied retrieved passages. }
+        java: { input: org.pipelineframework.examples.ragproof.domain.RetrievedContext, output: org.pipelineframework.examples.ragproof.domain.Answer }
+
+steps:
+  - { name: Call index, pipeline: index, cardinality: MANY_TO_ONE, input: Document, output: IndexReceipt, java: { input: org.pipelineframework.examples.ragproof.domain.Document, output: org.pipelineframework.examples.ragproof.domain.IndexReceipt } }

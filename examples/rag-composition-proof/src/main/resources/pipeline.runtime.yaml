@@ -1,0 +1,12 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: rag-composition-proof-app
+  module: rag-composition-proof-app
+  synthetic:
+    module: rag-composition-proof-app
+modules:
+  rag-composition-proof-app:
+    runtime: rag-composition-proof-app
+    steps:
+      - call-index
