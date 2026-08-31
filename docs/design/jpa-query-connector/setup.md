@@ -108,10 +108,36 @@ steps:
         riskBand: riskBand
         score: score
       result: single
+
+  - name: Load Customer Risk History
+    kind: query
+    cardinality: ONE_TO_MANY
+    operation: find.many
+    operationVersion: 1
+    using: database
+    config:
+      entity: com.example.CustomerRiskEntity
+      where:
+        customerId:
+          operator: eq
+          values: [input.customerId]
+      projection:
+        customerId: customerId
+        riskBand: riskBand
+        score: score
+      orderBy:
+        observedAt: asc
+        id: asc
+      uniqueBy: [id]
+      limit: 10000
 ```
 
 `jpa.query` and `hibernate.reactive.query` deliberately remain separate providers. There is no
 runtime mode switch and the reactive provider does not implement the legacy automatic JPA path.
+Both provider bindings support the same native `find.many` configuration. The blocking provider
+uses a cursor on framework workers; the reactive provider uses private bounded demand windows and
+does not require Panache. `limit` is an optional positive semantic cap on emitted rows, not a page
+size or permission for a transport to collect the complete stream.
 
 ## Java records
 

@@ -1,5 +1,6 @@
 package org.pipelineframework.connector;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,6 @@ public record ConnectorConfigurationDocument(Map<String, Object> values) {
             String name = ConnectorConfigFieldDescriptor.requireName(entry.getKey());
             copy.put(name, Objects.requireNonNull(entry.getValue(), "configuration value must not be null for " + name));
         }
-        return Map.copyOf(copy);
+        return Collections.unmodifiableMap(copy);
     }
 }

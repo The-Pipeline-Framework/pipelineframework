@@ -2097,7 +2097,7 @@ public class StepDefinitionParser {
                 normalized.put(entry.getKey().toString(), normalizeValue(entry.getValue()));
             }
         }
-        return Map.copyOf(normalized);
+        return java.util.Collections.unmodifiableMap(normalized);
     }
 
     private Object normalizeValue(Object value) {

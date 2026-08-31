@@ -58,6 +58,7 @@ public final class ConnectorConfigurationValidator {
             case ENUM -> value instanceof String string && field.enumValues().contains(string);
             case DURATION -> validDuration(value);
             case MAP -> value instanceof java.util.Map<?, ?>;
+            case LIST -> value instanceof java.util.List<?>;
         };
         if (!valid) {
             throw failure(subject, schema, field.name(), "expected " + field.type() + " value");

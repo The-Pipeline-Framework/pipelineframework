@@ -12,5 +12,6 @@ public enum ConnectorConfigValueType {
     /** @deprecated Use a tenant-aware {@link ConnectionRef} for authenticated connector access. */
     @Deprecated(forRemoval = true)
     SECRET_REF,
-    MAP
+    MAP,
+    LIST
 }

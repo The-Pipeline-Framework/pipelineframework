@@ -97,6 +97,9 @@ public final class ConnectorConfigurationBinder {
         if (type == Map.class) {
             return ConnectorConfigValueType.MAP;
         }
+        if (type == List.class) {
+            return ConnectorConfigValueType.LIST;
+        }
         if (type.isEnum()) {
             return ConnectorConfigValueType.ENUM;
         }

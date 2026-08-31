@@ -4,14 +4,14 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
-
 
 final class JpaQueryPlan {
     private static final Pattern JAVA_IDENTIFIER = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*");
@@ -42,7 +42,7 @@ final class JpaQueryPlan {
     }
 
     static JpaQueryPlan from(String queryId, JpaFindOneConfiguration configuration) {
-        return from(
+        return fromOne(
             queryId,
             configuration.entity(),
             configuration.where(),
@@ -52,7 +52,23 @@ final class JpaQueryPlan {
             configuration.result().orElse("single"));
     }
 
-    private static JpaQueryPlan from(
+    static JpaQueryPlan fromMany(String queryId, JpaFindManyConfiguration configuration) {
+        String entity = configuration.entity();
+        Map<String, JpaPredicate> where = configuration.where();
+        Map<String, String> projection = configuration.projection().orElse(Map.of());
+        Map<String, String> orderBy = configuration.orderBy();
+        List<String> uniqueBy = configuration.uniqueBy();
+        Optional<Integer> limit = configuration.limit();
+
+        validateCommon(entity, where, projection, orderBy);
+        validateTotalOrder(orderBy, uniqueBy);
+        if (limit.isPresent() && limit.orElseThrow() <= 0) {
+            throw new IllegalArgumentException("query jpa.limit must be positive");
+        }
+        return new JpaQueryPlan(queryId, loadClass(entity), where, projection, orderBy, limit);
+    }
+
+    private static JpaQueryPlan fromOne(
         String queryId,
         String entity,
         Map<String, JpaPredicate> where,
@@ -61,12 +77,7 @@ final class JpaQueryPlan {
         Optional<Integer> limit,
         String result
     ) {
-        if (entity == null || entity.isBlank()) {
-            throw new IllegalArgumentException("query jpa.entity must not be blank");
-        }
-        validatePathMap(where, "where");
-        validatePropertyMap(projection, "projection");
-        validateOrderByMap(orderBy);
+        validateCommon(entity, where, projection, orderBy);
         if (limit.isPresent() && limit.orElseThrow() != 1) {
             throw new IllegalArgumentException("query jpa.limit supports only 1 in v2");
         }
@@ -77,6 +88,38 @@ final class JpaQueryPlan {
             throw new IllegalArgumentException("query jpa.result supports only single in v1");
         }
         return new JpaQueryPlan(queryId, loadClass(entity), where, projection, orderBy, limit);
+    }
+
+    private static void validateCommon(
+        String entity,
+        Map<String, JpaPredicate> where,
+        Map<String, String> projection,
+        Map<String, String> orderBy
+    ) {
+        if (entity == null || entity.isBlank()) {
+            throw new IllegalArgumentException("query jpa.entity must not be blank");
+        }
+        validatePathMap(where, "where");
+        validatePropertyMap(projection, "projection");
+        validateOrderByMap(orderBy);
+    }
+
+    private static void validateTotalOrder(Map<String, String> orderBy, List<String> uniqueBy) {
+        if (orderBy.isEmpty()) {
+            throw new IllegalArgumentException("streaming query jpa.orderBy must not be empty");
+        }
+        if (uniqueBy.isEmpty()) {
+            throw new IllegalArgumentException("streaming query jpa.uniqueBy must not be empty");
+        }
+        uniqueBy.forEach(path -> validatePath(path, "jpa.uniqueBy value"));
+        if (new HashSet<>(uniqueBy).size() != uniqueBy.size()) {
+            throw new IllegalArgumentException("streaming query jpa.uniqueBy must not contain duplicates");
+        }
+        List<String> orderedPaths = List.copyOf(orderBy.keySet());
+        if (uniqueBy.size() > orderedPaths.size()
+            || !orderedPaths.subList(orderedPaths.size() - uniqueBy.size(), orderedPaths.size()).equals(uniqueBy)) {
+            throw new IllegalArgumentException("streaming query jpa.uniqueBy must be an ordered suffix of orderBy");
+        }
     }
 
     String queryId() {
@@ -133,6 +176,14 @@ final class JpaQueryPlan {
 
     boolean firstResultOnly() {
         return limit.filter(value -> value == 1).isPresent();
+    }
+
+    Optional<Integer> streamingLimit() {
+        return limit;
+    }
+
+    OrderingGuard orderingGuard() {
+        return new OrderingGuard(List.copyOf(orderBy.keySet()));
     }
 
     private void appendPredicate(StringBuilder hql, String entityPath, JpaPredicate predicate, ParameterCounter parameters) {
@@ -269,6 +320,27 @@ final class JpaQueryPlan {
 
         String next() {
             return "p" + next++;
+        }
+    }
+
+    static final class OrderingGuard {
+        private static final Object NULL_ORDER_VALUE = new Object();
+        private final List<String> paths;
+        private List<Object> previous;
+
+        private OrderingGuard(List<String> paths) {
+            this.paths = paths;
+        }
+
+        void validateNext(Object entity) {
+            List<Object> current = paths.stream()
+                .map(path -> JpaQueryReflection.readProperty(entity, path).orElse(NULL_ORDER_VALUE))
+                .toList();
+            if (previous != null && previous.equals(current)) {
+                throw new IllegalStateException(
+                    "Hibernate streaming query produced adjacent rows with the same orderBy tuple");
+            }
+            previous = current;
         }
     }
 }
