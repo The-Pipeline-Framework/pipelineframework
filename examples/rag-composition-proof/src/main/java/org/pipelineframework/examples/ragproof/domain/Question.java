@@ -1,4 +1,4 @@
 package org.pipelineframework.examples.ragproof.domain;
 
-public record Question(String questionId, String text) implements RoutedRequest {
+public record Question(String questionId, String text) {
 }

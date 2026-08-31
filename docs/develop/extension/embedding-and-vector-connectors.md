@@ -102,7 +102,7 @@ Chunking stays application-authored. A typical index flow uses a deterministic `
 
 [`examples/rag-composition-proof`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/rag-composition-proof) provides deterministic `proof.embedding`, `proof.vector`, and `proof.rag.llm` providers. It hashes normalized tokens into a small numeric vector, stores immutable entries in a binding-local in-memory index, performs deterministic cosine search, and generates an answer without network, model, database, filesystem, or process access.
 
-The proof is intentionally not a production embedding or vector-database adapter. Its in-memory index lasts only for the configured provider instance. The example exercises INDEX through the normal queue-async pipeline and invokes the independently generated RETRIEVE named pipeline in the same runtime so both operations share that binding instance. Current branch-aware queue transitions do not yet preserve `accepts` routing when sibling named-pipeline calls share a union input; the proof does not disguise that limitation as RAG behavior.
+The proof is intentionally not a production embedding or vector-database adapter. Its in-memory index lasts only for the configured provider instance. INDEX is the queue-async application root, and the integration test runs the independently authored RETRIEVE definition through its generated step clients in the same runtime so both operations share that binding instance. The proof does not put them behind sibling union routes: a stream-scoped `MANY_TO_ONE` child cannot currently participate in per-item `accepts` routing, and this ecosystem example does not redefine that core behavior.
 
 ## Relationship to agentic composition
 

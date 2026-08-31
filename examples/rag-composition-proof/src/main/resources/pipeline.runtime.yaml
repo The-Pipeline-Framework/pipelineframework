@@ -9,4 +9,4 @@ modules:
   rag-composition-proof-app:
     runtime: rag-composition-proof-app
     steps:
-      - call-rag
+      - call-index

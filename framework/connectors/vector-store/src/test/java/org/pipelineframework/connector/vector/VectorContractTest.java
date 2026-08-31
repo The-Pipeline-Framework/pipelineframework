@@ -30,6 +30,20 @@ class VectorContractTest {
     }
 
     @Test
+    void enforcesDescendingScoresAndAscendingItemIdsForTies() {
+        var ordered = List.of(
+            new VectorMatch("z", "highest", 0.9f),
+            new VectorMatch("a", "tie first", 0.8f),
+            new VectorMatch("b", "tie second", 0.8f));
+
+        assertEquals(ordered, new VectorSearchResult("query", "text", ordered).matches());
+        assertThrows(IllegalArgumentException.class, () -> new VectorSearchResult("query", "text", List.of(
+            new VectorMatch("a", "lower", 0.7f), new VectorMatch("b", "higher", 0.8f))));
+        assertThrows(IllegalArgumentException.class, () -> new VectorSearchResult("query", "text", List.of(
+            new VectorMatch("b", "tie second", 0.8f), new VectorMatch("a", "tie first", 0.8f))));
+    }
+
+    @Test
     void contributesRepeatedFloatsAndRepeatedMatches() {
         ProtocolTypeContributor contributor = ServiceLoader.load(ProtocolTypeContributor.class).stream()
             .map(ServiceLoader.Provider::get)

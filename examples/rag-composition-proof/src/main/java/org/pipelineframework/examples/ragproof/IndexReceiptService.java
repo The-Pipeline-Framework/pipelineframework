@@ -17,10 +17,19 @@ public class IndexReceiptService implements ReactiveStreamingClientService<Vecto
 
     private static IndexReceipt receipt(List<VectorUpsertResult> results) {
         if (results.isEmpty()) throw new IllegalArgumentException("at least one indexed chunk is required");
-        String documentId = results.getFirst().itemId().split("#", 2)[0];
-        if (results.stream().anyMatch(result -> !result.itemId().startsWith(documentId + "#"))) {
+        String documentId = documentId(results.getFirst().itemId());
+        if (results.stream().map(VectorUpsertResult::itemId).map(IndexReceiptService::documentId)
+            .anyMatch(candidate -> !candidate.equals(documentId))) {
             throw new IllegalArgumentException("all indexed chunks must belong to one document");
         }
         return new IndexReceipt(documentId, results.size());
+    }
+
+    private static String documentId(String chunkId) {
+        int separator = chunkId.lastIndexOf('#');
+        if (separator <= 0 || separator == chunkId.length() - 1) {
+            throw new IllegalArgumentException("indexed chunk ID must end with a generated chunk suffix");
+        }
+        return chunkId.substring(0, separator);
     }
 }

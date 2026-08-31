@@ -3,7 +3,7 @@ appName: RAG Composition Proof
 basePackage: org.pipelineframework.examples.ragproof
 transport: LOCAL
 platform: COMPUTE
-contract: { input: RagInput, output: RagResponse }
+contract: { input: Document, output: IndexReceipt }
 
 connectors:
   embedder:
@@ -30,20 +30,8 @@ types:
       - [question, string]
       - { name: passages, repeated: string }
   Answer: { fields: [[questionId, string], [text, string]] }
-  RagInput: { fields: [[kind, string], [id, string], [text, string]] }
-  RoutedRequest: { variants: { index: Document, ask: Question } }
-  RagResult: { variants: { indexed: IndexReceipt, answered: Answer } }
-  RagResponse: { fields: [[result, RagResult]] }
 
 pipelines:
-  rag:
-    input: RagInput
-    output: RagResponse
-    steps:
-      - { name: Rag request, service: org.pipelineframework.examples.ragproof.RagRequestService, cardinality: ONE_TO_ONE, input: RagInput, output: RoutedRequest, java: { input: org.pipelineframework.examples.ragproof.domain.RagInput, output: org.pipelineframework.examples.ragproof.domain.RoutedRequest } }
-      - { name: Call index, pipeline: index, cardinality: ONE_TO_ONE, input: RoutedRequest, output: IndexReceipt, accepts: [Document], java: { input: org.pipelineframework.examples.ragproof.domain.RoutedRequest, output: org.pipelineframework.examples.ragproof.domain.IndexReceipt } }
-      - { name: Call retrieve, pipeline: retrieve, cardinality: ONE_TO_ONE, input: RoutedRequest, output: Answer, accepts: [Question], java: { input: org.pipelineframework.examples.ragproof.domain.RoutedRequest, output: org.pipelineframework.examples.ragproof.domain.Answer } }
-      - { name: Rag response, service: org.pipelineframework.examples.ragproof.RagResponseService, cardinality: ONE_TO_ONE, input: RagResult, output: RagResponse, accepts: [IndexReceipt, Answer], terminal: true, java: { input: org.pipelineframework.examples.ragproof.domain.RagResult, output: org.pipelineframework.examples.ragproof.domain.RagResponse } }
   index:
     input: Document
     output: IndexReceipt
@@ -87,4 +75,4 @@ pipelines:
         java: { input: org.pipelineframework.examples.ragproof.domain.RetrievedContext, output: org.pipelineframework.examples.ragproof.domain.Answer }
 
 steps:
-  - { name: Call RAG, pipeline: rag, cardinality: ONE_TO_ONE, input: RagInput, output: RagResponse, terminal: true, java: { input: org.pipelineframework.examples.ragproof.domain.RagInput, output: org.pipelineframework.examples.ragproof.domain.RagResponse } }
+  - { name: Call index, pipeline: index, cardinality: MANY_TO_ONE, input: Document, output: IndexReceipt, java: { input: org.pipelineframework.examples.ragproof.domain.Document, output: org.pipelineframework.examples.ragproof.domain.IndexReceipt } }

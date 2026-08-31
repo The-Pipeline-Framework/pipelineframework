@@ -1,4 +1,4 @@
 package org.pipelineframework.examples.ragproof.domain;
 
-public record Document(String documentId, String text) implements RoutedRequest {
+public record Document(String documentId, String text) {
 }

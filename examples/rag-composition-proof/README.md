@@ -23,6 +23,6 @@ Run the proof from the repository root:
 
 The integration test proves generated Query capture and Command effect replay, real `ONE_TO_MANY` command dispatch, bounded ordered search, typed LLM completion, and connector/release metadata.
 
-The application contract uses a concrete `RagInput`/`RagResponse` envelope and keeps `RoutedRequest` and `RagResult` as internal unions because current branch-aware generation requires concrete external endpoints. INDEX is exercised through the queue-async root. RETRIEVE is invoked through its independently generated named-pipeline adapter in the same Quarkus runtime, preserving the shared binding-owned store. A combined queue-async ASK through sibling union-accepting nested calls is not claimed: current transition routing does not retain the `accepts` branch at that boundary.
+INDEX is the queue-async application root so every vector write crosses the real Command boundary. The integration test then runs the independently authored RETRIEVE definition through its generated step clients in the same Quarkus runtime, preserving the shared binding-owned store. The example deliberately does not place both behind sibling union routes: a stream-scoped `MANY_TO_ONE` child cannot currently participate in per-item `accepts` routing, and this ecosystem proof does not redefine that core behavior.
 
 This is a proof adapter, not a production vector store. It deliberately has no metadata/filter DSL, namespaces, sparse or hybrid search, reranking, model process, or persistent index.
