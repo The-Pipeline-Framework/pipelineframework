@@ -27,6 +27,7 @@ import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.objectingest.ObjectSourceItem;
 import org.pipelineframework.objectingest.ObjectSourceProvider;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.step.NonRetryableException;
 
 /**
  * Filesystem object source provider for local ingest and deterministic tests.
@@ -107,7 +108,7 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
                 throw new IllegalArgumentException("filesystem payload reference container must not be blank");
             }
             if (reference.sizeBytes() > maxBytes) {
-                throw new IllegalStateException("Object exceeds configured maxBytes: " + reference.key());
+                throw inputTooLarge(reference.key());
             }
             Path root = canonicalReferenceRoot(reference);
             String key = canonicalReferenceKey(reference.key());
@@ -131,12 +132,16 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
             int read;
             while ((read = input.read(buffer)) != -1) {
                 if (maxBytes > 0 && (long) output.size() + read > maxBytes) {
-                    throw new IllegalStateException("Object exceeds configured maxBytes: " + key);
+                    throw inputTooLarge(key);
                 }
                 output.write(buffer, 0, read);
             }
             return output.toByteArray();
         }
+    }
+
+    private static NonRetryableException inputTooLarge(String key) {
+        return new NonRetryableException("Object exceeds configured maxBytes: " + key);
     }
 
     private ObjectSourceItem item(PipelineObjectSourceConfig source, Path root, String key) {

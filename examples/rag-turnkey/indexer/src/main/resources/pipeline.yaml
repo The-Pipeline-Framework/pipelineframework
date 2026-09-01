@@ -22,7 +22,7 @@ sources:
     provider: filesystem
     binding: local-files
     location: { root: ./inbox, prefix: "" }
-    filter: { include: ["*.txt"] }
+    filter: { include: ["*.txt", "*.md", "*.pdf", "*.docx"] }
     poll: { enabled: true, interval: PT2S, batchSize: 25 }
     identity: { fields: [provider, container, key, etag] }
     payload: { mode: reference }
@@ -36,17 +36,25 @@ input:
 
 types:
   Document:
-    fields: [[sourceId, string], [content, payload_ref]]
+    fields: [[sourceId, string], [fileName, string], [contentType, string], [content, payload_ref]]
     mappings:
       file:
         type: org.pipelineframework.examples.rag.indexer.domain.MaterializedDocument
-        options: { fields: [sourceId, content], maxBytes: 1048576 }
-  ParsedDocument: { fields: [[sourceId, string], [text, string]] }
+        options: { fields: [sourceId, fileName, contentType, content], maxBytes: 10485760 }
+  ExtractionDiagnostics:
+    fields:
+      - [format, string]
+      - [selectedBy, string]
+      - [contentType, string]
+      - [inputBytes, int64]
+      - [extractedCharacters, int32]
+      - { name: notes, repeated: string }
+  ParsedDocument: { fields: [[sourceId, string], [text, string], [diagnostics, ExtractionDiagnostics]] }
   Chunk: { fields: [[sourceId, string], [chunkId, string], [content, string], [index, int32]] }
   IndexReceipt: { fields: [[sourceId, string], [chunks, int32]] }
 
 steps:
-  - { name: Parse document, service: org.pipelineframework.examples.rag.indexer.ParseDocumentService, cardinality: ONE_TO_ONE, input: Document, output: ParsedDocument, java: { input: org.pipelineframework.examples.rag.indexer.domain.MaterializedDocument, output: org.pipelineframework.examples.rag.indexer.domain.ParsedDocument } }
+  - { name: Extract document text, service: org.pipelineframework.examples.rag.indexer.ExtractDocumentTextService, cardinality: ONE_TO_ONE, input: Document, output: ParsedDocument, java: { input: org.pipelineframework.examples.rag.indexer.domain.MaterializedDocument, output: org.pipelineframework.examples.rag.indexer.domain.ParsedDocument } }
   - { name: Chunk document, service: org.pipelineframework.examples.rag.indexer.ChunkDocumentService, cardinality: ONE_TO_MANY, input: ParsedDocument, output: Chunk, java: { input: org.pipelineframework.examples.rag.indexer.domain.ParsedDocument, output: org.pipelineframework.examples.rag.indexer.domain.Chunk } }
   - { name: Prepare embedding, service: org.pipelineframework.examples.rag.indexer.ChunkEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Chunk, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.rag.indexer.domain.Chunk, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
   - { name: Embed chunk, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }

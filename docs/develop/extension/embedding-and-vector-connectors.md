@@ -100,6 +100,8 @@ Query capture records one external observation for a stable execution and captur
 
 Chunking stays application-authored. A typical index flow uses a deterministic `ONE_TO_MANY` service to produce stable chunk IDs, embeds each chunk through the Query, dispatches one Command per chunk, and uses `MANY_TO_ONE` only when the application needs an indexing receipt. Retrieval embeds the question, searches through a Query, authors a typed context, then passes that value to the [one-turn LLM Query](./llm-query.md).
 
+Document decoding and text extraction are likewise deterministic authored computation. The turnkey INDEXER keeps bounded `.txt`, `.md`, `.pdf`, and `.docx` extraction in a reusable application library: strict UTF-8 for text formats, PDFBox for PDF, and a narrow POI parser for DOCX paragraphs and tables. Its typed output includes format-selection and size diagnostics before authored chunking. It deliberately has no OCR or vision path. Expensive or probabilistic recovery belongs in a separately composed external `Query` only when deterministic extraction is insufficient; it is not a connector, new DSL construct, or new step kind.
+
 ## Offline composition proof
 
 [`examples/rag-composition-proof`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/rag-composition-proof) provides deterministic `proof.embedding`, `proof.vector`, and `proof.rag.llm` providers. It hashes normalized tokens into a small numeric vector, stores immutable entries in a binding-local in-memory index, performs deterministic cosine search, and generates an answer without network, model, database, filesystem, or process access.

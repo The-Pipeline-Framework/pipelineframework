@@ -230,6 +230,12 @@ bytes. It is repeatable while the referenced file and binding provenance remain 
 input remains single-consumption and cannot truthfully offer repeatable reference materialization
 without first transferring ownership to durable storage.
 
+`maxBytes` is a hard materialization bound, not a retry or buffering control. A filesystem object
+that exceeds it fails with TPF's non-retryable failure classification: retrying the same immutable
+payload cannot make it smaller. Other read failures retain their normal classification because their
+cause may be transient. Object Publish has its own independently configured output bound; increasing
+that bound does not change the admitted input limit.
+
 S3 materialization uses the canonical bucket, key, optional version ID, size, and ETag captured in the
 reference. It enforces `maxBytes` against the captured size, current object metadata, and returned bytes.
 Ingested references use the S3 ETag as their immutable object fingerprint; Object Publish references use

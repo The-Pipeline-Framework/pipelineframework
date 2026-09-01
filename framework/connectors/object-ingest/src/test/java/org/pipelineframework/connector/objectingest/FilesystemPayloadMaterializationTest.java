@@ -3,6 +3,7 @@ package org.pipelineframework.connector.objectingest;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -30,6 +31,7 @@ import org.pipelineframework.connector.PayloadMaterializer;
 import org.pipelineframework.objectingest.ObjectSourceItem;
 import org.pipelineframework.objectingest.ObjectSourceProvider;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.step.NonRetryableException;
 
 class FilesystemPayloadMaterializationTest {
     @TempDir
@@ -77,6 +79,7 @@ class FilesystemPayloadMaterializationTest {
         CompletionException failure = assertThrows(CompletionException.class, () ->
             provider.materialize(reference, 3).toCompletableFuture().join());
 
+        assertInstanceOf(NonRetryableException.class, failure.getCause());
         assertEquals("Object exceeds configured maxBytes: large.txt", failure.getCause().getMessage());
     }
 
