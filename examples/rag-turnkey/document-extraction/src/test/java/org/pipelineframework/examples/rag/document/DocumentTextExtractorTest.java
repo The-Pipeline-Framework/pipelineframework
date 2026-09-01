@@ -91,6 +91,25 @@ class DocumentTextExtractorTest {
         assertEquals(FormatSelection.EXTENSION, result.diagnostics().selectedBy());
     }
 
+    @Test void rejectsDocxExpansionBeforePoiConstructsTheDocument() throws Exception {
+        Path file = directory.resolve("compressed-expansion.docx");
+        try (XWPFDocument document = new XWPFDocument()) {
+            document.createParagraph().createRun().setText("x".repeat(200_000));
+            try (var output = Files.newOutputStream(file)) {
+                document.write(output);
+            }
+        }
+        int decompressedBudget = 64 * 1024;
+        assertTrue(Files.size(file) < decompressedBudget);
+
+        var failure = assertThrows(DocumentExtractionLimitException.class,
+            () -> new DocumentTextExtractor(decompressedBudget, 300_000)
+                .extract(request(file, "application/zip")));
+
+        assertEquals("document exceeds the 65536 byte decompressed DOCX limit: compressed-expansion.docx",
+            failure.getMessage());
+    }
+
     @Test void rejectsPdfWithoutDeterministicallyExtractableText() throws Exception {
         Path file = directory.resolve("scan.pdf");
         try (PDDocument document = new PDDocument()) {

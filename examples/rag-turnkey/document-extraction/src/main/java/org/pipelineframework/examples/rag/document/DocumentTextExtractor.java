@@ -14,7 +14,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.zip.ZipInputStream;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
@@ -137,7 +139,8 @@ public final class DocumentTextExtractor {
     }
 
     private String extractPdf(byte[] bytes, String fileName) {
-        try (PDDocument document = Loader.loadPDF(bytes)) {
+        var streamCache = MemoryUsageSetting.setupMainMemoryOnly(maxInputBytes).streamCache;
+        try (PDDocument document = Loader.loadPDF(bytes, "", null, null, streamCache)) {
             PDFTextStripper stripper = new PDFTextStripper();
             stripper.setLineSeparator("\n");
             stripper.setPageEnd("\n");
@@ -152,12 +155,33 @@ public final class DocumentTextExtractor {
     }
 
     private String extractDocx(byte[] bytes, String fileName) {
+        validateDocxExpansion(bytes, fileName);
         try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes))) {
             BoundedText output = new BoundedText(maxExtractedCharacters, fileName);
             appendBody(document.getBodyElements(), output);
             return output.toString();
         } catch (IOException failure) {
             throw new IllegalArgumentException("could not extract DOCX text: " + fileName, failure);
+        }
+    }
+
+    private void validateDocxExpansion(byte[] bytes, String fileName) {
+        long archiveBytes = 0;
+        byte[] buffer = new byte[8192];
+        try (ZipInputStream archive = new ZipInputStream(new ByteArrayInputStream(bytes))) {
+            while (archive.getNextEntry() != null) {
+                long entryBytes = 0;
+                int read;
+                while ((read = archive.read(buffer)) != -1) {
+                    entryBytes += read;
+                    archiveBytes += read;
+                    if (entryBytes > maxInputBytes || archiveBytes > maxInputBytes) {
+                        throw decompressedDocxLimit(fileName);
+                    }
+                }
+            }
+        } catch (IOException failure) {
+            throw new IllegalArgumentException("could not inspect DOCX entries: " + fileName, failure);
         }
     }
 
@@ -214,6 +238,11 @@ public final class DocumentTextExtractor {
     private DocumentExtractionLimitException extractedTextLimit(String fileName) {
         return new DocumentExtractionLimitException("document exceeds the " + maxExtractedCharacters
             + " character extraction limit: " + fileName);
+    }
+
+    private DocumentExtractionLimitException decompressedDocxLimit(String fileName) {
+        return new DocumentExtractionLimitException("document exceeds the " + maxInputBytes
+            + " byte decompressed DOCX limit: " + fileName);
     }
 
     private record FormatDecision(DocumentFormat format, FormatSelection selectedBy, String contentType,
