@@ -7,6 +7,7 @@ state_dir="${TPF_VERIFY_STATE_DIR:-$repository_root/target/full-verify}"
 pid_file="$state_dir/pid"
 status_file="$state_dir/exit-status"
 log_file="$state_dir/verify.log"
+start_claim_dir="$state_dir/start-claim"
 success_message='TPF full verify: all went well'
 
 is_running() {
@@ -32,8 +33,22 @@ run_verify() {
   exit "$verify_status"
 }
 
+release_start_claim() {
+  rmdir "$start_claim_dir" 2>/dev/null || true
+}
+
 start_verify() {
   mkdir -p "$state_dir"
+  if ! mkdir "$start_claim_dir" 2>/dev/null; then
+    if is_running; then
+      printf 'TPF full verify: already running as PID %s; log: %s\n' "$verify_pid" "$log_file"
+    else
+      printf 'TPF full verify: start already in progress; log: %s\n' "$log_file"
+    fi
+    return 0
+  fi
+  trap 'release_start_claim' EXIT
+  trap 'release_start_claim; exit 1' HUP INT TERM
   if is_running; then
     printf 'TPF full verify: already running as PID %s; log: %s\n' "$verify_pid" "$log_file"
     return 0
@@ -44,6 +59,8 @@ start_verify() {
   verify_pid=$!
   printf '%s\n' "$verify_pid" >"$pid_file"
   printf 'TPF full verify: started as PID %s; poll with %s status\n' "$verify_pid" "$0"
+  release_start_claim
+  trap - EXIT HUP INT TERM
 }
 
 report_status() {
