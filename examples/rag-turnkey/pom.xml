@@ -5,10 +5,21 @@
     <artifactId>rag-turnkey</artifactId>
     <packaging>pom</packaging>
     <name>RAG Turnkey - Two Application Reference</name>
+    <properties>
+        <pdfbox.version>3.0.7</pdfbox.version>
+        <poi.version>5.5.1</poi.version>
+    </properties>
     <modules>
         <module>support</module>
+        <module>document-extraction</module>
         <module>indexer</module>
         <module>query</module>
         <module>system-test</module>
     </modules>
+    <dependencyManagement>
+        <dependencies>
+            <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>${pdfbox.version}</version></dependency>
+            <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId><version>${poi.version}</version></dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

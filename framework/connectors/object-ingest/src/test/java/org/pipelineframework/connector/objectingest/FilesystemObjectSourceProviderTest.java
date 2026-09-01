@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.objectingest.ObjectSourceItem;
+import org.pipelineframework.step.NonRetryableException;
 
 class FilesystemObjectSourceProviderTest {
 
@@ -59,7 +60,7 @@ class FilesystemObjectSourceProviderTest {
             null);
         FilesystemObjectSourceProvider provider = new FilesystemObjectSourceProvider();
 
-        assertThrows(IllegalStateException.class, () -> provider.readText(source, item("big.csv"), 3L));
+        assertThrows(NonRetryableException.class, () -> provider.readText(source, item("big.csv"), 3L));
         assertThrows(SecurityException.class, () -> provider.readText(source, item("../outside.csv"), 0L));
     }
 
