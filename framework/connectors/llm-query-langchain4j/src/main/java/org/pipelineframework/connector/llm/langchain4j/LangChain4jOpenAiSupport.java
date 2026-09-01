@@ -45,49 +45,52 @@ final class LangChain4jOpenAiSupport {
         if (cause instanceof AuthenticationException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.AUTHENTICATION_REQUIRED,
-                "llm-provider-authentication-required",
+                LlmProviderFailureException.CODE_AUTHENTICATION_REQUIRED,
                 cause);
         }
         if (cause instanceof RateLimitException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
-                "llm-provider-rate-limited",
+                LlmProviderFailureException.CODE_RATE_LIMITED,
                 cause);
         }
         if (cause instanceof TimeoutException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
-                "llm-provider-timeout",
+                LlmProviderFailureException.CODE_TIMEOUT,
                 cause);
         }
         if (cause instanceof InternalServerException || cause instanceof UnresolvedModelServerException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
-                "llm-provider-unavailable",
+                LlmProviderFailureException.CODE_UNAVAILABLE,
                 cause);
         }
         if (cause instanceof ModelNotFoundException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TERMINAL,
-                "llm-provider-model-unavailable",
+                LlmProviderFailureException.CODE_MODEL_UNAVAILABLE,
                 cause);
         }
         if (cause instanceof ContentFilteredException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TERMINAL,
-                "llm-provider-content-filtered",
+                LlmProviderFailureException.CODE_CONTENT_FILTERED,
                 cause);
         }
         if (cause instanceof InvalidRequestException || cause instanceof UnsupportedFeatureException) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TERMINAL,
-                "llm-provider-request-rejected",
+                LlmProviderFailureException.CODE_REQUEST_REJECTED,
                 cause);
         }
         if (cause instanceof HttpException http) {
             return classifyHttpFailure(http);
         }
-        return providerFailure(LlmProviderFailureException.Kind.TERMINAL, "llm-provider-failed", cause);
+        return providerFailure(
+            LlmProviderFailureException.Kind.TERMINAL,
+            LlmProviderFailureException.CODE_FAILED,
+            cause);
     }
 
     private static LlmProviderFailureException classifyHttpFailure(HttpException failure) {
@@ -95,30 +98,38 @@ final class LangChain4jOpenAiSupport {
         if (status == 401 || status == 403) {
             return providerFailure(
                 LlmProviderFailureException.Kind.AUTHENTICATION_REQUIRED,
-                "llm-provider-authentication-required",
+                LlmProviderFailureException.CODE_AUTHENTICATION_REQUIRED,
                 failure);
         }
         if (status == 402) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TERMINAL,
-                "llm-provider-quota-exhausted",
+                LlmProviderFailureException.CODE_QUOTA_EXHAUSTED,
                 failure);
         }
-        if (status == 408 || status == 429 || status >= 500) {
+        if (status == 408) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
-                status == 429 ? "llm-provider-rate-limited" : "llm-provider-unavailable",
+                LlmProviderFailureException.CODE_TIMEOUT,
+                failure);
+        }
+        if (status == 429 || status >= 500) {
+            return providerFailure(
+                LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
+                status == 429
+                    ? LlmProviderFailureException.CODE_RATE_LIMITED
+                    : LlmProviderFailureException.CODE_UNAVAILABLE,
                 failure);
         }
         if (status == 404) {
             return providerFailure(
                 LlmProviderFailureException.Kind.TERMINAL,
-                "llm-provider-model-unavailable",
+                LlmProviderFailureException.CODE_MODEL_UNAVAILABLE,
                 failure);
         }
         return providerFailure(
             LlmProviderFailureException.Kind.TERMINAL,
-            "llm-provider-request-rejected",
+            LlmProviderFailureException.CODE_REQUEST_REJECTED,
             failure);
     }
 

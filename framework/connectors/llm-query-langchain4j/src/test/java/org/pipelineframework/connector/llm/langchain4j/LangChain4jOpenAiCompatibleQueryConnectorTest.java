@@ -156,6 +156,16 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
     }
 
     @Test
+    void classifiesHttpRequestTimeoutAsTimeout() {
+        LlmProviderFailureException classified = LangChain4jOpenAiSupport.classifyProviderFailure(
+            new HttpException(408, "timeout-body-must-not-leak"));
+
+        assertEquals(LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE, classified.kind());
+        assertEquals(LlmProviderFailureException.CODE_TIMEOUT, classified.outcomeCode());
+        assertTrue(!classified.getMessage().contains("timeout-body-must-not-leak"));
+    }
+
+    @Test
     void classifiesReactiveProviderFailuresWithoutExposingProviderBodies() {
         ConnectionResolver resolver = new ConnectionResolver() {
             @Override

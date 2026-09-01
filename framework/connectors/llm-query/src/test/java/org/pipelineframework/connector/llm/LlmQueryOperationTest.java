@@ -137,6 +137,14 @@ class LlmQueryOperationTest {
     }
 
     @Test
+    void rejectsUnregisteredProviderOutcomeCodesEvenWhenSyntaxIsValid() {
+        assertThrows(IllegalArgumentException.class, () -> new LlmProviderFailureException(
+            LlmProviderFailureException.Kind.TERMINAL,
+            "llm-provider-adapter-defined",
+            new IllegalStateException("provider-body-must-not-leak")));
+    }
+
+    @Test
     void requiredStructuredOutputFailsBeforeInferenceWhenAdapterCannotEnforceIt() {
         AtomicInteger calls = new AtomicInteger();
         LlmTurnConfiguration required = new LlmTurnConfiguration(
