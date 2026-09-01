@@ -78,7 +78,9 @@ public final class LangChain4jOpenAiCompatibleQueryConnector extends LlmQueryCon
             configuration.model(),
             runtimeSettings.requestTimeout(),
             0);
-        return new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, context.executor());
+        Objects.requireNonNull(model, "OpenAI-compatible model must not be null");
+        return new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(
+            (request, ignored) -> CompletableFuture.supplyAsync(() -> model.chat(request), context.executor()));
     }
 
     @ConfigMapping(prefix = "pipeline.llm.langchain4j.openai-compatible")

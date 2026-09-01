@@ -58,6 +58,7 @@ import org.pipelineframework.query.QueryCacheRequirements;
 import org.pipelineframework.query.QueryNotFoundException;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingClientService;
 import org.pipelineframework.service.ReactiveStreamingService;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
@@ -217,6 +218,10 @@ class PipelineStepExecutor {
             var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
             return applyOneToMany(adapter, current, false, maxConcurrency, stepTelemetry,
                 contextSnapshot, awaitContextSnapshot);
+        } else if (resolvedStep instanceof ReactiveStreamingClientService<?, ?> streamingClientService) {
+            ManyToOne<Object, Object> adapter = input ->
+                ((ReactiveStreamingClientService<Object, Object>) streamingClientService).process(input);
+            return applyManyToOne(adapter, current, stepTelemetry, contextSnapshot, awaitContextSnapshot);
         } else if (resolvedStep instanceof ReactiveBidirectionalStreamingService<?, ?> bidirectionalStreamingService) {
             var adapter = new ReactiveBidirectionalStreamingServiceStepAdapter(
                 (ReactiveBidirectionalStreamingService<Object, Object>) bidirectionalStreamingService);

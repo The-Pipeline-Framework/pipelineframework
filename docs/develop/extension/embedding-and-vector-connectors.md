@@ -36,7 +36,7 @@ Its version 1 `embed` operation is a cacheable, unary `Query`. `itemId` and `tex
 - `VectorMatch(itemId, content, float32 score)`
 - `VectorSearchResult(queryId, queryText, repeated VectorMatch matches)`
 
-Its version 1 `upsert` operation is a `Command`; its version 1 cacheable `search` operation is a `Query`. Vectors must be non-empty and finite, and `limit` must be positive. Search returns at most `limit` matches in descending score order, with ascending `itemId` as the tie-breaker. No matches is a successful result with an empty list. Scores only order one response; they are not portable measurements across models or providers.
+Its version 1 `upsert` operation is a `Command`; its version 1 live-only `search` operation is a `Query`. Search observations remain capturable within an execution, but cross-execution cache modes cannot serve results that may have become stale after an upsert. Vectors must be non-empty and finite, and `limit` must be positive. Search returns at most `limit` matches in descending score order, with ascending `itemId` as the tie-breaker. No matches is a successful result with an empty list. Scores only order one response; they are not portable measurements across models or providers.
 
 The contracts deliberately omit namespaces, collections, filters, metadata predicates, sparse or hybrid search, reranking, and metric selection.
 

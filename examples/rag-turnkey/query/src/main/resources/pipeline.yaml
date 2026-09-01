@@ -17,7 +17,7 @@ connectors:
   answer-model:
     provider: llm.query
     version: 1
-    config: { model: qwen3:8b, baseUrl: http://localhost:11435 }
+    config: { model: qwen3:8b }
 
 types:
   Question: { fields: [[questionId, string], [text, string]] }

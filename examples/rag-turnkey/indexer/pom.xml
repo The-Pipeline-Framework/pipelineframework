@@ -15,6 +15,7 @@
         <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>vector-store-pgvector-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>object-ingest-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>representation-provider-file</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-reactive-pg-client</artifactId></dependency>
@@ -23,6 +24,7 @@
     <build><plugins>
         <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><configuration><annotationProcessorPaths>
             <path><groupId>io.quarkus</groupId><artifactId>quarkus-extension-processor</artifactId><version>${quarkus.platform.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>representation-provider-file</artifactId><version>${project.version}</version></path>
             <path><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-deployment</artifactId><version>${project.version}</version></path>
             <path><groupId>org.pipelineframework</groupId><artifactId>embedding-query-connector</artifactId><version>${project.version}</version></path>
             <path><groupId>org.pipelineframework</groupId><artifactId>vector-store-connector</artifactId><version>${project.version}</version></path>

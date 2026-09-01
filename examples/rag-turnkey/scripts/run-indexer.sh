@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/../../.."
+repository_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$repository_root"
 ./mvnw -pl examples/rag-turnkey/indexer -am package -DskipTests -Dgpg.skip -Dmaven.javadoc.skip=true \
   -Dmaven.repo.local="$PWD/.m2/repository"
-exec java -jar examples/rag-turnkey/indexer/target/quarkus-app/quarkus-run.jar
+cd examples/rag-turnkey/indexer
+exec java -jar target/quarkus-app/quarkus-run.jar

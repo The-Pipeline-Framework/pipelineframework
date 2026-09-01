@@ -10,9 +10,24 @@ import java.util.ServiceLoader;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.protocol.ProtocolTypeContributor;
 
 class VectorContractTest {
+    @Test
+    void treatsMutableVectorSearchesAsLiveOnly() {
+        VectorSearchQueryOperation operation = new VectorSearchQueryOperation() {
+            @Override
+            public java.util.concurrent.CompletionStage<org.pipelineframework.connector.QueryOutcome<VectorSearchResult>>
+                    query(org.pipelineframework.connector.QueryInvocation<VectorSearchRequest,
+                        org.pipelineframework.connector.ConnectorConfigurationDocument, VectorSearchResult> invocation) {
+                return java.util.concurrent.CompletableFuture.failedStage(new UnsupportedOperationException());
+            }
+        };
+
+        assertEquals(QueryCacheability.LIVE_ONLY, operation.capabilities().cacheability());
+    }
+
     @Test
     void validatesPortableRequestsAndKeepsRepeatedValuesImmutable() {
         ArrayList<Float> mutable = new ArrayList<>(List.of(1.0f, 0.0f, 1.0f));

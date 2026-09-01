@@ -17,4 +17,18 @@ class ChunkIdTest {
     @Test void rejectsNonCanonicalIds() {
         assertThrows(IllegalArgumentException.class, () -> ChunkId.decode("plain#0001"));
     }
+
+    @Test void acceptsChunkIndexBoundaries() {
+        assertEquals(0, ChunkId.decode(ChunkId.encode("source", 0, "first")).index());
+        assertEquals(999_999, ChunkId.decode(ChunkId.encode("source", 999_999, "last")).index());
+    }
+
+    @Test void rejectsChunkIndexesOutsideTheEncodedRange() {
+        assertThrows(IllegalArgumentException.class, () -> ChunkId.encode("source", -1, "before"));
+        assertThrows(IllegalArgumentException.class, () -> ChunkId.encode("source", 1_000_000, "after"));
+    }
+
+    @Test void rejectsSourceIdsWithSurroundingWhitespace() {
+        assertThrows(IllegalArgumentException.class, () -> ChunkId.encode(" source ", 0, "content"));
+    }
 }

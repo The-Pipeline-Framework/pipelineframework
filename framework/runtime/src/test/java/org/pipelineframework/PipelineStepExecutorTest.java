@@ -51,6 +51,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingClientService;
 import org.pipelineframework.service.ReactiveStreamingService;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
@@ -364,6 +365,25 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals(List.of("a-1", "a-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveStreamingClientServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveStreamingClientService<String, String>) input ->
+                input.collect().asList().map(items -> String.join(",", items)),
+            Multi.createFrom().items("a", "b"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals("a,b", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test

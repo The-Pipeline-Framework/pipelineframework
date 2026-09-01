@@ -10,6 +10,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
+import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -128,6 +129,7 @@ public final class LangChain4jOllamaEmbeddingConnector
                 .baseUrl(configuration.baseUrl())
                 .modelName(configuration.model())
                 .timeout(configuration.requestTimeout())
+                .httpClientBuilder(JdkHttpClient.builder())
                 .maxRetries(0);
             configuration.dimensions().ifPresent(builder::dimensions);
             return builder.build();

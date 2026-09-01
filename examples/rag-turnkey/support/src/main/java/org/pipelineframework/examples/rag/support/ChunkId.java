@@ -21,6 +21,9 @@ public record ChunkId(String sourceId, int index, String contentHash) {
 
     public static String encode(String sourceId, int index, String content) {
         String normalizedSource = requireText(sourceId, "source ID");
+        if (index < 0 || index > 999_999) {
+            throw new IllegalArgumentException("chunk index must be between 0 and 999999");
+        }
         String normalizedContent = Objects.requireNonNull(content, "chunk content must not be null");
         String source = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(normalizedSource.getBytes(StandardCharsets.UTF_8));
@@ -55,8 +58,12 @@ public record ChunkId(String sourceId, int index, String contentHash) {
     }
 
     private static String requireText(String value, String label) {
-        String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
+        String original = Objects.requireNonNull(value, label + " must not be null");
+        String normalized = original.trim();
         if (normalized.isEmpty()) throw new IllegalArgumentException(label + " must not be blank");
-        return normalized;
+        if (!original.equals(normalized)) {
+            throw new IllegalArgumentException(label + " must not contain surrounding whitespace");
+        }
+        return original;
     }
 }
