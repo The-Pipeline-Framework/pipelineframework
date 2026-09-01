@@ -167,6 +167,34 @@ class ModelContextRoleEnricherTest {
     }
 
     @Test
+    void enrichRestoresServerCopyWhenExtractedMonolithModelAlreadyHasClientRole() {
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+        doReturn(Set.of(mock(Element.class)))
+            .when(roundEnv)
+            .getElementsAnnotatedWith(eq(PipelineOrchestrator.class));
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
+        ctx.setRuntimeMapping(new PipelineRuntimeMapping(
+            PipelineRuntimeMapping.Layout.MONOLITH,
+            PipelineRuntimeMapping.Validation.STRICT,
+            PipelineRuntimeMapping.Defaults.defaultValues(),
+            Map.of("monolith-svc", "monolith-svc"),
+            Map.of("monolith-svc", "monolith-svc"),
+            Map.of("ProcessAService", "monolith-svc"),
+            Map.of()));
+
+        PipelineStepModel extracted = step("ProcessAService", false).toBuilder()
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        List<PipelineStepModel> result = enricher.enrich(ctx, List.of(extracted));
+
+        assertEquals(2, result.size());
+        assertEquals(DeploymentRole.PIPELINE_SERVER, result.get(0).deploymentRole());
+        assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, result.get(1).deploymentRole());
+    }
+
+    @Test
     void enrichKeepsAwaitStepsClientOnlyForMonolithLayout() {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
         doReturn(Set.of(mock(Element.class)))

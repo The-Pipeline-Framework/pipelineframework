@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,12 +15,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.boundary.PipelineObjectNamingConfig;
+import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.command.CommandRetryTestAccess;
 import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
@@ -69,6 +72,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +94,12 @@ class PipelineExecutionServiceTest {
     private PipelineRunner pipelineRunner;
 
     @Mock
+    private PipelineStepConfig pipelineStepConfig;
+
+    @Mock
+    private PipelineStepConfig.HealthConfig healthConfig;
+
+    @Mock
     private PipelineStepResolver pipelineStepResolver;
 
     @Mock
@@ -105,15 +115,40 @@ class PipelineExecutionServiceTest {
         service.transitionWorkerSelector = transitionWorkerSelector;
         service.releaseIdentityResolver = releaseIdentityResolver;
         service.pipelineRunner = pipelineRunner;
+        service.pipelineStepConfig = pipelineStepConfig;
         service.pipelineStepResolver = pipelineStepResolver;
         service.awaitCoordinator = awaitCoordinator;
         service.executionHooks = new ExecutionHooks();
         service.executionInputPolicy = new ExecutionInputPolicy();
+        lenient().when(pipelineStepConfig.health()).thenReturn(healthConfig);
+        lenient().when(healthConfig.startupTimeout()).thenReturn(Duration.ofMinutes(5));
     }
 
     @Test
     void startupHealthStateInitiallyPending() {
         assertEquals(PipelineExecutionService.StartupHealthState.PENDING, service.getStartupHealthState());
+    }
+
+    @Test
+    void unaryExecutionWaitsForStartupHealthWithoutBlockingTheSubscriber() throws Exception {
+        List<Object> steps = List.of(new Object());
+        CompletableFuture<Boolean> startupHealth = new CompletableFuture<>();
+        setStartupHealthFuture(service, startupHealth);
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runWithContext(any(), eq(steps)))
+            .thenReturn(new PipelineRunner.ExecutionResult(Uni.createFrom().item("done"), telemetryContext));
+
+        UniAssertSubscriber<String> subscriber = service
+            .<String>executePipelineUnary(Uni.createFrom().item("input"))
+            .subscribe().withSubscriber(UniAssertSubscriber.create());
+
+        subscriber.assertNotTerminated();
+        verify(pipelineRunner, never()).runWithContext(any(), any());
+
+        startupHealth.complete(true);
+
+        subscriber.assertCompleted().assertItem("done");
+        verify(pipelineRunner).runWithContext(any(), eq(steps));
     }
 
     @Test
@@ -657,6 +692,14 @@ class PipelineExecutionServiceTest {
         AtomicReference<PipelineExecutionService.StartupHealthState> state =
             (AtomicReference<PipelineExecutionService.StartupHealthState>) field.get(service);
         state.set(PipelineExecutionService.StartupHealthState.HEALTHY);
+    }
+
+    private static void setStartupHealthFuture(
+            PipelineExecutionService service,
+            CompletableFuture<Boolean> startupHealthFuture) throws Exception {
+        Field field = PipelineExecutionService.class.getDeclaredField("startupHealthFuture");
+        field.setAccessible(true);
+        field.set(service, startupHealthFuture);
     }
 
     public record TestTerminalOutput(String group, String value) {

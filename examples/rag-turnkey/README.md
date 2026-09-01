@@ -4,7 +4,7 @@ This reference topology is two independently deployable TPF applications. The qu
 
 They share only the embedding model and durable pgvector tables. They have separate roots, processes, datasource pools, capture/effect stores, retries, scaling, releases, failure domains, admission mechanisms, and latency objectives. Querying is not the next stage of one indexing execution, so checkpoint handoff is inappropriate.
 
-Start infrastructure with `scripts/infrastructure.sh up -d`, pull models with `scripts/pull-models.sh`, and run `scripts/run-indexer.sh` and `scripts/run-query.sh` in separate terminals. Drop a UTF-8 text file with `scripts/ingest.sh path/to/file.txt`; ask with `scripts/ask.sh 'your question'`. PostgreSQL listens on 5433 and Ollama on 11435 to avoid common local defaults.
+Start infrastructure with `scripts/infrastructure.sh up -d`, pull models with `scripts/pull-models.sh`, and run `scripts/run-indexer.sh` and `scripts/run-query.sh` in separate terminals. Drop a UTF-8 text file with `scripts/ingest.sh path/to/file.txt`; ask with `scripts/ask.sh 'your question'`. PostgreSQL listens on 5433 and Ollama on 11435 to avoid common local defaults. INDEXER uses HTTP/gRPC ports 8080/9000; QUERY uses 8081/9001. Override them with `INDEXER_HTTP_PORT`, `INDEXER_GRPC_PORT`, `QUERY_HTTP_PORT`, and `QUERY_GRPC_PORT`.
 
 `EmbeddingProviderConfiguration.model` and dimensions are binding-owned because they define vector meaning. Ollama endpoints/timeouts and PostgreSQL connection/schema/table/pool settings are deployment configuration. The existing LLM Ollama binding retains its established binding-level `baseUrl`.
 

@@ -1,8 +1,12 @@
 package org.pipelineframework.query;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -75,8 +79,7 @@ public class QueryStepDescriptorFactory {
     }
 
     private QueryStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
-        Path configPath = resolveConfigPath(serviceName);
-        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
+        PipelineYamlConfig config = loadPipelineConfig(serviceName);
         PipelineYamlStep step = config.stepDefinitions().values().stream()
             .flatMap(java.util.Collection::stream)
             .filter(candidate -> matchesServiceName(serviceName, candidate.name()))
@@ -203,18 +206,41 @@ public class QueryStepDescriptorFactory {
         return lastDot >= 0 ? type.substring(lastDot + 1) : type;
     }
 
-    private static Path resolveConfigPath(String serviceName) {
+    private static PipelineYamlConfig loadPipelineConfig(String serviceName) {
+        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         Optional<String> explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
         if (explicit.isPresent()) {
             Path candidate = Path.of(explicit.get()).toAbsolutePath().normalize();
             if (!Files.isDirectory(candidate)) {
-                return candidate;
+                return loader.load(candidate);
             }
-            return new PipelineYamlConfigLocator().locate(candidate)
-                .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
+            Optional<Path> located = new PipelineYamlConfigLocator().locate(candidate);
+            if (located.isPresent()) {
+                return loader.load(located.orElseThrow());
+            }
+        } else {
+            Optional<Path> located = new PipelineYamlConfigLocator().locate(Path.of("").toAbsolutePath());
+            if (located.isPresent()) {
+                return loader.load(located.orElseThrow());
+            }
         }
-        return new PipelineYamlConfigLocator().locate(Path.of("").toAbsolutePath())
-            .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
+
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        ClassLoader fallback = QueryStepDescriptorFactory.class.getClassLoader();
+        Optional<URL> resource = java.util.stream.Stream.of(context, fallback)
+            .filter(Objects::nonNull)
+            .distinct()
+            .map(classLoader -> new PipelineYamlConfigLocator().locateResource(classLoader))
+            .flatMap(Optional::stream)
+            .findFirst();
+        if (resource.isPresent()) {
+            try (InputStream stream = resource.orElseThrow().openStream()) {
+                return loader.load(stream);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to read pipeline YAML for query step " + serviceName, e);
+            }
+        }
+        throw new IllegalStateException("No pipeline YAML found for query step " + serviceName);
     }
 
     private static Optional<String> firstNonBlank(String... values) {

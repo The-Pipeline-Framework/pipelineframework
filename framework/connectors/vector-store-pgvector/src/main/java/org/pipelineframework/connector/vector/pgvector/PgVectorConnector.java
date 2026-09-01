@@ -1,9 +1,5 @@
 package org.pipelineframework.connector.vector.pgvector;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -14,14 +10,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import javax.sql.DataSource;
 
-import io.agroal.api.AgroalDataSource;
+import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.pgclient.PgPool;
+import io.vertx.mutiny.sqlclient.Row;
+import io.vertx.mutiny.sqlclient.RowSet;
+import io.vertx.mutiny.sqlclient.SqlClient;
+import io.vertx.mutiny.sqlclient.SqlConnection;
+import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
-import org.pipelineframework.connector.BlockingOperation;
 import org.pipelineframework.connector.CommandCapabilities;
 import org.pipelineframework.connector.CommandConfirmation;
 import org.pipelineframework.connector.CommandExecutionPosture;
@@ -44,7 +44,7 @@ import org.pipelineframework.connector.vector.VectorUpsertCommandOperation;
 import org.pipelineframework.connector.vector.VectorUpsertRequest;
 import org.pipelineframework.connector.vector.VectorUpsertResult;
 
-/** Production JDBC adapter for PostgreSQL with the pgvector extension. */
+/** Production non-blocking PostgreSQL adapter for the pgvector extension. */
 @ApplicationScoped
 public final class PgVectorConnector implements ConnectorProvider<PgVectorProviderConfiguration> {
     public static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("vector.store.pgvector");
@@ -52,34 +52,34 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
     private static final ConnectorConfigSchema<PgVectorProviderConfiguration> PROVIDER_CONFIGURATION =
         ConnectorConfigSchema.record(PgVectorProviderConfiguration.class, "vector.store.pgvector.provider", 1);
 
-    private final Supplier<DataSource> dataSourceSupplier;
+    private final Supplier<PgPool> poolSupplier;
     private final RuntimeSettings runtimeSettings;
     private final UpsertOperation upsert = new UpsertOperation();
     private final SearchOperation search = new SearchOperation();
     private volatile ActiveBinding active;
 
     public PgVectorConnector() {
-        this.dataSourceSupplier = () -> {
-            throw new IllegalStateException("No default Quarkus JDBC datasource is available for pgvector");
+        this.poolSupplier = () -> {
+            throw new IllegalStateException("No default Quarkus reactive PostgreSQL pool is available for pgvector");
         };
         this.runtimeSettings = RuntimeSettings.defaults();
     }
 
     @Inject
-    PgVectorConnector(Instance<AgroalDataSource> dataSources, PgVectorRuntimeConfiguration configuration) {
-        Objects.requireNonNull(dataSources, "pgvector datasource handle must not be null");
-        this.dataSourceSupplier = () -> {
-            if (!dataSources.isResolvable()) {
-                throw new IllegalStateException("No default Quarkus JDBC datasource is available for pgvector");
+    PgVectorConnector(Instance<PgPool> pools, PgVectorRuntimeConfiguration configuration) {
+        Objects.requireNonNull(pools, "pgvector reactive pool handle must not be null");
+        this.poolSupplier = () -> {
+            if (!pools.isResolvable()) {
+                throw new IllegalStateException("No default Quarkus reactive PostgreSQL pool is available for pgvector");
             }
-            return dataSources.get();
+            return pools.get();
         };
         this.runtimeSettings = new RuntimeSettings(
             configuration.schema(), configuration.table(), configuration.commandTable());
     }
 
-    PgVectorConnector(DataSource dataSource, RuntimeSettings runtimeSettings) {
-        this.dataSourceSupplier = () -> Objects.requireNonNull(dataSource, "pgvector datasource must not be null");
+    PgVectorConnector(PgPool pool, RuntimeSettings runtimeSettings) {
+        this.poolSupplier = () -> Objects.requireNonNull(pool, "pgvector reactive pool must not be null");
         this.runtimeSettings = runtimeSettings;
     }
 
@@ -93,14 +93,14 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
     @Override
     public CompletionStage<Void> start(ConnectorRuntimeContext context, PgVectorProviderConfiguration configuration) {
         try {
-            DataSource dataSource = dataSource();
             ActiveBinding candidate = new ActiveBinding(
-                dataSource,
+                pool(),
                 configuration.dimensions(),
                 qualified(runtimeSettings.schema(), runtimeSettings.table()),
                 qualified(runtimeSettings.schema(), runtimeSettings.commandTable()));
-            return CompletableFuture.runAsync(() -> validateSchema(candidate), context.executor())
-                .thenRun(() -> active = candidate);
+            return validateSchema(candidate)
+                .invoke(() -> active = candidate)
+                .subscribeAsCompletionStage();
         } catch (RuntimeException failure) {
             return CompletableFuture.failedStage(failure);
         }
@@ -112,12 +112,11 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
         return CompletableFuture.completedStage(null);
     }
 
-    private DataSource dataSource() {
-        return Objects.requireNonNull(dataSourceSupplier.get(), "pgvector datasource supplier returned null");
+    private PgPool pool() {
+        return Objects.requireNonNull(poolSupplier.get(), "pgvector reactive pool supplier returned null");
     }
 
-    private final class UpsertOperation
-        implements VectorUpsertCommandOperation<PgVectorUpsertConfiguration>, BlockingOperation {
+    private final class UpsertOperation implements VectorUpsertCommandOperation<PgVectorUpsertConfiguration> {
         private static final ConnectorConfigSchema<PgVectorUpsertConfiguration> CONFIGURATION =
             ConnectorConfigSchema.record(PgVectorUpsertConfiguration.class, "vector.store.pgvector.upsert", 1);
 
@@ -139,14 +138,14 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
                 validateDimensions(invocation.input().values(), binding.dimensions());
                 String commandId = invocation.dispatchIdentity().orElseThrow(() ->
                     new IllegalArgumentException("pgvector upsert requires a command dispatch identity")).commandId();
-                return CompletableFuture.completedStage(upsert(binding, commandId, invocation.input()));
+                return upsert(binding, commandId, invocation.input()).subscribeAsCompletionStage();
             } catch (RuntimeException failure) {
                 return CompletableFuture.failedStage(failure);
             }
         }
     }
 
-    private final class SearchOperation implements VectorSearchQueryOperation, BlockingOperation {
+    private final class SearchOperation implements VectorSearchQueryOperation {
         @Override
         public CompletionStage<QueryOutcome<VectorSearchResult>> query(
             QueryInvocation<VectorSearchRequest, org.pipelineframework.connector.ConnectorConfigurationDocument,
@@ -155,132 +154,106 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
             try {
                 ActiveBinding binding = active();
                 validateDimensions(invocation.input().values(), binding.dimensions());
-                return CompletableFuture.completedStage(new QueryOutcome.Found<>(search(binding, invocation.input())));
+                return search(binding, invocation.input())
+                    .map(result -> (QueryOutcome<VectorSearchResult>) new QueryOutcome.Found<>(result))
+                    .subscribeAsCompletionStage();
             } catch (RuntimeException failure) {
                 return CompletableFuture.failedStage(failure);
             }
         }
     }
 
-    private CommandOutcome<VectorUpsertResult> upsert(
+    private Uni<CommandOutcome<VectorUpsertResult>> upsert(
         ActiveBinding binding,
         String commandId,
         VectorUpsertRequest request
     ) {
         String fingerprint = PgVectorRequestFingerprint.of(request);
-        try (Connection connection = binding.dataSource().getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                int inserted = insertCommand(connection, binding, commandId, fingerprint, request.itemId());
-                if (inserted == 0) {
-                    verifyRecordedCommand(connection, binding, commandId, fingerprint, request.itemId());
-                } else {
-                    writeVector(connection, binding, commandId, request);
-                    verifyVector(connection, binding, request);
-                }
-                connection.commit();
-                return success(request.itemId());
-            } catch (SQLException failure) {
-                rollback(connection, failure);
-                throw new IllegalStateException("pgvector upsert transaction failed", failure);
-            } catch (RuntimeException failure) {
-                rollback(connection, failure);
-                throw failure;
-            }
-        } catch (SQLException failure) {
-            throw new IllegalStateException("pgvector upsert failed", failure);
-        }
+        return binding.pool().withTransaction(connection ->
+            insertCommand(connection, binding, commandId, fingerprint, request.itemId())
+                .flatMap(inserted -> inserted == 0
+                    ? verifyRecordedCommand(connection, binding, commandId, fingerprint, request.itemId())
+                    : writeVector(connection, binding, commandId, request)
+                        .flatMap(ignored -> verifyVector(connection, binding, request))))
+            .replaceWith(success(request.itemId()));
     }
 
-    private int insertCommand(
-        Connection connection,
+    private Uni<Integer> insertCommand(
+        SqlConnection connection,
         ActiveBinding binding,
         String commandId,
         String fingerprint,
         String itemId
-    ) throws SQLException {
+    ) {
         String sql = "INSERT INTO " + binding.commandTable()
-            + " (command_id, request_fingerprint, item_id) VALUES (?, ?, ?) ON CONFLICT (command_id) DO NOTHING";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, commandId);
-            statement.setString(2, fingerprint);
-            statement.setString(3, itemId);
-            return statement.executeUpdate();
-        }
+            + " (command_id, request_fingerprint, item_id) VALUES ($1, $2, $3) "
+            + "ON CONFLICT (command_id) DO NOTHING";
+        return connection.preparedQuery(sql).execute(Tuple.of(commandId, fingerprint, itemId))
+            .map(RowSet::rowCount);
     }
 
-    private void verifyRecordedCommand(
-        Connection connection,
+    private Uni<Void> verifyRecordedCommand(
+        SqlConnection connection,
         ActiveBinding binding,
         String commandId,
         String fingerprint,
         String itemId
-    ) throws SQLException {
+    ) {
         String sql = "SELECT request_fingerprint, item_id FROM " + binding.commandTable()
-            + " WHERE command_id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, commandId);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) throw new IllegalStateException("pgvector command ledger lost command " + commandId);
-                if (!fingerprint.equals(result.getString(1)) || !itemId.equals(result.getString(2))) {
-                    throw new IllegalStateException("command ID was reused with different vector content: " + commandId);
-                }
+            + " WHERE command_id = $1";
+        return connection.preparedQuery(sql).execute(Tuple.of(commandId)).invoke(rows -> {
+            Row row = first(rows).orElseThrow(() ->
+                new IllegalStateException("pgvector command ledger lost command " + commandId));
+            if (!fingerprint.equals(row.getString(0)) || !itemId.equals(row.getString(1))) {
+                throw new IllegalStateException("command ID was reused with different vector content: " + commandId);
             }
-        }
+        }).replaceWithVoid();
     }
 
-    private void writeVector(
-        Connection connection,
+    private Uni<Void> writeVector(
+        SqlConnection connection,
         ActiveBinding binding,
         String commandId,
         VectorUpsertRequest request
-    ) throws SQLException {
+    ) {
         String sql = "INSERT INTO " + binding.vectorTable()
-            + " (item_id, content, embedding, updated_command_id) VALUES (?, ?, CAST(? AS vector), ?) "
+            + " (item_id, content, embedding, updated_command_id) VALUES ($1, $2, CAST($3 AS vector), $4) "
             + "ON CONFLICT (item_id) DO UPDATE SET content = EXCLUDED.content, embedding = EXCLUDED.embedding, "
             + "updated_command_id = EXCLUDED.updated_command_id";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, request.itemId());
-            statement.setString(2, request.content());
-            statement.setString(3, vectorLiteral(request.values()));
-            statement.setString(4, commandId);
-            statement.executeUpdate();
-        }
+        return connection.preparedQuery(sql).execute(
+            Tuple.of(request.itemId(), request.content(), vectorLiteral(request.values()), commandId))
+            .replaceWithVoid();
     }
 
-    private void verifyVector(Connection connection, ActiveBinding binding, VectorUpsertRequest request)
-        throws SQLException {
-        String sql = "SELECT content, embedding::text FROM " + binding.vectorTable() + " WHERE item_id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, request.itemId());
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next() || !request.content().equals(result.getString(1))
-                    || !request.values().equals(parseVector(result.getString(2)))) {
-                    throw new IllegalStateException("pgvector read-after-write verification failed for " + request.itemId());
-                }
+    private Uni<Void> verifyVector(
+        SqlConnection connection,
+        ActiveBinding binding,
+        VectorUpsertRequest request
+    ) {
+        String sql = "SELECT content, embedding::text FROM " + binding.vectorTable() + " WHERE item_id = $1";
+        return connection.preparedQuery(sql).execute(Tuple.of(request.itemId())).invoke(rows -> {
+            Optional<Row> result = first(rows);
+            if (result.isEmpty() || !request.content().equals(result.orElseThrow().getString(0))
+                || !request.values().equals(parseVector(result.orElseThrow().getString(1)))) {
+                throw new IllegalStateException("pgvector read-after-write verification failed for " + request.itemId());
             }
-        }
+        }).replaceWithVoid();
     }
 
-    private VectorSearchResult search(ActiveBinding binding, VectorSearchRequest request) {
-        String sql = "WITH query_vector AS (SELECT CAST(? AS vector) AS value) "
+    private Uni<VectorSearchResult> search(ActiveBinding binding, VectorSearchRequest request) {
+        String sql = "WITH query_vector AS (SELECT CAST($1 AS vector) AS value) "
             + "SELECT item_id, content, (1 - (embedding <=> query_vector.value))::real AS score "
             + "FROM " + binding.vectorTable() + ", query_vector "
-            + "ORDER BY embedding <=> query_vector.value, item_id ASC LIMIT ?";
-        List<VectorMatch> matches = new ArrayList<>();
-        try (Connection connection = binding.dataSource().getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, vectorLiteral(request.values()));
-            statement.setInt(2, request.limit());
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    matches.add(new VectorMatch(result.getString(1), result.getString(2), result.getFloat(3)));
+            + "ORDER BY embedding <=> query_vector.value, item_id ASC LIMIT $2";
+        return binding.pool().preparedQuery(sql)
+            .execute(Tuple.of(vectorLiteral(request.values()), request.limit()))
+            .map(rows -> {
+                List<VectorMatch> matches = new ArrayList<>();
+                for (Row row : rows) {
+                    matches.add(new VectorMatch(row.getString(0), row.getString(1), row.getFloat(2)));
                 }
-            }
-        } catch (SQLException failure) {
-            throw new IllegalStateException("pgvector search failed", failure);
-        }
-        return new VectorSearchResult(request.queryId(), request.queryText(), matches);
+                return new VectorSearchResult(request.queryId(), request.queryText(), matches);
+            });
     }
 
     private static CommandOutcome<VectorUpsertResult> success(String itemId) {
@@ -295,35 +268,39 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
         }
     }
 
-    private void validateSchema(ActiveBinding binding) {
-        try (Connection connection = binding.dataSource().getConnection()) {
-            requireSingleValue(connection,
-                "SELECT extversion FROM pg_extension WHERE extname = 'vector'", "pgvector extension is not installed");
-            requireSingleValue(connection,
-                "SELECT to_regclass('" + binding.vectorTable().replace("\"", "") + "')",
-                "pgvector table does not exist");
-            requireSingleValue(connection,
-                "SELECT to_regclass('" + binding.commandTable().replace("\"", "") + "')",
-                "pgvector command table does not exist");
-            String type = requireSingleValue(connection,
+    private Uni<Void> validateSchema(ActiveBinding binding) {
+        String vectorTable = unquoted(binding.vectorTable());
+        String commandTable = unquoted(binding.commandTable());
+        return requireSingleValue(binding.pool(),
+            "SELECT extversion FROM pg_extension WHERE extname = 'vector'", Tuple.tuple(),
+            "pgvector extension is not installed")
+            .flatMap(ignored -> requireSingleValue(binding.pool(),
+                "SELECT to_regclass($1)::text", Tuple.of(vectorTable), "pgvector table does not exist"))
+            .flatMap(ignored -> requireSingleValue(binding.pool(),
+                "SELECT to_regclass($1)::text", Tuple.of(commandTable), "pgvector command table does not exist"))
+            .flatMap(ignored -> requireSingleValue(binding.pool(),
                 "SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a "
-                    + "WHERE a.attrelid = '" + binding.vectorTable().replace("\"", "")
-                    + "'::regclass AND a.attname = 'embedding' AND NOT a.attisdropped",
-                "pgvector embedding column does not exist");
-            if (!type.equals("vector(" + binding.dimensions() + ")")) {
-                throw new IllegalStateException(
-                    "pgvector embedding column must be vector(" + binding.dimensions() + ") but was " + type);
-            }
-        } catch (SQLException failure) {
-            throw new IllegalStateException("pgvector schema validation failed", failure);
-        }
+                    + "WHERE a.attrelid = CAST($1 AS regclass) AND a.attname = 'embedding' AND NOT a.attisdropped",
+                Tuple.of(vectorTable), "pgvector embedding column does not exist"))
+            .invoke(type -> {
+                if (!type.equals("vector(" + binding.dimensions() + ")")) {
+                    throw new IllegalStateException(
+                        "pgvector embedding column must be vector(" + binding.dimensions() + ") but was " + type);
+                }
+            })
+            .replaceWithVoid();
     }
 
-    private static String requireSingleValue(Connection connection, String sql, String missing) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet result = statement.executeQuery()) {
-            if (!result.next() || result.getString(1) == null) throw new IllegalStateException(missing);
-            return result.getString(1);
-        }
+    private static Uni<String> requireSingleValue(SqlClient client, String sql, Tuple parameters, String missing) {
+        return client.preparedQuery(sql).execute(parameters).map(rows -> first(rows)
+            .map(row -> row.getString(0))
+            .filter(Objects::nonNull)
+            .orElseThrow(() -> new IllegalStateException(missing)));
+    }
+
+    private static Optional<Row> first(RowSet<Row> rows) {
+        var iterator = rows.iterator();
+        return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
     }
 
     private ActiveBinding active() {
@@ -366,12 +343,8 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
         return '"' + normalized + '"';
     }
 
-    private static void rollback(Connection connection, Exception original) {
-        try {
-            connection.rollback();
-        } catch (SQLException rollbackFailure) {
-            original.addSuppressed(rollbackFailure);
-        }
+    private static String unquoted(String qualified) {
+        return qualified.replace("\"", "");
     }
 
     record RuntimeSettings(String schema, String table, String commandTable) {
@@ -387,11 +360,10 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
     }
 
     private record ActiveBinding(
-        DataSource dataSource,
+        PgPool pool,
         int dimensions,
         String vectorTable,
         String commandTable
     ) {
     }
-
 }

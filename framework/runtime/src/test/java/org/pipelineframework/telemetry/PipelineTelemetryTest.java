@@ -443,6 +443,11 @@ class PipelineTelemetryTest {
                 public Duration startupTimeout() {
                     return Duration.ofMinutes(5);
                 }
+
+                @Override
+                public String restPath() {
+                    return "/q/health";
+                }
             };
         }
 

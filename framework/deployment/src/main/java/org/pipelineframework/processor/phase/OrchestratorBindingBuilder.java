@@ -1,6 +1,8 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.Element;
 
@@ -11,7 +13,9 @@ import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.ir.TypeMapping;
 
 /**
  * Builds orchestrator-specific bindings.
@@ -28,10 +32,12 @@ class OrchestratorBindingBuilder {
     static OrchestratorBinding buildOrchestratorBinding(
             PipelineTemplateConfig config,
             Set<? extends Element> orchestratorElements,
-            String resolvedTransport) {
+            String resolvedTransport,
+            List<StepDefinition> stepDefinitions) {
         if (config == null) {
             return null;
         }
+        Objects.requireNonNull(stepDefinitions, "stepDefinitions must not be null");
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return null;
@@ -60,14 +66,16 @@ class OrchestratorBindingBuilder {
         String firstServiceNameFormatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(first.name()));
         String firstServiceName = "Process" + firstServiceNameFormatted + "Service";
         StreamingShape firstStreamingShape = StreamingShapeResolver.streamingShape(first.cardinality());
+        TypeMapping inputMapping = rootMapping(stepDefinitions, true, inputType);
+        TypeMapping outputMapping = rootMapping(stepDefinitions, false, outputType);
 
         PipelineStepModel model = new PipelineStepModel(
             "OrchestratorService",
             "OrchestratorService",
             basePackage + ".orchestrator.service",
             ClassName.get(basePackage + ".orchestrator.service", "OrchestratorService"),
-            null,
-            null,
+            inputMapping,
+            outputMapping,
             StreamingShapeResolver.streamingShape(inputStreaming, outputStreaming),
             Set.of(GenerationTarget.GRPC_SERVICE),
             org.pipelineframework.processor.ir.ExecutionMode.DEFAULT,
@@ -99,6 +107,20 @@ class OrchestratorBindingBuilder {
             cliDescription,
             cliVersion
         );
+    }
+
+    private static TypeMapping rootMapping(
+            List<StepDefinition> stepDefinitions,
+            boolean input,
+            String canonicalTypeName) {
+        Optional<ClassName> javaType = stepDefinitions.isEmpty()
+            ? Optional.empty()
+            : Optional.ofNullable(input
+                ? stepDefinitions.getFirst().inputType()
+                : stepDefinitions.getLast().outputType());
+        return javaType
+            .map(type -> TypeMapping.canonical(type, canonicalTypeName))
+            .orElseGet(TypeMapping::unresolved);
     }
 
     /**

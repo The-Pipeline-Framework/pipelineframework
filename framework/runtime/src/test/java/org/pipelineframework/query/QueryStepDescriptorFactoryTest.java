@@ -67,6 +67,31 @@ class QueryStepDescriptorFactoryTest {
     }
 
     @Test
+    void descriptorLoadsPackagedPipelineYamlFromTheContextClassLoader() throws Exception {
+        Path resourceRoot = tempDir.resolve("packaged-query");
+        Files.createDirectories(resourceRoot);
+        Files.writeString(resourceRoot.resolve("pipeline.yaml"), pipelineYaml("packaged"));
+
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { resourceRoot.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+            try {
+                QueryStepDescriptor descriptor = factory.descriptor(
+                    "ProcessLoadCustomerRiskService",
+                    "org.example.CustomerRiskLookup",
+                    "org.example.CustomerRiskSnapshot").await().atMost(Duration.ofSeconds(2));
+
+                assertEquals("packaged", descriptor.version());
+            } finally {
+                factory.shutdown();
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void nativeQueryDescriptorRefersToTheNamedBindingWithoutProviderConstruction() throws Exception {
         Path metadataRoot = tempDir.resolve("connector-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");

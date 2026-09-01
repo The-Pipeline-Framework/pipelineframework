@@ -38,15 +38,28 @@ public class PipelineRuntimeMappingLocator {
      * @return the located mapping file path, or empty if no mapping file is found
      */
     public Optional<Path> locate(Path moduleDir) {
+        List<Path> moduleMatches = new ArrayList<>();
+        scanDirectory(moduleDir, moduleMatches);
+        scanDirectory(moduleDir.resolve("config"), moduleMatches);
+        if (!moduleMatches.isEmpty()) {
+            return selectSingle(moduleMatches);
+        }
+
         Path projectRoot = findNearestParentPom(moduleDir);
         if (projectRoot == null) {
             return Optional.empty();
         }
 
         List<Path> matches = new ArrayList<>();
-        scanDirectory(projectRoot, matches);
-        scanDirectory(projectRoot.resolve("config"), matches);
+        if (!projectRoot.equals(moduleDir)) {
+            scanDirectory(projectRoot, matches);
+            scanDirectory(projectRoot.resolve("config"), matches);
+        }
 
+        return selectSingle(matches);
+    }
+
+    private Optional<Path> selectSingle(List<Path> matches) {
         if (matches.size() > 1) {
             String names = matches.stream()
                 .map(Path::toString)

@@ -34,6 +34,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
 
@@ -111,6 +113,35 @@ class PipelineBindingConstructionPhaseTest {
 
         Map<String, Object> bindings = context.getRendererBindings();
         assertTrue(bindings.containsKey("TestService_local"));
+    }
+
+    @Test
+    void orchestratorBindingCarriesCanonicalRootMappings() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineTemplateStep rootStep = new PipelineTemplateStep(
+            "Root", "ONE_TO_ONE", "Question", List.of(), "Answer", List.of());
+        PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
+        when(config.steps()).thenReturn(List.of(rootStep));
+        when(config.basePackage()).thenReturn("com.example");
+        when(config.transport()).thenReturn("REST");
+        StepDefinition rootDefinition = mock(StepDefinition.class);
+        when(rootDefinition.inputType()).thenReturn(ClassName.get("com.example.domain", "Question"));
+        when(rootDefinition.outputType()).thenReturn(ClassName.get("com.example.domain", "Answer"));
+
+        context.setPipelineTemplateConfig(config);
+        context.setStepDefinitions(List.of(rootDefinition));
+        context.setTransportMode(PipelineTransport.REST);
+        context.setOrchestratorModels(List.of(new PipelineOrchestratorModel(
+            "OrchestratorService", "com.example.orchestrator", Set.of(GenerationTarget.REST_RESOURCE), false)));
+
+        phase.execute(context);
+
+        OrchestratorBinding binding = (OrchestratorBinding) context.getRendererBindings().get("orchestrator");
+        assertEquals(ClassName.get("com.example.domain", "Question"), binding.model().inputMapping().domainType());
+        assertEquals("Question", binding.model().inputMapping().canonicalTypeName().orElseThrow());
+        assertEquals(ClassName.get("com.example.domain", "Answer"), binding.model().outputMapping().domainType());
+        assertEquals("Answer", binding.model().outputMapping().canonicalTypeName().orElseThrow());
     }
 
     @Test

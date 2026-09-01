@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Optional;
+import io.vertx.mutiny.pgclient.PgPool;
+import io.vertx.pgclient.PgConnectOptions;
+import io.vertx.sqlclient.PoolOptions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.postgresql.ds.PGSimpleDataSource;
 import org.pipelineframework.connector.CommandDispatchIdentity;
 import org.pipelineframework.connector.CommandInvocation;
 import org.pipelineframework.connector.CommandOutcome;
@@ -28,7 +30,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 class PgVectorConnectorIT {
     private static final PostgreSQLContainer<?> POSTGRES =
         new PostgreSQLContainer<>("pgvector/pgvector:pg17");
-    private static PGSimpleDataSource dataSource;
+    private static PgPool pool;
 
     @BeforeAll static void startDatabase() throws Exception {
         POSTGRES.start();
@@ -38,13 +40,18 @@ class PgVectorConnectorIT {
             statement.execute("CREATE TABLE rag_vectors (item_id text PRIMARY KEY, content text NOT NULL, embedding vector(3) NOT NULL, updated_command_id text NOT NULL)");
             statement.execute("CREATE TABLE rag_vector_commands (command_id text PRIMARY KEY, request_fingerprint text NOT NULL, item_id text NOT NULL)");
         }
-        dataSource = new PGSimpleDataSource();
-        dataSource.setURL(POSTGRES.getJdbcUrl());
-        dataSource.setUser(POSTGRES.getUsername());
-        dataSource.setPassword(POSTGRES.getPassword());
+        pool = PgPool.pool(new PgConnectOptions()
+            .setHost(POSTGRES.getHost())
+            .setPort(POSTGRES.getFirstMappedPort())
+            .setDatabase(POSTGRES.getDatabaseName())
+            .setUser(POSTGRES.getUsername())
+            .setPassword(POSTGRES.getPassword()), new PoolOptions().setMaxSize(4));
     }
 
-    @AfterAll static void stopDatabase() { POSTGRES.stop(); }
+    @AfterAll static void stopDatabase() {
+        if (pool != null) pool.closeAndAwait();
+        POSTGRES.stop();
+    }
 
     @Test void persistsOrdersReplaysAndSurvivesConnectorRestart() {
         var connector = connector();
@@ -62,7 +69,7 @@ class PgVectorConnectorIT {
     }
 
     private static PgVectorConnector connector() {
-        var connector = new PgVectorConnector(dataSource,
+        var connector = new PgVectorConnector(pool,
             PgVectorConnector.runtimeSettings("public", "rag_vectors", "rag_vector_commands"));
         connector.start(ConnectorRuntimeContext.empty(), new PgVectorProviderConfiguration(3)).toCompletableFuture().join();
         return connector;

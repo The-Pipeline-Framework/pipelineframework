@@ -17,7 +17,7 @@
         <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest</artifactId></dependency>
-        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-reactive-pg-client</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
     </dependencies>
     <build><plugins>
@@ -33,6 +33,7 @@
         </annotationProcessorPaths></configuration><executions>
             <execution><id>default-compile</id><phase>compile</phase><goals><goal>compile</goal></goals><configuration><compilerArgs><arg>${pipeline.configArg}</arg><arg>${pipeline.generatedSourcesArg}</arg><arg>${pipeline.moduleArg}</arg></compilerArgs></configuration></execution>
             <execution><id>compile-orchestrator-client-generated</id><phase>process-classes</phase><goals><goal>compile</goal></goals><configuration><proc>none</proc><compileSourceRoots><compileSourceRoot>${project.build.directory}/generated-sources/pipeline/orchestrator-client</compileSourceRoot></compileSourceRoots><outputDirectory>${project.build.outputDirectory}</outputDirectory></configuration></execution>
+            <execution><id>compile-rest-server-generated</id><phase>process-classes</phase><goals><goal>compile</goal></goals><configuration><proc>none</proc><compileSourceRoots><compileSourceRoot>${project.build.directory}/generated-sources/pipeline/rest-server</compileSourceRoot></compileSourceRoots><outputDirectory>${project.build.outputDirectory}</outputDirectory></configuration></execution>
         </executions></plugin>
         <plugin><groupId>io.quarkus</groupId><artifactId>quarkus-maven-plugin</artifactId></plugin>
         <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.1</version><executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions></plugin>

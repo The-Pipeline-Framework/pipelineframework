@@ -296,6 +296,15 @@ public interface PipelineStepConfig {
          */
         @WithDefault("PT5M")
         Duration startupTimeout();
+
+        /**
+         * Default HTTP path used to check REST step dependencies.
+         *
+         * @return REST dependency health path
+         */
+        @WithName("rest-path")
+        @WithDefault("/q/health")
+        String restPath();
     }
 
     /**
