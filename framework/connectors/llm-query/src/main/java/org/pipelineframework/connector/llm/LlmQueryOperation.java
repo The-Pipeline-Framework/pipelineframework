@@ -106,11 +106,46 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                         contract,
                         invocation.input()));
             })
-            .exceptionally(failure -> {
-                LOG.log(System.Logger.Level.WARNING,
-                    "LLM Query failed without a repair or retry inference");
-                return new QueryOutcome.TerminalFailure<>("llm-query-failed");
-            });
+            .exceptionally(LlmQueryOperation::failureOutcome);
+    }
+
+    private static QueryOutcome<Object> failureOutcome(Throwable failure) {
+        Throwable cause = unwrap(failure);
+        QueryOutcome<Object> outcome;
+        if (cause instanceof org.pipelineframework.connector.ConnectionResolutionException connection) {
+            outcome = switch (connection.kind()) {
+                case AUTHENTICATION_REQUIRED ->
+                    new QueryOutcome.AuthenticationRequired<>("llm-connection-authentication-required");
+                case TEMPORARILY_UNAVAILABLE ->
+                    new QueryOutcome.TemporarilyUnavailable<>("llm-connection-temporarily-unavailable");
+                case CONFIGURATION ->
+                    new QueryOutcome.TerminalFailure<>("llm-connection-misconfigured");
+            };
+        } else if (cause instanceof LlmProviderFailureException provider) {
+            outcome = switch (provider.kind()) {
+                case AUTHENTICATION_REQUIRED ->
+                    new QueryOutcome.AuthenticationRequired<>(provider.outcomeCode());
+                case TEMPORARILY_UNAVAILABLE ->
+                    new QueryOutcome.TemporarilyUnavailable<>(provider.outcomeCode());
+                case TERMINAL ->
+                    new QueryOutcome.TerminalFailure<>(provider.outcomeCode());
+            };
+        } else {
+            outcome = new QueryOutcome.TerminalFailure<>("llm-query-failed");
+        }
+        LOG.log(System.Logger.Level.WARNING,
+            "LLM Query failed without a repair or retry inference: " + outcome.code());
+        return outcome;
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        Throwable current = Objects.requireNonNull(failure, "LLM Query failure must not be null");
+        while ((current instanceof java.util.concurrent.CompletionException
+                || current instanceof java.util.concurrent.ExecutionException)
+            && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private CompletionStage<LlmDecisionClient> resolveClient(

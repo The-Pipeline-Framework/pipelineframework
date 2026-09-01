@@ -238,18 +238,25 @@ connectors:
 ```
 
 `connection` is an opaque logical `ConnectionRef`, not a credential or account identifier. The
-application's tenant-aware `ConnectionResolver` turns it into an
-`AuthenticatedOpenAiCompatibleConnection` for each live invocation. That typed connection creates
-an authenticated LangChain4j `ChatModel`; API keys, vault paths, Keychain aliases, refresh behavior,
-and provider security configuration remain entirely behind the host boundary. Its host model
-factory must preserve all supplied non-secret model settings, including strict JSON Schema for
-required structured output.
+application's tenant-aware `ConnectionResolver` turns it into the typed connection requested by the
+configured client implementation for each live invocation. The blocking implementation requests an
+`AuthenticatedOpenAiCompatibleConnection` backed by a LangChain4j `ChatModel`; the reactive
+implementation requests an `AuthenticatedOpenAiCompatibleReactiveConnection` backed by a
+`StreamingChatModel`. Both remain one `llm.query.openai.compatible` connector and one portable Query
+contract. API keys, vault paths, Keychain aliases, refresh behavior, and provider security
+configuration remain entirely behind the host boundary. Each host model factory must preserve all
+supplied non-secret model settings, including strict JSON Schema for required structured output.
 
 Only non-sensitive adapter tuning is configured as a runtime property:
 
 ```properties
 pipeline.llm.langchain4j.openai-compatible.request-timeout=PT60S
+pipeline.llm.langchain4j.openai-compatible.client-implementation=blocking
 ```
+
+`client-implementation` accepts `blocking` or `reactive` and defaults to `blocking` for compatibility.
+It is runtime/deployment selection, not pipeline DSL: switching host stacks does not change the
+connector binding or Query contract.
 
 The connection reference and one host `ConnectionResolver` are required when an
 `llm.query.openai.compatible` binding starts. Tenant context and the typed authenticated connection
@@ -264,8 +271,14 @@ When the provider reports token usage, response model, or finish reason, the ada
 values as framework-owned Query observation metadata. Input, output, and total token counts are
 independently optional; TPF neither estimates missing counts nor recomputes the provider total.
 
-Operational model/provider failures remain exceptional Query failures. A syntactically or
-structurally invalid model decision is instead a typed terminal Query outcome, while its completed
+Operational connection and provider failures retain safe typed outcomes rather than collapsing
+everything into `llm-query-failed`. Authentication failures become `AuthenticationRequired`,
+timeouts, rate limits, and provider outages become `TemporarilyUnavailable`, and rejected requests,
+unavailable models, exhausted quota, and content filtering become terminal failures with bounded
+codes. Provider messages, response bodies, and credentials are not copied into those codes or logs.
+An unclassified adapter failure remains `llm-query-failed`.
+
+A syntactically or structurally invalid model decision is instead a typed terminal Query outcome, while its completed
 provider observation remains available for usage telemetry. Query capture records the successful
 application decision plus optional observation metadata, not prompts, credentials, SDK objects, or
 hidden reasoning. Observation metadata does not enter the application output type, canonical schema,
