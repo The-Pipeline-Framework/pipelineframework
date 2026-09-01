@@ -53,7 +53,7 @@ public class AwaitClientStepRenderer {
             model.inboundDomainType(), transportRepresentation, configHints.basePackage());
         TypeName transportOutputType = clientStepType(
             model.outboundDomainType(), transportRepresentation, configHints.basePackage());
-        V3TransportBoundaryResolver.RepresentationBoundary boundary = V3TransportBoundaryResolver.resolveAwait(
+        TransportBoundaryResolver.RepresentationBoundary boundary = TransportBoundaryResolver.resolveAwait(
             model,
             transportInputType,
             transportOutputType,
@@ -130,7 +130,7 @@ public class AwaitClientStepRenderer {
 
     private MethodSpec renderApplyMethod(
         PipelineStepModel model,
-        V3TransportBoundaryResolver.RepresentationBoundary boundary
+        TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         TypeName inputType = boundary.stepInputType();
         TypeName outputType = boundary.stepOutputType();
@@ -176,7 +176,7 @@ public class AwaitClientStepRenderer {
 
     private static CodeBlock descriptorInvocation(
         PipelineStepModel model,
-        V3TransportBoundaryResolver.RepresentationBoundary boundary
+        TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         if (!boundary.convertsAtBoundary()) {
             return CodeBlock.of(

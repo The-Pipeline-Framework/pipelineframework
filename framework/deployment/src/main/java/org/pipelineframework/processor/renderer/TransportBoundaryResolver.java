@@ -4,6 +4,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
 import java.io.IOException;
 import java.util.Optional;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
@@ -14,9 +15,9 @@ import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
  * application-authored v3 domain/protobuf pairs retain their shared generated adapter, and
  * legacy callers retain the application-owned mapper path.</p>
  */
-final class V3TransportBoundaryResolver {
+final class TransportBoundaryResolver {
 
-    private V3TransportBoundaryResolver() {
+    private TransportBoundaryResolver() {
     }
 
     static RepresentationBoundary resolve(
@@ -25,13 +26,11 @@ final class V3TransportBoundaryResolver {
             GenerationContext context) throws IOException {
         TypeName transportInputType = grpcTypes.grpcParameterType();
         TypeName transportOutputType = grpcTypes.grpcReturnType();
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> normalizedInput = resolver.resolve(model.inputMapping());
-        Optional<V3TransportTypeBinding> normalizedOutput = resolver.resolve(model.outputMapping());
+        CanonicalTransportBindingPair normalized = CanonicalTransportBindingResolver.resolveAndEnsure(
+            context, model, PipelineTransport.GRPC);
+        Optional<CanonicalTransportTypeBinding> normalizedInput = normalized.input();
+        Optional<CanonicalTransportTypeBinding> normalizedOutput = normalized.output();
         if (normalizedInput.isPresent() && normalizedOutput.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            renderer.ensureGrpc(normalizedInput.orElseThrow());
-            renderer.ensureGrpc(normalizedOutput.orElseThrow());
             return new RepresentationBoundary(
                 model.inboundDomainType(),
                 model.outboundDomainType(),

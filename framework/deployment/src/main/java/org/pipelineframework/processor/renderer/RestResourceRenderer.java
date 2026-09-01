@@ -9,6 +9,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
@@ -108,12 +109,13 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
         resourceBuilder.addField(serviceField);
-        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx);
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, PipelineTransport.REST);
         // Legacy templates derive DTOs from Java package conventions; v3 uses the normalized type model.
-        TypeName inputDtoClassName = normalizedTransport.input().<TypeName>map(V3TransportTypeBinding::restDtoType).orElseGet(() -> model.inboundDomainType() != null
+        TypeName inputDtoClassName = normalizedTransport.input().<TypeName>map(CanonicalTransportTypeBinding::restDtoType).orElseGet(() -> model.inboundDomainType() != null
             ? convertDomainToDtoType(model.inboundDomainType())
             : ClassName.OBJECT);
-        TypeName outputDtoClassName = normalizedTransport.output().<TypeName>map(V3TransportTypeBinding::restDtoType).orElseGet(() -> model.outboundDomainType() != null
+        TypeName outputDtoClassName = normalizedTransport.output().<TypeName>map(CanonicalTransportTypeBinding::restDtoType).orElseGet(() -> model.outboundDomainType() != null
             ? convertDomainToDtoType(model.outboundDomainType())
             : ClassName.OBJECT);
 
@@ -128,12 +130,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         String inboundMapperFieldName = "inboundMapper";
         String outboundMapperFieldName = "outboundMapper";
         if (!cacheSideEffect) {
-            TypeName inboundMapperType = normalizedTransport.input().<TypeName>map(V3TransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
+            TypeName inboundMapperType = normalizedTransport.input().<TypeName>map(CanonicalTransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainInputType,
                 inputDtoClassName
             ));
-            TypeName outboundMapperType = normalizedTransport.output().<TypeName>map(V3TransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
+            TypeName outboundMapperType = normalizedTransport.output().<TypeName>map(CanonicalTransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainOutputType,
                 outputDtoClassName
@@ -188,28 +190,6 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         resourceBuilder.addMethod(processMethod);
 
         return resourceBuilder.build();
-    }
-
-    private TransportBindingPair normalizedTransport(
-        PipelineStepModel model,
-        GenerationContext context
-    ) throws IOException {
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding resolved : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                renderer.ensureRest(resolved);
-            }
-        }
-        return new TransportBindingPair(input, output);
-    }
-
-    private record TransportBindingPair(
-        Optional<V3TransportTypeBinding> input,
-        Optional<V3TransportTypeBinding> output
-    ) {
     }
 
     /**

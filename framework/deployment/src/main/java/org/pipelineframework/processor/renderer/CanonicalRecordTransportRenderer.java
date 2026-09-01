@@ -19,28 +19,29 @@ import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.proto.PipelineJavaProtoScalarExpressions;
 
 /** Emits typed REST and protobuf adapters for normalized v3 record bindings. */
-final class V3TransportRecordRenderer {
+final class CanonicalRecordTransportRenderer {
     private final GenerationContext context;
-    private final V3TransportTypeBindingResolver resolver;
+    private final CanonicalTransportBindingResolver resolver;
     private final PipelineTemplateTypeModel typeModel;
     private final String basePackage;
     private final PipelineTemplateJavaScalarTypes scalarTypes = new PipelineTemplateJavaScalarTypes();
 
-    V3TransportRecordRenderer(GenerationContext context, V3TransportTypeBindingResolver resolver) {
+    CanonicalRecordTransportRenderer(GenerationContext context, CanonicalTransportBindingResolver resolver) {
         this.context = context;
         this.resolver = resolver;
         this.typeModel = resolver.typeModel().orElseThrow();
         this.basePackage = resolver.basePackage().orElseThrow();
     }
 
-    void ensureRest(V3TransportTypeBinding binding) throws IOException {
+    void ensureRest(CanonicalTransportTypeBinding binding) throws IOException {
         ensureDto(binding.definition());
         ensureRestMapper(binding);
     }
 
-    void ensureGrpc(V3TransportTypeBinding binding) throws IOException {
+    void ensureGrpc(CanonicalTransportTypeBinding binding) throws IOException {
         ensureGrpcMapper(binding);
     }
 
@@ -70,14 +71,14 @@ final class V3TransportRecordRenderer {
         write(output, source.toString());
     }
 
-    private void ensureRestMapper(V3TransportTypeBinding binding) throws IOException {
+    private void ensureRestMapper(CanonicalTransportTypeBinding binding) throws IOException {
         Path output = sourcePath(binding.restMapperType());
         if (Files.exists(output)) {
             return;
         }
         BoundRecord record = bindRecord(binding);
-        Map<String, V3TransportTypeBinding> nested = nestedBindings(record);
-        for (V3TransportTypeBinding value : nested.values()) {
+        Map<String, CanonicalTransportTypeBinding> nested = nestedBindings(record);
+        for (CanonicalTransportTypeBinding value : nested.values()) {
             ensureRest(value);
         }
         StringBuilder source = new StringBuilder(header(binding.restMapperType().packageName()))
@@ -97,14 +98,14 @@ final class V3TransportRecordRenderer {
         write(output, source.toString());
     }
 
-    private void ensureGrpcMapper(V3TransportTypeBinding binding) throws IOException {
+    private void ensureGrpcMapper(CanonicalTransportTypeBinding binding) throws IOException {
         Path output = sourcePath(binding.grpcMapperType());
         if (Files.exists(output)) {
             return;
         }
         BoundRecord record = bindRecord(binding);
-        Map<String, V3TransportTypeBinding> nested = nestedBindings(record);
-        for (V3TransportTypeBinding value : nested.values()) {
+        Map<String, CanonicalTransportTypeBinding> nested = nestedBindings(record);
+        for (CanonicalTransportTypeBinding value : nested.values()) {
             ensureGrpc(value);
         }
         StringBuilder source = new StringBuilder(header(binding.grpcMapperType().packageName()))
@@ -142,7 +143,7 @@ final class V3TransportRecordRenderer {
         write(output, source.toString());
     }
 
-    private BoundRecord bindRecord(V3TransportTypeBinding binding) {
+    private BoundRecord bindRecord(CanonicalTransportTypeBinding binding) {
         if (context.processingEnv() == null) {
             throw new IllegalStateException("Normalized transport mapping requires an annotation processing environment");
         }
@@ -165,8 +166,8 @@ final class V3TransportRecordRenderer {
         return new BoundRecord(binding, List.copyOf(fields));
     }
 
-    private Map<String, V3TransportTypeBinding> nestedBindings(BoundRecord record) {
-        Map<String, V3TransportTypeBinding> nested = new LinkedHashMap<>();
+    private Map<String, CanonicalTransportTypeBinding> nestedBindings(BoundRecord record) {
+        Map<String, CanonicalTransportTypeBinding> nested = new LinkedHashMap<>();
         for (BoundField field : record.fields()) {
             if (namedRecord(field.definition().type()).isEmpty()) {
                 continue;
@@ -176,14 +177,14 @@ final class V3TransportRecordRenderer {
                 : field.javaType();
             ClassName nestedJavaType = className(nestedMirror);
             String nestedName = field.definition().type().name();
-            V3TransportTypeBinding nestedBinding = resolver.resolve(TypeMapping.canonical(nestedJavaType, nestedName))
+            CanonicalTransportTypeBinding nestedBinding = resolver.resolve(TypeMapping.canonical(nestedJavaType, nestedName))
                 .orElseThrow(() -> new IllegalStateException("Cannot resolve nested canonical record '" + nestedName + "'"));
             nested.put(field.definition().name(), nestedBinding);
         }
         return Map.copyOf(nested);
     }
 
-    private void appendNestedFields(StringBuilder source, Map<String, V3TransportTypeBinding> nested) {
+    private void appendNestedFields(StringBuilder source, Map<String, CanonicalTransportTypeBinding> nested) {
         nested.forEach((field, binding) -> source.append("    private final ")
             .append(binding.restMapperType().canonicalName()).append(' ')
             .append(field).append("Mapper = new ")
@@ -193,17 +194,17 @@ final class V3TransportRecordRenderer {
         }
     }
 
-    private String fromRest(BoundField field, Map<String, V3TransportTypeBinding> nested) {
+    private String fromRest(BoundField field, Map<String, CanonicalTransportTypeBinding> nested) {
         String value = "external." + field.definition().name() + "()";
         return mapValue(field, value, nested, "fromExternal");
     }
 
-    private String toRest(BoundField field, Map<String, V3TransportTypeBinding> nested) {
+    private String toRest(BoundField field, Map<String, CanonicalTransportTypeBinding> nested) {
         String value = "domain." + field.definition().name() + "()";
         return mapValue(field, value, nested, "toExternal");
     }
 
-    private String fromGrpc(BoundField field, Map<String, V3TransportTypeBinding> nested) {
+    private String fromGrpc(BoundField field, Map<String, CanonicalTransportTypeBinding> nested) {
         String value = "value.get" + capitalized(field.definition().name())
             + (field.definition().repeated() ? "List()" : "()");
         if (field.definition().type() instanceof PipelineTemplateTypeReference.Scalar scalar) {
@@ -215,7 +216,7 @@ final class V3TransportRecordRenderer {
         return mapGrpcValue(field, value, nested, "fromProto");
     }
 
-    private String toGrpc(BoundField field, Map<String, V3TransportTypeBinding> nested) {
+    private String toGrpc(BoundField field, Map<String, CanonicalTransportTypeBinding> nested) {
         String value = "domain." + field.definition().name() + "()";
         if (field.definition().type() instanceof PipelineTemplateTypeReference.Scalar scalar) {
             String converted = toProtoScalar(scalar.name(), "item");
@@ -229,7 +230,7 @@ final class V3TransportRecordRenderer {
     private String mapValue(
         BoundField field,
         String value,
-        Map<String, V3TransportTypeBinding> nested,
+        Map<String, CanonicalTransportTypeBinding> nested,
         String method
     ) {
         if (!nested.containsKey(field.definition().name())) {
@@ -244,10 +245,10 @@ final class V3TransportRecordRenderer {
     private String mapGrpcValue(
         BoundField field,
         String value,
-        Map<String, V3TransportTypeBinding> nested,
+        Map<String, CanonicalTransportTypeBinding> nested,
         String method
     ) {
-        V3TransportTypeBinding binding = nested.get(field.definition().name());
+        CanonicalTransportTypeBinding binding = nested.get(field.definition().name());
         if (binding == null) {
             return field.definition().repeated() ? "java.util.List.copyOf(" + value + ")" : value;
         }
@@ -294,30 +295,14 @@ final class V3TransportRecordRenderer {
     }
 
     private String fromProtoScalar(String scalar, String expression) {
-        return switch (scalar) {
-            case "decimal" -> "new java.math.BigDecimal(" + expression + ")";
-            case "uuid" -> "java.util.UUID.fromString(" + expression + ")";
-            case "timestamp" -> "java.time.Instant.parse(" + expression + ")";
-            case "datetime" -> "java.time.LocalDateTime.parse(" + expression + ")";
-            case "date" -> "java.time.LocalDate.parse(" + expression + ")";
-            case "duration" -> "java.time.Duration.parse(" + expression + ")";
-            case "currency" -> "java.util.Currency.getInstance(" + expression + ")";
-            case "uri" -> "java.net.URI.create(" + expression + ")";
-            case "path" -> "java.nio.file.Path.of(" + expression + ")";
-            case "payload_ref" -> "org.pipelineframework.proto.PayloadReferenceProtobufCodec.decode("
-                + expression + ".toByteArray())";
-            default -> expression;
-        };
+        return PipelineJavaProtoScalarExpressions.fromProto(scalar, expression,
+            value -> "org.pipelineframework.proto.PayloadReferenceProtobufCodec.decode("
+                + value + ".toByteArray())");
     }
 
     private String toProtoScalar(String scalar, String expression) {
-        return switch (scalar) {
-            case "decimal" -> expression + ".toPlainString()";
-            case "uuid", "timestamp", "datetime", "date", "duration", "currency", "uri", "path" ->
-                expression + ".toString()";
-            case "payload_ref" -> "toProtoPayloadReference(" + expression + ")";
-            default -> expression;
-        };
+        return PipelineJavaProtoScalarExpressions.toProto(
+            scalar, expression, value -> "toProtoPayloadReference(" + value + ")");
     }
 
     private String joinExpressions(BoundRecord record, java.util.function.Function<BoundField, String> renderer) {
@@ -347,7 +332,7 @@ final class V3TransportRecordRenderer {
         return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
-    private record BoundRecord(V3TransportTypeBinding binding, List<BoundField> fields) {
+    private record BoundRecord(CanonicalTransportTypeBinding binding, List<BoundField> fields) {
     }
 
     private record BoundField(PipelineTemplateTypeDefinition.Field definition, TypeMirror javaType) {

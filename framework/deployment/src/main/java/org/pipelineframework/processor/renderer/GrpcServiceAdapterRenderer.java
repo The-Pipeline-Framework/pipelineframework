@@ -39,7 +39,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(
             binding, ctx.processingEnv().getMessager());
-        V3TransportBoundaryResolver.RepresentationBoundary boundary = V3TransportBoundaryResolver.resolve(
+        TransportBoundaryResolver.RepresentationBoundary boundary = TransportBoundaryResolver.resolve(
             binding.model(), grpcTypes, ctx);
         TypeSpec grpcServiceClass = buildGrpcServiceClass(
             binding, ctx.processingEnv().getMessager(), ctx.role(), boundary);
@@ -65,7 +65,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             GrpcBinding binding,
             Messager messager,
             org.pipelineframework.processor.ir.DeploymentRole role,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+            TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         String simpleClassName;
         // For gRPC services: ${ServiceName}GrpcService
@@ -162,7 +162,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+            TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcReactiveServiceAdapter");
@@ -250,7 +250,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+            TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceStreamingAdapter");
@@ -334,7 +334,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+            TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceClientStreamingAdapter");
@@ -422,7 +422,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+            TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceBidirectionalStreamingAdapter");
@@ -507,7 +507,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
             Messager messager,
-            V3TransportBoundaryResolver.RepresentationBoundary boundary
+            TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         PipelineStepModel model = binding.model();
 
@@ -585,14 +585,14 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
     private static TypeName domainInputType(
         PipelineStepModel model,
-        V3TransportBoundaryResolver.RepresentationBoundary boundary
+        TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         return boundary.convertsAtBoundary() ? boundary.stepInputType() : model.inboundDomainType();
     }
 
     private static TypeName domainOutputType(
         PipelineStepModel model,
-        V3TransportBoundaryResolver.RepresentationBoundary boundary
+        TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         return boundary.convertsAtBoundary() ? boundary.stepOutputType() : model.outboundDomainType();
     }

@@ -616,31 +616,16 @@ final class PipelineJavaDomainRenderer {
         PipelineTemplateTypeReference resolved = model.resolveAliases(reference);
         if (resolved instanceof PipelineTemplateTypeReference.Named named) { return "toProto(" + expression + ")"; }
         String scalar = ((PipelineTemplateTypeReference.Scalar) resolved).name();
-        return switch (scalar) {
-            case "decimal" -> expression + ".toPlainString()";
-            case "uuid", "timestamp", "datetime", "date", "duration", "currency", "uri", "path" -> expression + ".toString()";
-            case "payload_ref" -> "toProtoPayloadReference(" + expression + ")";
-            default -> expression;
-        };
+        return PipelineJavaProtoScalarExpressions.toProto(
+            scalar, expression, value -> "toProtoPayloadReference(" + value + ")");
     }
 
     private String fromProtoExpression(PipelineTemplateTypeReference reference, String expression, PipelineTemplateTypeModel model) {
         PipelineTemplateTypeReference resolved = model.resolveAliases(reference);
         if (resolved instanceof PipelineTemplateTypeReference.Named named) { return "fromProto(" + expression + ")"; }
         String scalar = ((PipelineTemplateTypeReference.Scalar) resolved).name();
-        return switch (scalar) {
-            case "decimal" -> "new java.math.BigDecimal(" + expression + ")";
-            case "uuid" -> "java.util.UUID.fromString(" + expression + ")";
-            case "timestamp" -> "java.time.Instant.parse(" + expression + ")";
-            case "datetime" -> "java.time.LocalDateTime.parse(" + expression + ")";
-            case "date" -> "java.time.LocalDate.parse(" + expression + ")";
-            case "duration" -> "java.time.Duration.parse(" + expression + ")";
-            case "currency" -> "java.util.Currency.getInstance(" + expression + ")";
-            case "uri" -> "java.net.URI.create(" + expression + ")";
-            case "path" -> "java.nio.file.Path.of(" + expression + ")";
-            case "payload_ref" -> "fromProtoPayloadReference(" + expression + ")";
-            default -> expression;
-        };
+        return PipelineJavaProtoScalarExpressions.fromProto(
+            scalar, expression, value -> "fromProtoPayloadReference(" + value + ")");
     }
 
     private String javaSetter(String protoName) {

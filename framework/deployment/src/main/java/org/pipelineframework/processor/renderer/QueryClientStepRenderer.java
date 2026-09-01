@@ -63,7 +63,8 @@ public class QueryClientStepRenderer {
             : resolveNativeCacheRequirements(model, ctx);
         Optional<QueryPersistenceRepresentation> persistenceRepresentation =
             resolveQueryPersistenceRepresentation(model, ctx, configHints);
-        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx, configHints.transportMode());
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, configHints.transportMode());
         TypeName inputType = normalizedTransport.input().<TypeName>map(binding -> binding.transportType(configHints.transportMode()))
             .orElseGet(() -> clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage()));
         TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(configHints.transportMode()))
@@ -394,30 +395,6 @@ public class QueryClientStepRenderer {
         };
     }
 
-    private TransportBindingPair normalizedTransport(
-        PipelineStepModel model,
-        GenerationContext context,
-        PipelineTransport transport
-    ) throws IOException {
-        if (transport == PipelineTransport.LOCAL) {
-            return new TransportBindingPair(Optional.empty(), Optional.empty());
-        }
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                if (transport == PipelineTransport.REST) {
-                    renderer.ensureRest(binding);
-                } else {
-                    renderer.ensureGrpc(binding);
-                }
-            }
-        }
-        return new TransportBindingPair(input, output);
-    }
-
     private String basePackage(ClassName className, String pipelineBasePackage) {
         String packageName = className.packageName();
         if (packageName == null || packageName.isBlank()) {
@@ -447,15 +424,6 @@ public class QueryClientStepRenderer {
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
-    }
-
-    private record TransportBindingPair(
-        Optional<V3TransportTypeBinding> input,
-        Optional<V3TransportTypeBinding> output
-    ) {
-        boolean any() {
-            return input.isPresent() || output.isPresent();
-        }
     }
 
     private record NativeCacheRequirements(

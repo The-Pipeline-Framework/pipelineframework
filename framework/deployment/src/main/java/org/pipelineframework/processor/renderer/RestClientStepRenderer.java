@@ -14,6 +14,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.ResourceNameUtils;
@@ -40,9 +41,13 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         validateRestMappings(binding.model());
-        RestTypes restTypes = restTypes(binding.model(), ctx);
-        TypeSpec restClientInterface = buildRestClientInterface(binding, ctx, restTypes);
-        TypeSpec restClientStep = buildRestClientStepClass(binding, ctx, restClientInterface.name, restTypes);
+        PipelineStepModel model = binding.model();
+        CanonicalTransportBindingPair transport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, PipelineTransport.REST);
+        TypeName inputDto = transport.restInputOr(() -> convertDomainToDtoType(model.inboundDomainType()));
+        TypeName outputDto = transport.restOutputOr(() -> convertDomainToDtoType(model.outboundDomainType()));
+        TypeSpec restClientInterface = buildRestClientInterface(binding, ctx, inputDto, outputDto);
+        TypeSpec restClientStep = buildRestClientStepClass(binding, ctx, restClientInterface.name, inputDto, outputDto);
 
         JavaFile clientInterfaceFile = JavaFile.builder(
                 binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
@@ -68,16 +73,17 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param binding the RestBinding that provides the pipeline model, DTO type information, and optional path override
      * @return a TypeSpec representing the generated REST client interface
      */
-    private TypeSpec buildRestClientInterface(RestBinding binding, GenerationContext ctx, RestTypes restTypes) {
+    private TypeSpec buildRestClientInterface(
+        RestBinding binding,
+        GenerationContext ctx,
+        TypeName inputDto,
+        TypeName outputDto
+    ) {
         PipelineStepModel model = binding.model();
-        validateRestMappings(model);
 
         String serviceClassName = model.generatedName();
         String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String interfaceName = baseName + "RestClient";
-
-        TypeName inputDto = restTypes.input();
-        TypeName outputDto = restTypes.output();
 
         String basePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
@@ -136,16 +142,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         RestBinding binding,
         GenerationContext ctx,
         String restClientInterfaceName,
-        RestTypes restTypes
+        TypeName inputDto,
+        TypeName outputDto
     ) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
         boolean cachePluginSideEffect = isCachePluginSideEffect(model);
         String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
             + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
-
-        TypeName inputDto = restTypes.input();
-        TypeName outputDto = restTypes.output();
 
         TypeSpec.Builder clientStepBuilder = TypeSpec.classBuilder(clientStepClassName)
             .addModifiers(Modifier.PUBLIC)
@@ -482,25 +486,6 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return DtoTypeUtils.toDtoType(domainType);
     }
 
-    private RestTypes restTypes(PipelineStepModel model, GenerationContext context) throws IOException {
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                renderer.ensureRest(binding);
-            }
-        }
-        TypeName inputDto = input.<TypeName>map(V3TransportTypeBinding::restDtoType)
-            .orElseGet(() -> model.inboundDomainType() != null
-                ? convertDomainToDtoType(model.inboundDomainType()) : ClassName.OBJECT);
-        TypeName outputDto = output.<TypeName>map(V3TransportTypeBinding::restDtoType)
-            .orElseGet(() -> model.outboundDomainType() != null
-                ? convertDomainToDtoType(model.outboundDomainType()) : ClassName.OBJECT);
-        return new RestTypes(inputDto, outputDto);
-    }
-
     /**
      * Ensure the pipeline step model contains the required REST input and output mappings and domain types.
      *
@@ -541,6 +526,4 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return withBoundaryHyphens.toLowerCase();
     }
 
-    private record RestTypes(TypeName input, TypeName output) {
-    }
 }
