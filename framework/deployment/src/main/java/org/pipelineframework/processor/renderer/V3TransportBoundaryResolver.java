@@ -2,28 +2,44 @@ package org.pipelineframework.processor.renderer;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import java.io.IOException;
 import java.util.Optional;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
 /**
- * Identifies the deliberately narrow v3 generated-domain/protobuf binding.
+ * Resolves a normalized v3 Java/protobuf boundary and retains the legacy generated-domain convention as a fallback.
  *
- * <p>This is not mapper selection: it applies only when both sides have the
- * exact names emitted by the v3 target renderers. All other boundaries retain
- * the normal application-owned mapper path.</p>
+ * <p>Normalized record bindings use compiler-owned per-representation mappers. Existing
+ * application-authored v3 domain/protobuf pairs retain their shared generated adapter, and
+ * legacy callers retain the application-owned mapper path.</p>
  */
-final class V3GeneratedDomainBinding {
+final class V3TransportBoundaryResolver {
 
-    private V3GeneratedDomainBinding() {
+    private V3TransportBoundaryResolver() {
     }
 
     static RepresentationBoundary resolve(
             PipelineStepModel model,
             GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes,
-            GenerationContext context) {
+            GenerationContext context) throws IOException {
         TypeName transportInputType = grpcTypes.grpcParameterType();
         TypeName transportOutputType = grpcTypes.grpcReturnType();
+        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
+        Optional<V3TransportTypeBinding> normalizedInput = resolver.resolve(model.inputMapping());
+        Optional<V3TransportTypeBinding> normalizedOutput = resolver.resolve(model.outputMapping());
+        if (normalizedInput.isPresent() && normalizedOutput.isPresent()) {
+            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
+            renderer.ensureGrpc(normalizedInput.orElseThrow());
+            renderer.ensureGrpc(normalizedOutput.orElseThrow());
+            return new RepresentationBoundary(
+                model.inboundDomainType(),
+                model.outboundDomainType(),
+                transportInputType,
+                transportOutputType,
+                Optional.of(normalizedInput.orElseThrow().grpcMapperType()),
+                Optional.of(normalizedOutput.orElseThrow().grpcMapperType()));
+        }
         if (!context.v3GeneratedDomainTypes() || context.pipelineBasePackage() == null) {
             return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
         }
@@ -41,6 +57,7 @@ final class V3GeneratedDomainBinding {
                 canonicalOutputType.orElseThrow(),
                 transportInputType,
                 transportOutputType,
+                Optional.of(ClassName.get(context.pipelineBasePackage() + ".domain", "PipelineDomainProtoAdapters")),
                 Optional.of(ClassName.get(context.pipelineBasePackage() + ".domain", "PipelineDomainProtoAdapters")));
         }
         return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
@@ -63,6 +80,7 @@ final class V3GeneratedDomainBinding {
                 model.outboundDomainType(),
                 transportInputType,
                 transportOutputType,
+                Optional.of(ClassName.get(pipelineBasePackage + ".domain", "PipelineDomainProtoAdapters")),
                 Optional.of(ClassName.get(pipelineBasePackage + ".domain", "PipelineDomainProtoAdapters")));
         }
         return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
@@ -88,19 +106,26 @@ final class V3GeneratedDomainBinding {
         TypeName stepOutputType,
         TypeName transportInputType,
         TypeName transportOutputType,
-        Optional<ClassName> adapters
+        Optional<ClassName> inputAdapter,
+        Optional<ClassName> outputAdapter
     ) {
         static RepresentationBoundary transportOnly(TypeName inputType, TypeName outputType) {
-            return new RepresentationBoundary(inputType, outputType, inputType, outputType, Optional.empty());
+            return new RepresentationBoundary(
+                inputType, outputType, inputType, outputType, Optional.empty(), Optional.empty());
         }
 
         boolean convertsAtBoundary() {
-            return adapters.isPresent();
+            return inputAdapter.isPresent() && outputAdapter.isPresent();
         }
 
-        ClassName adaptersOrThrow() {
-            return adapters.orElseThrow(() -> new IllegalStateException(
-                "A generated representation boundary requires a protobuf adapter class"));
+        ClassName inputAdapterOrThrow() {
+            return inputAdapter.orElseThrow(() -> new IllegalStateException(
+                "A generated representation boundary requires an input protobuf adapter class"));
+        }
+
+        ClassName outputAdapterOrThrow() {
+            return outputAdapter.orElseThrow(() -> new IllegalStateException(
+                "A generated representation boundary requires an output protobuf adapter class"));
         }
     }
 }

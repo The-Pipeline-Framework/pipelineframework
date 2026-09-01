@@ -47,3 +47,4 @@ Node/docs surfaces:
 - Unit tests: `*Test` (Surefire)
 - Integration tests: `*IT` (Failsafe)
 - E2E tests using containers should run in `verify` unless there is an explicit reason otherwise.
+- The Unix `mvnw` wrapper exposes the active Docker CLI context as `DOCKER_HOST` when that variable is unset. This lets Testcontainers discover desktop runtimes such as OrbStack without per-shell exports; an explicitly configured `DOCKER_HOST` or `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` always wins.

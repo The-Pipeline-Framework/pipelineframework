@@ -11,6 +11,8 @@ Build configuration notes:
 - Register the role directories as sources for IDEs via `build-helper-maven-plugin`.
 - If tests reference generated classes (e.g., REST resources), register the same directories as test sources in `generate-test-sources`.
 
+For v3 records reachable from a REST or FUNCTION boundary, the compiler also emits one DTO under `<basePackage>.dto` and deterministic typed mappers under `<basePackage>.transport.generated`. These artifacts are generated for both application-authored and contributed protocol records. Connector libraries remain transport-neutral and do not ship application REST DTOs.
+
 ## Generated Pipeline Metadata
 
 The build also emits runtime metadata under `META-INF/pipeline/`:

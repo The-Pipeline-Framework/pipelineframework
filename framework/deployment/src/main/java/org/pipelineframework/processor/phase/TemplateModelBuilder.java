@@ -80,7 +80,7 @@ class TemplateModelBuilder {
             return TypeMapping.unresolved();
         }
         ClassName domainType = ClassName.get(basePackage + ".common.domain", typeName);
-        return TypeMapping.withoutMapper(domainType);
+        return TypeMapping.canonical(domainType, typeName);
     }
 
     private String toPackageSegment(String name) {

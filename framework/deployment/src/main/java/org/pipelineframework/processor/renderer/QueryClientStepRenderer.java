@@ -63,8 +63,11 @@ public class QueryClientStepRenderer {
             : resolveNativeCacheRequirements(model, ctx);
         Optional<QueryPersistenceRepresentation> persistenceRepresentation =
             resolveQueryPersistenceRepresentation(model, ctx, configHints);
-        TypeName inputType = clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage());
-        TypeName outputType = clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage());
+        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx, configHints.transportMode());
+        TypeName inputType = normalizedTransport.input().<TypeName>map(binding -> binding.transportType(configHints.transportMode()))
+            .orElseGet(() -> clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage()));
+        TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(configHints.transportMode()))
+            .orElseGet(() -> clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage()));
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.query", "QueryStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -88,8 +91,32 @@ public class QueryClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(streaming ? Multi.class : Uni.class), outputType))
             .addParameter(inputType, "input");
-        persistenceRepresentation.ifPresentOrElse(
-            mapping -> apply.addStatement(
+        if (normalizedTransport.any()) {
+            String fromMethod = configHints.transportMode() == PipelineTransport.REST ? "fromExternal" : "fromGrpc";
+            String toMethod = configHints.transportMode() == PipelineTransport.REST ? "toExternal" : "toGrpc";
+            if (normalizedTransport.input().isPresent()) {
+                apply.addStatement("$T queryInput = inputMapper.$L(input)", model.inboundDomainType(), fromMethod);
+            }
+            String queryInput = normalizedTransport.input().isPresent() ? "queryInput" : "input";
+            TypeName queryOutput = normalizedTransport.output().isPresent() ? model.outboundDomainType() : outputType;
+            String inputIdentity = normalizedTransport.input().isPresent()
+                ? model.inboundDomainType().toString() : inputType.toString();
+            String outputIdentity = normalizedTransport.output().isPresent()
+                ? model.outboundDomainType().toString() : outputType.toString();
+            String invocation = streaming
+                ? "support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), " + queryInput + ", $T.class)"
+                : "support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), " + queryInput + ", $T.class)";
+            if (normalizedTransport.output().isPresent()) {
+                invocation += ".map(outputMapper::$L)";
+                apply.addStatement("return " + invocation,
+                    model.serviceName(), inputIdentity, outputIdentity, queryOutput, toMethod);
+            } else {
+                apply.addStatement("return " + invocation,
+                    model.serviceName(), inputIdentity, outputIdentity, queryOutput);
+            }
+        } else {
+            persistenceRepresentation.ifPresentOrElse(
+                mapping -> apply.addStatement(
                 streaming
                     ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)"
                     : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)",
@@ -100,6 +127,7 @@ public class QueryClientStepRenderer {
                     ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class)"
                     : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
                 model.serviceName(), inputType.toString(), outputType.toString(), outputType));
+        }
 
         TypeSpec.Builder type = TypeSpec.classBuilder(className)
             .addModifiers(Modifier.PUBLIC)
@@ -121,6 +149,13 @@ public class QueryClientStepRenderer {
             .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(apply.build());
+
+        normalizedTransport.input().ifPresent(binding -> type.addField(
+            FieldSpec.builder(binding.mapperType(configHints.transportMode()), "inputMapper", Modifier.PRIVATE, Modifier.FINAL)
+                .initializer("new $T()", binding.mapperType(configHints.transportMode())).build()));
+        normalizedTransport.output().ifPresent(binding -> type.addField(
+            FieldSpec.builder(binding.mapperType(configHints.transportMode()), "outputMapper", Modifier.PRIVATE, Modifier.FINAL)
+                .initializer("new $T()", binding.mapperType(configHints.transportMode())).build()));
 
         if (!streaming) {
             type.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
@@ -359,6 +394,30 @@ public class QueryClientStepRenderer {
         };
     }
 
+    private TransportBindingPair normalizedTransport(
+        PipelineStepModel model,
+        GenerationContext context,
+        PipelineTransport transport
+    ) throws IOException {
+        if (transport == PipelineTransport.LOCAL) {
+            return new TransportBindingPair(Optional.empty(), Optional.empty());
+        }
+        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
+        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
+        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
+        if (input.isPresent() || output.isPresent()) {
+            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
+            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
+                if (transport == PipelineTransport.REST) {
+                    renderer.ensureRest(binding);
+                } else {
+                    renderer.ensureGrpc(binding);
+                }
+            }
+        }
+        return new TransportBindingPair(input, output);
+    }
+
     private String basePackage(ClassName className, String pipelineBasePackage) {
         String packageName = className.packageName();
         if (packageName == null || packageName.isBlank()) {
@@ -388,6 +447,15 @@ public class QueryClientStepRenderer {
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
+    }
+
+    private record TransportBindingPair(
+        Optional<V3TransportTypeBinding> input,
+        Optional<V3TransportTypeBinding> output
+    ) {
+        boolean any() {
+            return input.isPresent() || output.isPresent();
+        }
     }
 
     private record NativeCacheRequirements(
