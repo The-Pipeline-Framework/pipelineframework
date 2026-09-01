@@ -18,6 +18,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -34,6 +35,7 @@ import com.squareup.javapoet.WildcardTypeName;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.ir.StreamingShape;
 
@@ -204,12 +206,12 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
         String handlerClassName = baseName + getHandlerSuffix();
 
-        TypeName inputDto = model.inboundDomainType() != null
-            ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDto = model.outboundDomainType() != null
-            ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
+        CanonicalTransportBindingPair transport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, PipelineTransport.REST);
+        TypeName inputDto = transport.restInputOr(() -> model.inboundDomainType() != null
+            ? convertDomainToDtoType(model.inboundDomainType()) : ClassName.OBJECT);
+        TypeName outputDto = transport.restOutputOr(() -> model.outboundDomainType() != null
+            ? convertDomainToDtoType(model.outboundDomainType()) : ClassName.OBJECT);
         TypeName inputEventType = streamingInput
             ? ParameterizedTypeName.get(MULTI, inputDto)
             : inputDto;

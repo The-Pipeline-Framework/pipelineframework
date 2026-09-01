@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>pipeline-framework-root</artifactId><version>26.8.2-SNAPSHOT</version><relativePath>../../../pom.xml</relativePath></parent>
+    <artifactId>rag-composition-proof-connectors</artifactId>
+    <name>RAG Composition Proof - Connectors</name>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>vector-store-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins>
+        <plugin><groupId>io.smallrye</groupId><artifactId>jandex-maven-plugin</artifactId></plugin>
+        <plugin><groupId>org.pipelineframework</groupId><artifactId>connector-maven-plugin</artifactId><version>${project.version}</version><executions><execution><goals><goal>generate-provider-artifacts</goal></goals></execution></executions></plugin>
+    </plugins></build>
+</project>

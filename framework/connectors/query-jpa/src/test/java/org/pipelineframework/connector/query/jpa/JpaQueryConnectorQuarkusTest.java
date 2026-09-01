@@ -4,25 +4,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaPredicate;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.BlockingQueryOperation;
+import org.pipelineframework.connector.BlockingOperation;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.QueryStream;
+import org.pipelineframework.connector.StreamingQueryOperation;
 import org.pipelineframework.query.QueryRequest;
 import org.pipelineframework.query.QueryStepDescriptor;
 
@@ -70,6 +77,76 @@ class JpaQueryConnectorQuarkusTest {
             assertInstanceOf(QueryOutcome.Found.class, outcome).output());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void nativeFindManyStreamsProjectedRowsUnderDemandAndHonoursSemanticLimit() throws Exception {
+        replaceWith(
+            new CustomerRiskEntity("customer-many", "LOW", 40, "ACTIVE", 1, null),
+            new CustomerRiskEntity("customer-many", "MEDIUM", 70, "ACTIVE", 2, null),
+            new CustomerRiskEntity("customer-many", "HIGH", 95, "ACTIVE", 3, null));
+        StreamingQueryOperation<Object, JpaFindManyConfiguration, Object> operation =
+            (StreamingQueryOperation<Object, JpaFindManyConfiguration, Object>) connector.operations().stream()
+                .filter(StreamingQueryOperation.class::isInstance)
+                .filter(candidate -> "find.many".equals(candidate.id()))
+                .findFirst()
+                .orElseThrow();
+        assertInstanceOf(BlockingOperation.class, operation);
+        QueryStream<Object> stream = operation.query(new QueryInvocation<>(
+            new CustomerRiskLookup("customer-many"),
+            manyConfiguration(2),
+            (Class<Object>) (Class<?>) CustomerRiskFacts.class,
+            ConnectorExecutionContext.empty()));
+        AssertSubscriber<Object> subscriber = Multi.createFrom().publisher(stream.rows())
+            .subscribe().withSubscriber(AssertSubscriber.create(0));
+
+        subscriber.assertHasNotReceivedAnyItem();
+        subscriber.request(1).awaitItems(1).assertItems(new CustomerRiskFacts("customer-many", "LOW", 40));
+        subscriber.request(1).awaitItems(2).awaitCompletion(Duration.ofSeconds(5)).assertItems(
+            new CustomerRiskFacts("customer-many", "LOW", 40),
+            new CustomerRiskFacts("customer-many", "MEDIUM", 70));
+        stream.termination().toCompletableFuture().get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nativeFindManyCompletesEmptyAndRejectsObservedNonUniqueOrdering() {
+        StreamingQueryOperation<Object, JpaFindManyConfiguration, Object> operation =
+            (StreamingQueryOperation<Object, JpaFindManyConfiguration, Object>) connector.operations().stream()
+                .filter(StreamingQueryOperation.class::isInstance)
+                .filter(candidate -> "find.many".equals(candidate.id()))
+                .findFirst()
+                .orElseThrow();
+        replaceWith();
+        QueryStream<Object> empty = operation.query(new QueryInvocation<>(
+            new CustomerRiskLookup("missing"),
+            manyConfiguration(null),
+            (Class<Object>) (Class<?>) CustomerRiskFacts.class,
+            ConnectorExecutionContext.empty()));
+        Multi.createFrom().publisher(empty.rows()).subscribe().withSubscriber(AssertSubscriber.create(Long.MAX_VALUE))
+            .awaitCompletion(Duration.ofSeconds(5)).assertCompleted().assertHasNotReceivedAnyItem();
+
+        replaceWith(
+            new CustomerRiskEntity("customer-duplicate-order", "LOW", 40, "ACTIVE", 1, null),
+            new CustomerRiskEntity("customer-duplicate-order", "HIGH", 95, "ACTIVE", 1, null));
+        JpaFindManyConfiguration invalidObservation = new JpaFindManyConfiguration(
+            CustomerRiskEntity.class.getName(),
+            Map.of("customerId", new JpaPredicate("eq", List.of("input.customerId"))),
+            Optional.of(Map.of("customerId", "customerId", "riskBand", "riskBand", "score", "score")),
+            Map.of("updatedAt", "asc"),
+            List.of("updatedAt"),
+            Optional.empty());
+        QueryStream<Object> duplicate = operation.query(new QueryInvocation<>(
+            new CustomerRiskLookup("customer-duplicate-order"),
+            invalidObservation,
+            (Class<Object>) (Class<?>) CustomerRiskFacts.class,
+            ConnectorExecutionContext.empty()));
+
+        AssertSubscriber<Object> subscriber = Multi.createFrom().publisher(duplicate.rows())
+            .subscribe().withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+        subscriber.awaitFailure(Duration.ofSeconds(5));
+        assertInstanceOf(IllegalStateException.class, subscriber.getFailure());
+    }
+
     private static JpaFindOneConfiguration nativeConfiguration() {
         return new JpaFindOneConfiguration(
             CustomerRiskEntity.class.getName(),
@@ -78,6 +155,19 @@ class JpaQueryConnectorQuarkusTest {
             Optional.empty(),
             Optional.empty(),
             Optional.of("single"));
+    }
+
+    private static JpaFindManyConfiguration manyConfiguration(Integer limit) {
+        Map<String, String> orderBy = new LinkedHashMap<>();
+        orderBy.put("updatedAt", "asc");
+        orderBy.put("id", "asc");
+        return new JpaFindManyConfiguration(
+            CustomerRiskEntity.class.getName(),
+            Map.of("customerId", new JpaPredicate("eq", List.of("input.customerId"))),
+            Optional.of(Map.of("customerId", "customerId", "riskBand", "riskBand", "score", "score")),
+            orderBy,
+            List.of("id"),
+            Optional.ofNullable(limit));
     }
 
     @Test

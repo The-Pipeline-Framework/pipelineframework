@@ -106,6 +106,53 @@ class JpaQueryPlanTest {
         assertThrows(IllegalArgumentException.class, () -> plan(configuration(where, Map.of(), Map.of(), null)));
     }
 
+    @Test
+    void buildsFiniteStreamingPlanWithSemanticLimitAndCompositeUniqueSuffix() {
+        Map<String, String> orderBy = new LinkedHashMap<>();
+        orderBy.put("updatedAt", "desc");
+        orderBy.put("tenantId", "asc");
+        orderBy.put("customerId", "asc");
+
+        JpaQueryPlan plan = JpaQueryPlan.fromMany("customer-risks", manyConfiguration(
+            orderBy, List.of("tenantId", "customerId"), 25));
+
+        assertEquals(
+            "select e from " + CustomerRiskEntity.class.getName()
+                + " e where e.customerId = :p0 order by e.updatedAt desc, e.tenantId asc, e.customerId asc",
+            plan.toHql());
+        assertEquals(Optional.of(25), plan.streamingLimit());
+    }
+
+    @Test
+    void rejectsStreamingPlansWithoutADeclaredTotalOrder() {
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.fromMany(
+            "customer-risks", manyConfiguration(Map.of(), List.of("customerId"), null)));
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.fromMany(
+            "customer-risks", manyConfiguration(Map.of("customerId", "asc"), List.of(), null)));
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.fromMany(
+            "customer-risks", manyConfiguration(
+                linkedOrder("customerId", "asc", "updatedAt", "desc"), List.of("customerId"), null)));
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.fromMany(
+            "customer-risks", manyConfiguration(Map.of("customerId", "asc"), List.of("customerId", "customerId"), null)));
+    }
+
+    @Test
+    void rejectsNonPositiveStreamingLimit() {
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryPlan.fromMany(
+            "customer-risks", manyConfiguration(Map.of("customerId", "asc"), List.of("customerId"), 0)));
+    }
+
+    @Test
+    void orderingGuardRejectsAdjacentDuplicateOrderingTuples() {
+        JpaQueryPlan plan = JpaQueryPlan.fromMany("customer-risks", manyConfiguration(
+            Map.of("customerId", "asc"), List.of("customerId"), null));
+        JpaQueryPlan.OrderingGuard guard = plan.orderingGuard();
+
+        guard.validateNext(new CustomerRiskEntity("customer-1"));
+
+        assertThrows(IllegalStateException.class, () -> guard.validateNext(new CustomerRiskEntity("customer-1")));
+    }
+
     private static JpaFindOneConfiguration descriptor(Map<String, String> where, Map<String, String> projection) {
         Map<String, JpaPredicate> predicates = new LinkedHashMap<>();
         where.forEach((path, value) -> predicates.put(path, new JpaPredicate("eq", List.of(value))));
@@ -127,6 +174,27 @@ class JpaQueryPlanTest {
         return JpaQueryPlan.from("customer-risk", configuration);
     }
 
+    private static JpaFindManyConfiguration manyConfiguration(
+        Map<String, String> orderBy,
+        List<String> uniqueBy,
+        Integer limit
+    ) {
+        return new JpaFindManyConfiguration(
+            CustomerRiskEntity.class.getName(),
+            Map.of("customerId", new JpaPredicate("eq", List.of("input.customerId"))),
+            Optional.of(Map.of()),
+            orderBy,
+            uniqueBy,
+            Optional.ofNullable(limit));
+    }
+
+    private static Map<String, String> linkedOrder(String first, String firstDirection, String second, String secondDirection) {
+        Map<String, String> order = new LinkedHashMap<>();
+        order.put(first, firstDirection);
+        order.put(second, secondDirection);
+        return order;
+    }
+
     record CustomerRiskLookup(String customerId, int minimumScore, List<String> riskBands, String[] statuses) {
     }
 
@@ -135,5 +203,12 @@ class JpaQueryPlanTest {
 
     static final class CustomerRiskEntity {
         String customerId;
+
+        CustomerRiskEntity() {
+        }
+
+        CustomerRiskEntity(String customerId) {
+            this.customerId = customerId;
+        }
     }
 }

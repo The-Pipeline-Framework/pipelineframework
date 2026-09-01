@@ -7,6 +7,10 @@ import java.time.Duration;
 /** Runtime-owned Ollama tuning supplied through ordinary application properties. */
 @ConfigMapping(prefix = "pipeline.llm.langchain4j.ollama")
 public interface OllamaRuntimeConfiguration {
+    /** Runtime-owned Ollama endpoint used when a legacy binding does not declare one. */
+    @WithDefault("http://localhost:11434")
+    String baseUrl();
+
     /** Maximum wall-clock time for one Ollama HTTP request. */
     @WithDefault("PT30S")
     Duration requestTimeout();

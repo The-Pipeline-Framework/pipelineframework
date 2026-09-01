@@ -20,6 +20,7 @@ import java.util.Set;
 /**
  * Strict host-neutral binder from a configuration document into a declared immutable record.
  */
+@SuppressWarnings("removal")
 public final class ConnectorConfigurationBinder {
     private ConnectorConfigurationBinder() {
     }
@@ -95,6 +96,9 @@ public final class ConnectorConfigurationBinder {
         }
         if (type == Map.class) {
             return ConnectorConfigValueType.MAP;
+        }
+        if (type == List.class) {
+            return ConnectorConfigValueType.LIST;
         }
         if (type.isEnum()) {
             return ConnectorConfigValueType.ENUM;

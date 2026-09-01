@@ -1,6 +1,25 @@
 name: CI — E2E Test Matrix
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'framework/**'
+      - 'examples/csv-payments/**'
+      - 'examples/search/**'
+      - 'plugins/**'
+      - 'connectors/**'
+      - 'pom.xml'
+      - 'mvnw'
+      - '.mvn/**'
+      - 'scripts/ci/**'
+      - '.github/actions/setup-testcontainers/**'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/ci-e2e-matrix.yml'
+      - '.github/workflows/e2e-csv-*.yml'
+      - '.github/workflows/e2e-search-resource-it.yml'
+      - '.github/workflows/full-tests.yml'
   workflow_dispatch:
 
 concurrency:
@@ -10,6 +29,7 @@ concurrency:
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  QUARKUS_JIB_BASE_JVM_IMAGE: "registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24@sha256:41cfee8b4373d0be1c6724ab80a9942e1e4d10bba62c5876455a8028a7a953a2"
 
 jobs:
   # Build and install framework once for all E2E workflows
@@ -35,6 +55,23 @@ jobs:
       - name: Install root POM, framework, and foundational plugins to local repository
         run: |
           ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      # Populate the shared Jib cache before the merge-only E2E jobs fan out.
+      # Otherwise every runner can miss the same cache concurrently and pull
+      # the Red Hat base-image layers independently.
+      - name: Restore shared Jib cache
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Warm shared Jib base-image cache
+        run: |
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          read -r -a maven_args <<< "$local_maven_args"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
+            -pl payment-status-svc \
+            -am \
+            -DskipTests \
+            -Dquarkus.container-image.build=true \
+            package
 
       - name: Package framework artifacts
         run: |
@@ -100,6 +137,7 @@ jobs:
   e2e-search-lambda:
     name: Search Lambda Smoke
     needs: build-framework
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/e2e-search-lambda-smoke.yml
     with:
       artifact_name: framework-m2-cache
@@ -108,6 +146,7 @@ jobs:
   e2e-search-azure-functions:
     name: Search Azure Functions Preview (Optional)
     needs: build-framework
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/e2e-search-azure-functions.yml
     with:
       artifact_name: framework-m2-cache
@@ -125,6 +164,7 @@ jobs:
   e2e-search-pipeline:
     name: Search Pipeline E2E
     needs: build-framework
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/e2e-search-pipeline-e2e.yml
     with:
       artifact_name: framework-m2-cache
@@ -133,6 +173,7 @@ jobs:
   e2e-checkout-tpfgo:
     name: Checkout TPFGo Smoke
     needs: build-framework
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/e2e-checkout-tpfgo-smoke.yml
     with:
       artifact_name: framework-m2-cache

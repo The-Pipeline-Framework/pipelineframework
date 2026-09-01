@@ -15,6 +15,7 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.llm.LlmDecision;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
+import org.pipelineframework.connector.llm.LlmDecisionClientResolver;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmQueryConnectorProvider;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
@@ -34,12 +35,13 @@ public class ScriptedLlmQueryConnector extends LlmQueryConnectorProvider {
     }
 
     @Override
-    protected LlmDecisionClient createClient(
+    protected LlmDecisionClientResolver createClientResolver(
         LlmProviderConfiguration configuration,
         ConnectorRuntimeContext context
     ) {
-        return new StatelessDecisionClient(Objects.requireNonNull(
+        LlmDecisionClient client = new StatelessDecisionClient(Objects.requireNonNull(
             recorder, "proof invocation recorder must be injected"));
+        return ignored -> CompletableFuture.completedStage(client);
     }
 
     public static final class StatelessDecisionClient implements LlmDecisionClient {

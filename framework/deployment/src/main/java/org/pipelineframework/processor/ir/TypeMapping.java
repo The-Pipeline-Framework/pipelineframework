@@ -5,27 +5,30 @@ import com.squareup.javapoet.TypeName;
 import java.util.Optional;
 
 /**
- * Represents a semantic directional type mapping derived from annotations. Contains semantic information from the @PipelineStep
- * annotation, including domain types and inferred mapper information.
+ * Represents one semantic directional type mapping in normalized compiler IR. It carries the actual Java representation,
+ * optional application mapper information, and the canonical v3 identity when normalization supplied one.
  *
  * @param domainType the domain type for this mapping
  * @param mapperType the inferred mapper type for this mapping when one has been resolved
  * @param hasMapper whether a mapper has been inferred for this mapping
  * @param entityType the entity type used for mapper inference (the domain type that the mapper operates on)
+ * @param canonicalTypeName normalized local canonical type name, when present
  */
 public record TypeMapping(
         TypeName domainType,
         Optional<TypeName> mapperType,
         boolean hasMapper,
-        TypeName entityType
+        TypeName entityType,
+        Optional<String> canonicalTypeName
 ) {
     /**
      * Creates a new TypeMapping instance with entity type for inference.
      */
     public TypeMapping {
-        if (mapperType == null) {
-            throw new IllegalArgumentException("mapperType must not be null; use Optional.empty()");
+        if (mapperType == null || canonicalTypeName == null) {
+            throw new IllegalArgumentException("Optional mapping fields must not be null; use Optional.empty()");
         }
+        canonicalTypeName = canonicalTypeName.map(String::trim).filter(value -> !value.isEmpty());
         // entityType defaults to domainType if not specified
         if (entityType == null) {
             entityType = domainType;
@@ -40,7 +43,12 @@ public record TypeMapping(
      * @param hasMapper  true if a mapper has been inferred, false otherwise
      */
     public TypeMapping(TypeName domainType, TypeName mapperType, boolean hasMapper) {
-        this(domainType, Optional.ofNullable(mapperType), hasMapper, domainType);
+        this(domainType, Optional.ofNullable(mapperType), hasMapper, domainType, Optional.empty());
+    }
+
+    /** Backward-compatible constructor for mappings without a normalized v3 type identity. */
+    public TypeMapping(TypeName domainType, Optional<TypeName> mapperType, boolean hasMapper, TypeName entityType) {
+        this(domainType, mapperType, hasMapper, entityType, Optional.empty());
     }
 
     /**
@@ -56,12 +64,21 @@ public record TypeMapping(
         if (domainType == null) {
             throw new IllegalArgumentException("domainType must not be null; use unresolved() for an unavailable contract");
         }
-        return new TypeMapping(domainType, Optional.empty(), false, domainType);
+        return new TypeMapping(domainType, Optional.empty(), false, domainType, Optional.empty());
+    }
+
+    /** Creates an unmapped Java binding for one normalized v3 canonical type. */
+    public static TypeMapping canonical(TypeName domainType, String canonicalTypeName) {
+        if (domainType == null) {
+            throw new IllegalArgumentException("domainType must not be null");
+        }
+        return new TypeMapping(
+            domainType, Optional.empty(), false, domainType, Optional.ofNullable(canonicalTypeName));
     }
 
     /** Creates an explicit mapping for a contract that is not available at extraction time. */
     public static TypeMapping unresolved() {
-        return new TypeMapping(null, Optional.empty(), false, null);
+        return new TypeMapping(null, Optional.empty(), false, null, Optional.empty());
     }
 
     /**
@@ -71,6 +88,6 @@ public record TypeMapping(
      * @return a TypeMapping with `mapperType` set to the provided `inferredMapperType` and `hasMapper` set to true
      */
     public TypeMapping withInferredMapper(ClassName inferredMapperType) {
-        return new TypeMapping(domainType, Optional.of(inferredMapperType), true, entityType);
+        return new TypeMapping(domainType, Optional.of(inferredMapperType), true, entityType, canonicalTypeName);
     }
 }

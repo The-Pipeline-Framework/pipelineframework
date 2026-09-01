@@ -3,6 +3,7 @@ package org.pipelineframework.connector;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("removal")
 class ConnectorConfigurationBindingTest {
 
     @Test
@@ -118,6 +120,31 @@ class ConnectorConfigurationBindingTest {
         assertTrue(failure.getMessage().contains("expected MAP value"));
     }
 
+    @Test
+    void bindsTopLevelListConfiguration() {
+        ConnectorConfigSchema<ListConfig> schema =
+            ConnectorConfigSchema.record(ListConfig.class, "fake.config.list", 1);
+        ConnectorConfigurationDocument document = new ConnectorConfigurationDocument(Map.of(
+            "uniqueBy", List.of("tenantId", "customerId")));
+
+        ConnectorConfigurationValidator.validate(schema.descriptor(), document, "list operation");
+        ListConfig configuration = ConnectorConfigurationBinder.bind(schema, document, "list operation");
+
+        assertEquals(List.of("tenantId", "customerId"), configuration.uniqueBy());
+        assertEquals(ConnectorConfigValueType.LIST, schema.descriptor().fields().getFirst().type());
+    }
+
+    @Test
+    void configurationDocumentPreservesDeclaredMapOrder() {
+        Map<String, Object> ordered = new LinkedHashMap<>();
+        ordered.put("score", "asc");
+        ordered.put("id", "asc");
+
+        ConnectorConfigurationDocument document = new ConnectorConfigurationDocument(ordered);
+
+        assertEquals(List.of("score", "id"), List.copyOf(document.values().keySet()));
+    }
+
     private static ConnectorRuntimeContext context(AtomicInteger connections, AtomicInteger secrets) {
         ConnectionResolver connectionResolver = new ConnectionResolver() {
             @Override
@@ -157,6 +184,9 @@ class ConnectorConfigurationBindingTest {
     }
 
     record NestedPredicate(String operator, List<Object> values) {
+    }
+
+    record ListConfig(List<String> uniqueBy) {
     }
 
     private enum Mode {

@@ -9,6 +9,9 @@ public enum ConnectorConfigValueType {
     ENUM,
     DURATION,
     CONNECTION_REF,
+    /** @deprecated Use a tenant-aware {@link ConnectionRef} for authenticated connector access. */
+    @Deprecated(forRemoval = true)
     SECRET_REF,
-    MAP
+    MAP,
+    LIST
 }

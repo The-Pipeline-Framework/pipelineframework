@@ -1,0 +1,10 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: rag-turnkey-indexer
+  module: rag-turnkey-indexer
+  synthetic: { module: rag-turnkey-indexer }
+modules:
+  rag-turnkey-indexer:
+    runtime: rag-turnkey-indexer
+    steps: [parse-document, chunk-document, prepare-embedding, embed-chunk, prepare-vector-upsert, upsert-vector, build-index-receipt]

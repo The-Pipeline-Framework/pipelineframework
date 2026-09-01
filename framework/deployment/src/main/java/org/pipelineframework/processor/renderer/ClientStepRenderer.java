@@ -74,7 +74,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * @param ctx the generation context supplying the processing environment and deployment role
      * @return the generated TypeSpec describing the client step class
      */
-    private TypeSpec buildClientStepClass(GrpcBinding binding, GenerationContext ctx) {
+    private TypeSpec buildClientStepClass(GrpcBinding binding, GenerationContext ctx) throws IOException {
         Messager messager = ctx.processingEnv().getMessager();
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
@@ -85,7 +85,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding, messager);
         TypeName inputGrpcType = grpcTypes.grpcParameterType();
         TypeName outputGrpcType = grpcTypes.grpcReturnType();
-        V3GeneratedDomainBinding.RepresentationBoundary boundary = V3GeneratedDomainBinding.resolve(model, grpcTypes, ctx);
+        TransportBoundaryResolver.RepresentationBoundary boundary = TransportBoundaryResolver.resolve(model, grpcTypes, ctx);
         TypeName stepInputType = boundary.stepInputType();
         TypeName stepOutputType = boundary.stepOutputType();
 
@@ -268,7 +268,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportUnaryInvocation(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName,
@@ -284,7 +284,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportMultiInvocation(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName,
@@ -300,7 +300,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportUnaryFromStreamInvocation(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName
@@ -315,7 +315,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportMultiFromStreamInvocation(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName
@@ -330,35 +330,35 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportInput(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock input
     ) {
         return boundary.convertsAtBoundary()
-            ? CodeBlock.of("$T.toProto($L)", boundary.adaptersOrThrow(), input)
+            ? CodeBlock.of("$T.toProto($L)", boundary.inputAdapterOrThrow(), input)
             : input;
     }
 
-    private static CodeBlock transportInputs(V3GeneratedDomainBinding.RepresentationBoundary boundary) {
+    private static CodeBlock transportInputs(TransportBoundaryResolver.RepresentationBoundary boundary) {
         return boundary.convertsAtBoundary()
-            ? CodeBlock.of("inputs.onItem().transform(value -> $T.toProto(value))", boundary.adaptersOrThrow())
+            ? CodeBlock.of("inputs.onItem().transform(value -> $T.toProto(value))", boundary.inputAdapterOrThrow())
             : CodeBlock.of("inputs");
     }
 
     private static CodeBlock transportOutputUni(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock invocation
     ) {
         return boundary.convertsAtBoundary()
-            ? CodeBlock.of("$L.onItem().transform(value -> $T.fromProto(value))", invocation, boundary.adaptersOrThrow())
+            ? CodeBlock.of("$L.onItem().transform(value -> $T.fromProto(value))", invocation, boundary.outputAdapterOrThrow())
             : invocation;
     }
 
     private static CodeBlock transportOutputMulti(
-        V3GeneratedDomainBinding.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock invocation
     ) {
         return boundary.convertsAtBoundary()
-            ? CodeBlock.of("$L.onItem().transform(value -> $T.fromProto(value))", invocation, boundary.adaptersOrThrow())
+            ? CodeBlock.of("$L.onItem().transform(value -> $T.fromProto(value))", invocation, boundary.outputAdapterOrThrow())
             : invocation;
     }
 

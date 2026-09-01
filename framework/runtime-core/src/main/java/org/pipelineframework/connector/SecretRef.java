@@ -3,8 +3,13 @@ package org.pipelineframework.connector;
 import java.util.Objects;
 
 /**
- * Configuration-level secret reference. Resolved secret material remains runtime-only.
+ * Legacy configuration-level secret reference.
+ *
+ * @deprecated This context-free reference cannot safely select tenant-aware authenticated
+ * connector access. Connectors that call external systems must use a {@link ConnectionRef}
+ * resolved through {@link ConnectionResolutionRequest} instead.
  */
+@Deprecated(forRemoval = true)
 public record SecretRef(String value) {
     public SecretRef {
         Objects.requireNonNull(value, "secret reference must not be null");

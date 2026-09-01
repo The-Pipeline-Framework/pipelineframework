@@ -47,3 +47,5 @@ Node/docs surfaces:
 - Unit tests: `*Test` (Surefire)
 - Integration tests: `*IT` (Failsafe)
 - E2E tests using containers should run in `verify` unless there is an explicit reason otherwise.
+- The Unix `mvnw` wrapper exposes the active Docker CLI context as `DOCKER_HOST` when that variable is unset. This lets Testcontainers discover desktop runtimes such as OrbStack without per-shell exports. TLS-enabled TCP contexts also propagate their Docker-managed certificate directory and verification flag; explicitly configured Docker or Testcontainers environment variables always win.
+- Use `./tools/full-verify.sh start` for the complete root gate when the caller has a bounded RPC/session window, then poll with `./tools/full-verify.sh status`. The launcher refuses duplicate concurrent runs and a successful log ends with `TPF full verify: all went well`.

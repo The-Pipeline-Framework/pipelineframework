@@ -19,14 +19,20 @@ package org.pipelineframework.plugin.persistence;
 import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import org.pipelineframework.mapper.Mapper;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -195,7 +201,39 @@ class PersistenceServiceTest {
         assertSame(failure, thrown);
     }
 
+    @Test
+    void process_WithVThreadProvider_ShouldLeaveCallingEventLoopBeforeProviderResolution() throws Exception {
+        PersistenceManager manager = mock(PersistenceManager.class);
+        PersistenceService<TestEntity> service = new PersistenceService<>();
+        service.persistenceManager = manager;
+        service.config = config("ignore", Optional.of(PersistenceConstants.VTHREAD_PROVIDER_CLASS));
+
+        TestEntity entity = new TestEntity();
+        AtomicBoolean calledOnEventLoop = new AtomicBoolean(true);
+        when(manager.persist(entity)).thenAnswer(ignored -> {
+            calledOnEventLoop.set(Context.isOnEventLoopThread());
+            return Uni.createFrom().item(entity);
+        });
+
+        Vertx vertx = Vertx.vertx();
+        try {
+            CompletableFuture<TestEntity> result = new CompletableFuture<>();
+            vertx.getOrCreateContext().runOnContext(ignored -> service.process(entity)
+                .subscribe().with(result::complete, result::completeExceptionally));
+
+            assertSame(entity, result.get(10, TimeUnit.SECONDS));
+            assertFalse(calledOnEventLoop.get());
+            verify(manager).persist(entity);
+        } finally {
+            vertx.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS);
+        }
+    }
+
     private PersistenceConfig config(String duplicateKey) {
+        return config(duplicateKey, Optional.empty());
+    }
+
+    private PersistenceConfig config(String duplicateKey, Optional<String> providerClass) {
         return new PersistenceConfig() {
             @Override
             public String duplicateKey() {
@@ -204,7 +242,7 @@ class PersistenceServiceTest {
 
             @Override
             public Optional<String> providerClass() {
-                return Optional.empty();
+                return providerClass;
             }
 
             @Override

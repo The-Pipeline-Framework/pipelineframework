@@ -21,6 +21,12 @@ TPF does not authenticate application users, run OAuth/OIDC flows, handle callba
 refresh tokens, or replace Spring Security, Quarkus security, Keycloak, Auth0, IAM, or a connection
 broker.
 
+> **Do not use `SecretRef` or `SecretResolver` for connector authentication.** Those legacy,
+> context-free APIs are deprecated for removal. They receive no tenant, execution, connector, or
+> operation identity, so they cannot enforce the resolution invariant described here. Existing
+> configuration remains readable during migration; new authenticated connectors must use
+> `ConnectionRef` and `ConnectionResolutionRequest`.
+
 ## Invocation and resolution contracts
 
 For each live native Query or Command, `ConnectorExecutionContext` makes these facts available when
@@ -139,6 +145,26 @@ OAuth connector is not enough evidence for a cross-provider authority model.
 Query capture is evaluated before live binding activation. Replaying a captured Gmail observation
 does not start the provider or call `ConnectionResolver`, so token availability cannot change the
 meaning of an already-captured observation.
+
+## OpenAI-compatible LLM connector
+
+Provider `llm.query.openai.compatible` also uses the host-authenticated connection seam. Its provider
+configuration contains the model, optional base URL, and an opaque `ConnectionRef`. For every live
+Query invocation, it requests an `AuthenticatedOpenAiCompatibleConnection` using the current
+`ConnectorExecutionContext`.
+
+The resolved connection exposes a host-supplied factory for an authenticated LangChain4j
+`ChatModel`; it does not expose token text through a TPF API. This lets an application resolve API
+keys from environment configuration, macOS Keychain, Vault, a cloud secret manager, or another
+host facility without encoding that facility in `pipeline.yaml`. Credential rotation takes effect
+on the next live invocation because the connector resolves the connection per invocation.
+The factory must apply every supplied `ModelConfiguration` setting, including
+`strictJsonSchema`. Authentication is host-owned, but the connector's required structured-output
+semantics still govern the authenticated model that the host creates.
+
+Model and base URL remain connector binding semantics. They identify the external model contract
+whose observations TPF captures; they are not credential-selection or security-policy fields.
+Captured replay precedes live provider resolution and therefore requires no LLM credential.
 
 ## Security boundary
 

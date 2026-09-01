@@ -18,6 +18,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -30,6 +31,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Abstract base class for generating cloud function handler wrappers for orchestrator execution.
@@ -206,8 +208,12 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
         boolean streamingInput = binding.inputStreaming();
         boolean streamingOutput = binding.outputStreaming();
 
-        ClassName inputDto = ClassName.get(basePackage + ".common.dto", binding.inputTypeName() + "Dto");
-        ClassName outputDto = ClassName.get(basePackage + ".common.dto", binding.outputTypeName() + "Dto");
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, binding.model(), PipelineTransport.REST);
+        ClassName inputDto = normalizedTransport.input().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(basePackage + ".common.dto", binding.inputTypeName() + "Dto"));
+        ClassName outputDto = normalizedTransport.output().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(basePackage + ".common.dto", binding.outputTypeName() + "Dto"));
         TypeName inputEventType = streamingInput ? ParameterizedTypeName.get(MULTI, inputDto) : inputDto;
         TypeName handlerOutputType = streamingOutput ? ParameterizedTypeName.get(ClassName.get(List.class), outputDto) : outputDto;
         ClassName resourceType = ClassName.get(basePackage + ".orchestrator.service", RESOURCE_CLASS);

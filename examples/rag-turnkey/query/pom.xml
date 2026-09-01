@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey</artifactId><version>26.8.2-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <artifactId>rag-turnkey-query</artifactId>
+    <name>RAG Turnkey - Query Application</name>
+    <properties>
+        <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
+        <pipeline.configArg>-Apipeline.config=${project.basedir}/src/main/resources/pipeline.yaml</pipeline.configArg>
+        <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
+    </properties>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey-support</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>vector-store-pgvector-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-reactive-pg-client</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><configuration><annotationProcessorPaths>
+            <path><groupId>io.quarkus</groupId><artifactId>quarkus-extension-processor</artifactId><version>${quarkus.platform.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-deployment</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>embedding-query-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>vector-store-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>embedding-query-langchain4j-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>vector-store-pgvector-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>llm-query-langchain4j-connector</artifactId><version>${project.version}</version></path>
+        </annotationProcessorPaths></configuration><executions>
+            <execution><id>default-compile</id><phase>compile</phase><goals><goal>compile</goal></goals><configuration><compilerArgs><arg>${pipeline.configArg}</arg><arg>${pipeline.generatedSourcesArg}</arg><arg>${pipeline.moduleArg}</arg></compilerArgs></configuration></execution>
+            <execution><id>compile-orchestrator-client-generated</id><phase>process-classes</phase><goals><goal>compile</goal></goals><configuration><proc>none</proc><compileSourceRoots><compileSourceRoot>${project.build.directory}/generated-sources/pipeline/orchestrator-client</compileSourceRoot></compileSourceRoots><outputDirectory>${project.build.outputDirectory}</outputDirectory></configuration></execution>
+            <execution><id>compile-rest-server-generated</id><phase>process-classes</phase><goals><goal>compile</goal></goals><configuration><proc>none</proc><compileSourceRoots><compileSourceRoot>${project.build.directory}/generated-sources/pipeline/rest-server</compileSourceRoot></compileSourceRoots><outputDirectory>${project.build.outputDirectory}</outputDirectory></configuration></execution>
+        </executions></plugin>
+        <plugin><groupId>io.quarkus</groupId><artifactId>quarkus-maven-plugin</artifactId></plugin>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.1</version><executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions></plugin>
+    </plugins></build>
+</project>

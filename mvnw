@@ -105,6 +105,11 @@ trim() {
 scriptDir="$(dirname "$0")"
 scriptName="$(basename "$0")"
 
+# Testcontainers does not read Docker CLI contexts. Mirror the active context into
+# the standard Docker environment before Maven starts, including TCP TLS material.
+. "$scriptDir/.mvn/testcontainers-docker-context.sh"
+configure_testcontainers_docker_host
+
 # parse distributionUrl and optional distributionSha256Sum, requires .mvn/wrapper/maven-wrapper.properties
 while IFS="=" read -r key value; do
   case "${key-}" in

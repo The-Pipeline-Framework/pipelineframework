@@ -21,6 +21,7 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.representation.RepresentationProviderRegistry;
 import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
+import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
 import org.pipelineframework.representation.spi.CanonicalType;
@@ -165,12 +166,31 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
     private record MappingBinding(String role, CanonicalType type, RepresentationMapping mapping) {
     }
 
-    private static CanonicalType canonical(PipelineTemplateConfig config, ClassName javaType) {
-        String name = javaType.simpleName();
+    static CanonicalType canonical(PipelineTemplateConfig config, ClassName javaType) {
+        V3JavaTypeResolver javaTypes = new V3JavaTypeResolver(config);
+        String name = javaTypes.semanticType(javaType)
+            .orElseGet(() -> canonicalNameForRepresentation(config, javaType));
         CanonicalTypeShape shape = config.typeModel().definition(name)
             .map(RepresentationProviderPreparationPhase::shape)
             .orElse(CanonicalTypeShape.UNKNOWN);
-        return new CanonicalType(name, javaType.canonicalName(), shape);
+        String targetTypeName = javaTypes.resolve(name).orElse(javaType).canonicalName();
+        return new CanonicalType(name, targetTypeName, shape);
+    }
+
+    private static String canonicalNameForRepresentation(PipelineTemplateConfig config, ClassName javaType) {
+        List<String> candidates = config.typeModel().representationMappings().entrySet().stream()
+            .filter(entry -> entry.getValue().values().stream()
+                .anyMatch(mapping -> mapping.representationType()
+                    .filter(javaType.canonicalName()::equals).isPresent()))
+            .map(Map.Entry::getKey)
+            .distinct()
+            .sorted()
+            .toList();
+        if (candidates.size() > 1) {
+            throw new IllegalStateException("Java representation type '" + javaType.canonicalName()
+                + "' is declared by multiple canonical types: " + String.join(", ", candidates));
+        }
+        return candidates.isEmpty() ? javaType.simpleName() : candidates.getFirst();
     }
 
     private static CanonicalTypeShape shape(PipelineTemplateTypeDefinition definition) {

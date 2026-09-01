@@ -22,6 +22,8 @@ import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.QueryStream;
+import org.pipelineframework.connector.StreamingQueryOperation;
 
 /** Non-blocking Hibernate Reactive Query provider backed directly by {@link Mutiny.SessionFactory}. */
 @ApplicationScoped
@@ -31,6 +33,7 @@ public final class HibernateReactiveQueryConnector implements ConnectorProvider<
 
     private final Optional<Instance<Mutiny.SessionFactory>> sessionFactory;
     private final HibernateReactiveFindOneOperation findOneOperation = new HibernateReactiveFindOneOperation();
+    private final HibernateReactiveFindManyOperation findManyOperation = new HibernateReactiveFindManyOperation();
 
     /** Side-effect-free constructor used by connector artifact packaging. */
     public HibernateReactiveQueryConnector() {
@@ -54,7 +57,7 @@ public final class HibernateReactiveQueryConnector implements ConnectorProvider<
 
     @Override
     public Collection<? extends ConnectorOperation> operations() {
-        return List.of(findOneOperation);
+        return List.of(findOneOperation, findManyOperation);
     }
 
     private CompletionStage<Object> queryOne(
@@ -124,6 +127,61 @@ public final class HibernateReactiveQueryConnector implements ConnectorProvider<
                 (Class<Object>) invocation.outputType(),
                 (Optional<Function<Object, ?>>) (Optional<?>) invocation.localResultMapper())
                 .handle((output, failure) -> outcome(id(), output, failure));
+        }
+    }
+
+    private final class HibernateReactiveFindManyOperation
+        implements StreamingQueryOperation<Object, JpaFindManyConfiguration, Object> {
+        private static final int MAXIMUM_WINDOW = 64;
+        private static final ConnectorConfigSchema<JpaFindManyConfiguration> CONFIGURATION_SCHEMA =
+            ConnectorConfigSchema.record(JpaFindManyConfiguration.class, "jpa.query.find.many", 1);
+
+        @Override
+        public String id() {
+            return "find.many";
+        }
+
+        @Override
+        public Optional<ConnectorConfigSchema<JpaFindManyConfiguration>> configurationSchema() {
+            return Optional.of(CONFIGURATION_SCHEMA);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public QueryStream<Object> query(QueryInvocation<Object, JpaFindManyConfiguration, Object> invocation) {
+            JpaQueryPlan plan = JpaQueryPlan.fromMany(id(), invocation.configuration());
+            if (sessionFactory.isEmpty() || !sessionFactory.orElseThrow().isResolvable()) {
+                throw new IllegalStateException(
+                    "No Hibernate Reactive SessionFactory is available for connector hibernate.reactive.query");
+            }
+            JpaQueryPlan.OrderingGuard ordering = plan.orderingGuard();
+            Optional<Function<Object, ?>> localMapper =
+                (Optional<Function<Object, ?>>) (Optional<?>) invocation.localResultMapper();
+            HibernateReactiveWindowPublisher<Object> publisher = new HibernateReactiveWindowPublisher<>(
+                sessionFactory.orElseThrow().get(),
+                (session, offset, size) -> {
+                    Mutiny.SelectionQuery<?> selection = session
+                        .createSelectionQuery(plan.toHql(), plan.entityType())
+                        .setFirstResult(offset)
+                        .setMaxResults(size);
+                    plan.bindings(invocation.input()).forEach(selection::setParameter);
+                    return selection.getResultList().map(rows -> rows.stream().map(entity -> {
+                        ordering.validateNext(entity);
+                        Object external = JpaQueryProjection.project(
+                            entity, (Class<Object>) invocation.outputType(), plan.projection());
+                        Object result = localMapper.isPresent()
+                            ? localMapper.orElseThrow().apply(external)
+                            : external;
+                        if (result == null) {
+                            throw new IllegalStateException(
+                                "Hibernate Reactive streaming query local result mapper returned null");
+                        }
+                        return result;
+                    }).toList());
+                },
+                MAXIMUM_WINDOW,
+                plan.streamingLimit());
+            return new QueryStream<>(publisher, publisher.termination());
         }
     }
 

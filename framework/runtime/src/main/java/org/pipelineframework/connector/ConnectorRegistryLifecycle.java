@@ -1,10 +1,14 @@
 package org.pipelineframework.connector;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -139,18 +143,41 @@ public class ConnectorRegistryLifecycle {
             : CompletableFuture.failedFuture(firstFailure.get()));
     }
 
-    private static List<ConnectorBindingDefinition> loadBindingDefinitions() {
-        Optional<Path> configPath = configuredPipelinePath();
-        if (configPath.isEmpty()) {
+    static List<ConnectorBindingDefinition> loadBindingDefinitions() {
+        Optional<PipelineYamlConfig> config = loadPipelineConfig();
+        if (config.isEmpty()) {
             return List.of();
         }
-        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath.orElseThrow());
         List<ConnectorBindingDefinition> definitions = new ArrayList<>();
-        config.connectors().values().stream()
+        config.orElseThrow().connectors().values().stream()
             .sorted(java.util.Comparator.comparing(binding -> binding.name()))
             .map(binding -> binding.toDefinition())
             .forEach(definitions::add);
         return List.copyOf(definitions);
+    }
+
+    private static Optional<PipelineYamlConfig> loadPipelineConfig() {
+        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
+        Optional<Path> configPath = configuredPipelinePath();
+        if (configPath.isPresent()) {
+            return Optional.of(loader.load(configPath.orElseThrow()));
+        }
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        ClassLoader fallback = ConnectorRegistryLifecycle.class.getClassLoader();
+        Optional<URL> resource = java.util.stream.Stream.of(context, fallback)
+            .filter(Objects::nonNull)
+            .distinct()
+            .map(classLoader -> new PipelineYamlConfigLocator().locateResource(classLoader))
+            .flatMap(Optional::stream)
+            .findFirst();
+        if (resource.isEmpty()) {
+            return Optional.empty();
+        }
+        try (InputStream stream = resource.orElseThrow().openStream()) {
+            return Optional.of(loader.load(stream));
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read packaged pipeline YAML connector bindings", e);
+        }
     }
 
     private static Optional<Path> configuredPipelinePath() {

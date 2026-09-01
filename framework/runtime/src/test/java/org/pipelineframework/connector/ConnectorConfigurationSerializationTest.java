@@ -13,6 +13,7 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+@SuppressWarnings("removal")
 class ConnectorConfigurationSerializationTest {
     private static final String RESOLVED_SECRET = "resolved-secret-must-not-be-serialized";
 

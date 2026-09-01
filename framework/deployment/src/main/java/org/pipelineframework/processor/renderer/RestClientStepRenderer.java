@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -13,6 +14,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.ResourceNameUtils;
@@ -38,8 +40,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec restClientInterface = buildRestClientInterface(binding, ctx);
-        TypeSpec restClientStep = buildRestClientStepClass(binding, ctx, restClientInterface.name);
+        validateRestMappings(binding.model());
+        PipelineStepModel model = binding.model();
+        CanonicalTransportBindingPair transport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, PipelineTransport.REST);
+        TypeName inputDto = transport.restInputOr(() -> convertDomainToDtoType(model.inboundDomainType()));
+        TypeName outputDto = transport.restOutputOr(() -> convertDomainToDtoType(model.outboundDomainType()));
+        TypeSpec restClientInterface = buildRestClientInterface(binding, ctx, inputDto, outputDto);
+        TypeSpec restClientStep = buildRestClientStepClass(binding, ctx, restClientInterface.name, inputDto, outputDto);
 
         JavaFile clientInterfaceFile = JavaFile.builder(
                 binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
@@ -65,20 +73,17 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param binding the RestBinding that provides the pipeline model, DTO type information, and optional path override
      * @return a TypeSpec representing the generated REST client interface
      */
-    private TypeSpec buildRestClientInterface(RestBinding binding, GenerationContext ctx) {
+    private TypeSpec buildRestClientInterface(
+        RestBinding binding,
+        GenerationContext ctx,
+        TypeName inputDto,
+        TypeName outputDto
+    ) {
         PipelineStepModel model = binding.model();
-        validateRestMappings(model);
 
         String serviceClassName = model.generatedName();
         String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String interfaceName = baseName + "RestClient";
-
-        TypeName inputDto = model.inboundDomainType() != null
-            ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDto = model.outboundDomainType() != null
-            ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
 
         String basePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
@@ -133,19 +138,18 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param restClientInterfaceName simple name of the previously generated REST client interface to reference
      * @return a TypeSpec describing the generated REST client step class
      */
-    private TypeSpec buildRestClientStepClass(RestBinding binding, GenerationContext ctx, String restClientInterfaceName) {
+    private TypeSpec buildRestClientStepClass(
+        RestBinding binding,
+        GenerationContext ctx,
+        String restClientInterfaceName,
+        TypeName inputDto,
+        TypeName outputDto
+    ) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
         boolean cachePluginSideEffect = isCachePluginSideEffect(model);
         String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
             + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
-
-        TypeName inputDto = model.inboundDomainType() != null
-            ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDto = model.outboundDomainType() != null
-            ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
 
         TypeSpec.Builder clientStepBuilder = TypeSpec.classBuilder(clientStepClassName)
             .addModifiers(Modifier.PUBLIC)
@@ -521,4 +525,5 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .replaceAll("([a-z0-9])([A-Z])", "$1-$2");
         return withBoundaryHyphens.toLowerCase();
     }
+
 }

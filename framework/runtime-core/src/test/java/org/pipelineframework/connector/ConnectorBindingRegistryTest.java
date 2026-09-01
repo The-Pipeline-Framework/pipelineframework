@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("removal")
 class ConnectorBindingRegistryTest {
     private static final ConnectorConfigSchema<ProviderConfig> SCHEMA =
         ConnectorConfigSchema.record(ProviderConfig.class, "acme.binding", 1);

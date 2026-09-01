@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,14 +23,13 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ResponseFormatType;
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
+import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.QueryObservationOrigin;
@@ -37,9 +37,28 @@ import org.pipelineframework.repository.PayloadReference;
 
 class LangChain4jOllamaQueryConnectorTest {
     @Test
+    void propagatesReactiveCompletionWithoutBlockingTheCallingThread() {
+        CompletableFuture<ChatResponse> providerResponse = new CompletableFuture<>();
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(
+            (request, schema) -> providerResponse);
+
+        var decision = client.decide(optionalCompletionRequest()).toCompletableFuture();
+
+        assertFalse(decision.isDone());
+        providerResponse.complete(ChatResponse.builder()
+            .aiMessage(AiMessage.from(ToolExecutionRequest.builder()
+                .name("complete")
+                .arguments("{}")
+                .build()))
+            .build());
+        assertEquals("complete", decision.join().proposal().alias());
+    }
+
+    @Test
     void rejectsNonPositiveRequestTimeouts() {
         assertThrows(IllegalArgumentException.class,
-            () -> new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(Duration.ZERO, false));
+            () -> new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(
+                "http://localhost:11434", Duration.ZERO, false));
     }
 
     @Test
@@ -48,48 +67,49 @@ class LangChain4jOllamaQueryConnectorTest {
         AtomicReference<String> modelName = new AtomicReference<>();
         AtomicReference<Duration> timeout = new AtomicReference<>();
         AtomicReference<Boolean> thinking = new AtomicReference<>();
-        AtomicInteger maxRetries = new AtomicInteger(-1);
         ChatModel model = model(AiMessage.from("unused"));
         var connector = new LangChain4jOllamaQueryConnector((configuredBaseUrl, configuredModel, configuredTimeout,
-                                                              configuredThinking, configuredMaxRetries) -> {
+                                                              configuredThinking) -> {
             baseUrl.set(configuredBaseUrl);
             modelName.set(configuredModel);
             timeout.set(configuredTimeout);
             thinking.set(configuredThinking);
-            maxRetries.set(configuredMaxRetries);
-            return model;
-        }, new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(Duration.ofSeconds(90), false));
+            return (request, schema) -> java.util.concurrent.CompletableFuture.completedFuture(model.chat(request));
+        }, new LangChain4jOllamaQueryConnector.OllamaRuntimeSettings(
+            "http://runtime-ollama:11434", Duration.ofSeconds(90), false));
 
         assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class,
-            connector.createClient(
+            connector.createClientResolver(
                 new LlmProviderConfiguration("qwen3", Optional.of("http://ollama.internal:11434")),
-                ConnectorRuntimeContext.empty()));
+                ConnectorRuntimeContext.empty())
+                .resolve(ConnectorExecutionContext.empty()).toCompletableFuture().join());
         assertEquals("http://ollama.internal:11434", baseUrl.get());
         assertEquals("qwen3", modelName.get());
         assertEquals(Duration.ofSeconds(90), timeout.get());
         assertEquals(false, thinking.get());
-        assertEquals(0, maxRetries.get());
     }
 
     @Test
-    void retainsCompatibleTimeoutAndThinkingDefaultsWithoutInternalRetries() {
+    void retainsCompatibleTimeoutAndThinkingDefaults() {
+        AtomicReference<String> baseUrl = new AtomicReference<>();
         AtomicReference<Duration> timeout = new AtomicReference<>();
         AtomicReference<Boolean> thinking = new AtomicReference<>();
-        AtomicInteger maxRetries = new AtomicInteger(-1);
-        var connector = new LangChain4jOllamaQueryConnector((baseUrl, modelName, configuredTimeout,
-                                                              configuredThinking, configuredMaxRetries) -> {
+        var connector = new LangChain4jOllamaQueryConnector((configuredBaseUrl, modelName, configuredTimeout,
+                                                              configuredThinking) -> {
+            baseUrl.set(configuredBaseUrl);
             timeout.set(configuredTimeout);
             thinking.set(configuredThinking);
-            maxRetries.set(configuredMaxRetries);
-            return model(AiMessage.from("unused"));
+            ChatModel model = model(AiMessage.from("unused"));
+            return (request, schema) -> java.util.concurrent.CompletableFuture.completedFuture(model.chat(request));
         });
 
-        connector.createClient(new LlmProviderConfiguration("qwen3", Optional.empty()),
-            ConnectorRuntimeContext.empty());
+        connector.createClientResolver(new LlmProviderConfiguration("qwen3", Optional.empty()),
+                ConnectorRuntimeContext.empty())
+            .resolve(ConnectorExecutionContext.empty()).toCompletableFuture().join();
 
+        assertEquals("http://localhost:11434", baseUrl.get());
         assertEquals(Duration.ofSeconds(30), timeout.get());
         assertEquals(true, thinking.get());
-        assertEquals(0, maxRetries.get());
     }
 
     @Test
@@ -112,7 +132,7 @@ class LangChain4jOllamaQueryConnectorTest {
                     .build();
             }
         };
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model));
 
         var proposal = client.decide(new LlmTurnRequest(
             "Decide once.",
@@ -153,7 +173,7 @@ class LangChain4jOllamaQueryConnectorTest {
                     .build();
             }
         };
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model));
 
         var observation = client.decide(optionalCompletionRequest()).toCompletableFuture().join()
             .observation().orElseThrow();
@@ -168,8 +188,7 @@ class LangChain4jOllamaQueryConnectorTest {
     @Test
     void returnsAnObservationWhenProviderMetadataIsAbsent() {
         var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(
-            model(AiMessage.from(ToolExecutionRequest.builder().name("complete").arguments("{}").build())),
-            Runnable::run);
+            async(model(AiMessage.from(ToolExecutionRequest.builder().name("complete").arguments("{}").build()))));
 
         var observation = client.decide(optionalCompletionRequest()).toCompletableFuture().join()
             .observation().orElseThrow();
@@ -195,7 +214,7 @@ class LangChain4jOllamaQueryConnectorTest {
                     .build();
             }
         };
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model));
 
         var decision = client.decide(optionalCompletionRequest()).toCompletableFuture().join();
 
@@ -217,29 +236,19 @@ class LangChain4jOllamaQueryConnectorTest {
     @Test
     void usesNativeJsonSchemaForRequiredDirectCompletion() throws Exception {
         AtomicInteger calls = new AtomicInteger();
-        ChatModel model = new ChatModel() {
-            @Override
-            public ChatResponse doChat(ChatRequest request) {
-                calls.incrementAndGet();
-                assertTrue(request.toolSpecifications().isEmpty());
-                assertEquals(ResponseFormatType.JSON, request.responseFormat().type());
-                JsonObjectSchema schema = assertInstanceOf(
-                    JsonObjectSchema.class, request.responseFormat().jsonSchema().rootElement());
-                assertEquals(List.of("facts", "recommendation", "note"), schema.required());
-                JsonObjectSchema facts = assertInstanceOf(
-                    JsonObjectSchema.class, schema.definitions().get("InvoiceFacts"));
-                assertEquals(List.of("supplier", "invoiceNumber", "totalAmount", "diagnostic"), facts.required());
-                JsonObjectSchema recommendation = assertInstanceOf(
-                    JsonObjectSchema.class, schema.definitions().get("PropertyRecommendation"));
-                assertEquals(List.of("propertyId", "explanation"), recommendation.required());
-                return ChatResponse.builder().aiMessage(AiMessage.from("""
+        AtomicReference<Optional<String>> observedSchema = new AtomicReference<>();
+        LangChain4jOllamaQueryConnector.AsyncChatModel model = (request, schema) -> {
+            calls.incrementAndGet();
+            assertTrue(request.toolSpecifications().isEmpty());
+            observedSchema.set(schema);
+            return java.util.concurrent.CompletableFuture.completedFuture(
+                ChatResponse.builder().aiMessage(AiMessage.from("""
                     {"facts":{"supplier":"Acme","invoiceNumber":"INV-1","totalAmount":12.34,
                     "diagnostic":"Header text."},"recommendation":{"propertyId":"home",
                     "explanation":"Address match."},"note":"Friday callout."}
-                    """)).build();
-            }
+                    """)).build());
         };
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model);
         LlmToolDefinition completion = new LlmToolDefinition("complete", "Complete", """
             {"type":"object","properties":{
               "facts":{"$ref":"#/$defs/InvoiceFacts"},
@@ -269,6 +278,8 @@ class LangChain4jOllamaQueryConnectorTest {
             "diagnostic":"Header text."},"recommendation":{"propertyId":"home",
             "explanation":"Address match."},"note":"Friday callout."}
             """), new ObjectMapper().readTree(proposal.proposal().argumentsJson()));
+        assertEquals(new ObjectMapper().readTree(completion.inputSchemaJson()),
+            new ObjectMapper().readTree(observedSchema.get().orElseThrow()));
         assertEquals(1, calls.get());
     }
 
@@ -303,7 +314,7 @@ class LangChain4jOllamaQueryConnectorTest {
         PayloadReference reference = new PayloadReference(
             "test", "invoices", "invoice.pdf", "application/pdf", null, "sha256:test", 4,
             null, java.util.Map.of(), Optional.empty());
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model));
 
         client.decide(new LlmTurnRequest(
             "Analyse once.",
@@ -339,7 +350,7 @@ class LangChain4jOllamaQueryConnectorTest {
         PayloadReference reference = new PayloadReference(
             "test", "invoices", "invoice.png", "image/png", null, "sha256:test", 4,
             null, java.util.Map.of(), Optional.empty());
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model, Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model));
 
         client.decide(new LlmTurnRequest(
             "Analyse once.",
@@ -360,7 +371,7 @@ class LangChain4jOllamaQueryConnectorTest {
     }
 
     private static org.pipelineframework.connector.llm.LlmToolProposal decide(AiMessage message) {
-        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(model(message), Runnable::run);
+        var client = new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(async(model(message)));
         return client.decide(new LlmTurnRequest("Decide once.", "{}", List.of(
             new LlmToolDefinition("complete", "Complete", """
                 {"type":"object","properties":{},"required":[],"additionalProperties":false}
@@ -375,5 +386,9 @@ class LangChain4jOllamaQueryConnectorTest {
                 return ChatResponse.builder().aiMessage(message).build();
             }
         };
+    }
+
+    private static LangChain4jOllamaQueryConnector.AsyncChatModel async(ChatModel model) {
+        return (request, schema) -> CompletableFuture.completedFuture(model.chat(request));
     }
 }

@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.llm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -11,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.connector.ConnectionResolutionException;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
@@ -26,7 +28,8 @@ class LlmQueryOperationTest {
 
     @Test
     void declaresPipelineResultCachingSupport() {
-        LlmQueryOperation operation = new LlmQueryOperation(Optional::<LlmDecisionClient>empty);
+        LlmQueryOperation operation = new LlmQueryOperation(ignored ->
+            CompletableFuture.failedStage(new IllegalStateException("inactive")));
 
         assertEquals(org.pipelineframework.connector.QueryCacheability.CACHEABLE,
             operation.capabilities().cacheability());
@@ -100,6 +103,45 @@ class LlmQueryOperationTest {
 
         assertEquals("llm-query-failed", assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void exposesSafeConnectionFailureCategoryWithoutItsMessage() {
+        LlmQueryOperation operation = new LlmQueryOperation(ignored -> CompletableFuture.failedStage(
+            new ConnectionResolutionException(
+                ConnectionResolutionException.Kind.AUTHENTICATION_REQUIRED,
+                "openrouter-secret-must-not-leak")));
+
+        QueryOutcome<?> outcome = operation.query(invocation()).toCompletableFuture().join();
+
+        QueryOutcome.AuthenticationRequired<?> failure =
+            assertInstanceOf(QueryOutcome.AuthenticationRequired.class, outcome);
+        assertEquals("llm-connection-authentication-required", failure.code());
+        assertFalse(failure.toString().contains("openrouter-secret-must-not-leak"));
+    }
+
+    @Test
+    void preservesSafeProviderFailureSemantics() {
+        LlmQueryOperation operation = operation(ignored -> CompletableFuture.failedStage(
+            new LlmProviderFailureException(
+                LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
+                "llm-provider-timeout",
+                new IllegalStateException("provider-body-must-not-leak"))));
+
+        QueryOutcome<?> outcome = operation.query(invocation()).toCompletableFuture().join();
+
+        QueryOutcome.TemporarilyUnavailable<?> failure =
+            assertInstanceOf(QueryOutcome.TemporarilyUnavailable.class, outcome);
+        assertEquals("llm-provider-timeout", failure.code());
+        assertFalse(failure.toString().contains("provider-body-must-not-leak"));
+    }
+
+    @Test
+    void rejectsUnregisteredProviderOutcomeCodesEvenWhenSyntaxIsValid() {
+        assertThrows(IllegalArgumentException.class, () -> new LlmProviderFailureException(
+            LlmProviderFailureException.Kind.TERMINAL,
+            "llm-provider-adapter-defined",
+            new IllegalStateException("provider-body-must-not-leak")));
     }
 
     @Test
@@ -192,7 +234,7 @@ class LlmQueryOperationTest {
         AtomicInteger loads = new AtomicInteger();
         CanonicalTypeCatalogue catalogue = CanonicalTypeCatalogue.load(Decision.class.getClassLoader());
         LlmQueryOperation operation = new LlmQueryOperation(
-            () -> Optional.of(request -> CompletableFuture.completedFuture(
+            ignored -> CompletableFuture.completedStage(request -> CompletableFuture.completedFuture(
                 new LlmDecision(new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"ok\"}")))),
             ignored -> {
                 loads.incrementAndGet();
@@ -203,6 +245,26 @@ class LlmQueryOperationTest {
         operation.query(invocation()).toCompletableFuture().join();
 
         assertEquals(1, loads.get());
+    }
+
+    @Test
+    void resolvesAClientForEveryLiveInvocationAndRedactsResolutionFailures() {
+        AtomicInteger resolutions = new AtomicInteger();
+        LlmQueryOperation operation = new LlmQueryOperation(executionContext -> {
+            resolutions.incrementAndGet();
+            return CompletableFuture.failedStage(new IllegalStateException("openrouter-secret-must-not-leak"));
+        });
+
+        QueryOutcome<?> first = operation.query(invocation()).toCompletableFuture().join();
+        QueryOutcome<?> second = operation.query(invocation()).toCompletableFuture().join();
+
+        assertEquals("llm-query-failed",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, first).code());
+        assertEquals("llm-query-failed",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, second).code());
+        assertFalse(first.toString().contains("openrouter-secret-must-not-leak"));
+        assertFalse(second.toString().contains("openrouter-secret-must-not-leak"));
+        assertEquals(2, resolutions.get());
     }
 
     @Test
@@ -429,7 +491,7 @@ class LlmQueryOperationTest {
     }
 
     private static LlmQueryOperation operation(LlmDecisionClient client) {
-        return new LlmQueryOperation(() -> Optional.of(client));
+        return new LlmQueryOperation(ignored -> CompletableFuture.completedStage(client));
     }
 
     private static QueryInvocation<Object, LlmTurnConfiguration, Object> invocation() {

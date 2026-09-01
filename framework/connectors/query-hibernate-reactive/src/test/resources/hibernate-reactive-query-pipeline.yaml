@@ -20,3 +20,22 @@ steps:
         riskBand: riskBand
         score: score
       result: single
+  - name: Load Reactive Customer Risks
+    kind: query
+    cardinality: ONE_TO_MANY
+    operation: find.many
+    using: reactive-database
+    config:
+      entity: org.pipelineframework.connector.query.jpa.ReactiveCustomerRiskEntity
+      where:
+        customerId:
+          operator: eq
+          values: [input.customerId]
+      projection:
+        customerId: customerId
+        riskBand: riskBand
+        score: score
+      orderBy:
+        score: asc
+        id: asc
+      uniqueBy: [id]

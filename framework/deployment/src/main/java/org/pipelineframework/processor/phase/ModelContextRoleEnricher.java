@@ -81,7 +81,7 @@ class ModelContextRoleEnricher {
         List<PipelineStepModel> serverModels = isMonolithLayout(ctx)
             ? expanded.stream()
                 .filter(this::isMonolithServerCandidate)
-                .map(this::ensureServerRole)
+                .map(model -> withDeploymentRole(model, DeploymentRole.PIPELINE_SERVER))
                 .toList()
             : List.of();
         if (!colocatedPlugins) {
@@ -170,7 +170,18 @@ class ModelContextRoleEnricher {
     }
 
     private boolean isMonolithServerCandidate(PipelineStepModel model) {
-        return !model.sideEffect() && isServerCandidate(model);
+        return !model.sideEffect() && !isClientOnlyDescriptorStep(model);
+    }
+
+    private boolean isClientOnlyDescriptorStep(PipelineStepModel model) {
+        if (model.serviceClassName() == null) {
+            return false;
+        }
+        String className = model.serviceClassName().canonicalName();
+        return PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS.equals(className)
+            || PipelineTargetResolutionPhase.COMMAND_STEP_DESCRIPTOR_CLASS.equals(className)
+            || PipelineTargetResolutionPhase.QUERY_STEP_DESCRIPTOR_CLASS.equals(className)
+            || PipelineTargetResolutionPhase.DYNAMIC_OPERATION_DESCRIPTOR_CLASS.equals(className);
     }
 
     private boolean isAwaitDescriptorStep(PipelineStepModel model) {

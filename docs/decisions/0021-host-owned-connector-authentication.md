@@ -34,6 +34,13 @@ configuration each install zero or one application resolver in `ConnectorRuntime
 reject ambiguous resolver beans. The resolver may use framework security facilities, a connection
 broker, or application infrastructure, but TPF does not prescribe or implement those systems.
 
+The older `SecretRef`, `SecretResolver`, and `ResolvedSecret` connector APIs are deprecated for
+removal and retained only for source compatibility. Their lookup is context-free: it has no tenant,
+execution, connector target, or operation identity. They must not be used to authenticate external
+connector access. This warning is part of the public Javadoc and connector authoring documentation
+so generated code and coding agents do not mistake the legacy secret API for the authentication
+seam defined by this decision.
+
 Connectors request an authenticated, typed runtime handle. They do not receive portable bearer
 tokens and do not implement OAuth/OIDC flows, callbacks, refresh-token persistence, or application
 user authentication. A connection is resolved for live invocation only. Query capture and Command
@@ -43,6 +50,19 @@ The first proof is provider `google.gmail` with read-only `list.messages`, `get.
 `search.messages` Query operations. The host returns an `AuthenticatedGmailConnection` containing
 an already-authenticated Google `Gmail` SDK client. The connector declares Google's read-only
 scope as a connector-local constant; TPF adds no portable authentication or scope metadata.
+
+Provider `llm.query.openai.compatible` is the second proof. Its provider configuration contains a
+model, optional base URL, and logical `ConnectionRef`; it contains no API key or secret-store
+selector. One connector-local client manager selects either the blocking or reactive implementation
+from runtime configuration without changing the provider identity or pipeline contract. The selected
+implementation asks the host for an `AuthenticatedOpenAiCompatibleConnection` containing a
+LangChain4j `ChatModel`, or an `AuthenticatedOpenAiCompatibleReactiveConnection` containing a
+`StreamingChatModel`. Both implementations complete the same asynchronous decision contract;
+the blocking implementation offloads its SDK call while the reactive implementation consumes the
+provider callback directly. Resolution occurs for every live invocation so tenant
+selection and credential rotation remain host-owned, while captured replay performs no resolution.
+The factory must preserve the connector-supplied non-secret model settings, including strict JSON
+Schema, so moving credential attachment to the host does not weaken required structured output.
 
 This decision does not schedule outbound-authority controls as a follow-on feature. If a concrete
 connector later demonstrates a need for destination, account, or egress restrictions, that
@@ -64,9 +84,10 @@ authority problem of caller-controlled destinations.
 
 ## Alternatives considered
 
-- A context-free compatibility overload or a separate authenticated-resolution sidecar would
-  preserve two resolution models. Neither can make tenant-aware invocation semantics mandatory,
-  so the owning `ConnectionResolver` contract changes directly.
+- Treating the deprecated context-free secret SPI as an authentication compatibility overload
+  would preserve two resolution models. It remains functional only to avoid an unannounced source
+  break; it is explicitly excluded from authenticated connector design. New work changes the
+  owning `ConnectionResolver` contract directly rather than extending the legacy path.
 - A portable bearer-token wrapper would expose credential material and make connectors responsible
   for token attachment, refresh races, and redaction. Typed authenticated handles keep those
   concerns in the host integration.
@@ -79,13 +100,16 @@ authority problem of caller-controlled destinations.
 
 ## Consequences
 
-- `ConnectionResolver` is a clean SPI break; there is no context-free compatibility overload.
+- `ConnectionResolver` is the only supported connector-authentication SPI. The context-free secret
+  SPI remains deprecated compatibility surface and is scheduled for removal.
 - Resolver implementations must select connected access from deployment configuration and
   invocation context, especially `tenantId`, never from ordinary pipeline payload fields.
 - Resolver ambiguity and missing tenant context fail without exposing credentials in payloads,
-  durable records, telemetry, or error codes.
-- The Gmail connector depends on the Google SDK but contains no authorization-code flow, callback,
-  client secret, token store, or refresh-token code.
+  durable records, telemetry, or error codes. Resolution and provider failures retain only bounded,
+  framework-owned outcome categories; exception messages and provider response bodies are never
+  copied into Query outcomes.
+- Gmail and OpenAI-compatible LLM connectors contain no authorization-code flow, callback, client
+  secret, token store, or refresh-token code. Neither receives portable credential material.
 - Application developers remain responsible for OAuth client registration, consent, scopes,
   connected-account persistence, and the Quarkus/Spring security configuration they choose.
 - Portable scope strings, generic authentication metadata, live secret-backed tests, and full

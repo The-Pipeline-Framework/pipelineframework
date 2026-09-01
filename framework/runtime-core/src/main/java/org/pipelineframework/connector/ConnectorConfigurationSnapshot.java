@@ -11,6 +11,7 @@ import java.util.Objects;
 /**
  * Sanitized configuration metadata suitable for future durable metadata; resolved values are excluded.
  */
+@SuppressWarnings("removal")
 public record ConnectorConfigurationSnapshot(
     String schemaId,
     int schemaVersion,

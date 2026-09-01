@@ -35,6 +35,7 @@ import lombok.Getter;
 import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
+import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
@@ -102,6 +103,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   /** Health check service to verify dependent services. */
   @Inject
   protected HealthCheckService healthCheckService;
+
+  @Inject
+  PipelineStepConfig pipelineStepConfig;
 
   @Inject
   PipelineStepResolver pipelineStepResolver;
@@ -567,27 +571,24 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Multi.createFrom().deferred(() -> {
       StopWatch watch = new StopWatch();
       List<Object> steps = loadStepsForExecution();
-      RuntimeException healthFailure = healthCheckFailure();
-      if (healthFailure != null) {
-        return Multi.createFrom().failure(healthFailure);
-      }
       RuntimeException inputFailure = validateInputShape(input);
       if (inputFailure != null) {
         return Multi.createFrom().failure(inputFailure);
       }
-
-      PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
-      Object result = executionResult.result();
-      if (result == null) {
-        return Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
-      } else if (result instanceof Multi<?> multi) {
-        return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
-      } else if (result instanceof Uni<?> uni) {
-        return executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext());
-      } else {
-        return Multi.createFrom().failure(new IllegalStateException(
-            MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
-      }
+      return awaitStartupHealthReactive().onItem().transformToMulti(ignored -> {
+        PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+        Object result = executionResult.result();
+        if (result == null) {
+          return Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
+        } else if (result instanceof Multi<?> multi) {
+          return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
+        } else if (result instanceof Uni<?> uni) {
+          return executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext());
+        } else {
+          return Multi.createFrom().failure(new IllegalStateException(
+              MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
+        }
+      });
     });
   }
 
@@ -900,25 +901,22 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Uni.createFrom().deferred(() -> {
       StopWatch watch = new StopWatch();
       List<Object> steps = loadStepsForExecution();
-      RuntimeException healthFailure = healthCheckFailure();
-      if (healthFailure != null) {
-        return Uni.createFrom().failure(healthFailure);
-      }
       RuntimeException inputFailure = validateInputShape(input);
       if (inputFailure != null) {
         return Uni.createFrom().failure(inputFailure);
       }
-
-      PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
-      Object result = executionResult.result();
-      return switch (result) {
-        case null -> Uni.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
-        case Uni<?> uni -> executionHooks.attachUniHooks(uni, watch, executionResult.telemetryContext());
-        case Multi<?> ignored -> Uni.createFrom().failure(new IllegalStateException(
-            "PipelineRunner returned stream output where unary output was expected"));
-        default -> Uni.createFrom().failure(new IllegalStateException(
-            MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
-      };
+      return awaitStartupHealthReactive().onItem().transformToUni(ignored -> {
+        PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+        Object result = executionResult.result();
+        return switch (result) {
+          case null -> Uni.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
+          case Uni<?> uni -> executionHooks.attachUniHooks(uni, watch, executionResult.telemetryContext());
+          case Multi<?> ignoredResult -> Uni.createFrom().failure(new IllegalStateException(
+              "PipelineRunner returned stream output where unary output was expected"));
+          default -> Uni.createFrom().failure(new IllegalStateException(
+              MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
+        };
+      });
     });
   }
 
@@ -944,11 +942,42 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     }
   }
 
+  private Uni<Void> awaitStartupHealthReactive() {
+    StartupHealthState state = startupHealthState.get();
+    if (state == StartupHealthState.HEALTHY) {
+      return Uni.createFrom().voidItem();
+    }
+    if (state != StartupHealthState.PENDING) {
+      return Uni.createFrom().failure(new RuntimeException(
+          "One or more dependent services are not healthy. Pipeline execution aborted (" + state + ")."));
+    }
+    CompletableFuture<Boolean> future = startupHealthFuture;
+    if (future == null) {
+      return Uni.createFrom().failure(new RuntimeException("Startup health checks are unavailable."));
+    }
+    return Uni.createFrom().completionStage(future)
+        .ifNoItem().after(pipelineStepConfig.health().startupTimeout())
+        .failWith(() -> new RuntimeException("Startup health checks are still running."))
+        .onItem().transformToUni(healthy -> {
+          if (Boolean.TRUE.equals(healthy)) {
+            startupHealthState.compareAndSet(StartupHealthState.PENDING, StartupHealthState.HEALTHY);
+            return Uni.createFrom().voidItem();
+          }
+          StartupHealthState resolved = startupHealthState.get();
+          if (resolved == StartupHealthState.PENDING) {
+            resolved = StartupHealthState.UNHEALTHY;
+            startupHealthState.compareAndSet(StartupHealthState.PENDING, resolved);
+          }
+          return Uni.createFrom().failure(new RuntimeException(
+              "One or more dependent services are not healthy. Pipeline execution aborted (" + resolved + ")."));
+        });
+  }
+
   private RuntimeException healthCheckFailure() {
     StartupHealthState state = startupHealthState.get();
     if (state == StartupHealthState.PENDING) {
       try {
-        awaitStartupHealth(Duration.ofMinutes(2));
+        awaitStartupHealth(pipelineStepConfig.health().startupTimeout());
         return null;
       } catch (RuntimeException e) {
         return e;

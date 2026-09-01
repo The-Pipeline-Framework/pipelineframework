@@ -2,6 +2,13 @@
 
 This is a generated pipeline application built with the Pipeline Framework.
 
+This example remains useful for its authored parse/chunk transformations, stable indexing identity,
+fan-out/fan-in cardinality, and separation of cache, persistence, and effect concerns. Its embedding
+service, hash-only vectors, OpenSearch-shaped domain, and v2-era mapper topology are historical rather
+than the portable RAG pattern. See the offline
+[RAG composition proof](../rag-composition-proof/README.md) for embedding Query, vector Command, vector
+Query, and one-turn LLM Query composition on v3.
+
 ## Prerequisites
 
 - Java 21

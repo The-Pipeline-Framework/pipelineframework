@@ -17,10 +17,11 @@
 package org.pipelineframework.blocking;
 
 import java.util.List;
-import java.util.concurrent.Flow;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -62,11 +63,20 @@ public class BlockingExecutionSupport {
     }
 
     public <T> Multi<T> emitIterator(boolean useVirtualThreads, Supplier<? extends CloseableIterator<T>> supplier) {
+        return Multi.createFrom().publisher(openIterator(useVirtualThreads, supplier).rows());
+    }
+
+    public <T> BlockingIteratorPublisher<T> openIterator(
+        boolean useVirtualThreads,
+        Supplier<? extends CloseableIterator<T>> supplier
+    ) {
         PipelineContext context = PipelineContextHolder.get();
         TransportDispatchMetadata transport = TransportDispatchMetadataHolder.get();
         Executor executor = selectExecutor(useVirtualThreads);
-        return Multi.createFrom().publisher(subscriber ->
-            subscriber.onSubscribe(new IteratorSubscription<>(subscriber, supplier, executor, context, transport)));
+        CompletableFuture<Void> termination = new CompletableFuture<>();
+        Flow.Publisher<T> rows = subscriber -> subscriber.onSubscribe(
+            new IteratorSubscription<>(subscriber, supplier, executor, context, transport, termination));
+        return new BlockingIteratorPublisher<>(rows, termination);
     }
 
     private Executor selectExecutor(boolean useVirtualThreads) {
@@ -130,6 +140,7 @@ public class BlockingExecutionSupport {
         private final TransportDispatchMetadata transport;
         private final AtomicLong requested = new AtomicLong();
         private final AtomicInteger workInProgress = new AtomicInteger();
+        private final CompletableFuture<Void> termination;
         private CloseableIterator<T> iterator;
         private volatile boolean closed;
         private volatile boolean completed;
@@ -139,13 +150,15 @@ public class BlockingExecutionSupport {
             Supplier<? extends CloseableIterator<T>> supplier,
             Executor executor,
             PipelineContext context,
-            TransportDispatchMetadata transport
+            TransportDispatchMetadata transport,
+            CompletableFuture<Void> termination
         ) {
             this.subscriber = subscriber;
             this.supplier = supplier;
             this.executor = executor;
             this.context = context;
             this.transport = transport;
+            this.termination = termination;
         }
 
         @Override
@@ -160,7 +173,11 @@ public class BlockingExecutionSupport {
 
         @Override
         public void cancel() {
-            close();
+            if (closed || completed) {
+                return;
+            }
+            closed = true;
+            scheduleDrain();
         }
 
         private void scheduleDrain() {
@@ -176,21 +193,26 @@ public class BlockingExecutionSupport {
         private void drain() {
             int missed = 1;
             while (true) {
+                if (closed) {
+                    closeAfterCancellation();
+                    return;
+                }
                 while (requested.get() > 0 && !closed && !completed) {
                     T item;
                     try {
                         if (iterator == null) {
                             iterator = supplier.get();
                             if (iterator == null) {
-                                completed = true;
-                                subscriber.onComplete();
+                                complete();
                                 return;
                             }
                         }
+                        if (closed) {
+                            closeAfterCancellation();
+                            return;
+                        }
                         if (!iterator.hasNext()) {
-                            completed = true;
-                            closeIterator();
-                            subscriber.onComplete();
+                            complete();
                             return;
                         }
                         item = iterator.next();
@@ -212,9 +234,7 @@ public class BlockingExecutionSupport {
                     if (requested.get() == 0 && !closed && !completed) {
                         try {
                             if (!iterator.hasNext()) {
-                                completed = true;
-                                closeIterator();
-                                subscriber.onComplete();
+                                complete();
                                 return;
                             }
                         } catch (Throwable failure) {
@@ -239,6 +259,7 @@ public class BlockingExecutionSupport {
 
         private void fail(Throwable failure) {
             if (closed) {
+                closeAfterCancellation();
                 return;
             }
             closed = true;
@@ -246,16 +267,32 @@ public class BlockingExecutionSupport {
                 closeIterator();
             } catch (Throwable closeFailure) {
                 failure.addSuppressed(closeFailure);
+                termination.completeExceptionally(closeFailure);
             }
+            termination.complete(null);
             subscriber.onError(failure);
         }
 
-        private void close() {
-            if (closed || completed) {
-                return;
+        private void complete() {
+            completed = true;
+            try {
+                closeIterator();
+                termination.complete(null);
+                subscriber.onComplete();
+            } catch (Throwable closeFailure) {
+                closed = true;
+                termination.completeExceptionally(closeFailure);
+                subscriber.onError(closeFailure);
             }
-            closed = true;
-            executor.execute(() -> withCapturedContext(context, transport, this::closeIterator));
+        }
+
+        private void closeAfterCancellation() {
+            try {
+                closeIterator();
+                termination.complete(null);
+            } catch (Throwable closeFailure) {
+                termination.completeExceptionally(closeFailure);
+            }
         }
 
         private void closeIterator() {

@@ -33,6 +33,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.mutiny.unchecked.Unchecked;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
@@ -261,6 +262,7 @@ public class HealthCheckService {
                 throw new RuntimeException("Health check failed");
             }
         }))
+        .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onFailure().retry()
         .withBackOff(Duration.ofSeconds(5), Duration.ofSeconds(5))
         .atMost(24); // 24 attempts with 5s backoff = ~2 minutes
@@ -722,9 +724,12 @@ public class HealthCheckService {
         if (path != null && !path.isBlank()) {
             return path;
         }
+        String configuredDefault = pipelineStepConfig == null || pipelineStepConfig.health() == null
+            ? "/q/health"
+            : pipelineStepConfig.health().restPath();
         return ConfigProvider.getConfig()
             .getOptionalValue("quarkus.rest-client.health-path", String.class)
-            .orElse("/q/health");
+            .orElse(configuredDefault);
     }
 
     private String resolveRestClientConfigValue(String configKey, String suffix) {

@@ -2,11 +2,13 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Generates REST orchestrator resource based on pipeline configuration.
@@ -67,8 +69,12 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName awaitInteractionDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitInteractionDto");
         ClassName awaitDtoMapper = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitDtoMapper");
 
-        ClassName inputType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
-        ClassName outputType = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, binding.model(), PipelineTransport.REST);
+        ClassName inputType = normalizedTransport.input().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto"));
+        ClassName outputType = normalizedTransport.output().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto"));
 
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
             .addAnnotation(inject)
@@ -333,12 +339,9 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addMethod(subscribeMethod)
             .build();
 
-        try {
-            JavaFile.builder(binding.basePackage() + ".orchestrator.service", resource)
-                .build()
-                .writeTo(ctx.processingEnv().getFiler());
-        } catch (javax.annotation.processing.FilerException e) {
-            // Skip duplicate generation attempts across rounds.
-        }
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", resource)
+            .build()
+            .writeTo(ctx.outputDir());
     }
+
 }

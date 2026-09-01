@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -8,6 +9,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
@@ -68,7 +70,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
          * @param ctx the GenerationContext providing deployment role, processing environment, and output configuration
          * @return a TypeSpec representing the generated REST resource class
          */
-    private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
+    private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) throws IOException {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         boolean cachePluginSideEffect = isCachePluginSideEffect(model);
@@ -107,13 +109,15 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
         resourceBuilder.addField(serviceField);
-        // For REST resources, derive DTO types from domain types.
-        TypeName inputDtoClassName = model.inboundDomainType() != null
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, PipelineTransport.REST);
+        // Legacy templates derive DTOs from Java package conventions; v3 uses the normalized type model.
+        TypeName inputDtoClassName = normalizedTransport.input().<TypeName>map(CanonicalTransportTypeBinding::restDtoType).orElseGet(() -> model.inboundDomainType() != null
             ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDtoClassName = model.outboundDomainType() != null
+            : ClassName.OBJECT);
+        TypeName outputDtoClassName = normalizedTransport.output().<TypeName>map(CanonicalTransportTypeBinding::restDtoType).orElseGet(() -> model.outboundDomainType() != null
             ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
+            : ClassName.OBJECT);
 
         TypeName domainInputType = cacheSideEffect
             ? inputDtoClassName
@@ -126,22 +130,30 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         String inboundMapperFieldName = "inboundMapper";
         String outboundMapperFieldName = "outboundMapper";
         if (!cacheSideEffect) {
-            TypeName inboundMapperType = ParameterizedTypeName.get(
+            TypeName inboundMapperType = normalizedTransport.input().<TypeName>map(CanonicalTransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainInputType,
                 inputDtoClassName
-            );
-            TypeName outboundMapperType = ParameterizedTypeName.get(
+            ));
+            TypeName outboundMapperType = normalizedTransport.output().<TypeName>map(CanonicalTransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainOutputType,
                 outputDtoClassName
-            );
-            resourceBuilder.addField(FieldSpec.builder(inboundMapperType, inboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build());
-            resourceBuilder.addField(FieldSpec.builder(outboundMapperType, outboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build());
+            ));
+            FieldSpec.Builder inbound = FieldSpec.builder(inboundMapperType, inboundMapperFieldName);
+            FieldSpec.Builder outbound = FieldSpec.builder(outboundMapperType, outboundMapperFieldName);
+            if (normalizedTransport.input().isPresent()) {
+                inbound.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", inboundMapperType);
+            } else {
+                inbound.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build());
+            }
+            if (normalizedTransport.output().isPresent()) {
+                outbound.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", outboundMapperType);
+            } else {
+                outbound.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build());
+            }
+            resourceBuilder.addField(inbound.build());
+            resourceBuilder.addField(outbound.build());
         }
 
         ClassName adapterClass = resolveRestAdapterClass(model);
