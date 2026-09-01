@@ -2,10 +2,16 @@ package org.pipelineframework.connector.llm.langchain4j;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.JsonRawSchema;
+import dev.langchain4j.model.chat.request.json.JsonSchema;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -80,7 +86,22 @@ public final class LangChain4jOpenAiCompatibleQueryConnector extends LlmQueryCon
             0);
         Objects.requireNonNull(model, "OpenAI-compatible model must not be null");
         return new LangChain4jOllamaQueryConnector.LangChain4jDecisionClient(
-            (request, ignored) -> CompletableFuture.supplyAsync(() -> model.chat(request), context.executor()));
+            (request, responseSchema) -> CompletableFuture.supplyAsync(
+                () -> model.chat(withResponseSchema(request, responseSchema)), context.executor()));
+    }
+
+    private static ChatRequest withResponseSchema(ChatRequest request, Optional<String> responseSchema) {
+        if (responseSchema.isEmpty()) {
+            return request;
+        }
+        ResponseFormat format = ResponseFormat.builder()
+            .type(ResponseFormatType.JSON)
+            .jsonSchema(JsonSchema.builder()
+                .name("tpf_completion")
+                .rootElement(JsonRawSchema.from(responseSchema.orElseThrow()))
+                .build())
+            .build();
+        return new ChatRequest.Builder(request).responseFormat(format).build();
     }
 
     @ConfigMapping(prefix = "pipeline.llm.langchain4j.openai-compatible")
