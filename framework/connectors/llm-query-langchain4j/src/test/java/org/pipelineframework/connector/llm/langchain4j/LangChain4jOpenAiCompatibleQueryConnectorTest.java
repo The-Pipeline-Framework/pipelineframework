@@ -123,7 +123,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
     }
 
     @Test
-    void selectsTheReactiveImplementationWithoutChangingProviderIdentity() {
+    void selectsTheReactiveImplementationByDefaultWithoutChangingProviderIdentity() {
         List<ConnectionResolutionRequest<?>> requests = new ArrayList<>();
         ConnectionResolver resolver = new ConnectionResolver() {
             @Override
@@ -134,9 +134,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 return CompletableFuture.completedStage(request.connectionType().cast(connection));
             }
         };
-        var connector = new LangChain4jOpenAiCompatibleQueryConnector(
-            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75), "reactive"),
-            OpenAiCompatibleClientManager.defaults());
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector();
 
         LlmDecisionClient client = connector.createClientResolver(
             new LlmProviderConfiguration(
@@ -215,7 +213,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 return CompletableFuture.completedStage(request.connectionType().cast(connection));
             }
         };
-        LlmDecisionClient client = new LangChain4jOpenAiCompatibleQueryConnector()
+        LlmDecisionClient client = blockingConnector()
             .createClientResolver(
                 new LlmProviderConfiguration(
                     "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
@@ -250,7 +248,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
             },
             Clock.systemUTC(),
             Optional.of(resolver));
-        LlmDecisionClient client = new LangChain4jOpenAiCompatibleQueryConnector()
+        LlmDecisionClient client = blockingConnector()
             .createClientResolver(
                 new LlmProviderConfiguration(
                     "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
@@ -285,7 +283,7 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                 return CompletableFuture.completedStage(request.connectionType().cast(connection));
             }
         };
-        var connector = new LangChain4jOpenAiCompatibleQueryConnector();
+        var connector = blockingConnector();
         LlmDecisionClient client = connector.createClientResolver(
             new LlmProviderConfiguration(
                 "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
@@ -349,6 +347,12 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
 
     private static ConnectorRuntimeContext runtimeContext(Optional<ConnectionResolver> resolver) {
         return ConnectorRuntimeContext.of("test", Runnable::run, Clock.systemUTC(), resolver);
+    }
+
+    private static LangChain4jOpenAiCompatibleQueryConnector blockingConnector() {
+        return new LangChain4jOpenAiCompatibleQueryConnector(
+            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(60), "blocking"),
+            OpenAiCompatibleClientManager.defaults());
     }
 
     private static ConnectionResolver failingResolver() {

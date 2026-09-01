@@ -251,12 +251,12 @@ Only non-sensitive adapter tuning is configured as a runtime property:
 
 ```properties
 pipeline.llm.langchain4j.openai-compatible.request-timeout=PT60S
-pipeline.llm.langchain4j.openai-compatible.client-implementation=blocking
+pipeline.llm.langchain4j.openai-compatible.client-implementation=reactive
 ```
 
-`client-implementation` accepts `blocking` or `reactive` and defaults to `blocking` for compatibility.
-It is runtime/deployment selection, not pipeline DSL: switching host stacks does not change the
-connector binding or Query contract.
+`client-implementation` accepts `reactive` or `blocking` and defaults to `reactive`. A blocking host
+must set it to `blocking` explicitly. It is runtime/deployment selection, not pipeline DSL:
+switching host stacks does not change the connector binding or Query contract.
 
 The connection reference and one host `ConnectionResolver` are required when an
 `llm.query.openai.compatible` binding starts. Tenant context and the typed authenticated connection

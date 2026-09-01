@@ -31,6 +31,7 @@ authoritative for exact syntax and release support.
 | [0020](./0020-query-capture-uses-immutable-durable-observation-revisions.md) | Persist Query observation authority as immutable conditional revisions with terminal streaming commit. |
 | [0021](./0021-host-owned-connector-authentication.md) | Expose connector invocation semantics while leaving external authentication and credential resolution with the host. |
 | [0022](./0022-hibernate-find-many-provider-strategy.md) | Preserve finite row streaming and declared total order in both Hibernate `find.many` providers. |
+| [0023](./0023-hosted-llm-query-defaults-to-reactive-client.md) | Default hosted LLM Query to non-blocking provider I/O while retaining an explicit blocking implementation. |
 
 ## Maintenance
 

@@ -81,7 +81,7 @@ public final class LangChain4jOpenAiCompatibleQueryConnector extends LlmQueryCon
         Duration requestTimeout();
 
         /** Runtime client implementation: blocking or reactive. */
-        @WithDefault("blocking")
+        @WithDefault("reactive")
         String clientImplementation();
     }
 
@@ -103,7 +103,7 @@ public final class LangChain4jOpenAiCompatibleQueryConnector extends LlmQueryCon
         static RuntimeSettings defaults() {
             return new RuntimeSettings(
                 Duration.ofSeconds(60),
-                BlockingOpenAiCompatibleClientImplementation.ID);
+                ReactiveOpenAiCompatibleClientImplementation.ID);
         }
     }
 }
