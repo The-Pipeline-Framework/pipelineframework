@@ -339,13 +339,9 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addMethod(subscribeMethod)
             .build();
 
-        try {
-            JavaFile.builder(binding.basePackage() + ".orchestrator.service", resource)
-                .build()
-                .writeTo(ctx.processingEnv().getFiler());
-        } catch (javax.annotation.processing.FilerException e) {
-            // Skip duplicate generation attempts across rounds.
-        }
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", resource)
+            .build()
+            .writeTo(ctx.outputDir());
     }
 
 }

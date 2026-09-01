@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -28,6 +30,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorBindingRegistry;
+import org.pipelineframework.connector.ConnectorRuntimeContext;
 import org.pipelineframework.connector.MaterializedPayload;
 import org.pipelineframework.connector.PayloadMaterializer;
 import org.pipelineframework.objectpublish.ObjectTargetProvider;
@@ -45,9 +48,30 @@ public final class FileRepresentationRuntime {
     private volatile ObjectTargetRegistry targets;
 
     @Inject
-    public FileRepresentationRuntime(ConnectorBindingRegistry connectorBindings) {
+    public FileRepresentationRuntime(
+        ConnectorBindingRegistry connectorBindings,
+        ConnectorRuntimeContext runtimeContext
+    ) {
         this.connectorBindings = Objects.requireNonNull(connectorBindings, "connectorBindings");
-        this.materializer = () -> connectorBindings::materialize;
+        ConnectorRuntimeContext context = Objects.requireNonNull(runtimeContext, "runtime context");
+        this.materializer = () -> (reference, maxBytes) ->
+            activateAndMaterialize(connectorBindings, context, reference, maxBytes);
+    }
+
+    private static CompletionStage<MaterializedPayload> activateAndMaterialize(
+        ConnectorBindingRegistry bindings,
+        ConnectorRuntimeContext context,
+        PayloadReference reference,
+        long maxBytes
+    ) {
+        try {
+            var origin = Objects.requireNonNull(reference, "input reference").connectorOrigin().orElseThrow(() ->
+                new IllegalArgumentException("payload reference is not connector-owned"));
+            return bindings.activate(origin.bindingName(), context)
+                .thenCompose(ignored -> bindings.materialize(reference, maxBytes));
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
 
     FileRepresentationRuntime(PayloadMaterializer materializer, ConnectorBindingRegistry connectorBindings,

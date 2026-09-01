@@ -8,7 +8,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -21,15 +22,13 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.pdf.PdfFile;
 import dev.langchain4j.data.image.Image;
-import dev.langchain4j.model.chat.Capability;
-import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.chat.request.ResponseFormatType;
-import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.TokenUsage;
-import dev.langchain4j.model.ollama.OllamaChatModel;
+import io.quarkiverse.langchain4j.ollama.OllamaStreamingChatLanguageModel;
+import io.quarkiverse.langchain4j.ollama.Options;
 import jakarta.enterprise.context.ApplicationScoped;
 import io.quarkus.arc.Unremovable;
 import jakarta.inject.Inject;
@@ -62,18 +61,11 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
     @Inject
     LangChain4jOllamaQueryConnector(OllamaRuntimeConfiguration configuration) {
         this(defaultModelFactory(), new OllamaRuntimeSettings(
-            configuration.requestTimeout(), configuration.thinking()));
+            configuration.baseUrl(), configuration.requestTimeout(), configuration.thinking()));
     }
 
     private static OllamaModelFactory defaultModelFactory() {
-        return (baseUrl, modelName, timeout, thinking, maxRetries) -> OllamaChatModel.builder()
-            .baseUrl(baseUrl)
-            .modelName(modelName)
-            .timeout(timeout)
-            .think(thinking)
-            .maxRetries(maxRetries)
-            .supportedCapabilities(Capability.RESPONSE_FORMAT_JSON_SCHEMA)
-            .build();
+        return ReactiveOllamaChatModel::new;
     }
 
     LangChain4jOllamaQueryConnector(OllamaModelFactory modelFactory) {
@@ -90,23 +82,26 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         LlmProviderConfiguration configuration,
         ConnectorRuntimeContext context
     ) {
-        ChatModel model = modelFactory.create(
-            configuration.baseUrl().orElse(DEFAULT_BASE_URL),
+        AsyncChatModel model = modelFactory.create(
+            configuration.baseUrl().orElse(runtimeSettings.baseUrl()),
             configuration.model(),
             runtimeSettings.requestTimeout(),
-            runtimeSettings.thinking(),
-            0);
-        LlmDecisionClient client = new LangChain4jDecisionClient(model, context.executor());
+            runtimeSettings.thinking());
+        LlmDecisionClient client = new LangChain4jDecisionClient(model);
         return ignored -> CompletableFuture.completedStage(client);
     }
 
     @FunctionalInterface
     interface OllamaModelFactory {
-        ChatModel create(String baseUrl, String modelName, Duration timeout, boolean thinking, int maxRetries);
+        AsyncChatModel create(String baseUrl, String modelName, Duration timeout, boolean thinking);
     }
 
-    record OllamaRuntimeSettings(Duration requestTimeout, boolean thinking) {
+    record OllamaRuntimeSettings(String baseUrl, Duration requestTimeout, boolean thinking) {
         OllamaRuntimeSettings {
+            baseUrl = Objects.requireNonNull(baseUrl, "Ollama base URL must not be null").trim();
+            if (baseUrl.isEmpty()) {
+                throw new IllegalArgumentException("Ollama base URL must not be blank");
+            }
             Objects.requireNonNull(requestTimeout, "Ollama request timeout must not be null");
             if (requestTimeout.isZero() || requestTimeout.isNegative()) {
                 throw new IllegalArgumentException("Ollama request timeout must be positive");
@@ -114,18 +109,73 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
         }
 
         static OllamaRuntimeSettings defaults() {
-            return new OllamaRuntimeSettings(REQUEST_TIMEOUT, true);
+            return new OllamaRuntimeSettings(DEFAULT_BASE_URL, REQUEST_TIMEOUT, true);
         }
 
     }
 
-    static final class LangChain4jDecisionClient implements LlmDecisionClient {
-        private final ChatModel model;
-        private final Executor executor;
+    @FunctionalInterface
+    interface AsyncChatModel {
+        CompletionStage<ChatResponse> chat(ChatRequest request, Optional<String> responseSchema);
+    }
 
-        LangChain4jDecisionClient(ChatModel model, Executor executor) {
+    static final class ReactiveOllamaChatModel implements AsyncChatModel {
+        private final String baseUrl;
+        private final String modelName;
+        private final Duration timeout;
+        private final boolean thinking;
+        private final ConcurrentHashMap<String, StreamingChatModel> models = new ConcurrentHashMap<>();
+
+        ReactiveOllamaChatModel(String baseUrl, String modelName, Duration timeout, boolean thinking) {
+            this.baseUrl = Objects.requireNonNull(baseUrl, "Ollama base URL must not be null");
+            this.modelName = Objects.requireNonNull(modelName, "Ollama model name must not be null");
+            this.timeout = Objects.requireNonNull(timeout, "Ollama timeout must not be null");
+            this.thinking = thinking;
+        }
+
+        @Override
+        public CompletionStage<ChatResponse> chat(ChatRequest request, Optional<String> responseSchema) {
+            Objects.requireNonNull(request, "Ollama chat request must not be null");
+            String schema = Objects.requireNonNull(responseSchema, "response schema must not be null").orElse("");
+            StreamingChatModel model = models.computeIfAbsent(schema, this::createModel);
+            CompletableFuture<ChatResponse> response = new CompletableFuture<>();
+            model.chat(request, new StreamingChatResponseHandler() {
+                @Override
+                public void onPartialResponse(String partialResponse) {
+                    // The Quarkus client aggregates partials into the final ChatResponse.
+                }
+
+                @Override
+                public void onCompleteResponse(ChatResponse completeResponse) {
+                    response.complete(completeResponse);
+                }
+
+                @Override
+                public void onError(Throwable error) {
+                    response.completeExceptionally(error);
+                }
+            });
+            return response;
+        }
+
+        private StreamingChatModel createModel(String schema) {
+            var builder = OllamaStreamingChatLanguageModel.builder()
+                .baseUrl(baseUrl)
+                .model(modelName)
+                .timeout(timeout)
+                .options(Options.builder().option("think", thinking).build());
+            if (!schema.isEmpty()) {
+                builder.format(schema);
+            }
+            return builder.build();
+        }
+    }
+
+    static final class LangChain4jDecisionClient implements LlmDecisionClient {
+        private final AsyncChatModel model;
+
+        LangChain4jDecisionClient(AsyncChatModel model) {
             this.model = java.util.Objects.requireNonNull(model, "LangChain4j model must not be null");
-            this.executor = java.util.Objects.requireNonNull(executor, "LLM executor must not be null");
         }
 
         @Override
@@ -135,10 +185,6 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
 
         @Override
         public java.util.concurrent.CompletionStage<LlmDecision> decide(LlmTurnRequest request) {
-            return CompletableFuture.supplyAsync(() -> decideBlocking(request), executor);
-        }
-
-        private LlmDecision decideBlocking(LlmTurnRequest request) {
             if (request.structuredOutputSchema()
                 == org.pipelineframework.connector.llm.StructuredOutputSchemaMode.REQUIRED) {
                 return decideNativeCompletion(request);
@@ -146,32 +192,23 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
             return decideToolProposal(request);
         }
 
-        private LlmDecision decideNativeCompletion(LlmTurnRequest request) {
+        private CompletionStage<LlmDecision> decideNativeCompletion(LlmTurnRequest request) {
             LlmToolDefinition completion = directCompletion(request.tools()).orElseThrow(() ->
                 new IllegalArgumentException(
                     "Native structured output requires one direct 'complete' alternative"));
-            ToolSpecification specification = tool(completion);
-            ResponseFormat responseFormat = ResponseFormat.builder()
-                .type(ResponseFormatType.JSON)
-                .jsonSchema(JsonSchema.builder()
-                    .name(completion.alias())
-                    .rootElement(Objects.requireNonNull(
-                        specification.parameters(), "completion schema parameters must not be null"))
-                    .build())
-                .build();
             ChatRequest chat = ChatRequest.builder()
                 .messages(
                     SystemMessage.from(request.instructions()),
                     userMessage(request, true))
-                .responseFormat(responseFormat)
                 .build();
-            ChatResponse response = model.chat(chat);
-            String arguments = response.aiMessage().text();
-            return decision(response, new LlmToolProposal(
-                completion.alias(), arguments == null ? "{}" : arguments));
+            return model.chat(chat, Optional.of(completion.inputSchemaJson())).thenApply(response -> {
+                String arguments = response.aiMessage().text();
+                return decision(response, new LlmToolProposal(
+                    completion.alias(), arguments == null ? "{}" : arguments));
+            });
         }
 
-        private LlmDecision decideToolProposal(LlmTurnRequest request) {
+        private CompletionStage<LlmDecision> decideToolProposal(LlmTurnRequest request) {
             List<ToolSpecification> tools = request.tools().stream().map(this::tool).toList();
             ChatRequest chat = ChatRequest.builder()
                 .messages(
@@ -179,16 +216,17 @@ public final class LangChain4jOllamaQueryConnector extends LlmQueryConnectorProv
                     userMessage(request, false))
                 .toolSpecifications(tools)
                 .build();
-            ChatResponse response = model.chat(chat);
-            List<ToolExecutionRequest> proposals = response.aiMessage().toolExecutionRequests();
-            proposals = proposals == null ? List.of() : proposals;
-            if (proposals.size() != 1) {
-                return decision(response, new LlmToolProposal("", "{}"));
-            }
-            ToolExecutionRequest proposal = proposals.getFirst();
-            String name = proposal.name() == null ? "" : proposal.name();
-            String arguments = proposal.arguments() == null ? "{}" : proposal.arguments();
-            return decision(response, new LlmToolProposal(name, arguments));
+            return model.chat(chat, Optional.empty()).thenApply(response -> {
+                List<ToolExecutionRequest> proposals = response.aiMessage().toolExecutionRequests();
+                proposals = proposals == null ? List.of() : proposals;
+                if (proposals.size() != 1) {
+                    return decision(response, new LlmToolProposal("", "{}"));
+                }
+                ToolExecutionRequest proposal = proposals.getFirst();
+                String name = proposal.name() == null ? "" : proposal.name();
+                String arguments = proposal.arguments() == null ? "{}" : proposal.arguments();
+                return decision(response, new LlmToolProposal(name, arguments));
+            });
         }
 
         private static LlmDecision decision(ChatResponse response, LlmToolProposal proposal) {

@@ -15,10 +15,13 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.JsonRawSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectionRef;
@@ -31,6 +34,9 @@ import org.pipelineframework.connector.ResolvedConnection;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
 import org.pipelineframework.connector.llm.LlmDecisionClientResolver;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
+import org.pipelineframework.connector.llm.LlmToolDefinition;
+import org.pipelineframework.connector.llm.LlmTurnRequest;
+import org.pipelineframework.connector.llm.StructuredOutputSchemaMode;
 
 class LangChain4jOpenAiCompatibleQueryConnectorTest {
     @Test
@@ -100,6 +106,44 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                     "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
                     Duration.ofSeconds(75), 0, true),
                 2)), models);
+    }
+
+    @Test
+    void preservesRequiredStructuredOutputOnTheOpenAiRequest() {
+        AtomicReference<ChatRequest> observed = new AtomicReference<>();
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                AuthenticatedOpenAiCompatibleConnection connection = new AuthenticatedOpenAiCompatibleConnection(
+                    ignored -> new ChatModel() {
+                        @Override
+                        public ChatResponse doChat(ChatRequest chatRequest) {
+                            observed.set(chatRequest);
+                            return ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
+                        }
+                    });
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector();
+        LlmDecisionClient client = connector.createClientResolver(
+            new LlmProviderConfiguration(
+                "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+            runtimeContext(Optional.of(resolver)))
+            .resolve(invocation("tenant-a")).toCompletableFuture().join();
+        String schema = """
+            {"type":"object","properties":{"answer":{"type":"string"}},
+             "required":["answer"],"additionalProperties":false}
+            """;
+
+        client.decide(new LlmTurnRequest("Answer once.", "{}", List.of(
+            new LlmToolDefinition("complete", "Complete", schema)), StructuredOutputSchemaMode.REQUIRED))
+            .toCompletableFuture().join();
+
+        assertEquals(ResponseFormatType.JSON, observed.get().responseFormat().type());
+        JsonRawSchema rawSchema = assertInstanceOf(
+            JsonRawSchema.class, observed.get().responseFormat().jsonSchema().rootElement());
+        assertEquals(schema, rawSchema.schema());
     }
 
     @Test

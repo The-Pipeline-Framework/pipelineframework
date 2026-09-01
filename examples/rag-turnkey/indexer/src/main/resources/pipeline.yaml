@@ -1,0 +1,66 @@
+version: 3
+appName: RAG Turnkey Indexer
+basePackage: org.pipelineframework.examples.rag.indexer
+transport: LOCAL
+platform: COMPUTE
+contract: { input: Document, output: IndexReceipt }
+
+connectors:
+  local-files: { provider: filesystem.objects, version: 1 }
+  embedder:
+    provider: embedding.query.ollama
+    version: 1
+    config: { model: nomic-embed-text, dimensions: 768 }
+  vectors:
+    provider: vector.store.pgvector
+    version: 1
+    config: { dimensions: 768 }
+
+sources:
+  document-inbox:
+    kind: object
+    provider: filesystem
+    binding: local-files
+    location: { root: ./inbox, prefix: "" }
+    filter: { include: ["*.txt"] }
+    poll: { enabled: true, interval: PT2S, batchSize: 25 }
+    identity: { fields: [provider, container, key, etag] }
+    payload: { mode: reference }
+
+input:
+  from: document-inbox
+  emits:
+    type: org.pipelineframework.examples.rag.indexer.domain.Document
+    typeName: Document
+    mapper: org.pipelineframework.examples.rag.indexer.DocumentObjectMapper
+
+types:
+  Document:
+    fields: [[sourceId, string], [content, payload_ref]]
+    mappings:
+      file:
+        type: org.pipelineframework.examples.rag.indexer.domain.MaterializedDocument
+        options: { fields: [sourceId, content], maxBytes: 1048576 }
+  ParsedDocument: { fields: [[sourceId, string], [text, string]] }
+  Chunk: { fields: [[sourceId, string], [chunkId, string], [content, string], [index, int32]] }
+  IndexReceipt: { fields: [[sourceId, string], [chunks, int32]] }
+
+steps:
+  - { name: Parse document, service: org.pipelineframework.examples.rag.indexer.ParseDocumentService, cardinality: ONE_TO_ONE, input: Document, output: ParsedDocument, java: { input: org.pipelineframework.examples.rag.indexer.domain.MaterializedDocument, output: org.pipelineframework.examples.rag.indexer.domain.ParsedDocument } }
+  - { name: Chunk document, service: org.pipelineframework.examples.rag.indexer.ChunkDocumentService, cardinality: ONE_TO_MANY, input: ParsedDocument, output: Chunk, java: { input: org.pipelineframework.examples.rag.indexer.domain.ParsedDocument, output: org.pipelineframework.examples.rag.indexer.domain.Chunk } }
+  - { name: Prepare embedding, service: org.pipelineframework.examples.rag.indexer.ChunkEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Chunk, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.rag.indexer.domain.Chunk, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
+  - { name: Embed chunk, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }
+  - { name: Prepare vector upsert, service: org.pipelineframework.examples.rag.indexer.VectorUpsertRequestService, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingResult>, output: <tpf.vector.VectorUpsertRequest>, java: { input: org.pipelineframework.connector.embedding.EmbeddingResult, output: org.pipelineframework.connector.vector.VectorUpsertRequest } }
+  - name: Upsert vector
+    kind: command
+    cardinality: ONE_TO_ONE
+    input: <tpf.vector.VectorUpsertRequest>
+    output: <tpf.vector.VectorUpsertResult>
+    using: vectors
+    operation: upsert
+    operationVersion: 1
+    commandIdGenerator: org.pipelineframework.examples.rag.indexer.VectorUpsertCommandIdGenerator
+    duplicatePolicy: RETURN_RECORDED
+    config: {}
+    java: { input: org.pipelineframework.connector.vector.VectorUpsertRequest, output: org.pipelineframework.connector.vector.VectorUpsertResult }
+  - { name: Build index receipt, service: org.pipelineframework.examples.rag.indexer.IndexReceiptService, cardinality: MANY_TO_ONE, input: <tpf.vector.VectorUpsertResult>, output: IndexReceipt, java: { input: org.pipelineframework.connector.vector.VectorUpsertResult, output: org.pipelineframework.examples.rag.indexer.domain.IndexReceipt } }

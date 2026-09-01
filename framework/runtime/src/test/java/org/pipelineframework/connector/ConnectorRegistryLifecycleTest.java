@@ -1,5 +1,9 @@
 package org.pipelineframework.connector;
 
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -9,10 +13,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConnectorRegistryLifecycleTest {
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void resetStarts() {
@@ -67,6 +75,30 @@ class ConnectorRegistryLifecycleTest {
         bindingsStopped.complete("stopped");
         stopped.toCompletableFuture().join();
         assertEquals(List.of("bindings", "catalog"), events);
+    }
+
+    @Test
+    void bindingDefinitionsLoadFromPackagedPipelineYaml() throws Exception {
+        Files.writeString(tempDir.resolve("pipeline.yaml"), """
+            connectors:
+              vectors:
+                provider: cdi.adapter
+                version: 1
+                config: { dimensions: 8 }
+            steps: []
+            """);
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { tempDir.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+
+            List<ConnectorBindingDefinition> definitions = ConnectorRegistryLifecycle.loadBindingDefinitions();
+
+            assertEquals(1, definitions.size());
+            assertEquals("vectors", definitions.get(0).name().value());
+            assertEquals(8, definitions.get(0).configuration().values().get("dimensions"));
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
     }
 
     public static final class TestProvider implements ConnectorProvider<Void> {

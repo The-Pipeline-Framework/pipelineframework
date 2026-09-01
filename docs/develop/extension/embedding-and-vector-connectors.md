@@ -1,5 +1,7 @@
 # Embedding and vector connectors
 
+For a production-oriented local topology, `examples/rag-turnkey` provides separate queue-async INDEXER and synchronous REST QUERY applications sharing only Ollama and pgvector. Separate applications allow independent scaling, release cadence, failure domains, admission, retry policy, and latency objectives. Sharing a vector table does not share an execution lifecycle, and checkpoint handoff is not appropriate because a later user question is not the next stage of an indexing execution. `rag-composition-proof` remains the deterministic offline framework fixture.
+
 TPF composes retrieval-augmented generation from existing step semantics. Authored services transform and fan out data, an embedding `Query` observes a model, a vector `Command` records an indexing effect, a vector `Query` observes retrieval, and the existing one-turn LLM `Query` produces the answer. There is no RAG runtime or retriever step kind.
 
 ## Portable contracts
@@ -34,7 +36,7 @@ Its version 1 `embed` operation is a cacheable, unary `Query`. `itemId` and `tex
 - `VectorMatch(itemId, content, float32 score)`
 - `VectorSearchResult(queryId, queryText, repeated VectorMatch matches)`
 
-Its version 1 `upsert` operation is a `Command`; its version 1 cacheable `search` operation is a `Query`. Vectors must be non-empty and finite, and `limit` must be positive. Search returns at most `limit` matches in descending score order, with ascending `itemId` as the tie-breaker. No matches is a successful result with an empty list. Scores only order one response; they are not portable measurements across models or providers.
+Its version 1 `upsert` operation is a `Command`; its version 1 live-only `search` operation is a `Query`. Search observations remain capturable within an execution, but cross-execution cache modes cannot serve results that may have become stale after an upsert. Vectors must be non-empty and finite, and `limit` must be positive. Search returns at most `limit` matches in descending score order, with ascending `itemId` as the tie-breaker. No matches is a successful result with an empty list. Scores only order one response; they are not portable measurements across models or providers.
 
 The contracts deliberately omit namespaces, collections, filters, metadata predicates, sparse or hybrid search, reranking, and metric selection.
 

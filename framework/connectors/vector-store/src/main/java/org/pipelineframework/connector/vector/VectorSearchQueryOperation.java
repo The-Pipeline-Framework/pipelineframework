@@ -14,6 +14,6 @@ public interface VectorSearchQueryOperation
 
     @Override
     default QueryCapabilities capabilities() {
-        return QueryCapabilities.cacheable();
+        return QueryCapabilities.conservative();
     }
 }

@@ -1,5 +1,7 @@
 # RAG composition proof
 
+> This is a deterministic framework fixture, not the recommended deployment topology. For independently deployable indexing and interactive-query applications backed by Ollama and pgvector, see [`../rag-turnkey`](../rag-turnkey/README.md).
+
 This offline v3 example proves that modern RAG is ordinary TPF composition:
 
 ```text

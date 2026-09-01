@@ -69,6 +69,7 @@
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.75.0</grpc.version>
         <langchain4j.version>1.19.0</langchain4j.version>
+        <quarkus-langchain4j.version>1.13.1</quarkus-langchain4j.version>
         <google.gmail.api.version>v1-rev20260727-2.0.0</google.gmail.api.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>

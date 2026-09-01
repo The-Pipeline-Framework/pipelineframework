@@ -211,6 +211,43 @@ class FileRepresentationRuntimeTest {
     }
 
     @Test
+    void activatesConnectorOwnedInputBindingBeforeMaterialization() throws Exception {
+        Path inputRoot = Files.createTempDirectory("file-representation-lazy-input-");
+        try {
+            Files.writeString(inputRoot.resolve("document.txt"), "portable");
+            PipelineObjectSourceConfig source = new PipelineObjectSourceConfig(
+                "documents", "object", "filesystem", Optional.of("documents"), Map.of("root", inputRoot.toString()),
+                null, null, null, PipelineObjectPayloadConfig.reference());
+            FilesystemObjectSourceProvider sourceProvider = new FilesystemObjectSourceProvider();
+            PayloadReference raw = sourceProvider.list(source, 10).getFirst().contentRef();
+            FilesystemObjectConnector connector = new FilesystemObjectConnector();
+            ConnectorBindingRegistry bindings = ConnectorBindingRegistry.fromProviders(
+                List.of(new ConnectorBindingDefinition(
+                    ConnectorBindingName.of("documents"), connector.id(), 1,
+                    new ConnectorConfigurationDocument(Map.of()))),
+                List.of(connector));
+            PayloadReference owned = bindings.ownPayloadReference(
+                ConnectorBindingName.of("documents"), sourceProvider.id(), sourceProvider.majorVersion(), raw);
+            FileRepresentationRuntime runtime = new FileRepresentationRuntime(
+                bindings, ConnectorRuntimeContext.empty());
+
+            String materialized = runtime.withMaterialized(Map.of("content", owned), 1024,
+                paths -> Uni.createFrom().item(() -> {
+                    try {
+                        return Files.readString(paths.get("content"));
+                    } catch (java.io.IOException failure) {
+                        throw new IllegalStateException(failure);
+                    }
+                })).await().indefinitely();
+
+            assertEquals("portable", materialized);
+            bindings.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
+        } finally {
+            deleteTree(inputRoot);
+        }
+    }
+
+    @Test
     void composesTheExistingFilesystemConnectorThroughPortableReferences() throws Exception {
         Path inputRoot = Files.createTempDirectory("file-representation-input-");
         Path outputRoot = Files.createTempDirectory("file-representation-output-");

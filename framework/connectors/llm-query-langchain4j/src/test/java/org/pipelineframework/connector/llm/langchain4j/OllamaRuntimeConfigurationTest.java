@@ -16,9 +16,11 @@ class OllamaRuntimeConfigurationTest {
     @Test
     void bindsConfiguredRuntimeControls() {
         OllamaRuntimeConfiguration configuration = configuration(Map.of(
+            "pipeline.llm.langchain4j.ollama.base-url", "http://ollama.internal:11434",
             "pipeline.llm.langchain4j.ollama.request-timeout", "PT1M30S",
             "pipeline.llm.langchain4j.ollama.thinking", "false"));
 
+        assertEquals("http://ollama.internal:11434", configuration.baseUrl());
         assertEquals(Duration.ofSeconds(90), configuration.requestTimeout());
         assertFalse(configuration.thinking());
     }
@@ -27,6 +29,7 @@ class OllamaRuntimeConfigurationTest {
     void retainsRuntimeControlDefaults() {
         OllamaRuntimeConfiguration configuration = configuration(Map.of());
 
+        assertEquals("http://localhost:11434", configuration.baseUrl());
         assertEquals(Duration.ofSeconds(30), configuration.requestTimeout());
         assertTrue(configuration.thinking());
     }
