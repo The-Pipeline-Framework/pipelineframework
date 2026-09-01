@@ -14,15 +14,20 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonRawSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectionRef;
 import org.pipelineframework.connector.ConnectionResolutionException;
@@ -34,6 +39,7 @@ import org.pipelineframework.connector.ResolvedConnection;
 import org.pipelineframework.connector.llm.LlmDecisionClient;
 import org.pipelineframework.connector.llm.LlmDecisionClientResolver;
 import org.pipelineframework.connector.llm.LlmProviderConfiguration;
+import org.pipelineframework.connector.llm.LlmProviderFailureException;
 import org.pipelineframework.connector.llm.LlmToolDefinition;
 import org.pipelineframework.connector.llm.LlmTurnRequest;
 import org.pipelineframework.connector.llm.StructuredOutputSchemaMode;
@@ -51,7 +57,14 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
     @Test
     void rejectsNonPositiveRequestTimeouts() {
         assertThrows(IllegalArgumentException.class,
-            () -> new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ZERO));
+            () -> new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ZERO, "blocking"));
+    }
+
+    @Test
+    void rejectsUnknownClientImplementations() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(
+                Duration.ofSeconds(60), "unknown"));
     }
 
     @Test
@@ -73,7 +86,8 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
             }
         };
         var connector = new LangChain4jOpenAiCompatibleQueryConnector(
-            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75)));
+            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75), "blocking"),
+            OpenAiCompatibleClientManager.defaults());
         LlmProviderConfiguration configuration = new LlmProviderConfiguration(
             "google/gemini-3.1-flash-lite",
             Optional.of("https://openrouter.ai/api/v1"),
@@ -106,6 +120,142 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
                     "https://openrouter.ai/api/v1", "google/gemini-3.1-flash-lite",
                     Duration.ofSeconds(75), 0, true),
                 2)), models);
+    }
+
+    @Test
+    void selectsTheReactiveImplementationWithoutChangingProviderIdentity() {
+        List<ConnectionResolutionRequest<?>> requests = new ArrayList<>();
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                requests.add(request);
+                AuthenticatedOpenAiCompatibleReactiveConnection connection =
+                    new AuthenticatedOpenAiCompatibleReactiveConnection(ignored -> streamingModel());
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector(
+            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75), "reactive"),
+            OpenAiCompatibleClientManager.defaults());
+
+        LlmDecisionClient client = connector.createClientResolver(
+            new LlmProviderConfiguration(
+                "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+            runtimeContext(Optional.of(resolver)))
+            .resolve(invocation("tenant-a")).toCompletableFuture().join();
+
+        assertEquals("llm.query.openai.compatible", connector.id().value());
+        assertInstanceOf(LangChain4jOllamaQueryConnector.LangChain4jDecisionClient.class, client);
+        assertEquals(AuthenticatedOpenAiCompatibleReactiveConnection.class, requests.getFirst().connectionType());
+    }
+
+    @Test
+    void usesTheQuarkusOpenAiStreamingModelBuilder() {
+        assertTrue(OpenAiStreamingChatModel.builder().getClass().getName()
+            .startsWith("io.quarkiverse.langchain4j.openai."));
+    }
+
+    @Test
+    void classifiesReactiveProviderFailuresWithoutExposingProviderBodies() {
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                AuthenticatedOpenAiCompatibleReactiveConnection connection =
+                    new AuthenticatedOpenAiCompatibleReactiveConnection(ignored -> new StreamingChatModel() {
+                        @Override
+                        public void doChat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
+                            handler.onError(new HttpException(402, "credit-body-must-not-leak"));
+                        }
+                    });
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
+        var connector = new LangChain4jOpenAiCompatibleQueryConnector(
+            new LangChain4jOpenAiCompatibleQueryConnector.RuntimeSettings(Duration.ofSeconds(75), "reactive"),
+            OpenAiCompatibleClientManager.defaults());
+        LlmDecisionClient client = connector.createClientResolver(
+            new LlmProviderConfiguration(
+                "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+            runtimeContext(Optional.of(resolver)))
+            .resolve(invocation("tenant-a")).toCompletableFuture().join();
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> client.decide(new LlmTurnRequest(
+            "Answer once.", "{}", List.of(new LlmToolDefinition("complete", "Complete", "{}")),
+            StructuredOutputSchemaMode.REQUIRED)).toCompletableFuture().join());
+
+        LlmProviderFailureException classified = assertInstanceOf(
+            LlmProviderFailureException.class, failure.getCause());
+        assertEquals(LlmProviderFailureException.Kind.TERMINAL, classified.kind());
+        assertEquals("llm-provider-quota-exhausted", classified.outcomeCode());
+        assertTrue(!classified.getMessage().contains("credit-body-must-not-leak"));
+    }
+
+    @Test
+    void classifiesBlockingProviderFailuresWithoutExposingProviderBodies() {
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                AuthenticatedOpenAiCompatibleConnection connection =
+                    new AuthenticatedOpenAiCompatibleConnection(ignored -> new ChatModel() {
+                        @Override
+                        public ChatResponse doChat(ChatRequest chatRequest) {
+                            throw new HttpException(429, "rate-limit-body-must-not-leak");
+                        }
+                    });
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
+        LlmDecisionClient client = new LangChain4jOpenAiCompatibleQueryConnector()
+            .createClientResolver(
+                new LlmProviderConfiguration(
+                    "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+                runtimeContext(Optional.of(resolver)))
+            .resolve(invocation("tenant-a")).toCompletableFuture().join();
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> client.decide(new LlmTurnRequest(
+            "Answer once.", "{}", List.of(new LlmToolDefinition("complete", "Complete", "{}")),
+            StructuredOutputSchemaMode.REQUIRED)).toCompletableFuture().join());
+
+        LlmProviderFailureException classified = assertInstanceOf(
+            LlmProviderFailureException.class, failure.getCause());
+        assertEquals(LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE, classified.kind());
+        assertEquals("llm-provider-rate-limited", classified.outcomeCode());
+        assertTrue(!classified.getMessage().contains("rate-limit-body-must-not-leak"));
+    }
+
+    @Test
+    void blockingExecutorRejectionSettlesTheDecisionStage() {
+        ConnectionResolver resolver = new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                AuthenticatedOpenAiCompatibleConnection connection =
+                    new AuthenticatedOpenAiCompatibleConnection(ignored -> model());
+                return CompletableFuture.completedStage(request.connectionType().cast(connection));
+            }
+        };
+        ConnectorRuntimeContext rejectingContext = ConnectorRuntimeContext.of(
+            "test",
+            ignored -> {
+                throw new RejectedExecutionException("executor detail must not leak");
+            },
+            Clock.systemUTC(),
+            Optional.of(resolver));
+        LlmDecisionClient client = new LangChain4jOpenAiCompatibleQueryConnector()
+            .createClientResolver(
+                new LlmProviderConfiguration(
+                    "provider-model", Optional.empty(), Optional.of(new ConnectionRef("hosted-llm.primary"))),
+                rejectingContext)
+            .resolve(invocation("tenant-a")).toCompletableFuture().join();
+
+        CompletionStage<?> decision = client.decide(new LlmTurnRequest(
+            "Answer once.", "{}", List.of(new LlmToolDefinition("complete", "Complete", "{}")),
+            StructuredOutputSchemaMode.REQUIRED));
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> decision.toCompletableFuture().join());
+
+        LlmProviderFailureException classified = assertInstanceOf(
+            LlmProviderFailureException.class, failure.getCause());
+        assertEquals("llm-provider-failed", classified.outcomeCode());
+        assertTrue(!classified.getMessage().contains("executor detail must not leak"));
     }
 
     @Test
@@ -211,6 +361,15 @@ class LangChain4jOpenAiCompatibleQueryConnectorTest {
             @Override
             public ChatResponse doChat(ChatRequest request) {
                 return ChatResponse.builder().aiMessage(AiMessage.from("{}")).build();
+            }
+        };
+    }
+
+    private static StreamingChatModel streamingModel() {
+        return new StreamingChatModel() {
+            @Override
+            public void doChat(ChatRequest request, StreamingChatResponseHandler handler) {
+                handler.onCompleteResponse(ChatResponse.builder().aiMessage(AiMessage.from("{}")).build());
             }
         };
     }

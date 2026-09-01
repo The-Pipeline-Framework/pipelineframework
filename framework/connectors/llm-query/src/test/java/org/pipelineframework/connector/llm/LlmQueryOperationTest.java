@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.connector.ConnectionResolutionException;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorConfigurationBinder;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
@@ -102,6 +103,37 @@ class LlmQueryOperationTest {
 
         assertEquals("llm-query-failed", assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void exposesSafeConnectionFailureCategoryWithoutItsMessage() {
+        LlmQueryOperation operation = new LlmQueryOperation(ignored -> CompletableFuture.failedStage(
+            new ConnectionResolutionException(
+                ConnectionResolutionException.Kind.AUTHENTICATION_REQUIRED,
+                "openrouter-secret-must-not-leak")));
+
+        QueryOutcome<?> outcome = operation.query(invocation()).toCompletableFuture().join();
+
+        QueryOutcome.AuthenticationRequired<?> failure =
+            assertInstanceOf(QueryOutcome.AuthenticationRequired.class, outcome);
+        assertEquals("llm-connection-authentication-required", failure.code());
+        assertFalse(failure.toString().contains("openrouter-secret-must-not-leak"));
+    }
+
+    @Test
+    void preservesSafeProviderFailureSemantics() {
+        LlmQueryOperation operation = operation(ignored -> CompletableFuture.failedStage(
+            new LlmProviderFailureException(
+                LlmProviderFailureException.Kind.TEMPORARILY_UNAVAILABLE,
+                "llm-provider-timeout",
+                new IllegalStateException("provider-body-must-not-leak"))));
+
+        QueryOutcome<?> outcome = operation.query(invocation()).toCompletableFuture().join();
+
+        QueryOutcome.TemporarilyUnavailable<?> failure =
+            assertInstanceOf(QueryOutcome.TemporarilyUnavailable.class, outcome);
+        assertEquals("llm-provider-timeout", failure.code());
+        assertFalse(failure.toString().contains("provider-body-must-not-leak"));
     }
 
     @Test

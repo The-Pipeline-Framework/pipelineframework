@@ -53,8 +53,13 @@ scope as a connector-local constant; TPF adds no portable authentication or scop
 
 Provider `llm.query.openai.compatible` is the second proof. Its provider configuration contains a
 model, optional base URL, and logical `ConnectionRef`; it contains no API key or secret-store
-selector. The host returns an `AuthenticatedOpenAiCompatibleConnection` whose factory creates an
-authenticated LangChain4j `ChatModel`. Resolution occurs for every live invocation so tenant
+selector. One connector-local client manager selects either the blocking or reactive implementation
+from runtime configuration without changing the provider identity or pipeline contract. The selected
+implementation asks the host for an `AuthenticatedOpenAiCompatibleConnection` containing a
+LangChain4j `ChatModel`, or an `AuthenticatedOpenAiCompatibleReactiveConnection` containing a
+`StreamingChatModel`. Both implementations complete the same asynchronous decision contract;
+the blocking implementation offloads its SDK call while the reactive implementation consumes the
+provider callback directly. Resolution occurs for every live invocation so tenant
 selection and credential rotation remain host-owned, while captured replay performs no resolution.
 The factory must preserve the connector-supplied non-secret model settings, including strict JSON
 Schema, so moving credential attachment to the host does not weaken required structured output.
@@ -100,7 +105,9 @@ authority problem of caller-controlled destinations.
 - Resolver implementations must select connected access from deployment configuration and
   invocation context, especially `tenantId`, never from ordinary pipeline payload fields.
 - Resolver ambiguity and missing tenant context fail without exposing credentials in payloads,
-  durable records, telemetry, or error codes.
+  durable records, telemetry, or error codes. Resolution and provider failures retain only bounded,
+  framework-owned outcome categories; exception messages and provider response bodies are never
+  copied into Query outcomes.
 - Gmail and OpenAI-compatible LLM connectors contain no authorization-code flow, callback, client
   secret, token store, or refresh-token code. Neither receives portable credential material.
 - Application developers remain responsible for OAuth client registration, consent, scopes,
