@@ -31,6 +31,7 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
+import org.pipelineframework.blocking.BlockingExecutions;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ParallelismHints;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -101,7 +102,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         try {
             boolean useVertx = shouldUseVertxContext();
             persistUni = !useVertx
-                ? persistenceManager.persist(representation)
+                ? persistOnBlockingContext(representation)
                 : (hasManagedReactiveContext()
                     ? persistenceManager.persist(representation)
                     : persistOnVertxContext(representation));
@@ -116,6 +117,12 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
             .onFailure().transform(failure -> isTransientDbError(failure)
                 ? failure
                 : new NonRetryableException("Non-transient persistence error", failure));
+    }
+
+    /** Invoke blocking persistence providers away from a caller's Vert.x event-loop context. */
+    private <R> Uni<R> persistOnBlockingContext(R representation) {
+        return BlockingExecutions.supply(this, () -> persistenceManager.persist(representation))
+            .chain(operation -> operation);
     }
 
     /**

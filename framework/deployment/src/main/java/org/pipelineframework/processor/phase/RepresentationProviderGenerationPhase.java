@@ -7,6 +7,8 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
+import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.representation.ProviderArtifactWriter;
 import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
 import org.pipelineframework.representation.spi.ArtifactDescription;
@@ -51,9 +53,14 @@ public final class RepresentationProviderGenerationPhase implements PipelineComp
         }
     }
 
-    private static void replaceServiceWithFacade(PipelineCompilationContext ctx, ResolvedProviderBoundary boundary) {
+    static void replaceServiceWithFacade(PipelineCompilationContext ctx, ResolvedProviderBoundary boundary) {
         String serviceType = boundary.boundary().serviceTypeName();
         ClassName facade = ClassName.bestGuess(boundary.claim().generatedFacadeTypeName());
+        var contract = boundary.claim().stepContract().orElseThrow(() -> new IllegalStateException(
+            "Representation provider '" + boundary.claim().providerKey() + "' claimed boundary '"
+                + boundary.boundary().stepName() + "' without a generated facade contract."));
+        ServiceApiKind facadeApiKind = ServiceApiKind.valueOf(contract.executionStyle().name());
+        StreamingShape facadeStreamingShape = StreamingShape.valueOf(contract.cardinality());
         boolean replaced = ctx.getStepModels().stream()
             .anyMatch(model -> serviceType.equals(model.serviceClassName().canonicalName()));
         if (!replaced) {
@@ -61,7 +68,7 @@ public final class RepresentationProviderGenerationPhase implements PipelineComp
         }
         List<PipelineStepModel> updated = ctx.getStepModels().stream()
             .map(model -> serviceType.equals(model.serviceClassName().canonicalName())
-                ? model.withServiceClassName(facade)
+                ? model.withProviderFacade(facade, facadeApiKind, facadeStreamingShape)
                 : model)
             .toList();
         ctx.setStepModels(updated);

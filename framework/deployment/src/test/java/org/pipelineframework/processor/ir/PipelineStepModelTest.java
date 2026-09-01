@@ -321,6 +321,34 @@ class PipelineStepModelTest {
     }
 
     @Test
+    void providerFacadeReplacesTheAuthoredServiceApiContract() {
+        PipelineStepModel authored = new PipelineStepModel.Builder()
+                .serviceName("PrepareInvoice")
+                .generatedName("PrepareInvoice")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "PrepareInvoiceStep"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.BLOCKING)
+                .build();
+
+        PipelineStepModel facade = authored.withProviderFacade(
+            ClassName.get("com.example", "PrepareInvoiceStepPipelineFacade"),
+            ServiceApiKind.REACTIVE,
+            StreamingShape.UNARY_UNARY);
+
+        assertEquals(ClassName.get("com.example", "PrepareInvoiceStepPipelineFacade"),
+            facade.serviceClassName());
+        assertEquals(ServiceApiKind.REACTIVE, facade.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, facade.reactiveReturnKind());
+        assertEquals(StreamingShape.UNARY_UNARY, facade.streamingShape());
+    }
+
+    @Test
     void builderCanSetBlockingIteratorServiceApiKind() {
         PipelineStepModel model = new PipelineStepModel.Builder()
                 .serviceName("TestService")
