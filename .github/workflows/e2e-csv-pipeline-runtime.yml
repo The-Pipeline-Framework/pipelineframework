@@ -18,22 +18,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches:
-      - main
-    paths:
-      - 'framework/**'
-      - 'examples/csv-payments/**'
-      - 'plugins/**'
-      - 'connectors/**'
-      - 'pom.xml'
-      - 'mvnw'
-      - '.mvn/**'
-      - 'scripts/ci/**'
-      - '.github/actions/setup-testcontainers/**'
-      - '.github/workflows/e2e-csv-pipeline-runtime.yml'
-  workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-pipeline-runtime
   cancel-in-progress: true
@@ -103,7 +87,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
-            -am \
             -Dcsv.runtime.layout=pipeline-runtime \
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
@@ -198,7 +181,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
-            -am \
             -Dcsv.runtime.layout=pipeline-runtime \
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \

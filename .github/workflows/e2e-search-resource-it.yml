@@ -13,22 +13,6 @@ on:
         required: false
         default: true
         type: boolean
-  push:
-    branches:
-      - main
-    paths:
-      - 'framework/**'
-      - 'examples/search/**'
-      - 'plugins/**'
-      - 'connectors/**'
-      - 'pom.xml'
-      - 'mvnw'
-      - '.mvn/**'
-      - 'scripts/ci/**'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/e2e-search-resource-it.yml'
-  workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-search-resource-it
   cancel-in-progress: true

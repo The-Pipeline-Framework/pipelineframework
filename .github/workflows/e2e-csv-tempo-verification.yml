@@ -13,22 +13,6 @@ on:
         required: false
         default: true
         type: boolean
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/csv-payments/**"
-      - "plugins/**"
-      - "connectors/**"
-      - "pom.xml"
-      - "mvnw"
-      - ".mvn/**"
-      - "scripts/ci/**"
-      - ".github/actions/setup-testcontainers/**"
-      - ".github/workflows/e2e-csv-tempo-verification.yml"
-  workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-tempo-verification
   cancel-in-progress: true
