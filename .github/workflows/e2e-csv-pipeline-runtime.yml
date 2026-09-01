@@ -103,7 +103,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
-            -am \
             -Dcsv.runtime.layout=pipeline-runtime \
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
@@ -198,7 +197,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
-            -am \
             -Dcsv.runtime.layout=pipeline-runtime \
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
