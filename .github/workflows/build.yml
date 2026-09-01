@@ -29,6 +29,7 @@ env:
   MAVEN_ARGS_BOOTSTRAP: -B -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
+  QUARKUS_JIB_BASE_JVM_IMAGE: "registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24@sha256:41cfee8b4373d0be1c6724ab80a9942e1e4d10bba62c5876455a8028a7a953a2"
   UNIT_TEST_PATTERN: "*,!*IT,!*ITCase,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
   # Dedicated Search E2E and resource IT workflows own the excluded Search classes below.
   GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!CsvPaymentsTempoVerificationEndToEndIT,!SearchPipelineEndToEndIT,!SearchReplayEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
@@ -56,6 +57,23 @@ jobs:
 
       - name: Install root POM, framework, and foundational plugins to local repository
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      # Populate the shared Jib cache before the PR E2E jobs fan out.
+      # Otherwise every runner can miss the same cache concurrently and pull
+      # the Red Hat base-image layers independently.
+      - name: Restore shared Jib cache
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Warm shared Jib base-image cache
+        run: |
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          read -r -a maven_args <<< "$local_maven_args"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
+            -pl payment-status-svc \
+            -am \
+            -DskipTests \
+            -Dquarkus.container-image.build=true \
+            package
 
       - name: Package framework artifacts
         run: |
