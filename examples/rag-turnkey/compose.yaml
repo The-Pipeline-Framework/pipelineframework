@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment: { POSTGRES_DB: rag, POSTGRES_USER: rag, POSTGRES_PASSWORD: rag }
+    ports: ["5433:5432"]
+    volumes:
+      - rag-postgres:/var/lib/postgresql/data
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/10-rag.sql:ro
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U rag -d rag"], interval: 2s, timeout: 3s, retries: 30 }
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11435:11434"]
+    volumes: ["rag-ollama:/root/.ollama"]
+volumes:
+  rag-postgres: {}
+  rag-ollama: {}

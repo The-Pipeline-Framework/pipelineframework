@@ -1,5 +1,7 @@
 # Embedding and vector connectors
 
+For a production-oriented local topology, `examples/rag-turnkey` provides separate queue-async INDEXER and synchronous REST QUERY applications sharing only Ollama and pgvector. Separate applications allow independent scaling, release cadence, failure domains, admission, retry policy, and latency objectives. Sharing a vector table does not share an execution lifecycle, and checkpoint handoff is not appropriate because a later user question is not the next stage of an indexing execution. `rag-composition-proof` remains the deterministic offline framework fixture.
+
 TPF composes retrieval-augmented generation from existing step semantics. Authored services transform and fan out data, an embedding `Query` observes a model, a vector `Command` records an indexing effect, a vector `Query` observes retrieval, and the existing one-turn LLM `Query` produces the answer. There is no RAG runtime or retriever step kind.
 
 ## Portable contracts

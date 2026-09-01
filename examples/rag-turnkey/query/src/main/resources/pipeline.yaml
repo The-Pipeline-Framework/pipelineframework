@@ -1,0 +1,65 @@
+version: 3
+appName: RAG Turnkey Query
+basePackage: org.pipelineframework.examples.rag.query
+transport: REST
+platform: COMPUTE
+contract: { input: Question, output: Answer }
+
+connectors:
+  embedder:
+    provider: embedding.query.ollama
+    version: 1
+    config: { model: nomic-embed-text, dimensions: 768 }
+  vectors:
+    provider: vector.store.pgvector
+    version: 1
+    config: { dimensions: 768 }
+  answer-model:
+    provider: llm.query
+    version: 1
+    config: { model: qwen3:8b, baseUrl: http://localhost:11435 }
+
+types:
+  Question: { fields: [[questionId, string], [text, string]] }
+  RetrievedChunk: { fields: [[sourceId, string], [chunkId, string], [excerpt, string], [score, float32]] }
+  RetrievedContext:
+    fields:
+      - [questionId, string]
+      - [question, string]
+      - { name: chunks, repeated: RetrievedChunk }
+  AnswerDraft:
+    fields:
+      - [text, string]
+      - { name: citedChunkIds, repeated: string }
+  AnswerCandidate:
+    fields:
+      - [questionId, string]
+      - [question, string]
+      - { name: chunks, repeated: RetrievedChunk }
+      - [draft, AnswerDraft]
+  Citation: { fields: [[sourceId, string], [chunkId, string], [excerpt, string]] }
+  Answer:
+    fields:
+      - [text, string]
+      - { name: citations, repeated: Citation }
+
+steps:
+  - { name: Prepare embedding, service: org.pipelineframework.examples.rag.query.QuestionEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Question, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.rag.query.domain.Question, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
+  - { name: Embed question, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }
+  - { name: Prepare vector search, service: org.pipelineframework.examples.rag.query.VectorSearchRequestService, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingResult>, output: <tpf.vector.VectorSearchRequest>, java: { input: org.pipelineframework.connector.embedding.EmbeddingResult, output: org.pipelineframework.connector.vector.VectorSearchRequest } }
+  - { name: Search vectors, kind: query, cardinality: ONE_TO_ONE, input: <tpf.vector.VectorSearchRequest>, output: <tpf.vector.VectorSearchResult>, using: vectors, operation: search, operationVersion: 1, capture: { keyFields: [queryId, queryText, values, limit] }, java: { input: org.pipelineframework.connector.vector.VectorSearchRequest, output: org.pipelineframework.connector.vector.VectorSearchResult } }
+  - { name: Build retrieved context, service: org.pipelineframework.examples.rag.query.RetrievedContextService, cardinality: ONE_TO_ONE, input: <tpf.vector.VectorSearchResult>, output: RetrievedContext, java: { input: org.pipelineframework.connector.vector.VectorSearchResult, output: org.pipelineframework.examples.rag.query.domain.RetrievedContext } }
+  - name: Draft answer
+    kind: query
+    cardinality: ONE_TO_ONE
+    input: RetrievedContext
+    output: AnswerCandidate
+    using: answer-model
+    operation: decide
+    operationVersion: 1
+    capture: { keyFields: [questionId, question, chunks] }
+    config:
+      instructions: Answer only from retrieved chunks. Return concise text and cite only supplied chunkId values.
+      completion: { field: draft, questionId: questionId, question: question, chunks: chunks }
+    java: { input: org.pipelineframework.examples.rag.query.domain.RetrievedContext, output: org.pipelineframework.examples.rag.query.domain.AnswerCandidate }
+  - { name: Validate citations, service: org.pipelineframework.examples.rag.query.ValidateCitationsService, cardinality: ONE_TO_ONE, input: AnswerCandidate, output: Answer, java: { input: org.pipelineframework.examples.rag.query.domain.AnswerCandidate, output: org.pipelineframework.examples.rag.query.domain.Answer } }

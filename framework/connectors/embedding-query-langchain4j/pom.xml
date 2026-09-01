@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>26.8.2-SNAPSHOT</version><relativePath>../../pom.xml</relativePath></parent>
+    <artifactId>embedding-query-langchain4j-connector</artifactId>
+    <name>The Pipeline Framework - LangChain4j Embedding Query Adapter</name>
+    <description>Production Ollama adapter for the portable embedding Query contract.</description>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j</artifactId><version>${langchain4j.version}</version></dependency>
+        <dependency><groupId>dev.langchain4j</groupId><artifactId>langchain4j-ollama</artifactId><version>${langchain4j.version}</version></dependency>
+        <dependency><groupId>io.smallrye.config</groupId><artifactId>smallrye-config-core</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId><version>${mockito.version}</version><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins>
+        <plugin><groupId>io.smallrye</groupId><artifactId>jandex-maven-plugin</artifactId></plugin>
+        <plugin><groupId>org.pipelineframework</groupId><artifactId>connector-maven-plugin</artifactId><version>${project.version}</version><executions><execution><goals><goal>generate-provider-artifacts</goal></goals></execution></executions></plugin>
+    </plugins></build>
+</project>

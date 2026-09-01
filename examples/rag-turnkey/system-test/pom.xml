@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey</artifactId><version>26.8.2-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <artifactId>rag-turnkey-system-test</artifactId>
+    <name>RAG Turnkey - Cross-Application System Test</name>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey-indexer</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey-query</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+    </dependencies>
+</project>

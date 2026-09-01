@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>26.8.2-SNAPSHOT</version><relativePath>../../pom.xml</relativePath></parent>
+    <artifactId>vector-store-pgvector-connector</artifactId>
+    <name>The Pipeline Framework - PostgreSQL pgvector Adapter</name>
+    <description>Production PostgreSQL/pgvector adapter for portable vector Command and Query contracts.</description>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>vector-store-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId></dependency>
+        <dependency><groupId>io.smallrye.config</groupId><artifactId>smallrye-config-core</artifactId></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId><version>${mockito.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-postgresql</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins>
+        <plugin><groupId>io.smallrye</groupId><artifactId>jandex-maven-plugin</artifactId></plugin>
+        <plugin><groupId>org.pipelineframework</groupId><artifactId>connector-maven-plugin</artifactId><version>${project.version}</version><executions><execution><goals><goal>generate-provider-artifacts</goal></goals></execution></executions></plugin>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId><version>3.5.1</version><executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions></plugin>
+    </plugins></build>
+</project>
