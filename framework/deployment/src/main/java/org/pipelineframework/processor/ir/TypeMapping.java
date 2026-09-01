@@ -5,13 +5,14 @@ import com.squareup.javapoet.TypeName;
 import java.util.Optional;
 
 /**
- * Represents a semantic directional type mapping derived from annotations. Contains semantic information from the @PipelineStep
- * annotation, including domain types and inferred mapper information.
+ * Represents one semantic directional type mapping in normalized compiler IR. It carries the actual Java representation,
+ * optional application mapper information, and the canonical v3 identity when normalization supplied one.
  *
  * @param domainType the domain type for this mapping
  * @param mapperType the inferred mapper type for this mapping when one has been resolved
  * @param hasMapper whether a mapper has been inferred for this mapping
  * @param entityType the entity type used for mapper inference (the domain type that the mapper operates on)
+ * @param canonicalTypeName normalized local canonical type name, when present
  */
 public record TypeMapping(
         TypeName domainType,

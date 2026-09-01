@@ -8,6 +8,7 @@ import javax.lang.model.element.Modifier;
 import com.squareup.javapoet.*;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Generates REST orchestrator resource based on pipeline configuration.
@@ -68,10 +69,11 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName awaitInteractionDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitInteractionDto");
         ClassName awaitDtoMapper = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitDtoMapper");
 
-        TransportBindingPair normalizedTransport = normalizedTransport(binding, ctx);
-        ClassName inputType = normalizedTransport.input().map(V3TransportTypeBinding::restDtoType)
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, binding.model(), PipelineTransport.REST);
+        ClassName inputType = normalizedTransport.input().map(CanonicalTransportTypeBinding::restDtoType)
             .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto"));
-        ClassName outputType = normalizedTransport.output().map(V3TransportTypeBinding::restDtoType)
+        ClassName outputType = normalizedTransport.output().map(CanonicalTransportTypeBinding::restDtoType)
             .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto"));
 
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
@@ -346,25 +348,4 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         }
     }
 
-    private TransportBindingPair normalizedTransport(
-        OrchestratorBinding binding,
-        GenerationContext context
-    ) throws IOException {
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(binding.model().inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(binding.model().outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding resolved : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                renderer.ensureRest(resolved);
-            }
-        }
-        return new TransportBindingPair(input, output);
-    }
-
-    private record TransportBindingPair(
-        Optional<V3TransportTypeBinding> input,
-        Optional<V3TransportTypeBinding> output
-    ) {
-    }
 }

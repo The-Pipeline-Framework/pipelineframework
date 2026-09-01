@@ -8,7 +8,7 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
 import org.pipelineframework.processor.ir.PipelineTransport;
 
 /** Compiler-owned binding from one normalized v3 record to its Java and transport representations. */
-record V3TransportTypeBinding(
+record CanonicalTransportTypeBinding(
     String canonicalName,
     PipelineTemplateTypeDefinition.RecordType definition,
     ClassName javaType,
@@ -18,7 +18,7 @@ record V3TransportTypeBinding(
     ClassName grpcMapperType,
     Optional<ProtocolTypeIdentity> contributedIdentity
 ) {
-    V3TransportTypeBinding {
+    CanonicalTransportTypeBinding {
         Objects.requireNonNull(canonicalName, "canonicalName must not be null");
         Objects.requireNonNull(definition, "definition must not be null");
         Objects.requireNonNull(javaType, "javaType must not be null");

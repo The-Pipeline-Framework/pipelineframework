@@ -31,6 +31,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Abstract base class for generating cloud function handler wrappers for orchestrator execution.
@@ -207,10 +208,11 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
         boolean streamingInput = binding.inputStreaming();
         boolean streamingOutput = binding.outputStreaming();
 
-        TransportBindingPair normalizedTransport = normalizedTransport(binding, ctx);
-        ClassName inputDto = normalizedTransport.input().map(V3TransportTypeBinding::restDtoType)
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, binding.model(), PipelineTransport.REST);
+        ClassName inputDto = normalizedTransport.input().map(CanonicalTransportTypeBinding::restDtoType)
             .orElseGet(() -> ClassName.get(basePackage + ".common.dto", binding.inputTypeName() + "Dto"));
-        ClassName outputDto = normalizedTransport.output().map(V3TransportTypeBinding::restDtoType)
+        ClassName outputDto = normalizedTransport.output().map(CanonicalTransportTypeBinding::restDtoType)
             .orElseGet(() -> ClassName.get(basePackage + ".common.dto", binding.outputTypeName() + "Dto"));
         TypeName inputEventType = streamingInput ? ParameterizedTypeName.get(MULTI, inputDto) : inputDto;
         TypeName handlerOutputType = streamingOutput ? ParameterizedTypeName.get(ClassName.get(List.class), outputDto) : outputDto;
@@ -247,28 +249,6 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
 
         JavaFile.builder(basePackage + ".orchestrator.service", handler.build()).build().writeTo(ctx.outputDir());
         renderAsyncHandlers(binding, ctx, basePackage, inputDto, outputDto, streamingInput, streamingOutput);
-    }
-
-    private TransportBindingPair normalizedTransport(
-        OrchestratorBinding binding,
-        GenerationContext context
-    ) throws IOException {
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(binding.model().inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(binding.model().outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding resolved : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                renderer.ensureRest(resolved);
-            }
-        }
-        return new TransportBindingPair(input, output);
-    }
-
-    private record TransportBindingPair(
-        Optional<V3TransportTypeBinding> input,
-        Optional<V3TransportTypeBinding> output
-    ) {
     }
 
     /**

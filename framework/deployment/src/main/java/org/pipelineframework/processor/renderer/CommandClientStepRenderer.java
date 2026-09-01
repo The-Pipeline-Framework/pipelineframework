@@ -47,7 +47,8 @@ public class CommandClientStepRenderer {
         PipelineTransport transportMode = configHints.transportMode();
         TypeName domainInputType = model.inboundDomainType();
         TypeName domainOutputType = model.outboundDomainType();
-        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx, transportMode);
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, model, transportMode);
         TypeName inputType = normalizedTransport.input().<TypeName>map(binding -> binding.transportType(transportMode))
             .orElseGet(() -> clientStepType(domainInputType, transportMode, configHints.basePackage()));
         TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(transportMode))
@@ -189,30 +190,6 @@ public class CommandClientStepRenderer {
         return body.build();
     }
 
-    private TransportBindingPair normalizedTransport(
-        PipelineStepModel model,
-        GenerationContext context,
-        PipelineTransport transport
-    ) throws IOException {
-        if (transport == PipelineTransport.LOCAL) {
-            return new TransportBindingPair(Optional.empty(), Optional.empty());
-        }
-        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
-        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
-        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
-        if (input.isPresent() || output.isPresent()) {
-            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
-            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
-                if (transport == PipelineTransport.REST) {
-                    renderer.ensureRest(binding);
-                } else {
-                    renderer.ensureGrpc(binding);
-                }
-            }
-        }
-        return new TransportBindingPair(input, output);
-    }
-
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
         if (ctx.transportMode() != null) {
             String basePackage = ctx.pipelineBasePackage() == null || ctx.pipelineBasePackage().isBlank()
@@ -302,9 +279,4 @@ public class CommandClientStepRenderer {
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
     }
 
-    private record TransportBindingPair(
-        Optional<V3TransportTypeBinding> input,
-        Optional<V3TransportTypeBinding> output
-    ) {
-    }
 }

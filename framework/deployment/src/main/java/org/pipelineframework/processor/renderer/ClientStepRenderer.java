@@ -85,7 +85,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding, messager);
         TypeName inputGrpcType = grpcTypes.grpcParameterType();
         TypeName outputGrpcType = grpcTypes.grpcReturnType();
-        V3TransportBoundaryResolver.RepresentationBoundary boundary = V3TransportBoundaryResolver.resolve(model, grpcTypes, ctx);
+        TransportBoundaryResolver.RepresentationBoundary boundary = TransportBoundaryResolver.resolve(model, grpcTypes, ctx);
         TypeName stepInputType = boundary.stepInputType();
         TypeName stepOutputType = boundary.stepOutputType();
 
@@ -268,7 +268,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportUnaryInvocation(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName,
@@ -284,7 +284,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportMultiInvocation(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName,
@@ -300,7 +300,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportUnaryFromStreamInvocation(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName
@@ -315,7 +315,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportMultiFromStreamInvocation(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         ClassName grpcClientTracing,
         String rpcServiceName,
         String rpcMethodName
@@ -330,7 +330,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportInput(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock input
     ) {
         return boundary.convertsAtBoundary()
@@ -338,14 +338,14 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
             : input;
     }
 
-    private static CodeBlock transportInputs(V3TransportBoundaryResolver.RepresentationBoundary boundary) {
+    private static CodeBlock transportInputs(TransportBoundaryResolver.RepresentationBoundary boundary) {
         return boundary.convertsAtBoundary()
             ? CodeBlock.of("inputs.onItem().transform(value -> $T.toProto(value))", boundary.inputAdapterOrThrow())
             : CodeBlock.of("inputs");
     }
 
     private static CodeBlock transportOutputUni(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock invocation
     ) {
         return boundary.convertsAtBoundary()
@@ -354,7 +354,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     private static CodeBlock transportOutputMulti(
-        V3TransportBoundaryResolver.RepresentationBoundary boundary,
+        TransportBoundaryResolver.RepresentationBoundary boundary,
         CodeBlock invocation
     ) {
         return boundary.convertsAtBoundary()

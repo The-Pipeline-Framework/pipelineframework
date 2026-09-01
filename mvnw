@@ -38,32 +38,6 @@ CYGWIN* | MINGW*)
   ;;
 esac
 
-# Testcontainers does not read Docker CLI contexts. When a desktop runtime such as
-# OrbStack is selected and DOCKER_HOST is otherwise unset, expose the active context
-# endpoint to Maven's JVM so ordinary verification commands can discover it.
-configure_testcontainers_docker_host() {
-  [ -z "${DOCKER_HOST-}" ] || return 0
-  command -v docker >/dev/null 2>&1 || return 0
-
-  docker_context="$(docker context show 2>/dev/null)" || return 0
-  [ -n "$docker_context" ] || return 0
-  docker_host="$(docker context inspect "$docker_context" --format '{{.Endpoints.docker.Host}}' 2>/dev/null)" || return 0
-  case "$docker_host" in
-  unix://* | tcp://*)
-    DOCKER_HOST="$docker_host"
-    export DOCKER_HOST
-    ;;
-  *) return 0 ;;
-  esac
-
-  if [ "$docker_context" = orbstack ] && [ -z "${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE-}" ]; then
-    TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-    export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE
-  fi
-}
-
-configure_testcontainers_docker_host
-
 # set JAVACMD and JAVACCMD
 set_java_home() {
   # For Cygwin and MinGW, ensure paths are in Unix format before anything is touched
@@ -130,6 +104,11 @@ trim() {
 
 scriptDir="$(dirname "$0")"
 scriptName="$(basename "$0")"
+
+# Testcontainers does not read Docker CLI contexts. Mirror the active context into
+# the standard Docker environment before Maven starts, including TCP TLS material.
+. "$scriptDir/.mvn/testcontainers-docker-context.sh"
+configure_testcontainers_docker_host
 
 # parse distributionUrl and optional distributionSha256Sum, requires .mvn/wrapper/maven-wrapper.properties
 while IFS="=" read -r key value; do

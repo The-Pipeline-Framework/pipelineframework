@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import com.squareup.javapoet.ClassName;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -12,21 +13,23 @@ import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 /** Resolves transport representations from the normalized v3 type graph rather than Java package conventions. */
-final class V3TransportTypeBindingResolver {
+final class CanonicalTransportBindingResolver {
     private final GenerationContext context;
     private final Optional<PipelineTemplateConfig> template;
     private final Optional<PipelineTemplateTypeModel> typeModel;
 
-    V3TransportTypeBindingResolver(GenerationContext context) {
+    CanonicalTransportBindingResolver(GenerationContext context) {
         this.context = context;
         this.template = loadTemplate(context);
         this.typeModel = context.canonicalTypeModel().or(() -> template.map(PipelineTemplateConfig::typeModel));
     }
 
-    Optional<V3TransportTypeBinding> resolve(TypeMapping mapping) {
+    Optional<CanonicalTransportTypeBinding> resolve(TypeMapping mapping) {
         if (mapping == null || !(mapping.domainType() instanceof ClassName javaType)) {
             return Optional.empty();
         }
@@ -53,7 +56,7 @@ final class V3TransportTypeBindingResolver {
         }
         String suffix = shortHash(javaType.canonicalName());
         String mapperBase = canonicalName + "_" + suffix;
-        return Optional.of(new V3TransportTypeBinding(
+        return Optional.of(new CanonicalTransportTypeBinding(
             canonicalName,
             record,
             javaType,
@@ -62,6 +65,40 @@ final class V3TransportTypeBindingResolver {
             ClassName.get(basePackage + ".grpc", "PipelineTypes", canonicalName),
             ClassName.get(basePackage + ".transport.generated", mapperBase + "GrpcMapper"),
             model.contributedTypeIdentity(canonicalName)));
+    }
+
+    static CanonicalTransportBindingPair resolveAndEnsure(
+        GenerationContext context,
+        PipelineStepModel model,
+        PipelineTransport transport
+    ) throws IOException {
+        if (transport == PipelineTransport.LOCAL) {
+            return CanonicalTransportBindingPair.empty();
+        }
+        return new CanonicalTransportBindingResolver(context)
+            .resolveAndEnsure(model.inputMapping(), model.outputMapping(), transport);
+    }
+
+    private CanonicalTransportBindingPair resolveAndEnsure(
+        TypeMapping inputMapping,
+        TypeMapping outputMapping,
+        PipelineTransport transport
+    ) throws IOException {
+        Optional<CanonicalTransportTypeBinding> input = resolve(inputMapping);
+        Optional<CanonicalTransportTypeBinding> output = resolve(outputMapping);
+        CanonicalTransportBindingPair resolved = new CanonicalTransportBindingPair(input, output);
+        if (!resolved.any()) {
+            return resolved;
+        }
+        CanonicalRecordTransportRenderer renderer = new CanonicalRecordTransportRenderer(context, this);
+        for (CanonicalTransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
+            if (transport == PipelineTransport.REST) {
+                renderer.ensureRest(binding);
+            } else {
+                renderer.ensureGrpc(binding);
+            }
+        }
+        return resolved;
     }
 
     Optional<PipelineTemplateTypeModel> typeModel() {
