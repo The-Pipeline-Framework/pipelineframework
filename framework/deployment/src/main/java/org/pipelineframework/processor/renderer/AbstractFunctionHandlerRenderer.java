@@ -18,6 +18,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -204,12 +205,9 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
         String handlerClassName = baseName + getHandlerSuffix();
 
-        TypeName inputDto = model.inboundDomainType() != null
-            ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDto = model.outboundDomainType() != null
-            ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
+        RestTypes restTypes = restTypes(model, ctx);
+        TypeName inputDto = restTypes.input();
+        TypeName outputDto = restTypes.output();
         TypeName inputEventType = streamingInput
             ? ParameterizedTypeName.get(MULTI, inputDto)
             : inputDto;
@@ -554,6 +552,28 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         throw new IllegalStateException(
             "Unexpected domain type for DTO conversion: " + domainType + 
             " (class: " + domainType.getClass().getName() + ")");
+    }
+
+    private RestTypes restTypes(PipelineStepModel model, GenerationContext context) throws IOException {
+        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
+        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
+        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
+        if (input.isPresent() || output.isPresent()) {
+            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
+            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
+                renderer.ensureRest(binding);
+            }
+        }
+        TypeName inputDto = input.<TypeName>map(V3TransportTypeBinding::restDtoType)
+            .orElseGet(() -> model.inboundDomainType() != null
+                ? convertDomainToDtoType(model.inboundDomainType()) : ClassName.OBJECT);
+        TypeName outputDto = output.<TypeName>map(V3TransportTypeBinding::restDtoType)
+            .orElseGet(() -> model.outboundDomainType() != null
+                ? convertDomainToDtoType(model.outboundDomainType()) : ClassName.OBJECT);
+        return new RestTypes(inputDto, outputDto);
+    }
+
+    private record RestTypes(TypeName input, TypeName output) {
     }
 
     /**

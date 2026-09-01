@@ -14,6 +14,26 @@ For internal `service:` steps:
 
 This eliminates the need for manual configuration and ensures consistency across your pipeline.
 
+## Normalization before transport generation
+
+V3 normalization establishes one canonical type universe before any Java or transport renderer runs. Application-authored types and records contributed through `ProtocolTypeContributor` therefore follow the same generation path once they are reachable from a pipeline contract:
+
+```text
+authored or contributed type
+        ↓
+normalized canonical type
+        ├── Java record
+        ├── protobuf message
+        ├── REST DTO and typed mapper
+        └── FUNCTION and queue representations
+```
+
+Protocol contributors own semantic vocabulary only. They do not provide REST DTOs, protobuf adapters, transport hooks, or application mappers. The compiler generates those representations from the normalized field definition and binds them to the Java representation used by the step. Repeated fields remain ordered and duplicate-preserving through each supported representation.
+
+Generated metadata continues to name canonical types and contributed identities; generated DTO and mapper class names are implementation details. This follows [ADR-0002: Compiler-owned v3 type model](../../decisions/0002-compiler-owned-v3-type-model) and [ADR-0010: Generated boundaries and typed connectors](../../decisions/0010-generated-boundaries-and-connectors).
+
+The current transport-complete contributed slice covers records, including nested and repeated records. Wrappers, aliases, unions, and recursive union payloads require their corresponding normalized renderers before they can be used at every remote boundary.
+
 ## Annotation Processing Workflow
 
 ### Proto Generation (Pre-Processing)

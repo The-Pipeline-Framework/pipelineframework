@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -68,7 +69,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
          * @param ctx the GenerationContext providing deployment role, processing environment, and output configuration
          * @return a TypeSpec representing the generated REST resource class
          */
-    private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
+    private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) throws IOException {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         boolean cachePluginSideEffect = isCachePluginSideEffect(model);
@@ -107,13 +108,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
         resourceBuilder.addField(serviceField);
-        // For REST resources, derive DTO types from domain types.
-        TypeName inputDtoClassName = model.inboundDomainType() != null
+        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx);
+        // Legacy templates derive DTOs from Java package conventions; v3 uses the normalized type model.
+        TypeName inputDtoClassName = normalizedTransport.input().<TypeName>map(V3TransportTypeBinding::restDtoType).orElseGet(() -> model.inboundDomainType() != null
             ? convertDomainToDtoType(model.inboundDomainType())
-            : ClassName.OBJECT;
-        TypeName outputDtoClassName = model.outboundDomainType() != null
+            : ClassName.OBJECT);
+        TypeName outputDtoClassName = normalizedTransport.output().<TypeName>map(V3TransportTypeBinding::restDtoType).orElseGet(() -> model.outboundDomainType() != null
             ? convertDomainToDtoType(model.outboundDomainType())
-            : ClassName.OBJECT;
+            : ClassName.OBJECT);
 
         TypeName domainInputType = cacheSideEffect
             ? inputDtoClassName
@@ -126,22 +128,30 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         String inboundMapperFieldName = "inboundMapper";
         String outboundMapperFieldName = "outboundMapper";
         if (!cacheSideEffect) {
-            TypeName inboundMapperType = ParameterizedTypeName.get(
+            TypeName inboundMapperType = normalizedTransport.input().<TypeName>map(V3TransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainInputType,
                 inputDtoClassName
-            );
-            TypeName outboundMapperType = ParameterizedTypeName.get(
+            ));
+            TypeName outboundMapperType = normalizedTransport.output().<TypeName>map(V3TransportTypeBinding::restMapperType).orElseGet(() -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
                 domainOutputType,
                 outputDtoClassName
-            );
-            resourceBuilder.addField(FieldSpec.builder(inboundMapperType, inboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build());
-            resourceBuilder.addField(FieldSpec.builder(outboundMapperType, outboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build());
+            ));
+            FieldSpec.Builder inbound = FieldSpec.builder(inboundMapperType, inboundMapperFieldName);
+            FieldSpec.Builder outbound = FieldSpec.builder(outboundMapperType, outboundMapperFieldName);
+            if (normalizedTransport.input().isPresent()) {
+                inbound.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", inboundMapperType);
+            } else {
+                inbound.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build());
+            }
+            if (normalizedTransport.output().isPresent()) {
+                outbound.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", outboundMapperType);
+            } else {
+                outbound.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build());
+            }
+            resourceBuilder.addField(inbound.build());
+            resourceBuilder.addField(outbound.build());
         }
 
         ClassName adapterClass = resolveRestAdapterClass(model);
@@ -178,6 +188,28 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         resourceBuilder.addMethod(processMethod);
 
         return resourceBuilder.build();
+    }
+
+    private TransportBindingPair normalizedTransport(
+        PipelineStepModel model,
+        GenerationContext context
+    ) throws IOException {
+        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
+        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
+        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
+        if (input.isPresent() || output.isPresent()) {
+            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
+            for (V3TransportTypeBinding resolved : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
+                renderer.ensureRest(resolved);
+            }
+        }
+        return new TransportBindingPair(input, output);
+    }
+
+    private record TransportBindingPair(
+        Optional<V3TransportTypeBinding> input,
+        Optional<V3TransportTypeBinding> output
+    ) {
     }
 
     /**

@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -46,8 +47,11 @@ public class CommandClientStepRenderer {
         PipelineTransport transportMode = configHints.transportMode();
         TypeName domainInputType = model.inboundDomainType();
         TypeName domainOutputType = model.outboundDomainType();
-        TypeName inputType = clientStepType(domainInputType, transportMode, configHints.basePackage());
-        TypeName outputType = clientStepType(domainOutputType, transportMode, configHints.basePackage());
+        TransportBindingPair normalizedTransport = normalizedTransport(model, ctx, transportMode);
+        TypeName inputType = normalizedTransport.input().<TypeName>map(binding -> binding.transportType(transportMode))
+            .orElseGet(() -> clientStepType(domainInputType, transportMode, configHints.basePackage()));
+        TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(transportMode))
+            .orElseGet(() -> clientStepType(domainOutputType, transportMode, configHints.basePackage()));
         boolean transportMapped = transportMode != PipelineTransport.LOCAL;
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.command", "CommandStepSupport"), "support")
@@ -64,12 +68,24 @@ public class CommandClientStepRenderer {
         FieldSpec inputMapper = null;
         FieldSpec outputMapper = null;
         if (transportMapped) {
-            inputMapper = FieldSpec.builder(mapperType(domainInputType, configHints.basePackage()), "inputMapper")
-                .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
-                .build();
-            outputMapper = FieldSpec.builder(mapperType(domainOutputType, configHints.basePackage()), "outputMapper")
-                .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
-                .build();
+            TypeName inputMapperType = normalizedTransport.input().<TypeName>map(binding -> binding.mapperType(transportMode))
+                .orElseGet(() -> mapperType(domainInputType, configHints.basePackage()));
+            TypeName outputMapperType = normalizedTransport.output().<TypeName>map(binding -> binding.mapperType(transportMode))
+                .orElseGet(() -> mapperType(domainOutputType, configHints.basePackage()));
+            FieldSpec.Builder inputMapperBuilder = FieldSpec.builder(inputMapperType, "inputMapper");
+            FieldSpec.Builder outputMapperBuilder = FieldSpec.builder(outputMapperType, "outputMapper");
+            if (normalizedTransport.input().isPresent()) {
+                inputMapperBuilder.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", inputMapperType);
+            } else {
+                inputMapperBuilder.addAnnotation(ClassName.get("jakarta.inject", "Inject"));
+            }
+            if (normalizedTransport.output().isPresent()) {
+                outputMapperBuilder.addModifiers(Modifier.PRIVATE, Modifier.FINAL).initializer("new $T()", outputMapperType);
+            } else {
+                outputMapperBuilder.addAnnotation(ClassName.get("jakarta.inject", "Inject"));
+            }
+            inputMapper = inputMapperBuilder.build();
+            outputMapper = outputMapperBuilder.build();
         }
 
         TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(className)
@@ -117,7 +133,9 @@ public class CommandClientStepRenderer {
                     transportMode,
                     domainInputType,
                     domainOutputType,
-                    model.cacheKeyGenerator().canonicalName()))
+                    model.cacheKeyGenerator().canonicalName(),
+                    normalizedTransport.input().isPresent(),
+                    normalizedTransport.output().isPresent()))
                 .build())
             .build();
 
@@ -131,7 +149,9 @@ public class CommandClientStepRenderer {
         PipelineTransport transportMode,
         TypeName domainInputType,
         TypeName domainOutputType,
-        String commandIdGeneratorName
+        String commandIdGeneratorName,
+        boolean normalizedInput,
+        boolean normalizedOutput
     ) {
         com.squareup.javapoet.CodeBlock.Builder body = com.squareup.javapoet.CodeBlock.builder();
         if (transportMode == PipelineTransport.LOCAL) {
@@ -154,16 +174,43 @@ public class CommandClientStepRenderer {
                     commandIdGeneratorName);
             return body.build();
         }
-        body.addStatement("$T commandInput = inputMapper.fromGrpcFromDto(input)", domainInputType)
+        String fromGrpc = normalizedInput ? "fromGrpc" : "fromGrpcFromDto";
+        String toGrpc = normalizedOutput ? "toGrpc" : "toDtoToGrpc";
+        body.addStatement("$T commandInput = inputMapper.$L(input)", domainInputType, fromGrpc)
             .addStatement("return support.<$T, $T>execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, commandInput)\n"
-                    + "    .map(commandOutput -> outputMapper.toDtoToGrpc(commandOutput))",
+                    + "    .map(commandOutput -> outputMapper.$L(commandOutput))",
                 domainInputType,
                 domainOutputType,
                 model.serviceName(),
                 domainInputType.toString(),
                 domainOutputType.toString(),
-                commandIdGeneratorName);
+                commandIdGeneratorName,
+                toGrpc);
         return body.build();
+    }
+
+    private TransportBindingPair normalizedTransport(
+        PipelineStepModel model,
+        GenerationContext context,
+        PipelineTransport transport
+    ) throws IOException {
+        if (transport == PipelineTransport.LOCAL) {
+            return new TransportBindingPair(Optional.empty(), Optional.empty());
+        }
+        V3TransportTypeBindingResolver resolver = new V3TransportTypeBindingResolver(context);
+        Optional<V3TransportTypeBinding> input = resolver.resolve(model.inputMapping());
+        Optional<V3TransportTypeBinding> output = resolver.resolve(model.outputMapping());
+        if (input.isPresent() || output.isPresent()) {
+            V3TransportRecordRenderer renderer = new V3TransportRecordRenderer(context, resolver);
+            for (V3TransportTypeBinding binding : java.util.stream.Stream.concat(input.stream(), output.stream()).toList()) {
+                if (transport == PipelineTransport.REST) {
+                    renderer.ensureRest(binding);
+                } else {
+                    renderer.ensureGrpc(binding);
+                }
+            }
+        }
+        return new TransportBindingPair(input, output);
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
@@ -253,5 +300,11 @@ public class CommandClientStepRenderer {
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
+    }
+
+    private record TransportBindingPair(
+        Optional<V3TransportTypeBinding> input,
+        Optional<V3TransportTypeBinding> output
+    ) {
     }
 }

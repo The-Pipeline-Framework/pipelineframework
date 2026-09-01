@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
@@ -8,6 +9,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.PipelineTransport;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 
 /**
  * Context for code generation operations, containing processing environment and output directory information.
@@ -22,6 +24,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
  * @param pipelineBasePackage Gets the resolved pipeline base package when available.
  * @param stepOrder Gets the zero-based resolved step order when rendering an ordered pipeline step.
  * @param v3GeneratedDomainTypes Whether the current pipeline has generated v3 Java domain types available.
+ * @param canonicalTypeModel Gets the normalized v3 type model when the compilation phase already carries it.
  */
 public record GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
                                 Set<String> enabledAspects, ClassName cacheKeyGenerator,
@@ -29,12 +32,24 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
                                 PipelineTransport transportMode,
                                 String pipelineBasePackage,
                                 Integer stepOrder,
-                                boolean v3GeneratedDomainTypes) {
+                                boolean v3GeneratedDomainTypes,
+                                Optional<PipelineTemplateTypeModel> canonicalTypeModel) {
     /**
      * Creates a new GenerationContext instance.
      */
     public GenerationContext {
         enabledAspects = enabledAspects == null ? Set.of() : Set.copyOf(enabledAspects);
+        canonicalTypeModel = canonicalTypeModel == null ? Optional.empty() : canonicalTypeModel;
+    }
+
+    /** Backward-compatible constructor for generation call sites without the normalized v3 type model. */
+    public GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
+                             Set<String> enabledAspects, ClassName cacheKeyGenerator,
+                             DescriptorProtos.FileDescriptorSet descriptorSet,
+                             PipelineTransport transportMode, String pipelineBasePackage,
+                             Integer stepOrder, boolean v3GeneratedDomainTypes) {
+        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet,
+            transportMode, pipelineBasePackage, stepOrder, v3GeneratedDomainTypes, Optional.empty());
     }
 
     public GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
@@ -51,7 +66,8 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             transportMode,
             pipelineBasePackage,
             null,
-            false);
+            false,
+            Optional.empty());
     }
 
     public GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
@@ -69,7 +85,8 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             transportMode,
             pipelineBasePackage,
             stepOrder,
-            false);
+            false,
+            Optional.empty());
     }
 
     public GenerationContext(
@@ -79,6 +96,8 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             Set<String> enabledAspects,
             ClassName cacheKeyGenerator,
             DescriptorProtos.FileDescriptorSet descriptorSet) {
-        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet, null, null, null, false);
+        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet,
+            null, null, null, false, Optional.empty());
     }
+
 }

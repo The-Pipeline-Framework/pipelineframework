@@ -89,6 +89,7 @@
         <module>representation-provider-file</module>
         <module>deployment</module>
         <module>connectors</module>
+        <module>transport-completeness-tests</module>
         <module>plugins</module>
     </modules>
 
