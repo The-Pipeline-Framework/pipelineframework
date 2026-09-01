@@ -68,6 +68,20 @@ public record PipelineStepModel(
             remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition);
     }
 
+    /** Returns this model with the implementation contract exposed by a provider-generated facade. */
+    public PipelineStepModel withProviderFacade(
+            ClassName replacement,
+            ServiceApiKind facadeApiKind,
+            StreamingShape facadeStreamingShape) {
+        ReactiveReturnKind facadeReturnKind = facadeApiKind == ServiceApiKind.REACTIVE
+            ? ReactiveReturnKind.MUTINY_UNI
+            : reactiveReturnKind;
+        return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
+            facadeStreamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
+            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition);
+    }
+
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
          *
