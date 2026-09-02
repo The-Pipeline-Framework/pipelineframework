@@ -113,6 +113,38 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void preservesCommandReissueAuthorizationAcrossEnvelopeRoundTrip() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            0,
+            -1,
+            2,
+            ExecutionResultShape.SINGLE,
+            8L,
+            "command-reissue:exec-1:7",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)),
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            -1,
+            Optional.of("archive:payment-1"),
+            Optional.of("customer approved a second archive"));
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+        TransitionWorkerCommand decoded = envelope.toCommand(payloadCodec);
+
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, decoded.redriveIntent());
+        assertEquals(Optional.of("archive:payment-1"), decoded.redriveCommandId());
+        assertEquals(Optional.of("customer approved a second archive"), decoded.redriveReason());
+        assertEquals(0, decoded.currentStepIndex());
+    }
+
+    @Test
     void intentAwareWorkerConstructorCarriesExactRetryCommandIdentity() {
         TransitionWorkerCommand command = new TransitionWorkerCommand(
             "tenant-1",

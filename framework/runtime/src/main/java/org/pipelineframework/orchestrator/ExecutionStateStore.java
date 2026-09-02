@@ -410,6 +410,32 @@ public interface ExecutionStateStore {
     }
 
     /**
+     * Re-queues a terminal execution with exact targeted-command and audit metadata.
+     *
+     * <p>Custom stores retain replay/retry compatibility through the older overload, while
+     * intentional reissue fails closed until the store explicitly persists the authorization.</p>
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        Optional<String> targetCommandId,
+        Optional<String> reason,
+        String transitionKey,
+        long nowEpochMs) {
+        if (intent != ExecutionRedriveIntent.REISSUE_COMMAND
+            && Optional.ofNullable(targetCommandId).orElseGet(Optional::empty).isEmpty()
+            && Optional.ofNullable(reason).orElseGet(Optional::empty).isEmpty()) {
+            return redriveTerminalExecution(
+                tenantId, executionId, expectedVersion, allowFailed, intent, transitionKey, nowEpochMs);
+        }
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support durable Command reissue authorization"));
+    }
+
+    /**
      * Finds executions due for dispatch.
      *
      * @param nowEpochMs current timestamp

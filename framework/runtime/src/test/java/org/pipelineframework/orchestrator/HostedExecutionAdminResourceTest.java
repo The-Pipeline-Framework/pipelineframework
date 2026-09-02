@@ -171,6 +171,72 @@ class HostedExecutionAdminResourceTest {
     }
 
     @Test
+    void commandReissueDelegatesExactTargetAndReturnsAcceptedIntent() {
+        ExecutionRedriveResult result = new ExecutionRedriveResult(
+            TENANT_ID,
+            EXECUTION_ID,
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.QUEUED,
+            8L,
+            0,
+            3,
+            "pipeline-a",
+            "contract-a",
+            "release-a",
+            100L,
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            Optional.of("archive:payment-1"));
+        when(controlPlane.redriveExecution(
+                TENANT_ID,
+                EXECUTION_ID,
+                7L,
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                "archive:payment-1",
+                "customer approved"))
+            .thenReturn(Uni.createFrom().item(result));
+
+        Response response = resource.redrive(
+                TENANT_ID,
+                EXECUTION_ID,
+                AUTH,
+                new HostedExecutionRedriveRequest(
+                    7L,
+                    "customer approved",
+                    false,
+                    ExecutionRedriveIntent.REISSUE_COMMAND,
+                    "archive:payment-1"))
+            .await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+        ExecutionRedriveResult body = assertInstanceOf(ExecutionRedriveResult.class, response.getEntity());
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, body.intent());
+        assertEquals(Optional.of("archive:payment-1"), body.targetCommandId());
+        verify(controlPlane).redriveExecution(
+            TENANT_ID,
+            EXECUTION_ID,
+            7L,
+            false,
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            "archive:payment-1",
+            "customer approved");
+    }
+
+    @Test
+    void commandReissueRequestRejectsMissingOrCrossIntentFields() {
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionRedriveRequest(
+            null, "approved", false, ExecutionRedriveIntent.REISSUE_COMMAND, "archive:payment-1"));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionRedriveRequest(
+            7L, " ", false, ExecutionRedriveIntent.REISSUE_COMMAND, "archive:payment-1"));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionRedriveRequest(
+            7L, "approved", false, ExecutionRedriveIntent.REISSUE_COMMAND, null));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionRedriveRequest(
+            7L, "approved", true, ExecutionRedriveIntent.REISSUE_COMMAND, "archive:payment-1"));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionRedriveRequest(
+            7L, "operator", false, ExecutionRedriveIntent.REPLAY, "archive:payment-1"));
+    }
+
+    @Test
     void unsupportedDeliberateRetryStoreReturnsNotImplemented() {
         when(controlPlane.redriveExecution(
                 TENANT_ID,

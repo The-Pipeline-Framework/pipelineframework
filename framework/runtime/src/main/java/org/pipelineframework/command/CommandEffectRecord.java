@@ -90,26 +90,52 @@ public record CommandEffectRecord(
     }
 
     public CommandEffectRecord appendRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+        return appendAttempt(request, CommandAttemptAdmission.retry(), nowEpochMs);
+    }
+
+    public CommandEffectRecord appendAttempt(
+        CommandRequest<?> request,
+        CommandAttemptAdmission admission,
+        long nowEpochMs
+    ) {
         Objects.requireNonNull(request, "request must not be null");
-        if (status != CommandEffectStatus.FAILED_RETRYABLE) {
+        Objects.requireNonNull(admission, "attempt admission must not be null");
+        CommandEffectStatus requiredStatus = admission.purpose() == CommandAttemptPurpose.RETRY
+            ? CommandEffectStatus.FAILED_RETRYABLE
+            : CommandEffectStatus.SUCCEEDED;
+        if (status != requiredStatus) {
             throw new IllegalStateException(
-                "Command effect " + commandId + " is not retryable from state " + status);
+                "Command effect " + commandId + " cannot append " + admission.purpose()
+                    + " attempt from state " + status);
         }
         if (!commandId.equals(request.commandId())
             || !stepId.equals(request.descriptor().stepId())
             || !command.equals(request.descriptor().command())) {
             throw new IllegalArgumentException(
-                "Retry request does not match the recorded logical command effect " + commandId);
+                "Attempt request does not match the recorded logical command effect " + commandId);
+        }
+        if (admission.purpose() == CommandAttemptPurpose.RETRY
+            && !currentAttempt().occurrenceId().equals(request.occurrenceId())) {
+            throw new IllegalArgumentException(
+                "Retry request must retain occurrence " + currentAttempt().occurrenceId());
+        }
+        if (admission.purpose() == CommandAttemptPurpose.REISSUE
+            && currentAttempt().occurrenceId().equals(request.occurrenceId())) {
+            throw new IllegalArgumentException("Reissue must establish a new Command occurrence");
         }
         List<CommandEffectAttemptRecord> updatedAttempts = new ArrayList<>(attempts);
         updatedAttempts.add(new CommandEffectAttemptRecord(
             request.attemptId(),
+            request.occurrenceId(),
             currentAttempt().attemptNumber() + 1,
             request.executionContext().executionId(),
+            admission.purpose(),
             CommandEffectStatus.PENDING,
+            Optional.empty(),
             null,
             null,
             Optional.empty(),
+            admission.reason(),
             nowEpochMs,
             nowEpochMs));
         return copy(
@@ -126,7 +152,7 @@ public record CommandEffectRecord(
     public CommandEffectRecord succeeded(String attemptId, Object commandOutput, long nowEpochMs) {
         requireCurrentAttempt(attemptId, CommandEffectStatus.DISPATCHING);
         return copyWithCurrentAttempt(
-            currentAttempt().succeeded(null, nowEpochMs),
+            currentAttempt().succeeded(commandOutput, null, nowEpochMs),
             CommandEffectStatus.SUCCEEDED, commandOutput, null, null, Optional.empty(), nowEpochMs);
     }
 
@@ -139,7 +165,7 @@ public record CommandEffectRecord(
         requireCurrentAttempt(attemptId, CommandEffectStatus.DISPATCHING);
         CommandOutcomeSnapshot required = Objects.requireNonNull(snapshot, "command outcome snapshot must not be null");
         return copyWithCurrentAttempt(
-            currentAttempt().succeeded(required, nowEpochMs),
+            currentAttempt().succeeded(commandOutput, required, nowEpochMs),
             CommandEffectStatus.SUCCEEDED, commandOutput, null, null, Optional.of(required), nowEpochMs);
     }
 
@@ -240,12 +266,16 @@ public record CommandEffectRecord(
     ) {
         return new CommandEffectAttemptRecord(
             "legacy-" + Integer.toUnsignedString(commandId.hashCode(), 36),
+            commandId,
             1,
             executionId,
+            CommandAttemptPurpose.INITIAL,
             status,
+            Optional.empty(),
             errorClass,
             errorMessage,
             outcome,
+            Optional.empty(),
             createdAtEpochMs,
             updatedAtEpochMs);
     }

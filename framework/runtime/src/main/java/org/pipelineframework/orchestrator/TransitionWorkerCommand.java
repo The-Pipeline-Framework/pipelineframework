@@ -18,6 +18,7 @@ import java.util.Optional;
  * @param redriveIntent explicit terminal-redrive intent
  * @param redriveStepIndex failed Command step targeted by deliberate retry, or {@code -1}
  * @param redriveCommandId exact logical Command effect targeted by deliberate retry
+ * @param redriveReason audit reason for intentional Command reissue
  */
 public record TransitionWorkerCommand(
     String tenantId,
@@ -31,8 +32,27 @@ public record TransitionWorkerCommand(
     Object inputPayload,
     ExecutionRedriveIntent redriveIntent,
     int redriveStepIndex,
-    Optional<String> redriveCommandId
+    Optional<String> redriveCommandId,
+    Optional<String> redriveReason
 ) {
+    public TransitionWorkerCommand(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        int stopBeforeStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        Object inputPayload,
+        ExecutionRedriveIntent redriveIntent,
+        int redriveStepIndex,
+        Optional<String> redriveCommandId
+    ) {
+        this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
+            executionVersion, transitionKey, inputPayload, redriveIntent, redriveStepIndex,
+            redriveCommandId, Optional.empty());
+    }
     public TransitionWorkerCommand(
         String tenantId,
         String executionId,
@@ -45,7 +65,8 @@ public record TransitionWorkerCommand(
         Object inputPayload
     ) {
         this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
-            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1, Optional.empty());
+            executionVersion, transitionKey, inputPayload, ExecutionRedriveIntent.REPLAY, -1,
+            Optional.empty(), Optional.empty());
     }
 
     public TransitionWorkerCommand(
@@ -70,6 +91,7 @@ public record TransitionWorkerCommand(
             inputPayload,
             ExecutionRedriveIntent.REPLAY,
             -1,
+            Optional.empty(),
             Optional.empty());
     }
 
@@ -97,7 +119,8 @@ public record TransitionWorkerCommand(
             inputPayload,
             redriveIntent,
             redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1,
-            redriveCommandId);
+            redriveCommandId,
+            Optional.empty());
     }
 
     public TransitionWorkerCommand {
@@ -121,6 +144,7 @@ public record TransitionWorkerCommand(
         }
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
         redriveCommandId = Optional.ofNullable(redriveCommandId).orElseGet(Optional::empty);
+        redriveReason = Optional.ofNullable(redriveReason).orElseGet(Optional::empty);
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
             throw new IllegalArgumentException(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
@@ -130,9 +154,19 @@ public record TransitionWorkerCommand(
             throw new IllegalArgumentException(
                 "redriveCommandId must identify the exact logical effect for deliberate Command retry");
         }
+        if (redriveIntent == ExecutionRedriveIntent.REISSUE_COMMAND
+            && redriveCommandId.filter(value -> !value.isBlank()).isEmpty()) {
+            throw new IllegalArgumentException(
+                "redriveCommandId must identify the exact logical effect for Command reissue");
+        }
+        if (redriveIntent == ExecutionRedriveIntent.REISSUE_COMMAND
+            && redriveReason.filter(value -> !value.isBlank()).isEmpty()) {
+            throw new IllegalArgumentException("Command reissue requires a nonblank audit reason");
+        }
         if (redriveIntent == ExecutionRedriveIntent.REPLAY) {
             redriveStepIndex = -1;
             redriveCommandId = Optional.empty();
+            redriveReason = Optional.empty();
         }
     }
 }

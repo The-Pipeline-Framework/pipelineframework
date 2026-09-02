@@ -103,6 +103,19 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
     }
 
     @Override
+    public Uni<ExecutionRedriveResult> redriveExecution(
+        String tenantId,
+        String executionId,
+        Long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String targetCommandId,
+        String reason) {
+        return queueAsyncCoordinator.redriveExecution(
+            tenantId, executionId, expectedVersion, allowFailed, intent, targetCommandId, reason);
+    }
+
+    @Override
     public Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command) {
         return queueAsyncCoordinator.completeAwait(command);
     }

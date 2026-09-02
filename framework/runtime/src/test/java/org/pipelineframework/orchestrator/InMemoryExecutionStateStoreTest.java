@@ -330,6 +330,72 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void commandReissueReopensSuccessfulExecutionFromRootWithOneOptimisticWinner() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a", "key-command-reissue", "initial-input", ExecutionResultShape.SINGLE,
+                    now, now / 1000 + 60))
+            .await().indefinitely();
+        ExecutionRecord<Object, Object> claimed = store.claimLease(
+                "tenant-a", created.record().executionId(), "worker-1", now, 1_000L)
+            .await().indefinitely().orElseThrow();
+        ExecutionRecord<Object, Object> waiting = store.markWaitingExternal(
+                "tenant-a", claimed.executionId(), claimed.version(), "await", "unit-reissue", 4, now + 1)
+            .await().indefinitely().orElseThrow();
+        ExecutionRecord<Object, Object> resumed = store.markAwaitItemContinuationsCompleted(
+                "tenant-a",
+                claimed.executionId(),
+                "unit-reissue",
+                5,
+                new ExecutionInputSnapshot(ExecutionInputShape.UNI, "continuation-input"),
+                now + 2)
+            .await().indefinitely().orElseThrow();
+        assertEquals("continuation-input",
+            assertInstanceOf(ExecutionInputSnapshot.class, resumed.inputPayload()).payload());
+        ExecutionRecord<Object, Object> succeeded = store.markSucceeded(
+                "tenant-a", claimed.executionId(), resumed.version(), "complete", "result", now + 3)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                succeeded.executionId(),
+                succeeded.version(),
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                Optional.of("archive:confirmation-7"),
+                Optional.of("customer approved a second archive"),
+                "command-reissue:" + succeeded.executionId() + ":" + succeeded.version(),
+                now + 4)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionStatus.QUEUED, redriven.status());
+        assertEquals(0, redriven.currentStepIndex());
+        assertEquals("initial-input", redriven.inputPayload());
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, redriven.redriveIntent());
+        assertEquals(Optional.of("archive:confirmation-7"), redriven.redriveTargetCommandId());
+        assertEquals(Optional.of("customer approved a second archive"), redriven.redriveReason());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                succeeded.executionId(),
+                succeeded.version(),
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                Optional.of("archive:confirmation-7"),
+                Optional.of("customer approved a second archive"),
+                "competing-command-reissue",
+                now + 4)
+            .await().indefinitely().isEmpty());
+
+        ExecutionRecord<Object, Object> reclaimed = store.claimLease(
+                "tenant-a", succeeded.executionId(), "worker-2", now + 5, 1_000L)
+            .await().indefinitely().orElseThrow();
+        assertEquals(Optional.of("archive:confirmation-7"), reclaimed.redriveTargetCommandId());
+        assertEquals(Optional.of("customer approved a second archive"), reclaimed.redriveReason());
+    }
+
+    @Test
     void redriveTerminalExecutionRejectsStaleVersionAndNonTerminalStatus() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
@@ -365,6 +431,27 @@ class InMemoryExecutionStateStoreTest {
                 "redrive",
                 now + 3)
             .await().indefinitely().isEmpty());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version(),
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                Optional.of("archive:confirmation-7"),
+                Optional.of("approved reissue"),
+                "command-reissue",
+                now + 3)
+            .await().indefinitely().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> store.redriveTerminalExecution(
+            "tenant-a",
+            created.record().executionId(),
+            terminal.get().version(),
+            true,
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            Optional.of("archive:confirmation-7"),
+            Optional.of("approved reissue"),
+            "command-reissue",
+            now + 3));
     }
 
     @Test

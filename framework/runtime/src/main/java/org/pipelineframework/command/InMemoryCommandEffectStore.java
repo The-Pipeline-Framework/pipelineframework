@@ -41,11 +41,15 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
             null,
             List.of(new CommandEffectAttemptRecord(
                 request.attemptId(),
+                request.occurrenceId(),
                 1,
                 request.executionContext().executionId(),
+                CommandAttemptPurpose.INITIAL,
                 CommandEffectStatus.PENDING,
+                Optional.empty(),
                 null,
                 null,
+                Optional.empty(),
                 Optional.empty(),
                 nowEpochMs,
                 nowEpochMs)),
@@ -65,13 +69,27 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
 
     @Override
     public Uni<CommandEffectRecord> createRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+        return createAttempt(request, CommandAttemptAdmission.retry(), nowEpochMs);
+    }
+
+    @Override
+    public boolean supportsAttempt(CommandAttemptPurpose purpose) {
+        return purpose == CommandAttemptPurpose.RETRY || purpose == CommandAttemptPurpose.REISSUE;
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> createAttempt(
+        CommandRequest<?> request,
+        CommandAttemptAdmission admission,
+        long nowEpochMs
+    ) {
         String key = key(request.executionContext().tenantId(), request.commandId());
         CommandEffectRecord updated = records.compute(key, (ignored, existing) -> {
             if (existing == null) {
                 throw new IllegalStateException(
                     "No command effect record found for commandId " + request.commandId());
             }
-            return existing.appendRetryAttempt(request, nowEpochMs);
+            return existing.appendAttempt(request, admission, nowEpochMs);
         });
         return Uni.createFrom().item(updated);
     }

@@ -90,7 +90,22 @@ public class DynamoCommandEffectStore implements CommandEffectStore {
 
     @Override
     public Uni<CommandEffectRecord> createRetryAttempt(CommandRequest<?> request, long nowEpochMs) {
+        return createAttempt(request, CommandAttemptAdmission.retry(), nowEpochMs);
+    }
+
+    @Override
+    public boolean supportsAttempt(CommandAttemptPurpose purpose) {
+        return purpose == CommandAttemptPurpose.RETRY || purpose == CommandAttemptPurpose.REISSUE;
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> createAttempt(
+        CommandRequest<?> request,
+        CommandAttemptAdmission admission,
+        long nowEpochMs
+    ) {
         Objects.requireNonNull(request, "command request must not be null");
+        Objects.requireNonNull(admission, "attempt admission must not be null");
         return transition(
             request.executionContext().tenantId(),
             request.commandId(),
@@ -98,9 +113,9 @@ public class DynamoCommandEffectStore implements CommandEffectStore {
                 if (!current.inputDeclaredType().equals(request.descriptor().inputType())
                     || !current.outputDeclaredType().equals(request.descriptor().outputType())) {
                     throw new IllegalArgumentException(
-                        "Retry request types do not match the recorded Command effect " + request.commandId());
+                        "Attempt request types do not match the recorded Command effect " + request.commandId());
                 }
-                return current.record().appendRetryAttempt(request, nowEpochMs);
+                return current.record().appendAttempt(request, admission, nowEpochMs);
             });
     }
 
@@ -308,7 +323,7 @@ public class DynamoCommandEffectStore implements CommandEffectStore {
             Map<String, AttributeValue> item = items.getFirst();
             long revision = longValue(item, REVISION);
             int schemaVersion = Math.toIntExact(longValue(item, SCHEMA_VERSION));
-            if (schemaVersion != CommandEffectRecordCodec.SCHEMA_VERSION) {
+            if (!CommandEffectRecordCodec.supportsSchemaVersion(schemaVersion)) {
                 throw new CommandEffectStoreException(
                     "Unsupported durable Command effect item schema version " + schemaVersion);
             }
@@ -388,11 +403,15 @@ public class DynamoCommandEffectStore implements CommandEffectStore {
             Optional.empty(),
             List.of(new CommandEffectAttemptRecord(
                 request.attemptId(),
+                request.occurrenceId(),
                 1,
                 request.executionContext().executionId(),
+                CommandAttemptPurpose.INITIAL,
                 CommandEffectStatus.PENDING,
+                Optional.empty(),
                 null,
                 null,
+                Optional.empty(),
                 Optional.empty(),
                 nowEpochMs,
                 nowEpochMs)),

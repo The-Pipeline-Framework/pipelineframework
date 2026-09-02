@@ -74,6 +74,35 @@ At Command dispatch,
 must atomically claim the next attempt. Success, terminal failure, in-flight, ambiguous,
 and user-action-required effects are never redispatched by this operation.
 
+To intentionally request one additional external effect from an exact retained successful Command,
+use `REISSUE_COMMAND`:
+
+```http
+POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "expectedVersion": 19,
+  "reason": "customer approved a second archive",
+  "allowFailed": false,
+  "intent": "REISSUE_COMMAND",
+  "targetCommandId": "archive:confirmation-7"
+}
+```
+
+This request is accepted only when the execution and target effect are both `SUCCEEDED`.
+`expectedVersion`, `reason`, and `targetCommandId` are required; `allowFailed=true` is rejected, and
+`targetCommandId` is invalid for other intents. The same execution reopens from its persisted initial
+input. Replay remains side-effect safe for every non-target Command, and the exact target receives
+one deterministic new occurrence/provider idempotency key. Duplicate policy `FAIL` is bypassed only
+for that target. Missing targets and `FAILED`, `DLQ`, `AMBIGUOUS`, `USER_ACTION_REQUIRED`, `PENDING`,
+or `DISPATCHING` effects fail closed before connector dispatch.
+
+If the reissued occurrence fails retryably, its failure becomes the current authoritative outcome
+while the earlier success remains in retained attempt history. A later `RETRY_FAILED_COMMAND` keeps
+that reissue occurrence id; it does not authorize another occurrence.
+
 ## Execution DLQ Envelope (Terminal Details)
 
 Execution DLQ entries include standard fields for triage across REST, gRPC, local, and function-style execution:

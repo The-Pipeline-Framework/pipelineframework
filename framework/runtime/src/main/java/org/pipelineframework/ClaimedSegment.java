@@ -49,7 +49,10 @@ record ClaimedSegment(
         payload,
         record.redriveIntent(),
         record.failedStepIndex(),
-        record.failedCommandId());
+        record.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.REISSUE_COMMAND
+            ? record.redriveTargetCommandId()
+            : record.failedCommandId(),
+        record.redriveReason());
     SerializedTransitionPayload encodedPayload = payloadCodec.encode(payload);
     return TransitionCommandEnvelope.from(
         command,

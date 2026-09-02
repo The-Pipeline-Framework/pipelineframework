@@ -136,9 +136,10 @@ public final class PgVectorConnector implements ConnectorProvider<PgVectorProvid
             try {
                 ActiveBinding binding = active();
                 validateDimensions(invocation.input().values(), binding.dimensions());
-                String commandId = invocation.dispatchIdentity().orElseThrow(() ->
-                    new IllegalArgumentException("pgvector upsert requires a command dispatch identity")).commandId();
-                return upsert(binding, commandId, invocation.input()).subscribeAsCompletionStage();
+                String providerIdempotencyKey = invocation.dispatchIdentity().orElseThrow(() ->
+                    new IllegalArgumentException("pgvector upsert requires a command dispatch identity"))
+                    .providerIdempotencyKey();
+                return upsert(binding, providerIdempotencyKey, invocation.input()).subscribeAsCompletionStage();
             } catch (RuntimeException failure) {
                 return CompletableFuture.failedStage(failure);
             }

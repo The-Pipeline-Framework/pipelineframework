@@ -50,7 +50,7 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
-import org.pipelineframework.command.CommandRetryExecutionScope;
+import org.pipelineframework.command.CommandReexecutionScope;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.context.PipelineContext;
@@ -608,7 +608,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         PipelineContext previousPipeline = PipelineContextHolder.get();
         AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
         java.util.Optional<PipelineExecutionContext> previousExecution = PipelineExecutionContextHolder.get();
-        CommandRetryExecutionScope.Snapshot previousCommandRetry = CommandRetryExecutionScope.capture();
+        CommandReexecutionScope.Snapshot previousCommandRetry = CommandReexecutionScope.capture();
         PipelineExecutionContext executionContext = new PipelineExecutionContext(
             command.tenantId(),
             command.executionId(),
@@ -618,12 +618,18 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             command.currentStepIndex(),
             java.util.Optional.empty(),
             java.util.Optional.of(envelope.traceId()).filter(traceId -> !traceId.isBlank()));
-        final CommandRetryExecutionScope.AdmissionHandle commandRetryAdmission;
+        final CommandReexecutionScope.AdmissionHandle commandRetryAdmission;
         if (command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
-          commandRetryAdmission = CommandRetryExecutionScope.installRetry(
+          commandRetryAdmission = CommandReexecutionScope.installRetry(
               command.redriveCommandId().orElseThrow(), command.transitionKey());
+        } else if (command.redriveIntent()
+            == org.pipelineframework.orchestrator.ExecutionRedriveIntent.REISSUE_COMMAND) {
+          commandRetryAdmission = CommandReexecutionScope.installReissue(
+              command.redriveCommandId().orElseThrow(),
+              command.transitionKey(),
+              command.redriveReason().orElseThrow());
         } else {
-          CommandRetryExecutionScope.clear();
+          CommandReexecutionScope.clear();
           commandRetryAdmission = null;
         }
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
@@ -878,7 +884,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       PipelineContext previousPipeline,
       AwaitExecutionContext previousAwait,
       java.util.Optional<PipelineExecutionContext> previousExecution,
-      CommandRetryExecutionScope.Snapshot previousCommandRetry) {
+      CommandReexecutionScope.Snapshot previousCommandRetry) {
     if (previousPipeline == null) {
       PipelineContextHolder.clear();
     } else {
@@ -888,12 +894,12 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     previousExecution.ifPresentOrElse(
         PipelineExecutionContextHolder::set,
         PipelineExecutionContextHolder::clear);
-    CommandRetryExecutionScope.restore(previousCommandRetry);
+    CommandReexecutionScope.restore(previousCommandRetry);
   }
 
   private Multi<?> requireCommandRetryConsumed(
       Multi<?> stream,
-      CommandRetryExecutionScope.AdmissionHandle admission) {
+      CommandReexecutionScope.AdmissionHandle admission) {
     return admission == null ? stream : stream.onCompletion().invoke(admission::requireConsumed);
   }
 

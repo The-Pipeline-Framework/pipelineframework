@@ -133,6 +133,7 @@ discarded or reconstructed as generic values.
 | Same command id already succeeded with `RETURN_RECORDED` | Stored output is returned; the connector is not called again. |
 | Connector throws a retryable failure | The current attempt is marked `FAILED_RETRYABLE`. Ordinary admission does not redispatch it. |
 | Control plane deliberately retries a failed Command execution | The store atomically appends one attempt under the same command id and dispatches through the ordinary provider path. |
+| Control plane deliberately reissues an exact successful Command | The store atomically appends one occurrence with a new provider idempotency key and dispatches only that target. |
 | Connector throws a non-retryable failure | Effect is marked terminal/DLQ. |
 
 The external system still needs an idempotency key or deterministic external id. TPF can avoid repeat dispatch after success is recorded, but it cannot make a third-party system exactly-once.
@@ -145,6 +146,24 @@ Queue-Async does not automatically retry failed effects. Deliberate retry is adm
 The configured execution store must preserve deliberate retry intent, and the configured
 `CommandEffectStore` must advertise retry-attempt history support. Older implementations fail this
 operation rather than silently emulating it or discarding attempt identity.
+
+An operator can intentionally request one additional occurrence of a retained successful Command
+with `REISSUE_COMMAND`. This is not ordinary replay. The request must identify the observed
+execution version, the exact logical Command id, and a nonblank audit reason. TPF reopens the same
+`SUCCEEDED` execution from its persisted initial input and deterministically replays from the root.
+Successful non-target Commands still return their recorded outputs; only the exact target may append
+a new occurrence, even when its duplicate policy is `FAIL`. If the target is absent or no longer
+`SUCCEEDED`, execution fails before connector dispatch.
+
+Command history distinguishes three identities:
+
+- `commandId` is the logical identity for the complete effect history;
+- `occurrenceId` is the provider idempotency key for one intentionally requested effect;
+- `attemptId` is one dispatch attempt within that occurrence.
+
+The initial occurrence id equals the logical Command id. Retry keeps its occurrence id. Reissue
+creates a deterministic new occurrence id; if that reissue fails retryably, a later
+`RETRY_FAILED_COMMAND` keeps the reissue occurrence id.
 
 ## Related Docs
 
