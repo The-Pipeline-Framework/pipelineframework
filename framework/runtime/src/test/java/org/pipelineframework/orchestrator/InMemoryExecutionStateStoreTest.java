@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -393,6 +394,64 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely().orElseThrow();
         assertEquals(Optional.of("archive:confirmation-7"), reclaimed.redriveTargetCommandId());
         assertEquals(Optional.of("customer approved a second archive"), reclaimed.redriveReason());
+
+        ExecutionRecord<Object, Object> deferred = store.deferCircuit(
+                "tenant-a",
+                reclaimed.executionId(),
+                reclaimed.version(),
+                now + 1_000,
+                "circuit-deferred",
+                "archive-circuit",
+                "CIRCUIT_OPEN",
+                "archive connector circuit is open",
+                now + 5,
+                1,
+                now + 6)
+            .await().indefinitely().orElseThrow();
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, deferred.redriveIntent());
+        assertEquals(Optional.of("archive:confirmation-7"), deferred.redriveTargetCommandId());
+        assertEquals(Optional.of("customer approved a second archive"), deferred.redriveReason());
+    }
+
+    @Test
+    void commandReissueUsesImmutableSnapshotOfNestedMapInput() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        List<String> mutableItems = new java.util.ArrayList<>(List.of("original"));
+        Map<String, Object> mutableNested = new java.util.HashMap<>();
+        mutableNested.put("items", mutableItems);
+        Map<String, Object> mutableInput = new java.util.HashMap<>();
+        mutableInput.put("nested", mutableNested);
+        CreateExecutionResult created = store.createOrGetExecution(new ExecutionCreateCommand(
+                "tenant-a", "key-map-reissue", mutableInput, ExecutionResultShape.SINGLE,
+                now, now / 1000 + 60))
+            .await().indefinitely();
+
+        mutableItems.add("mutated");
+        mutableNested.put("late", "value");
+        mutableInput.put("top-level", "value");
+        ExecutionRecord<Object, Object> succeeded = store.markSucceeded(
+                "tenant-a", created.record().executionId(), created.record().version(),
+                "complete", "result", now + 1)
+            .await().indefinitely().orElseThrow();
+
+        ExecutionRecord<Object, Object> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                succeeded.executionId(),
+                succeeded.version(),
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                Optional.of("archive:confirmation-8"),
+                Optional.of("approved map reissue"),
+                "command-reissue-map",
+                now + 2)
+            .await().indefinitely().orElseThrow();
+
+        Map<?, ?> retainedInput = assertInstanceOf(Map.class, redriven.inputPayload());
+        assertFalse(retainedInput.containsKey("top-level"));
+        Map<?, ?> retainedNested = assertInstanceOf(Map.class, retainedInput.get("nested"));
+        assertFalse(retainedNested.containsKey("late"));
+        assertEquals(List.of("original"), retainedNested.get("items"));
     }
 
     @Test

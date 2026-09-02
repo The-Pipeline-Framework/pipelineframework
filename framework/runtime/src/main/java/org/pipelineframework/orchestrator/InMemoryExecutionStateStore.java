@@ -2,8 +2,10 @@ package org.pipelineframework.orchestrator;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -479,7 +481,13 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private static Object copySnapshotPayload(Object payload) {
         if (payload instanceof List<?> list) {
-            return List.copyOf(list);
+            return list.stream().map(InMemoryExecutionStateStore::copySnapshotPayload).toList();
+        }
+        if (payload instanceof Map<?, ?> map) {
+            Map<Object, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, value) -> copy.put(
+                copySnapshotPayload(key), copySnapshotPayload(value)));
+            return Collections.unmodifiableMap(copy);
         }
         return payload;
     }
@@ -621,7 +629,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.version() + 1, current.currentStepIndex(), current.attempt(), null, 0L, nextDueEpochMs,
                     transitionKey, current.inputPayload(), current.awaitUnitId(), null, reason, truncate(errorMessage),
                     current.createdAtEpochMs(), nowEpochMs, current.ttlEpochS(), firstCircuitDeferredAtEpochMs,
-                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity);
+                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity,
+                    current.redriveIntent(), current.failedStepIndex(), current.failedCommandId(),
+                    current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
