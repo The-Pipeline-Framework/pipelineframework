@@ -13,6 +13,8 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.execution.PipelineExecutionContext;
+import org.pipelineframework.execution.PipelineExecutionContextHolder;
 
 class QueryStepDescriptorFactoryTest {
 
@@ -22,6 +24,30 @@ class QueryStepDescriptorFactoryTest {
     @AfterEach
     void clearPipelineConfigProperty() {
         System.clearProperty("pipeline.config");
+        PipelineExecutionContextHolder.clear();
+    }
+
+    @Test
+    void preservesManagedExecutionContextAcrossDescriptorLoaderExecutor() throws Exception {
+        Path explicit = tempDir.resolve("query-config.yaml");
+        Files.writeString(explicit, pipelineYaml("v2"));
+        System.setProperty("pipeline.config", explicit.toString());
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant-1", "execution-1", 2));
+
+        QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
+        try {
+            PipelineExecutionContext observed = factory.descriptor(
+                    "LoadCustomerRisk",
+                    "org.example.CustomerRiskLookup",
+                    "org.example.CustomerRiskSnapshot")
+                .onItem().transform(descriptor -> PipelineExecutionContextHolder.get().orElseThrow())
+                .await().atMost(Duration.ofSeconds(2));
+
+            assertEquals("tenant-1", observed.tenantId());
+            assertEquals("execution-1", observed.executionId());
+        } finally {
+            factory.shutdown();
+        }
     }
 
     @Test
