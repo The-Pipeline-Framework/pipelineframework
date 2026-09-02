@@ -48,6 +48,10 @@ public final class V3JavaTypeResolver {
             new PipelineTemplateTypeReference.Named(semanticType));
         if (resolved instanceof PipelineTemplateTypeReference.Named named
             && config.typeModel().definition(named.name()).isPresent()) {
+            Optional<String> bound = config.typeModel().javaTypeBinding(named.name());
+            if (bound.isPresent()) {
+                return Optional.of(ClassName.bestGuess(bound.orElseThrow()));
+            }
             return Optional.of(ClassName.get(config.basePackage() + ".domain", named.name()));
         }
         if (resolved instanceof PipelineTemplateTypeReference.Scalar scalar) {
@@ -73,6 +77,13 @@ public final class V3JavaTypeResolver {
     public Optional<String> semanticType(ClassName javaType) {
         if (javaType == null) {
             return Optional.empty();
+        }
+        Optional<String> bound = config.typeModel().javaTypeBindings().entrySet().stream()
+            .filter(entry -> javaType.canonicalName().equals(entry.getValue()))
+            .map(Map.Entry::getKey)
+            .findFirst();
+        if (bound.isPresent()) {
+            return bound;
         }
         String prefix = config.basePackage() + ".domain.";
         if (!javaType.canonicalName().startsWith(prefix)) {

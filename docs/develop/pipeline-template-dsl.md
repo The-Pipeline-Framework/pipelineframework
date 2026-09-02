@@ -55,6 +55,20 @@ Every entry in `types` declares exactly one kind of type.
 | `alias` | A transparent name for another type. |
 | `variants` | A closed sum type: this value is one declared alternative. |
 
+A named type normally maps to the Java type generated under the application's `basePackage`. An
+independently distributed definition can instead supply the canonical Java class with `java`:
+
+```yaml
+types:
+  DocumentFile:
+    java: org.pipelineframework.segments.document.DocumentFile
+    fields: [[sourceId, string], [fileName, string], [contentType, string], [content, payload_ref]]
+```
+
+This is still one canonical v3 type. The compiler validates its fields and uses the bound class at
+ordinary Java and representation-provider boundaries; it does not treat the class as an untyped
+payload or create a parallel package type system.
+
 ### Contributed protocol types
 
 Version 3 can reference framework- or extension-owned protocol vocabulary without copying its declaration into the application:
@@ -451,9 +465,44 @@ contract:
 
 Propagation never guesses across a union, a branch, or a predecessor without one concrete output. Those contracts stay explicit.
 
-### Local pipeline composition and bounded recursion
+### Local and packaged pipeline composition
 
-`pipelines` declares compile-time local definitions. A `pipeline` step invokes a named definition as an ordinary typed step; the compiler links the definition into the root release contract, and the runtime returns its result to the caller without creating another execution or publishing another terminal output.
+`pipelines` declares compile-time local definitions. Installed segment artifacts can contribute the
+same definition shape from an ordinary Maven or Gradle dependency. A `pipeline` step invokes either
+source as an ordinary typed step; the compiler links the definition into the root release contract,
+and the runtime returns its result to the caller without creating another execution or publishing
+another terminal output.
+
+```xml
+<dependency>
+  <groupId>org.pipelineframework.segments</groupId>
+  <artifactId>document-text-extraction</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
+```yaml
+steps:
+  - name: Extract document
+    pipeline: document-text-extraction
+    input: DocumentFile
+    output: ExtractedDocument
+```
+
+Package definitions have qualified identities such as
+`org.pipelineframework.document/document-text-extraction`. In an application, the short name is accepted only
+when it is unique and does not collide with a local definition. Inside a segment package, a short reference
+resolves to that package's own definition; use a qualified identity for an explicit cross-package reference.
+Removing the dependency makes the reference fail at compilation. Schema v3 release metadata records the
+artifact version, definition resource, and definition fingerprint; changing them changes the consuming
+contract hash.
+
+Initial packaged definitions are functional-core only. They may contain authored service steps and
+nested `pipeline:` calls, using ordinary supported cardinalities and representation providers. They
+cannot contain Query, Command, Await, remote Operators/delegates, connectors, or checkpoint authority.
+Those restrictions apply to packaging, not to the rest of the consuming application.
+
+### Bounded recursion
 
 ```yaml
 pipelines:

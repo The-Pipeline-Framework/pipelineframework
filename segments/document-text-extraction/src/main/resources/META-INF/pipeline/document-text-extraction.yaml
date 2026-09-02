@@ -1,0 +1,36 @@
+version: 3
+
+types:
+  DocumentFile:
+    java: org.pipelineframework.segments.document.DocumentFile
+    fields: [[sourceId, string], [fileName, string], [contentType, string], [content, payload_ref]]
+    mappings:
+      file:
+        type: org.pipelineframework.segments.document.MaterializedDocument
+        options: { fields: [sourceId, fileName, contentType, content], maxBytes: 10485760 }
+  ExtractionDiagnostics:
+    java: org.pipelineframework.segments.document.ExtractionDiagnostics
+    fields:
+      - [format, string]
+      - [selectedBy, string]
+      - [contentType, string]
+      - [inputBytes, int64]
+      - [extractedCharacters, int32]
+      - { name: notes, repeated: string }
+  ExtractedDocument:
+    java: org.pipelineframework.segments.document.ExtractedDocument
+    fields: [[sourceId, string], [text, string], [diagnostics, ExtractionDiagnostics]]
+
+pipelines:
+  document-text-extraction:
+    input: DocumentFile
+    output: ExtractedDocument
+    steps:
+      - name: Extract document text
+        service: org.pipelineframework.segments.document.ExtractDocumentTextService
+        cardinality: ONE_TO_ONE
+        input: DocumentFile
+        output: ExtractedDocument
+        java:
+          input: org.pipelineframework.segments.document.MaterializedDocument
+          output: org.pipelineframework.segments.document.ExtractedDocument

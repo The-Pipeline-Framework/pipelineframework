@@ -9,6 +9,7 @@ import com.squareup.javapoet.TypeName;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 /**
  * Contains semantic information derived from YAML step definitions or legacy {@code @PipelineStep} annotations.
@@ -35,6 +36,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param remoteExecution Gets remote operator execution metadata when the step is remote, otherwise null.
  * @param serviceApiKind Distinguishes reactive-authored from blocking-authored internal services.
  * @param reactiveReturnKind Identifies the reactive return library used by unary reactive services.
+ * @param definition Identifies the root or named pipeline definition that owns this model.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -58,14 +60,15 @@ public record PipelineStepModel(
         PipelineTemplateStepExecution remoteExecution,
         ServiceApiKind serviceApiKind,
         ReactiveReturnKind reactiveReturnKind,
-        Optional<AspectPosition> aspectPosition
+        Optional<AspectPosition> aspectPosition,
+        PipelineReference definition
 ) {
     /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
     public PipelineStepModel withServiceClassName(ClassName replacement) {
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition);
+            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition, definition);
     }
 
     /** Returns this model with the implementation contract exposed by a provider-generated facade. */
@@ -79,7 +82,7 @@ public record PipelineStepModel(
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             facadeStreamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition);
+            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition, definition);
     }
 
     /**
@@ -230,6 +233,36 @@ public record PipelineStepModel(
             ServiceApiKind serviceApiKind,
             ReactiveReturnKind reactiveReturnKind,
             Optional<AspectPosition> aspectPosition) {
+        this(serviceName, generatedName, servicePackage, serviceClassName, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
+            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition,
+            new PipelineReference("$root"));
+    }
+
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            Optional<String> delegateMethodName,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind,
+            Optional<AspectPosition> aspectPosition,
+            PipelineReference definition) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -270,6 +303,7 @@ public record PipelineStepModel(
         this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
         this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
         this.aspectPosition = aspectPosition == null ? Optional.empty() : aspectPosition;
+        this.definition = java.util.Objects.requireNonNull(definition, "definition cannot be null");
     }
 
     /**
@@ -519,6 +553,7 @@ public record PipelineStepModel(
         private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
         private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
         private Optional<AspectPosition> aspectPosition = Optional.empty();
+        private PipelineReference definition = new PipelineReference("$root");
 
         /**
          * Sets the service name.
@@ -779,6 +814,12 @@ public record PipelineStepModel(
             return this;
         }
 
+        /** Sets the root or named pipeline definition that owns this model. */
+        public Builder definition(PipelineReference definition) {
+            this.definition = java.util.Objects.requireNonNull(definition, "definition cannot be null");
+            return this;
+        }
+
         /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
@@ -826,7 +867,8 @@ public record PipelineStepModel(
                 remoteExecution,
                 serviceApiKind,
                 reactiveReturnKind,
-                aspectPosition);
+                aspectPosition,
+                definition);
         }
     }
     
@@ -859,7 +901,8 @@ public record PipelineStepModel(
             remoteExecution,
             serviceApiKind,
             reactiveReturnKind,
-            aspectPosition
+            aspectPosition,
+            definition
         );
     }
 
@@ -898,6 +941,7 @@ public record PipelineStepModel(
             .mapperFallbackMode(mapperFallbackMode)
             .remoteExecution(remoteExecution)
             .serviceApiKind(serviceApiKind)
-            .reactiveReturnKind(reactiveReturnKind);
+            .reactiveReturnKind(reactiveReturnKind)
+            .definition(definition);
     }
 }

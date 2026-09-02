@@ -20,11 +20,13 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.awaitable.AwaitStepTypeBindingResolver;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 /**
  * Extracts semantic models from YAML step definitions and legacy {@code @PipelineStep} annotations.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
+    private static final PipelineReference ROOT = new PipelineReference("$root");
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
         "No YAML step definitions were found. Falling back to annotation-driven extraction.";
     private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
@@ -85,14 +87,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         List<PipelineStepModel> stepModels;
         if (hasYamlStepDefinitions) {
             // Extract pipeline step models based on explicit YAML step definitions.
-            stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
-            stepModels = addProviderBoundaryModels(ctx, stepDefinitions, stepModels, ctxWarningLogger);
+            stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, ROOT, stepDefinitions, ctxWarningLogger));
+            stepModels = addProviderBoundaryModels(ctx, ROOT, stepDefinitions, stepModels, ctxWarningLogger);
             Map<String, List<PipelineStepModel>> localDefinitionModels = new LinkedHashMap<>();
             for (var entry : ctx.getParsedPipelineDefinitionCatalog().localDefinitions().entrySet()) {
                 List<org.pipelineframework.processor.ir.StepDefinition> directSteps = entry.getValue().stream()
                     .filter(step -> step.kind() != StepKind.PIPELINE)
                     .toList();
-                List<PipelineStepModel> models = extractStepModelsFromYaml(ctx, directSteps, ctxWarningLogger);
+                PipelineReference definition = new PipelineReference(entry.getKey());
+                List<PipelineStepModel> models = extractStepModelsFromYaml(
+                    ctx, definition, directSteps, ctxWarningLogger);
+                models = addProviderBoundaryModels(ctx, definition, directSteps, models,
+                    ctxWarningLogger);
                 localDefinitionModels.put(entry.getKey(), List.copyOf(models));
             }
             ctx.setLocalDefinitionStepModels(Collections.unmodifiableMap(new LinkedHashMap<>(localDefinitionModels)));
@@ -127,7 +133,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 stepModels = contextualModels;
             }
         }
-        ctx.setStepModels(deduplicateByServiceName(stepModels));
+        ctx.setStepModels(deduplicateByDefinitionServiceAndRole(stepModels));
     }
 
     /**
@@ -139,6 +145,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     private List<PipelineStepModel> extractStepModelsFromYaml(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions,
             Consumer<String> ctxWarningLogger) {
         if (stepDefinitions == null || stepDefinitions.isEmpty()) {
@@ -149,7 +156,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         PipelineStepIRExtractor irExtractor = new PipelineStepIRExtractor(ctx.getProcessingEnv());
 
         for (org.pipelineframework.processor.ir.StepDefinition stepDef : stepDefinitions) {
-            PipelineStepModel stepModel = createStepModelFromDefinition(ctx, stepDef, irExtractor, ctxWarningLogger);
+            PipelineStepModel stepModel = createStepModelFromDefinition(
+                ctx, definition, stepDef, irExtractor, ctxWarningLogger);
             if (stepModel != null) {
                 stepModels.add(stepModel);
             }
@@ -160,11 +168,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
     private List<PipelineStepModel> addProviderBoundaryModels(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions,
             List<PipelineStepModel> extracted,
             Consumer<String> ctxWarningLogger) {
         List<PipelineStepModel> models = new ArrayList<>(extracted);
-        for (var boundary : ctx.getResolvedProviderBoundaries()) {
+        for (var boundary : ctx.getResolvedProviderBoundaries().stream()
+            .filter(candidate -> definition.equals(candidate.definition())).toList()) {
             String serviceType = boundary.boundary().serviceTypeName();
             boolean alreadyExtracted = models.stream()
                 .anyMatch(model -> serviceType.equals(model.serviceClassName().canonicalName()));
@@ -184,6 +194,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             StreamingShape streamingShape = StreamingShape.valueOf(contract.cardinality());
             ServiceApiKind apiKind = ServiceApiKind.valueOf(contract.executionStyle().name());
             models.add(new PipelineStepModel.Builder()
+                .definition(definition)
                 .serviceName(toYamlServiceName(step.name()))
                 .generatedName(toYamlServiceName(step.name()))
                 .servicePackage(deriveYamlServicePackage(inputType, ctxWarningLogger))
@@ -247,19 +258,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     private PipelineStepModel createStepModelFromDefinition(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             PipelineStepIRExtractor irExtractor,
             Consumer<String> ctxWarningLogger) {
 
+        PipelineStepModel model;
         if (stepDef.dynamicOperationSource().isPresent()) {
-            return createDynamicOperationStepModel(ctx, stepDef, ctxWarningLogger);
-        }
-
-        // Determine if this is an internal or delegated step using switch for exhaustiveness
-        return switch (stepDef.kind()) {
-            case INTERNAL -> {
-                yield createInternalStepModel(ctx, stepDef, irExtractor);
-            }
+            model = createDynamicOperationStepModel(ctx, stepDef, ctxWarningLogger);
+        } else {
+            // Determine if this is an internal or delegated step using switch for exhaustiveness
+            model = switch (stepDef.kind()) {
+            case INTERNAL -> createInternalStepModel(ctx, definition, stepDef, irExtractor);
             case DELEGATED -> {
                 // For delegated steps, create a model based on the delegate service
                 yield createDelegatedStepModel(ctx, stepDef);
@@ -277,7 +287,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 yield createQueryStepModel(ctx, stepDef, ctxWarningLogger);
             }
             case PIPELINE -> null;
-        };
+            };
+        }
+        return model == null ? null : model.toBuilder().definition(definition).build();
     }
 
     private PipelineStepModel createCommandStepModel(
@@ -526,6 +538,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
     private PipelineStepModel createInternalStepModel(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             PipelineStepIRExtractor irExtractor) {
         TypeElement serviceClass = ctx.getProcessingEnv().getElementUtils()
@@ -577,6 +590,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         TypeName inputType = resolveInternalDomainType(
             ctx,
+            definition,
             stepDef.name(),
             "input",
             stepDef.inputType(),
@@ -587,6 +601,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         TypeName outputType = resolveInternalDomainType(
             ctx,
+            definition,
             stepDef.name(),
             "output",
             stepDef.outputType(),
@@ -1694,15 +1709,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
     private static final ClassName INVALID_CLASS_NAME = ClassName.get("java.lang", "Void");
 
-    private TypeName resolveInternalDomainType(
+    TypeName resolveInternalDomainType(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             String stepName,
             String direction,
             TypeName yamlType,
         TypeName annotationType,
         TypeName reactiveType) {
         if (yamlType != null) {
-            if (ctx.getResolvedProviderBoundary(stepName).isPresent()) {
+            if (ctx.getResolvedProviderBoundary(definition, stepName).isPresent()) {
                 return yamlType;
             }
             if (reactiveType != null && !yamlType.equals(reactiveType)) {
@@ -1928,10 +1944,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     ) {
     }
 
-    private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {
+    static List<PipelineStepModel> deduplicateByDefinitionServiceAndRole(List<PipelineStepModel> stepModels) {
         Map<String, PipelineStepModel> uniqueByServiceName = new LinkedHashMap<>();
         for (PipelineStepModel model : stepModels) {
-            String key = model.serviceName() + "::" + String.valueOf(model.deploymentRole());
+            String key = model.definition().logicalId() + "::" + model.serviceName()
+                + "::" + String.valueOf(model.deploymentRole());
             // Keep first occurrence so concrete @PipelineStep models take precedence over template fallbacks.
             uniqueByServiceName.putIfAbsent(key, model);
         }

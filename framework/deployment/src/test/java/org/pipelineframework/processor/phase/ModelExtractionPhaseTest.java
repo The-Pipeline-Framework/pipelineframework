@@ -27,6 +27,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,12 +37,19 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
+import org.pipelineframework.representation.spi.BoundaryClaim;
+import org.pipelineframework.representation.spi.BoundaryRequest;
+import org.pipelineframework.representation.spi.CanonicalType;
+import org.pipelineframework.representation.spi.CanonicalTypeShape;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static javax.tools.Diagnostic.Kind.NOTE;
@@ -115,6 +123,53 @@ class ModelExtractionPhaseTest {
         phase.execute(context);
 
         assertTrue(context.getStepModels().isEmpty());
+    }
+
+    @Test
+    void resolvesProviderBoundaryTypesWithinTheOwningLocalDefinition() {
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineReference definition = new PipelineReference("org.example/document-segment");
+        CanonicalType canonical = new CanonicalType("DocumentFile", "example.DocumentFile",
+            CanonicalTypeShape.RECORD);
+        context.registerResolvedProviderBoundary(new ResolvedProviderBoundary(
+            definition,
+            new BoundaryRequest("Extract", "example.MaterializedDocumentService", canonical, canonical,
+                "ONE_TO_ONE", Set.of(), Map.of()),
+            new BoundaryClaim("file", "extract:file", "example.ExtractFacade"),
+            List.of(),
+            Map.of()));
+
+        TypeName yamlType = ClassName.get("example", "DocumentFile");
+        TypeName representationType = ClassName.get("example", "MaterializedDocument");
+        TypeName resolved = new ModelExtractionPhase().resolveInternalDomainType(
+            context, definition, "Extract", "input", yamlType, null, representationType);
+
+        assertEquals(yamlType, resolved);
+        assertTrue(context.getResolvedProviderBoundary("Extract").isEmpty());
+    }
+
+    @Test
+    void keepsIdenticallyNamedModelsOwnedByDifferentDefinitions() {
+        PipelineStepModel root = modelOwnedBy("$root");
+        PipelineStepModel nested = modelOwnedBy("org.example/document-segment");
+
+        List<PipelineStepModel> deduplicated = ModelExtractionPhase.deduplicateByDefinitionServiceAndRole(
+            List.of(root, nested, root));
+
+        assertEquals(List.of(root, nested), deduplicated);
+    }
+
+    private static PipelineStepModel modelOwnedBy(String definition) {
+        return new PipelineStepModel.Builder()
+            .definition(new PipelineReference(definition))
+            .serviceName("ProcessExtract")
+            .generatedName("ProcessExtract")
+            .servicePackage("org.example")
+            .serviceClassName(ClassName.get("org.example", "ExtractService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
     }
 
     @Test

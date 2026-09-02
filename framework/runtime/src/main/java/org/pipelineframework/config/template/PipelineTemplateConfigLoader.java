@@ -263,6 +263,7 @@ public class PipelineTemplateConfigLoader {
         ProtocolTypeResolver.Resolved resolved = new ProtocolTypeResolver(
             protocolTypeRegistry, typeDeclarations.definitions()).resolve(
                 typeDeclarations.representationMappings(), typeDeclarations.providerConfigurations(),
+                typeDeclarations.javaTypeBindings(),
                 inputContract, outputContract, steps, pipelines);
         PipelineTemplateTypeModel typeModel = resolved.typeModel();
         inputContract = resolved.inputContract();
@@ -290,6 +291,10 @@ public class PipelineTemplateConfigLoader {
             if (id == null || id.isBlank()) {
                 throw new IllegalStateException("Pipeline definition IDs must not be blank.");
             }
+            String normalizedId = id.trim();
+            if ("$root".equals(normalizedId)) {
+                throw new IllegalStateException("Pipeline definition ID '$root' is reserved by the compiler.");
+            }
             if (!(entry.getValue() instanceof Map<?, ?> definition)) {
                 throw new IllegalStateException("Pipeline definition '" + id + "' must be a YAML map.");
             }
@@ -304,7 +309,7 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Pipeline definition '" + id
                     + "' contains kind: await; nested Await is not supported in this slice.");
             }
-            if (parsed.putIfAbsent(id.trim(), new PipelineTemplateDefinition(input, output, steps)) != null) {
+            if (parsed.putIfAbsent(normalizedId, new PipelineTemplateDefinition(input, output, steps)) != null) {
                 throw new IllegalStateException("Duplicate pipeline definition ID '" + id + "'.");
             }
         }
@@ -348,6 +353,7 @@ public class PipelineTemplateConfigLoader {
         }
         Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
         Map<String, Map<String, RepresentationMapping>> representationMappings = new LinkedHashMap<>();
+        Map<String, String> javaTypeBindings = new LinkedHashMap<>();
         Map<String, Map<String, Object>> providerConfigurations = readV3RepresentationProviderConfigurations(rootMap);
         for (Map.Entry<?, ?> entry : typesMap.entrySet()) {
             String name = stringify(entry.getKey());
@@ -361,6 +367,7 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Type '" + name + "' must be declared as a YAML map.");
             }
             definitions.put(name, readV3Type(name, declaration));
+            readV3JavaTypeBinding(name, declaration).ifPresent(javaType -> javaTypeBindings.put(name, javaType));
             Map<String, RepresentationMapping> mappings = readV3RepresentationMappings(name, declaration.get("mappings"));
             if (!mappings.isEmpty()) {
                 representationMappings.put(name, mappings);
@@ -369,14 +376,15 @@ public class PipelineTemplateConfigLoader {
         return new V3TypeDeclarations(
             Collections.unmodifiableMap(new LinkedHashMap<>(definitions)),
             Collections.unmodifiableMap(new LinkedHashMap<>(representationMappings)),
-            Collections.unmodifiableMap(new LinkedHashMap<>(providerConfigurations)));
+            Collections.unmodifiableMap(new LinkedHashMap<>(providerConfigurations)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(javaTypeBindings)));
     }
 
     private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
         if (declaration.containsKey("number") || declaration.containsKey("optional") || declaration.containsKey("reserved")) {
             throw new IllegalStateException("Type '" + name + "' cannot declare protobuf wire metadata in version: 3.");
         }
-        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants", "mappings",
+        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants", "mappings", "java",
             "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
         boolean fields = declaration.containsKey("fields");
         boolean wraps = declaration.containsKey("wraps");
@@ -405,6 +413,17 @@ public class PipelineTemplateConfigLoader {
         }
         rejectV3WrapperConstraints(name, declaration);
         return new PipelineTemplateTypeDefinition.UnionType(name, readV3Variants(name, declaration.get("variants")));
+    }
+
+    private Optional<String> readV3JavaTypeBinding(String name, Map<?, ?> declaration) {
+        if (!declaration.containsKey("java")) {
+            return Optional.empty();
+        }
+        Object value = declaration.get("java");
+        if (!(value instanceof String text) || !PipelineTemplateTypeModel.isFullyQualifiedJavaClassName(text)) {
+            throw new IllegalStateException("Type '" + name + "' java must be a fully-qualified class name.");
+        }
+        return Optional.of(text.strip());
     }
 
     private Map<String, RepresentationMapping> readV3RepresentationMappings(String domainType, Object rawMappings) {
@@ -748,7 +767,8 @@ public class PipelineTemplateConfigLoader {
     private record V3TypeDeclarations(
         Map<String, PipelineTemplateTypeDefinition> definitions,
         Map<String, Map<String, RepresentationMapping>> representationMappings,
-        Map<String, Map<String, Object>> providerConfigurations
+        Map<String, Map<String, Object>> providerConfigurations,
+        Map<String, String> javaTypeBindings
     ) {
     }
 
