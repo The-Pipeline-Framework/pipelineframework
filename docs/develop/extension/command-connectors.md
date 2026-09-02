@@ -309,7 +309,7 @@ public class OpenSearchIndexDocumentCommandConnector
   public Uni<SearchIndexWriteResult> execute(CommandRequest<SearchIndexDocument> request) {
     SearchIndexDocument input = request.input();
 
-    return upsertIntoOpenSearch(input.externalId, input)
+    return upsertIntoOpenSearch(input.externalId, input, request.providerIdempotencyKey())
         .map(ignored -> {
           SearchIndexWriteResult result = new SearchIndexWriteResult();
           result.commandId = request.commandId();
@@ -323,7 +323,9 @@ public class OpenSearchIndexDocumentCommandConnector
 }
 ```
 
-Use `request.commandId()` as the provider idempotency key when the provider supports it. If the provider has its own document id or external id, derive it from the same stable business fields.
+Use `request.providerIdempotencyKey()` as the provider idempotency key. Keep
+`request.commandId()` for the logical effect identity. If the provider has its own document id or
+external id, derive it from the same stable business fields.
 
 ## What TPF Handles
 

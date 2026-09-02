@@ -627,7 +627,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
           commandRetryAdmission = CommandReexecutionScope.installReissue(
               command.redriveCommandId().orElseThrow(),
               command.transitionKey(),
-              command.redriveReason().orElseThrow());
+              command.redriveReason().orElseThrow(() -> new IllegalStateException(
+                  "REISSUE_COMMAND worker command is missing its audit reason")));
         } else {
           CommandReexecutionScope.clear();
           commandRetryAdmission = null;
