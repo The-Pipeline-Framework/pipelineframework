@@ -39,6 +39,10 @@ public final class PipelineTemplateSchemaExporter {
   "description": "Generator-facing pipeline template configuration schema exported by framework/deployment.",
   "type": "object",
   "$defs": {
+    "javaClassName": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+    },
     "operatorReference": {
       "type": "string",
       "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*::[a-zA-Z_$][a-zA-Z\\\\d_$]*$"
@@ -2499,7 +2503,8 @@ public final class PipelineTemplateSchemaExporter {
       "type": "object",
       "properties": {
         "type": { "type": "string", "minLength": 1 },
-        "mapper": { "type": "string", "minLength": 1 }
+        "mapper": { "type": "string", "minLength": 1 },
+        "options": { "type": "object", "additionalProperties": true }
       },
       "additionalProperties": false
     },
@@ -2515,6 +2520,7 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["fields"],
           "properties": {
             "fields": { "type": "array", "items": { "$ref": "#/$defs/v3RecordField" } },
+            "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
@@ -2528,6 +2534,7 @@ public final class PipelineTemplateSchemaExporter {
             "maxLength": { "type": "integer", "minimum": 0 },
             "pattern": { "type": "string", "minLength": 1 },
             "format": { "const": "email" },
+            "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "allOf": [
@@ -2547,6 +2554,7 @@ public final class PipelineTemplateSchemaExporter {
             "minimumExclusive": { "type": "number" },
             "maximum": { "type": "number" },
             "maximumExclusive": { "type": "number" },
+            "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
@@ -2556,6 +2564,7 @@ public final class PipelineTemplateSchemaExporter {
           "required": ["wraps"],
           "properties": {
             "wraps": { "type": "string", "enum": ["bool", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] },
+            "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
@@ -2579,6 +2588,7 @@ public final class PipelineTemplateSchemaExporter {
               "propertyNames": { "type": "string", "minLength": 1 },
               "additionalProperties": { "$ref": "#/$defs/logicalContractReference" }
             },
+            "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false

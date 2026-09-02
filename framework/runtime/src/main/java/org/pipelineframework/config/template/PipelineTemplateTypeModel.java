@@ -27,10 +27,14 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
  * A union exposes membership only. It does not create routing edges or runtime conversions.</p>
  */
 public final class PipelineTemplateTypeModel {
+    private static final java.util.regex.Pattern FULLY_QUALIFIED_JAVA_CLASS_NAME = java.util.regex.Pattern.compile(
+        "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$");
+
     private final Map<String, PipelineTemplateTypeDefinition> definitions;
     private final Map<String, Map<String, RepresentationMapping>> representationMappings;
     private final Map<String, Map<String, Object>> representationProviderConfigurations;
     private final Map<String, ProtocolTypeIdentity> contributedTypeIdentities;
+    private final Map<String, String> javaTypeBindings;
 
     public PipelineTemplateTypeModel(Map<String, PipelineTemplateTypeDefinition> definitions) {
         this(definitions, Map.of());
@@ -57,6 +61,16 @@ public final class PipelineTemplateTypeModel {
         Map<String, Map<String, Object>> representationProviderConfigurations,
         Map<String, ProtocolTypeIdentity> contributedTypeIdentities
     ) {
+        this(definitions, representationMappings, representationProviderConfigurations, contributedTypeIdentities, Map.of());
+    }
+
+    public PipelineTemplateTypeModel(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings,
+        Map<String, Map<String, Object>> representationProviderConfigurations,
+        Map<String, ProtocolTypeIdentity> contributedTypeIdentities,
+        Map<String, String> javaTypeBindings
+    ) {
         Map<String, PipelineTemplateTypeDefinition> copy = definitions == null
             ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
         validate(copy);
@@ -64,6 +78,7 @@ public final class PipelineTemplateTypeModel {
         this.representationMappings = normalizeRepresentationMappings(copy, representationMappings);
         this.representationProviderConfigurations = normalizeProviderConfigurations(representationProviderConfigurations);
         this.contributedTypeIdentities = normalizeContributedIdentities(copy, contributedTypeIdentities);
+        this.javaTypeBindings = normalizeJavaTypeBindings(copy, javaTypeBindings);
     }
 
     public static PipelineTemplateTypeModel empty() {
@@ -151,6 +166,49 @@ public final class PipelineTemplateTypeModel {
 
     public Optional<ProtocolTypeIdentity> contributedTypeIdentity(String localTypeName) {
         return Optional.ofNullable(contributedTypeIdentities.get(localTypeName));
+    }
+
+    /** Package- or application-owned canonical Java representation for a named v3 type. */
+    public Map<String, String> javaTypeBindings() {
+        return javaTypeBindings;
+    }
+
+    public Optional<String> javaTypeBinding(String typeName) {
+        return Optional.ofNullable(javaTypeBindings.get(typeName));
+    }
+
+    private static Map<String, String> normalizeJavaTypeBindings(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, String> bindings
+    ) {
+        if (bindings == null || bindings.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> normalized = new LinkedHashMap<>();
+        Map<String, String> ownersByJavaType = new LinkedHashMap<>();
+        bindings.forEach((name, javaType) -> {
+            if (!definitions.containsKey(name) || !isFullyQualifiedJavaClassName(javaType)) {
+                throw new IllegalStateException("Invalid canonical Java type binding for '" + name + "'");
+            }
+            if (definitions.get(name) instanceof PipelineTemplateTypeDefinition.AliasType) {
+                throw new IllegalStateException("Alias type '" + name
+                    + "' cannot declare a canonical Java type binding; bind its target type instead");
+            }
+            String canonicalJavaType = javaType.trim();
+            String existingOwner = ownersByJavaType.putIfAbsent(canonicalJavaType, name);
+            if (existingOwner != null) {
+                throw new IllegalStateException("Canonical Java type '" + canonicalJavaType
+                    + "' cannot be bound to both '" + existingOwner + "' and '" + name + "'");
+            }
+            normalized.put(name, canonicalJavaType);
+        });
+        return Collections.unmodifiableMap(normalized);
+    }
+
+    static boolean isFullyQualifiedJavaClassName(String value) {
+        return value != null
+            && value.equals(value.strip())
+            && FULLY_QUALIFIED_JAVA_CLASS_NAME.matcher(value).matches();
     }
 
     private static Map<String, ProtocolTypeIdentity> normalizeContributedIdentities(

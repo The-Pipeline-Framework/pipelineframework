@@ -21,6 +21,7 @@ final class ProtocolTypeResolver {
     Resolved resolve(
         Map<String, Map<String, RepresentationMapping>> representationMappings,
         Map<String, Map<String, Object>> representationProviderConfigurations,
+        Map<String, String> javaTypeBindings,
         String inputContract,
         String outputContract,
         List<PipelineTemplateStep> steps,
@@ -39,7 +40,7 @@ final class ProtocolTypeResolver {
             normalizeNullableContract(pipeline.outputContract()),
             pipeline.steps().stream().map(this::normalizeStep).toList())));
         PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(
-            definitions, representationMappings, representationProviderConfigurations, identities);
+            definitions, representationMappings, representationProviderConfigurations, identities, javaTypeBindings);
         return new Resolved(model, resolvedInput, resolvedOutput, resolvedSteps, Map.copyOf(resolvedPipelines));
     }
 

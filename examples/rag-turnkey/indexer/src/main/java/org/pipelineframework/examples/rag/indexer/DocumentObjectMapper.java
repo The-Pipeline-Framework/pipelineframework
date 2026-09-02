@@ -2,15 +2,15 @@ package org.pipelineframework.examples.rag.indexer;
 
 import java.util.Objects;
 import java.util.Optional;
-import org.pipelineframework.examples.rag.document.DocumentTextExtractor;
-import org.pipelineframework.examples.rag.indexer.domain.Document;
 import org.pipelineframework.objectingest.ObjectSnapshot;
 import org.pipelineframework.objectingest.ObjectSnapshotMapper;
+import org.pipelineframework.segments.document.DocumentFile;
+import org.pipelineframework.segments.document.DocumentTextExtractor;
 
 /** Projects immutable object provenance into the public INDEXER input. */
-public final class DocumentObjectMapper implements ObjectSnapshotMapper<Document> {
+public final class DocumentObjectMapper implements ObjectSnapshotMapper<DocumentFile> {
     @Override
-    public Document map(ObjectSnapshot snapshot) {
+    public DocumentFile map(ObjectSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "object snapshot must not be null");
         var reference = Objects.requireNonNull(snapshot.contentRef(), "object snapshot must carry a payload reference");
         String revision = reference.version() != null ? reference.version() : reference.checksum();
@@ -22,7 +22,7 @@ public final class DocumentObjectMapper implements ObjectSnapshotMapper<Document
             .or(() -> Optional.ofNullable(reference.contentType()).filter(value -> !value.isBlank()))
             .map(String::strip)
             .orElse(DocumentTextExtractor.UNKNOWN_CONTENT_TYPE);
-        return new Document(reference.provider() + ":" + container + reference.key() + "@" + revision,
+        return new DocumentFile(reference.provider() + ":" + container + reference.key() + "@" + revision,
             reference.key(), contentType, reference);
     }
 }

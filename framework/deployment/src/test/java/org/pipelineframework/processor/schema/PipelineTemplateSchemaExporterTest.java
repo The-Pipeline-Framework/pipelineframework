@@ -52,6 +52,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("v2MessageDefinition"));
         assertTrue(definitions.has("v2UnionDefinition"));
         assertTrue(definitions.has("v3TypeDefinition"));
+        assertTrue(definitions.has("javaClassName"));
         assertTrue(definitions.has("v3RecordField"));
         assertTrue(definitions.has("v3TypeReference"));
         assertTrue(definitions.has("pipelineInputBoundary"));
@@ -157,6 +158,10 @@ class PipelineTemplateSchemaExporterTest {
     void versionThreeSchemaRequiresNonEmptyUnionsAndCanonicalStepContracts() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         JsonObject definitions = schema.getAsJsonObject("$defs");
+        JsonObject representationMapping = definitions.getAsJsonObject("v3RepresentationMapping")
+            .getAsJsonObject("properties");
+        assertTrue(representationMapping.has("options"));
+        assertTrue(representationMapping.getAsJsonObject("options").get("additionalProperties").getAsBoolean());
         JsonArray v3RecordFields = definitions.getAsJsonObject("v3RecordField").getAsJsonArray("oneOf");
         assertEquals(3, v3RecordFields.size());
         JsonObject repeatedField = v3RecordFields.asList().stream().map(JsonElement::getAsJsonObject)
@@ -174,6 +179,20 @@ class PipelineTemplateSchemaExporterTest {
             .filter(definition -> definition.getAsJsonObject("properties").has("variants"))
             .findFirst().orElseThrow().getAsJsonObject("properties").getAsJsonObject("variants");
         assertEquals(1, unionDefinition.get("minProperties").getAsInt());
+
+        List<JsonObject> typeDefinitions = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf")
+            .asList().stream().map(JsonElement::getAsJsonObject).toList();
+        typeDefinitions.stream()
+            .filter(definition -> !definition.getAsJsonObject("properties").has("alias"))
+            .forEach(definition -> assertEquals("#/$defs/javaClassName",
+                definition.getAsJsonObject("properties").getAsJsonObject("java").get("$ref").getAsString()));
+        typeDefinitions.stream()
+            .filter(definition -> definition.getAsJsonObject("properties").has("alias"))
+            .forEach(definition -> assertFalse(definition.getAsJsonObject("properties").has("java")));
+        String javaClassName = definitions.getAsJsonObject("javaClassName").get("pattern").getAsString();
+        assertTrue(java.util.regex.Pattern.matches(javaClassName, "org.example.segment.DocumentFile"));
+        assertFalse(java.util.regex.Pattern.matches(javaClassName, "."));
+        assertFalse(java.util.regex.Pattern.matches(javaClassName, "DocumentFile"));
 
         JsonObject stringWrapper = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
             .map(JsonElement::getAsJsonObject)

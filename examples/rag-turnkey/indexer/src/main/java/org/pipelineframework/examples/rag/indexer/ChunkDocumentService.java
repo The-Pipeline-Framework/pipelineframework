@@ -6,20 +6,20 @@ import java.util.List;
 import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.examples.rag.indexer.domain.Chunk;
-import org.pipelineframework.examples.rag.indexer.domain.ParsedDocument;
+import org.pipelineframework.segments.document.ExtractedDocument;
 import org.pipelineframework.examples.rag.support.ChunkId;
 import org.pipelineframework.service.ReactiveStreamingService;
 
 /** Application-authored deterministic fixed-window chunker. */
 @ApplicationScoped
-public final class ChunkDocumentService implements ReactiveStreamingService<ParsedDocument, Chunk> {
+public final class ChunkDocumentService implements ReactiveStreamingService<ExtractedDocument, Chunk> {
     static final int WINDOW_WORDS = 120;
 
-    @Override public Multi<Chunk> process(ParsedDocument document) {
+    @Override public Multi<Chunk> process(ExtractedDocument document) {
         return Multi.createFrom().iterable(chunks(document));
     }
 
-    static List<Chunk> chunks(ParsedDocument document) {
+    static List<Chunk> chunks(ExtractedDocument document) {
         List<String> words = Arrays.stream(document.text().strip().split("\\s+"))
             .filter(word -> !word.isBlank()).toList();
         if (words.isEmpty()) throw new IllegalArgumentException("document must contain text to chunk");

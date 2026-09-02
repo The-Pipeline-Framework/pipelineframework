@@ -80,6 +80,7 @@
     <modules>
         <!-- Framework modules -->
         <module>framework</module>
+        <module>segments</module>
         <!-- Example projects -->
         <module>examples/csv-payments</module>
         <module>examples/search</module>
