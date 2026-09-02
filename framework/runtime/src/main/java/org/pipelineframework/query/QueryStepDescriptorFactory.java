@@ -9,8 +9,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +32,7 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.connector.QueryCapabilities;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Builds query descriptors from runtime pipeline YAML.
@@ -53,6 +56,13 @@ public class QueryStepDescriptorFactory {
             t.setName("query-descriptor-loader-" + threadCounter.incrementAndGet());
             return t;
         });
+    private final Executor contextualBlockingExecutor = task -> {
+        Callable<Void> contextualized = RuntimeAdapters.executionContextCarrier().contextualize(() -> {
+            task.run();
+            return null;
+        });
+        blockingExecutor.execute(() -> call(contextualized));
+    };
 
     public Uni<QueryStepDescriptor> descriptor(String serviceName, String inputType, String outputType) {
         String cacheKey = descriptorCacheKey(serviceName, inputType, outputType);
@@ -62,7 +72,17 @@ public class QueryStepDescriptorFactory {
         }
         return Uni.createFrom()
             .item(() -> descriptors.computeIfAbsent(cacheKey, key -> loadDescriptor(serviceName, inputType, outputType)))
-            .runSubscriptionOn(blockingExecutor);
+            .runSubscriptionOn(contextualBlockingExecutor);
+    }
+
+    private static <T> T call(Callable<T> task) {
+        try {
+            return task.call();
+        } catch (RuntimeException failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw new IllegalStateException("Query descriptor loading failed", failure);
+        }
     }
 
     @PreDestroy
