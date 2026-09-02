@@ -928,6 +928,7 @@ class DynamoExecutionStateStoreTest {
             request.conditionExpression().contains("#version = :expected")
                 && request.conditionExpression().contains("#status = :dlq OR #status = :failed")
                 && request.updateExpression().contains("#attempt = #attempt + :one")
+                && !request.expressionAttributeNames().containsKey("#currentStep")
                 && request.updateExpression().contains("REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")));
     }
 

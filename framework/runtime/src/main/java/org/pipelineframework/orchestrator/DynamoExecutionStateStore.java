@@ -1404,6 +1404,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             values.put(":succeeded", avS(ExecutionStatus.SUCCEEDED.name()));
             values.put(":redriveTarget", avS(target));
             values.put(":redriveReason", avS(auditReason));
+        } else {
+            names.remove("#currentStep");
         }
         if (allowFailed) {
             values.put(":failed", avS(ExecutionStatus.FAILED.name()));
