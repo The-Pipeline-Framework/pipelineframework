@@ -9,8 +9,11 @@ import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.connector.ConnectorBindingDefinition;
@@ -83,6 +86,30 @@ class NativeQueryOperationTest {
             execution.invocationTarget().orElseThrow().bindingName());
         assertEquals(ConnectorProviderId.of("acme.lookup"),
             execution.invocationTarget().orElseThrow().operation().providerId());
+    }
+
+    @Test
+    void preservesManagedExecutionContextAcrossAsynchronousDescriptorResolution() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext(
+            "tenant-async", "execution-async", "mail-pipeline", "contract-3", "release-9", 2,
+            Optional.of("correlation-5"), Optional.of("trace-7")));
+        operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "LOW"));
+        ExecutorService descriptorLoader = Executors.newSingleThreadExecutor();
+
+        try {
+            Uni<QueryStepDescriptor> descriptor = Uni.createFrom()
+                .item(() -> descriptor(Map.of("index", "customers")))
+                .runSubscriptionOn(descriptorLoader);
+
+            Snapshot output = support.queryOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2));
+
+            assertEquals(new Snapshot("customer-1", "LOW"), output);
+            assertEquals(Optional.of("tenant-async"), operation.executionContext.tenantId());
+            assertEquals(Optional.of("execution-async"), operation.executionContext.executionId());
+        } finally {
+            descriptorLoader.shutdownNow();
+        }
     }
 
     @Test
