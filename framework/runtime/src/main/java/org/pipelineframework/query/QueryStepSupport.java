@@ -127,16 +127,12 @@ public class QueryStepSupport {
     }
 
     public <I, O> Uni<O> queryOneToOne(Uni<QueryStepDescriptor> descriptor, I input, Class<O> outputType) {
-        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
-        return descriptor.onItem().transformToUni(
-            resolved -> queryOneToOne(resolved, input, outputType, context));
+        return descriptor.onItem().transformToUni(resolved -> queryOneToOne(resolved, input, outputType));
     }
 
     public <I, O> Multi<O> queryOneToMany(Uni<QueryStepDescriptor> descriptor, I input, Class<O> outputType) {
-        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         return descriptor.onItem()
-            .transformToMulti(resolved -> queryOneToManyInternal(
-                resolved, input, outputType, outputType, outputType::cast, context));
+            .transformToMulti(resolved -> queryOneToMany(resolved, input, outputType));
     }
 
     public <I, O, E> Multi<O> queryOneToMany(
@@ -146,9 +142,8 @@ public class QueryStepSupport {
         Class<E> externalOutputType,
         Mapper<O, E> mapper
     ) {
-        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
-        return descriptor.onItem().transformToMulti(resolved -> queryOneToManyInternal(
-            resolved, input, outputType, externalOutputType, mappedRow(outputType, externalOutputType, mapper), context));
+        return descriptor.onItem().transformToMulti(resolved -> queryOneToMany(
+            resolved, input, outputType, externalOutputType, mapper));
     }
 
     public <I, O> Multi<O> queryOneToMany(
@@ -156,8 +151,7 @@ public class QueryStepSupport {
         I input,
         Class<O> outputType
     ) {
-        return queryOneToManyInternal(
-            descriptor, input, outputType, outputType, outputType::cast, PipelineExecutionContextHolder.get());
+        return queryOneToManyInternal(descriptor, input, outputType, outputType, outputType::cast);
     }
 
     public <I, O, E> Multi<O> queryOneToMany(
@@ -167,22 +161,8 @@ public class QueryStepSupport {
         Class<E> externalOutputType,
         Mapper<O, E> mapper
     ) {
-        return queryOneToManyInternal(
-            descriptor,
-            input,
-            outputType,
-            externalOutputType,
-            mappedRow(outputType, externalOutputType, mapper),
-            PipelineExecutionContextHolder.get());
-    }
-
-    private static <O, E> Function<Object, O> mappedRow(
-        Class<O> outputType,
-        Class<E> externalOutputType,
-        Mapper<O, E> mapper
-    ) {
         java.util.Objects.requireNonNull(mapper, "mapper must not be null");
-        return item -> {
+        return queryOneToManyInternal(descriptor, input, outputType, externalOutputType, item -> {
             E external = externalOutputType.cast(item);
             O canonical = mapper.fromExternal(external);
             if (canonical == null) {
@@ -190,7 +170,7 @@ public class QueryStepSupport {
                     "persistence representation mapper returned null for canonical output " + outputType.getName());
             }
             return outputType.cast(canonical);
-        };
+        });
     }
 
     private <I, O, E> Multi<O> queryOneToManyInternal(
@@ -198,8 +178,7 @@ public class QueryStepSupport {
         I input,
         Class<O> outputType,
         Class<E> providerOutputType,
-        Function<Object, O> rowMapper,
-        Optional<PipelineExecutionContext> context
+        Function<Object, O> rowMapper
     ) {
         return Multi.createFrom().deferred(() -> {
             if (descriptor == null || descriptor.nativeSelector().isEmpty()) {
@@ -212,8 +191,9 @@ public class QueryStepSupport {
             }
             java.util.Objects.requireNonNull(outputType, "outputType must not be null");
             java.util.Objects.requireNonNull(providerOutputType, "providerOutputType must not be null");
+            Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
             if (context.isEmpty()) {
-                return executeStreamingNative(descriptor, input, providerOutputType, rowMapper, context);
+                return executeStreamingNative(descriptor, input, providerOutputType, rowMapper);
             }
             try {
                 PipelineExecutionContext execution = context.orElseThrow();
@@ -237,7 +217,7 @@ public class QueryStepSupport {
                     StreamingQueryCaptureWriter writer =
                         ((StreamingQueryCaptureOpen.Write) opened).writer();
                     return captureStreaming(
-                        executeStreamingNative(descriptor, input, providerOutputType, rowMapper, context),
+                        executeStreamingNative(descriptor, input, providerOutputType, rowMapper),
                         writer,
                         outputType);
                 });
@@ -259,9 +239,8 @@ public class QueryStepSupport {
         Class<E> externalOutputType,
         Mapper<O, E> mapper
     ) {
-        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         return descriptor.onItem().transformToUni(resolved ->
-            queryOneToOne(resolved, input, outputType, externalOutputType, mapper, context));
+            queryOneToOne(resolved, input, outputType, externalOutputType, mapper));
     }
 
     public <I, O, E> Uni<O> queryOneToOne(
@@ -271,18 +250,6 @@ public class QueryStepSupport {
         Class<E> externalOutputType,
         Mapper<O, E> mapper
     ) {
-        return queryOneToOne(
-            descriptor, input, outputType, externalOutputType, mapper, PipelineExecutionContextHolder.get());
-    }
-
-    private <I, O, E> Uni<O> queryOneToOne(
-        QueryStepDescriptor descriptor,
-        I input,
-        Class<O> outputType,
-        Class<E> externalOutputType,
-        Mapper<O, E> mapper,
-        Optional<PipelineExecutionContext> context
-    ) {
         if (descriptor == null || descriptor.nativeSelector().isEmpty()) {
             return Uni.createFrom().failure(new IllegalArgumentException(
                 "mapped Query representations require a native Query descriptor"));
@@ -290,9 +257,9 @@ public class QueryStepSupport {
         java.util.Objects.requireNonNull(outputType, "outputType must not be null");
         java.util.Objects.requireNonNull(externalOutputType, "externalOutputType must not be null");
         java.util.Objects.requireNonNull(mapper, "mapper must not be null");
+        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         if (context.isEmpty()) {
-            return executeMappedNative(
-                descriptor, input, outputType, externalOutputType, mapper, Optional.empty(), context);
+            return executeMappedNative(descriptor, input, outputType, externalOutputType, mapper, Optional.empty());
         }
         PipelineExecutionContext executionContext = context.orElseThrow();
         try {
@@ -305,7 +272,7 @@ public class QueryStepSupport {
                 }
                 NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
                 return executeMappedNative(
-                    descriptor, input, outputType, externalOutputType, mapper, Optional.of(capture), context);
+                    descriptor, input, outputType, externalOutputType, mapper, Optional.of(capture));
             });
         } catch (Exception failure) {
             return Uni.createFrom().failure(failure);
@@ -313,20 +280,12 @@ public class QueryStepSupport {
     }
 
     public <I, O> Uni<O> queryOneToOne(QueryStepDescriptor descriptor, I input, Class<O> outputType) {
-        return queryOneToOne(descriptor, input, outputType, PipelineExecutionContextHolder.get());
-    }
-
-    private <I, O> Uni<O> queryOneToOne(
-        QueryStepDescriptor descriptor,
-        I input,
-        Class<O> outputType,
-        Optional<PipelineExecutionContext> context
-    ) {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
+        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         if (context.isEmpty()) {
-            return executeLive(descriptor, input, outputType, context);
+            return executeLive(descriptor, input, outputType);
         }
         PipelineExecutionContext executionContext = context.orElseThrow();
         QueryCaptureStore store;
@@ -364,7 +323,7 @@ public class QueryStepSupport {
         }
         Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         if (context.isEmpty()) {
-            return executeNative(descriptor, input, outputType, context)
+            return executeNative(descriptor, input, outputType)
                 .onItem().transformToUni(outcome -> preserveNativeOutcome(
                     descriptor, outputType, outcome, Optional.empty()));
         }
@@ -378,7 +337,7 @@ public class QueryStepSupport {
                     return replayCapturedOutcome(descriptor, existing.orElseThrow(), outputType);
                 }
                 NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
-                return executeNative(descriptor, input, outputType, context)
+                return executeNative(descriptor, input, outputType)
                     .onItem().transformToUni(outcome -> preserveNativeOutcome(
                         descriptor, outputType, outcome, Optional.of(capture)));
             });
@@ -387,14 +346,9 @@ public class QueryStepSupport {
         }
     }
 
-    private <I, O> Uni<O> executeLive(
-        QueryStepDescriptor descriptor,
-        I input,
-        Class<O> outputType,
-        Optional<PipelineExecutionContext> context
-    ) {
+    private <I, O> Uni<O> executeLive(QueryStepDescriptor descriptor, I input, Class<O> outputType) {
         if (descriptor.nativeSelector().isPresent()) {
-            return executeNative(descriptor, input, outputType, context)
+            return executeNative(descriptor, input, outputType)
                 .onItem().transformToUni(outcome -> applyNativeOutcome(
                     descriptor, outputType, outcome, Optional.empty()));
         }
@@ -412,8 +366,7 @@ public class QueryStepSupport {
         Class<O> outputType,
         Class<E> externalOutputType,
         Mapper<O, E> mapper,
-        Optional<NativeCapture> capture,
-        Optional<PipelineExecutionContext> context
+        Optional<NativeCapture> capture
     ) {
         AtomicBoolean mappedWithinProvider = new AtomicBoolean();
         Function<E, O> localResultMapper = external -> {
@@ -426,7 +379,7 @@ public class QueryStepSupport {
             mappedWithinProvider.set(true);
             return result;
         };
-        return executeNative(descriptor, input, externalOutputType, Optional.of(localResultMapper), context)
+        return executeNative(descriptor, input, externalOutputType, Optional.of(localResultMapper))
             .onItem().transformToUni(outcome -> {
                 QueryOutcome<Object> canonicalOutcome = mappedWithinProvider.get()
                     ? outcome
@@ -477,7 +430,7 @@ public class QueryStepSupport {
     ) {
         if (descriptor.nativeSelector().isPresent()) {
             NativeCapture capture = new NativeCapture(store, executionContext, captureKey, inputJson);
-            return executeNative(descriptor, input, outputType, Optional.of(executionContext))
+            return executeNative(descriptor, input, outputType)
                 .onItem().transformToUni(outcome -> applyNativeOutcome(
                     descriptor, outputType, outcome, Optional.of(capture)));
         }
@@ -495,10 +448,9 @@ public class QueryStepSupport {
     private <I, O> Uni<QueryOutcome<Object>> executeNative(
         QueryStepDescriptor descriptor,
         I input,
-        Class<O> outputType,
-        Optional<PipelineExecutionContext> context
+        Class<O> outputType
     ) {
-        return executeNative(descriptor, input, outputType, Optional.empty(), context);
+        return executeNative(descriptor, input, outputType, Optional.empty());
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -506,8 +458,7 @@ public class QueryStepSupport {
         QueryStepDescriptor descriptor,
         I input,
         Class<O> outputType,
-        Optional<Function<O, ?>> localResultMapper,
-        Optional<PipelineExecutionContext> context
+        Optional<Function<O, ?>> localResultMapper
     ) {
         NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
         ConnectorBindingRegistry bindings;
@@ -529,7 +480,7 @@ public class QueryStepSupport {
                         : zeroConfiguration(selector, configuration);
                     return invokeNative(
                         descriptor, selector, operation, input, boundConfiguration, outputType,
-                        localResultMapper, bindings, context);
+                        localResultMapper, bindings);
                 } catch (RuntimeException failure) {
                     return Uni.createFrom().failure(failure);
                 }
@@ -553,8 +504,7 @@ public class QueryStepSupport {
         QueryStepDescriptor descriptor,
         I input,
         Class<?> providerOutputType,
-        Function<Object, O> rowMapper,
-        Optional<PipelineExecutionContext> context
+        Function<Object, O> rowMapper
     ) {
         NativeQuerySelector selector = descriptor.nativeSelector().orElseThrow();
         ConnectorBindingRegistry bindings;
@@ -581,7 +531,7 @@ public class QueryStepSupport {
                             input,
                             boundConfiguration,
                             providerOutputType,
-                            connectorExecutionContext(descriptor, selector, context),
+                            connectorExecutionContext(descriptor, selector),
                             Optional.of(bindings::materialize),
                             Optional.empty())));
                     return Multi.createFrom().publisher(publisher)
@@ -602,15 +552,14 @@ public class QueryStepSupport {
         Object boundConfiguration,
         Class<O> outputType,
         Optional<Function<O, ?>> localResultMapper,
-        ConnectorBindingRegistry bindings,
-        Optional<PipelineExecutionContext> context
+        ConnectorBindingRegistry bindings
     ) {
         CompletionStage<QueryOutcome<Object>> stage = invocationCoordinator.invoke(selector.binding(), operation, () ->
             operation.query(new QueryInvocation<>(
                 input,
                 boundConfiguration,
                 outputType,
-                connectorExecutionContext(descriptor, selector, context),
+                connectorExecutionContext(descriptor, selector),
                 Optional.of(bindings::materialize),
                 localResultMapper)));
         return Uni.createFrom().completionStage(stage)
@@ -1077,9 +1026,9 @@ public class QueryStepSupport {
 
     private static ConnectorExecutionContext connectorExecutionContext(
         QueryStepDescriptor descriptor,
-        NativeQuerySelector selector,
-        Optional<PipelineExecutionContext> context
+        NativeQuerySelector selector
     ) {
+        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         org.pipelineframework.connector.ConnectorInvocationTarget target =
             new org.pipelineframework.connector.ConnectorInvocationTarget(
                 selector.binding(), selector.operationIdentity());
