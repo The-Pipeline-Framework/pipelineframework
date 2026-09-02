@@ -212,6 +212,41 @@ class QueueAsyncRedriveFlowTest {
   }
 
   @Test
+  void commandReissueUsesTargetedAtomicAdmissionAndReturnsAcceptedIntent() {
+    ExecutionRecord<Object, Object> succeeded = record(ExecutionStatus.SUCCEEDED, 4L, 2);
+    ExecutionRecord<Object, Object> redriven = reissueRecord(5L, 3);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+    when(executionStateStore.redriveTerminalExecution(
+            eq("tenant-1"),
+            eq("exec-1"),
+            eq(4L),
+            eq(false),
+            eq(ExecutionRedriveIntent.REISSUE_COMMAND),
+            eq(Optional.of("archive:invoice-1")),
+            eq(Optional.of("customer approved")),
+            eq("command-reissue:exec-1:4"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(redriven)));
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+    ExecutionRedriveResult result = flow.redrive(
+            "tenant-1",
+            "exec-1",
+            4L,
+            false,
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            "archive:invoice-1",
+            "customer approved")
+        .await().indefinitely();
+
+    assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, result.intent());
+    assertEquals(Optional.of("archive:invoice-1"), result.targetCommandId());
+    assertEquals(0, result.currentStepIndex());
+    verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+  }
+
+  @Test
   void omittedIntentUsesOrdinaryReplayAdmission() {
     ExecutionRecord<Object, Object> terminal = record(ExecutionStatus.DLQ, 4L, 2);
     ExecutionRecord<Object, Object> redriven = record(ExecutionStatus.QUEUED, 5L, 3);
@@ -299,5 +334,15 @@ class QueueAsyncRedriveFlowTest {
         ExecutionRedriveIntent.REPLAY,
         4,
         Optional.of("archive:invoice-1"));
+  }
+
+  private static ExecutionRecord<Object, Object> reissueRecord(long version, int attempt) {
+    return new ExecutionRecord<>(
+        "tenant-1", "exec-1", "key-1", "pipeline-a", "contract-a", "release-a",
+        ExecutionResultShape.SINGLE, ExecutionStatus.QUEUED, version, 0, attempt, null,
+        0L, 0L, "command-reissue:exec-1:4", "input", null, null, null, null,
+        1L, 2L, 99999999L, 0L, 0, "", ExecutionRedriveIntent.REISSUE_COMMAND,
+        4, Optional.of("archive:invoice-1"), Optional.of("archive:invoice-1"),
+        Optional.of("customer approved"));
   }
 }

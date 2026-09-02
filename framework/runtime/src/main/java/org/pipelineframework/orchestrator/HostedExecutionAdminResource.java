@@ -79,13 +79,22 @@ public class HostedExecutionAdminResource {
                 effectiveRequest.expectedVersion(),
                 effectiveRequest.allowFailed(),
                 effectiveRequest.reason())
-            : controlPlane.redriveExecution(
+            : effectiveRequest.intent() == ExecutionRedriveIntent.REISSUE_COMMAND
+                ? controlPlane.redriveExecution(
                 tenantId,
                 executionId,
                 effectiveRequest.expectedVersion(),
                 effectiveRequest.allowFailed(),
                 effectiveRequest.intent(),
-                effectiveRequest.reason());
+                effectiveRequest.targetCommandId(),
+                effectiveRequest.reason())
+                : controlPlane.redriveExecution(
+                    tenantId,
+                    executionId,
+                    effectiveRequest.expectedVersion(),
+                    effectiveRequest.allowFailed(),
+                    effectiveRequest.intent(),
+                    effectiveRequest.reason());
         return redrive
             .onItem().transform(result -> Response.ok(result).build())
             .onFailure(NotFoundException.class).recoverWithItem(failure ->

@@ -40,7 +40,9 @@ logical identity and recorded authority can prevent unsafe accidental redispatch
 ## Consequences
 
 - Generic cache and typed persistence cannot authorize an external effect.
-- Provider idempotency keys align with logical Command identity.
+- The initial provider idempotency key aligns with logical Command identity; an intentionally new
+  occurrence uses the occurrence identity defined by
+  [ADR-0025](./0025-command-reissue-uses-occurrence-identity.md).
 - Retry/redrive support must preserve effect identity and reject unsafe unsupported paths.
 - Execution stores must preserve deliberate retry intent until the targeted transition is
   claimed; effect stores remain the sole authority for whether another attempt is legal.

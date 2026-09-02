@@ -8,5 +8,8 @@ public enum ExecutionRedriveIntent {
     REPLAY,
 
     /** Authorize one deliberate retry attempt for the retained failed Command step. */
-    RETRY_FAILED_COMMAND
+    RETRY_FAILED_COMMAND,
+
+    /** Authorize one new occurrence for an exact retained successful Command effect. */
+    REISSUE_COMMAND
 }

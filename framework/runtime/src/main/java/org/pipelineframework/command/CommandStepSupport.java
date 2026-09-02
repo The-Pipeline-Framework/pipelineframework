@@ -235,54 +235,102 @@ public class CommandStepSupport {
         if (existing.isPresent()) {
             CommandEffectRecord record = existing.get();
             if (record.status() == CommandEffectStatus.SUCCEEDED) {
+                boolean recordedAttempt = CommandReexecutionScope.claimRecorded(
+                    request.commandId(), record.currentAttempt().attemptId());
+                Optional<CommandReexecutionScope.Claim> claim = recordedAttempt
+                    ? Optional.empty()
+                    : CommandReexecutionScope.claimAttempt(
+                        request.commandId(), record.currentAttempt().occurrenceId());
+                if (claim.isPresent()) {
+                    CommandReexecutionScope.Claim admitted = claim.orElseThrow();
+                    if (admitted.admission().purpose() != CommandAttemptPurpose.REISSUE) {
+                        return Uni.createFrom().failure(new IllegalStateException(
+                            "Command retry cannot append an attempt from SUCCEEDED state"));
+                    }
+                    if (!store.supportsAttempt(CommandAttemptPurpose.REISSUE)) {
+                        return Uni.createFrom().failure(new UnsupportedOperationException(
+                            "Command reissue requires a CommandEffectStore that persists occurrence history"));
+                    }
+                    CommandRequest<I> reissueRequest = new CommandRequest<>(
+                        request.descriptor(),
+                        request.commandId(),
+                        admitted.occurrenceId(),
+                        admitted.attemptId(),
+                        request.input(),
+                        request.executionContext(),
+                        request.config());
+                    return reissueRequest.descriptor().nativeSelector().isPresent()
+                        ? executeNative(
+                            store,
+                            reissueRequest,
+                            reissueRequest.descriptor().nativeSelector().orElseThrow(),
+                            Optional.of(admitted.admission()))
+                        : executeLegacy(store, reissueRequest, Optional.of(admitted.admission()));
+                }
                 if (request.descriptor().duplicatePolicy() == CommandDuplicatePolicy.FAIL) {
                     CommandEffectMetrics.recordDuplicate(request.descriptor(), "rejected");
                     return Uni.createFrom().failure(new NonRetryableException(
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
-                CommandRetryExecutionScope.claimRecorded(
-                    request.commandId(),
-                    record.currentAttempt().attemptId());
                 @SuppressWarnings("unchecked")
                 O recorded = (O) record.output();
                 CommandRecordedDuplicateMarker.mark(recorded);
                 CommandEffectMetrics.recordDuplicate(request.descriptor(), "returned_recorded");
+                CommandEffectMetrics.recordAdmission(request.descriptor(), "replay");
                 return Uni.createFrom().item(recorded);
             }
             if (record.status() == CommandEffectStatus.PENDING || record.status() == CommandEffectStatus.DISPATCHING) {
+                CommandReexecutionScope.claimRecorded(
+                    request.commandId(), record.currentAttempt().attemptId());
                 CommandEffectMetrics.recordDuplicate(request.descriptor(), "in_progress");
                 return Uni.createFrom().failure(new CommandInProgressException(
                     "Command already in progress for commandId " + request.commandId()));
             }
             if (record.status() == CommandEffectStatus.FAILED_RETRYABLE) {
-                CommandRequest<I> retryRequest = request;
-                boolean admittedRetry = deliberateRetry;
-                Optional<String> admittedAttempt = admittedRetry
+                Optional<CommandReexecutionScope.Claim> scopedClaim = deliberateRetry
                     ? Optional.empty()
-                    : CommandRetryExecutionScope.claimAttempt(request.commandId());
-                if (admittedAttempt.isPresent()) {
-                    retryRequest = new CommandRequest<>(
-                        request.descriptor(),
-                        request.commandId(),
-                        admittedAttempt.orElseThrow(),
-                        request.input(),
-                        request.executionContext(),
-                        request.config());
-                    admittedRetry = true;
-                }
-                if (admittedRetry) {
+                    : CommandReexecutionScope.claimAttempt(
+                        request.commandId(), record.currentAttempt().occurrenceId());
+                if (deliberateRetry || scopedClaim.isPresent()) {
+                    CommandAttemptAdmission admission = scopedClaim
+                        .map(CommandReexecutionScope.Claim::admission)
+                        .orElseGet(CommandAttemptAdmission::retry);
+                    if (admission.purpose() != CommandAttemptPurpose.RETRY) {
+                        return Uni.createFrom().failure(new IllegalStateException(
+                            "Command reissue cannot append an attempt from FAILED_RETRYABLE state"));
+                    }
+                    CommandRequest<I> retryRequest = scopedClaim
+                        .map(admitted -> new CommandRequest<>(
+                            request.descriptor(),
+                            request.commandId(),
+                            admitted.occurrenceId(),
+                            admitted.attemptId(),
+                            request.input(),
+                            request.executionContext(),
+                            request.config()))
+                        .orElseGet(() -> new CommandRequest<>(
+                            request.descriptor(),
+                            request.commandId(),
+                            record.currentAttempt().occurrenceId(),
+                            request.attemptId(),
+                            request.input(),
+                            request.executionContext(),
+                            request.config()));
                     if (record.currentAttempt().attemptId().equals(retryRequest.attemptId())) {
                         return Uni.createFrom().failure(new CommandRetryableOutcomeException(
                             "retry-admission-already-attempted"));
                     }
-                    if (!store.supportsRetryAttempts()) {
+                    if (!store.supportsAttempt(CommandAttemptPurpose.RETRY)) {
                         return Uni.createFrom().failure(new UnsupportedOperationException(
                             "deliberate Command retry requires a CommandEffectStore that persists attempt history"));
                     }
                     return retryRequest.descriptor().nativeSelector().isPresent()
                         ? executeNative(
-                            store, retryRequest, retryRequest.descriptor().nativeSelector().orElseThrow(), true)
-                        : executeLegacy(store, retryRequest, true);
+                            store,
+                            retryRequest,
+                            retryRequest.descriptor().nativeSelector().orElseThrow(),
+                            Optional.of(admission))
+                        : executeLegacy(store, retryRequest, Optional.of(admission));
                 }
                 return Uni.createFrom().failure(CommandRetryableEffectException.mark(
                     request.commandId(), new CommandRetryableOutcomeException(recordedOutcomeCode(record))));
@@ -290,6 +338,8 @@ public class CommandStepSupport {
             if (record.status() == CommandEffectStatus.DLQ
                 || record.status() == CommandEffectStatus.AMBIGUOUS
                 || record.status() == CommandEffectStatus.USER_ACTION_REQUIRED) {
+                CommandReexecutionScope.claimAttempt(
+                    request.commandId(), record.currentAttempt().occurrenceId());
                 return Uni.createFrom().failure(new CommandOutcomeException(record.status(), recordedOutcomeCode(record)));
             }
             return Uni.createFrom().failure(new IllegalStateException(
@@ -300,14 +350,14 @@ public class CommandStepSupport {
                 "No existing command effect found to retry for commandId " + request.commandId()));
         }
         return request.descriptor().nativeSelector().isPresent()
-            ? executeNative(store, request, request.descriptor().nativeSelector().orElseThrow(), false)
-            : executeLegacy(store, request, false);
+            ? executeNative(store, request, request.descriptor().nativeSelector().orElseThrow(), Optional.empty())
+            : executeLegacy(store, request, Optional.empty());
     }
 
     private <I, O> Uni<O> executeLegacy(
         CommandEffectStore store,
         CommandRequest<I> request,
-        boolean deliberateRetry
+        Optional<CommandAttemptAdmission> attemptAdmission
     ) {
         LegacyCommandConnectorProvider.LegacyCommandOperation operation;
         try {
@@ -316,7 +366,7 @@ public class CommandStepSupport {
             return Uni.createFrom().failure(failure);
         }
         long effectStartNanos = CommandEffectMetrics.startNanos();
-        return beginDispatch(store, request, deliberateRetry)
+        return beginDispatch(store, request, attemptAdmission)
             .onItem().<O>transformToUni(ignored -> this.<I, O>dispatchLegacyConnector(operation, request)
                 .onFailure(failure -> !isNonRetryable(failure))
                 .transform(failure -> CommandRetryableEffectException.mark(request.commandId(), failure))
@@ -337,7 +387,7 @@ public class CommandStepSupport {
         CommandEffectStore store,
         CommandRequest<I> request,
         NativeCommandSelector selector,
-        boolean deliberateRetry
+        Optional<CommandAttemptAdmission> attemptAdmission
     ) {
         if (!store.supportsNativeOutcomeSnapshots()) {
             return Uni.createFrom().failure(new IllegalStateException(
@@ -347,7 +397,7 @@ public class CommandStepSupport {
         long effectStartNanos = CommandEffectMetrics.startNanos();
         return activateBinding(selector)
             .onItem().transformToUni(ignored -> executeActivatedNative(
-                store, request, selector, effectStartNanos, deliberateRetry));
+                store, request, selector, effectStartNanos, attemptAdmission));
     }
 
     private <I, O> Uni<O> executeActivatedNative(
@@ -355,7 +405,7 @@ public class CommandStepSupport {
         CommandRequest<I> request,
         NativeCommandSelector selector,
         long effectStartNanos,
-        boolean deliberateRetry
+        Optional<CommandAttemptAdmission> attemptAdmission
     ) {
         CommandOperation<?, ?, ?> operation;
         try {
@@ -366,7 +416,7 @@ public class CommandStepSupport {
         } catch (IllegalStateException | IllegalArgumentException failure) {
             return Uni.createFrom().failure(failure);
         }
-        if (deliberateRetry && !operation.capabilities().retryRedriveSupported()) {
+        if (attemptAdmission.isPresent() && !operation.capabilities().retryRedriveSupported()) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "native command operation " + selector.operationIdentity()
                     + " does not support deliberate retry/redrive"));
@@ -384,7 +434,7 @@ public class CommandStepSupport {
             return Uni.createFrom().failure(failure);
         }
         return activateProviderFirst(selector)
-            .onItem().transformToUni(ignored -> beginDispatch(store, request, deliberateRetry)
+            .onItem().transformToUni(ignored -> beginDispatch(store, request, attemptAdmission)
                 .onItem().transformToUni(dispatched -> dispatchNative(operation, request, selector, boundConfiguration)
                     .onFailure(CommandStepSupport::isCancellation)
                     .recoverWithItem(new CommandOutcome.Ambiguous<>("provider-dispatch-cancelled", List.of()))
@@ -404,13 +454,17 @@ public class CommandStepSupport {
     private <I> Uni<Void> beginDispatch(
         CommandEffectStore store,
         CommandRequest<I> request,
-        boolean deliberateRetry
+        Optional<CommandAttemptAdmission> attemptAdmission
     ) {
         // Each effect transition records its own wall-clock time so the store can show dispatch/write duration.
-        Uni<CommandEffectRecord> admitted = deliberateRetry
-            ? store.createRetryAttempt(request, System.currentTimeMillis())
-            : store.createPending(request, System.currentTimeMillis());
+        Uni<CommandEffectRecord> admitted = attemptAdmission
+            .map(admission -> store.createAttempt(request, admission, System.currentTimeMillis()))
+            .orElseGet(() -> store.createPending(request, System.currentTimeMillis()));
         return admitted
+            .invoke(ignored -> CommandEffectMetrics.recordAdmission(
+                request.descriptor(),
+                attemptAdmission.map(value -> value.purpose().name().toLowerCase(java.util.Locale.ROOT))
+                    .orElse("initial")))
             .invoke(ignored -> CommandEffectMetrics.recordTransition(
                 request.descriptor(),
                 CommandEffectStatus.PENDING))
@@ -441,7 +495,7 @@ public class CommandStepSupport {
                 boundConfiguration,
                 connectorExecutionContext(request, selector, binding),
                 Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
-                    request.commandId(), request.attemptId())))));
+                    request.commandId(), request.occurrenceId(), request.attemptId())))));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(CommandStepSupport::unwrapTransportFailure);
     }

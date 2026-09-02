@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import org.junit.jupiter.api.Test;
 import java.util.OptionalLong;
+import java.util.Optional;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
@@ -90,6 +91,44 @@ class ExecutionRedrivePlanTest {
         dlq, OptionalLong.empty(), true, ExecutionRedriveIntent.RETRY_FAILED_COMMAND, "retry command"));
     assertThrows(IllegalStateException.class, () -> ExecutionRedrivePlan.from(
         failed, OptionalLong.empty(), false, ExecutionRedriveIntent.RETRY_FAILED_COMMAND, "retry command"));
+  }
+
+  @Test
+  void commandReissueRequiresSuccessfulExecutionVersionTargetAndReason() {
+    ExecutionRecord<Object, Object> succeeded = record(ExecutionStatus.SUCCEEDED, 8L);
+
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(
+        succeeded,
+        OptionalLong.of(8L),
+        false,
+        ExecutionRedriveIntent.REISSUE_COMMAND,
+        "archive:invoice-1",
+        "customer approved duplicate invoice archive");
+
+    assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, plan.intent());
+    assertEquals(Optional.of("archive:invoice-1"), plan.targetCommandId());
+    assertEquals("customer approved duplicate invoice archive", plan.normalizedReason());
+    assertEquals("command-reissue:exec-1:8", plan.transitionKey());
+
+    assertThrows(IllegalArgumentException.class, () -> ExecutionRedrivePlan.from(
+        succeeded, OptionalLong.empty(), false, ExecutionRedriveIntent.REISSUE_COMMAND,
+        "archive:invoice-1", "approved"));
+    assertThrows(IllegalArgumentException.class, () -> ExecutionRedrivePlan.from(
+        succeeded, OptionalLong.of(8L), false, ExecutionRedriveIntent.REISSUE_COMMAND,
+        null, "approved"));
+    assertThrows(IllegalArgumentException.class, () -> ExecutionRedrivePlan.from(
+        succeeded, OptionalLong.of(8L), false, ExecutionRedriveIntent.REISSUE_COMMAND,
+        "archive:invoice-1", " "));
+    assertThrows(IllegalArgumentException.class, () -> ExecutionRedrivePlan.from(
+        succeeded, OptionalLong.of(8L), true, ExecutionRedriveIntent.REISSUE_COMMAND,
+        "archive:invoice-1", "approved"));
+  }
+
+  @Test
+  void targetCommandIdIsRejectedForOtherRedriveIntents() {
+    assertThrows(IllegalArgumentException.class, () -> ExecutionRedrivePlan.from(
+        record(ExecutionStatus.DLQ, 2L), OptionalLong.of(2L), false,
+        ExecutionRedriveIntent.REPLAY, "archive:invoice-1", "operator"));
   }
 
   @Test

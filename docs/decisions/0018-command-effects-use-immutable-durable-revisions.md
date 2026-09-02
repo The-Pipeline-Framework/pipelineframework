@@ -21,7 +21,8 @@ Creation and transitions conditionally create the expected revision; they do not
 record or maintain a mutable current pointer. Reads of the latest authority are strongly consistent.
 
 Each revision preserves the complete typed input/output snapshot, native outcome metadata, and
-ordered attempt history. Store conflicts, connectivity failures, corrupt records, unsupported
+ordered attempt history, including the occurrence identity introduced by
+[ADR-0025](./0025-command-reissue-uses-occurrence-identity.md). Store conflicts, connectivity failures, corrupt records, unsupported
 schema versions, and type reconstruction failures remain store failures. They are never interpreted
 as provider outcomes. Query capture remains a separate state authority.
 
@@ -34,7 +35,8 @@ replay, and operator diagnosis without borrowing mutable legacy-store precedent.
 ## Consequences
 
 - Successful output and non-success barriers survive process restart.
-- Deliberate retry retains one logical effect identity and lossless attempt history.
+- Deliberate retry retains one occurrence identity, intentional reissue appends a new occurrence,
+  and both retain lossless attempt history.
 - Provider selection and table provisioning are deployment concerns; authored pipelines and
   connector operations do not select storage.
 - Large business content is carried by `PayloadReference` rather than expanding control-plane rows.

@@ -15,6 +15,7 @@ public final class CommandEffectMetrics {
     static final String TRANSITION_TOTAL = "tpf.command.effect.transition.total";
     static final String DUPLICATE_TOTAL = "tpf.command.effect.duplicate.total";
     static final String DURATION = "tpf.command.effect.duration";
+    static final String ADMISSION_TOTAL = "tpf.command.effect.admission.total";
     private CommandEffectMetrics() { }
 
     private static CommandEffectMetricsRecorder delegate() {
@@ -35,5 +36,9 @@ public final class CommandEffectMetrics {
 
     public static void recordDuplicate(CommandDescriptor descriptor, String duplicateResult) {
         delegate().recordDuplicate(descriptor, duplicateResult);
+    }
+
+    public static void recordAdmission(CommandDescriptor descriptor, String admission) {
+        delegate().recordAdmission(descriptor, admission);
     }
 }

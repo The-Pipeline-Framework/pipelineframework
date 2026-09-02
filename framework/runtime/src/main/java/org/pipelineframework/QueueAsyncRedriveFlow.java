@@ -58,7 +58,7 @@ class QueueAsyncRedriveFlow {
       boolean allowFailed,
       String reason) {
     return redrive(
-        tenantId, executionId, expectedVersion, allowFailed, ExecutionRedriveIntent.REPLAY, reason);
+        tenantId, executionId, expectedVersion, allowFailed, ExecutionRedriveIntent.REPLAY, null, reason);
   }
 
   Uni<ExecutionRedriveResult> redrive(
@@ -67,6 +67,17 @@ class QueueAsyncRedriveFlow {
       Long expectedVersion,
       boolean allowFailed,
       ExecutionRedriveIntent intent,
+      String reason) {
+    return redrive(tenantId, executionId, expectedVersion, allowFailed, intent, null, reason);
+  }
+
+  Uni<ExecutionRedriveResult> redrive(
+      String tenantId,
+      String executionId,
+      Long expectedVersion,
+      boolean allowFailed,
+      ExecutionRedriveIntent intent,
+      String targetCommandId,
       String reason) {
     ExecutionRedriveIntent resolvedIntent = intent == null ? ExecutionRedriveIntent.REPLAY : intent;
     OptionalLong resolvedExpectedVersion = expectedVersion == null
@@ -91,6 +102,7 @@ class QueueAsyncRedriveFlow {
               resolvedExpectedVersion,
               allowFailed,
               resolvedIntent,
+              targetCommandId,
               reason,
               now));
     });
@@ -103,13 +115,14 @@ class QueueAsyncRedriveFlow {
       OptionalLong expectedVersion,
       boolean allowFailed,
       ExecutionRedriveIntent intent,
+      String targetCommandId,
       String reason,
       long now) {
     if (optional.isEmpty()) {
       return Uni.createFrom().failure(new NotFoundException("Execution not found: " + executionId));
     }
     ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(
-        optional.get(), expectedVersion, allowFailed, intent, reason);
+        optional.get(), expectedVersion, allowFailed, intent, targetCommandId, reason);
     Uni<Optional<ExecutionRecord<Object, Object>>> admitted =
         plan.intent() == ExecutionRedriveIntent.REPLAY
             ? executionStateStore.redriveTerminalExecution(
@@ -119,14 +132,25 @@ class QueueAsyncRedriveFlow {
                 plan.allowFailed(),
                 plan.transitionKey(),
                 now)
-            : executionStateStore.redriveTerminalExecution(
+            : plan.intent() == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+                ? executionStateStore.redriveTerminalExecution(
                 tenantId,
                 executionId,
                 plan.expectedVersion(),
                 plan.allowFailed(),
                 plan.intent(),
                 plan.transitionKey(),
-                now);
+                now)
+                : executionStateStore.redriveTerminalExecution(
+                    tenantId,
+                    executionId,
+                    plan.expectedVersion(),
+                    plan.allowFailed(),
+                    plan.intent(),
+                    plan.targetCommandId(),
+                    Optional.of(plan.normalizedReason()),
+                    plan.transitionKey(),
+                    now);
     return admitted
         .onItem().transformToUni(redriven -> redriven
             .map(record -> enqueue(plan, record))

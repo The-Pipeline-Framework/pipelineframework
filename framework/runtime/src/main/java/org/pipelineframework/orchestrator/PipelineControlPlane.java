@@ -62,6 +62,22 @@ public interface PipelineControlPlane {
             "Pipeline control plane does not support deliberate Command retry redrive"));
     }
 
+    default Uni<ExecutionRedriveResult> redriveExecution(
+        String tenantId,
+        String executionId,
+        Long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        String targetCommandId,
+        String reason) {
+        if (targetCommandId == null || targetCommandId.isBlank()) {
+            return redriveExecution(
+                tenantId, executionId, expectedVersion, allowFailed, intent, reason);
+        }
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Pipeline control plane does not support targeted Command reissue"));
+    }
+
     Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command);
 
     Uni<AwaitCompletionResult> completeAwait(

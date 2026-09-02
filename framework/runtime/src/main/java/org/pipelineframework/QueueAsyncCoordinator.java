@@ -281,6 +281,21 @@ class QueueAsyncCoordinator {
     return redriveFlow().redrive(tenantId, executionId, expectedVersion, allowFailed, intent, reason);
   }
 
+  Uni<ExecutionRedriveResult> redriveExecution(
+      String tenantId,
+      String executionId,
+      Long expectedVersion,
+      boolean allowFailed,
+      ExecutionRedriveIntent intent,
+      String targetCommandId,
+      String reason) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
+    return redriveFlow().redrive(
+        tenantId, executionId, expectedVersion, allowFailed, intent, targetCommandId, reason);
+  }
+
   Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
     if (!ensureQueueModeReady()) {
       return Uni.createFrom().failure(queueModeDisabledException());

@@ -10,6 +10,7 @@ import org.pipelineframework.execution.PipelineExecutionContext;
 public record CommandRequest<I>(
     CommandDescriptor descriptor,
     String commandId,
+    String occurrenceId,
     String attemptId,
     I input,
     PipelineExecutionContext executionContext,
@@ -22,7 +23,18 @@ public record CommandRequest<I>(
         PipelineExecutionContext executionContext,
         Map<String, Object> config
     ) {
-        this(descriptor, commandId, newAttemptId(), input, executionContext, config);
+        this(descriptor, commandId, commandId, newAttemptId(), input, executionContext, config);
+    }
+
+    public CommandRequest(
+        CommandDescriptor descriptor,
+        String commandId,
+        String attemptId,
+        I input,
+        PipelineExecutionContext executionContext,
+        Map<String, Object> config
+    ) {
+        this(descriptor, commandId, commandId, attemptId, input, executionContext, config);
     }
 
     public CommandRequest {
@@ -32,6 +44,9 @@ public record CommandRequest<I>(
         if (commandId == null || commandId.isBlank()) {
             throw new IllegalArgumentException("commandId must not be blank");
         }
+        if (occurrenceId == null || occurrenceId.isBlank()) {
+            throw new IllegalArgumentException("occurrenceId must not be blank");
+        }
         if (attemptId == null || attemptId.isBlank()) {
             throw new IllegalArgumentException("attemptId must not be blank");
         }
@@ -39,6 +54,11 @@ public record CommandRequest<I>(
             throw new IllegalArgumentException("executionContext must not be null");
         }
         config = config == null ? Map.of() : Map.copyOf(config);
+    }
+
+    /** Stable provider idempotency key for this intentional effect occurrence. */
+    public String providerIdempotencyKey() {
+        return occurrenceId;
     }
 
     static String newAttemptId() {

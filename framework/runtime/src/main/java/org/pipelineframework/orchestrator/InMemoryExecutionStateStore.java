@@ -2,8 +2,10 @@ package org.pipelineframework.orchestrator;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,6 +24,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     private final Object lock = new Object();
     private final Map<String, ExecutionRecord<Object, Object>> executionsByScopedId = new HashMap<>();
     private final Map<String, String> executionIdByScopedKey = new HashMap<>();
+    private final Map<String, Object> initialInputByScopedId = new HashMap<>();
 
     @Override
     public String providerName() {
@@ -51,7 +54,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                         if (!isExpired(existing, command.nowEpochMs())) {
                             return new CreateExecutionResult(existing, true);
                         }
-                        executionsByScopedId.remove(scopedExecutionId(command.tenantId(), existing.executionId()));
+                        String scopedId = scopedExecutionId(command.tenantId(), existing.executionId());
+                        executionsByScopedId.remove(scopedId);
+                        initialInputByScopedId.remove(scopedId);
                     }
                     executionIdByScopedKey.remove(scopedKey);
                 }
@@ -83,7 +88,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     command.ttlEpochS());
 
                 executionIdByScopedKey.put(scopedKey, executionId);
-                executionsByScopedId.put(scopedExecutionId(command.tenantId(), executionId), created);
+                String scopedId = scopedExecutionId(command.tenantId(), executionId);
+                executionsByScopedId.put(scopedId, created);
+                if (command.inputPayload() != null) {
+                    initialInputByScopedId.put(scopedId, snapshotValue(command.inputPayload()));
+                }
                 return new CreateExecutionResult(created, false);
             }
         });
@@ -186,7 +195,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitIdentity(),
                     current.redriveIntent(),
                     current.failedStepIndex(),
-                    current.failedCommandId());
+                    current.failedCommandId(),
+                    current.redriveTargetCommandId(),
+                    current.redriveReason());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
             }
@@ -244,7 +255,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitIdentity(),
                     current.redriveIntent(),
                     current.failedStepIndex(),
-                    current.failedCommandId());
+                    current.failedCommandId(),
+                    current.redriveTargetCommandId(),
+                    current.redriveReason());
                 executionsByScopedId.put(scopedId, renewed);
                 return Optional.of(renewed);
             }
@@ -292,7 +305,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -341,7 +355,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -391,7 +406,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -447,7 +463,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -464,9 +481,23 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private static Object copySnapshotPayload(Object payload) {
         if (payload instanceof List<?> list) {
-            return List.copyOf(list);
+            return list.stream().map(InMemoryExecutionStateStore::copySnapshotPayload).toList();
+        }
+        if (payload instanceof Map<?, ?> map) {
+            Map<Object, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, value) -> copy.put(
+                copySnapshotPayload(key), copySnapshotPayload(value)));
+            return Collections.unmodifiableMap(copy);
         }
         return payload;
+    }
+
+    private static Object snapshotValue(Object inputPayload) {
+        if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
+            return new ExecutionInputSnapshot(
+                snapshot.shape(), copySnapshotPayload(snapshot.payload()), snapshot.pipelineContext());
+        }
+        return copySnapshotPayload(inputPayload);
     }
 
     @Override
@@ -513,7 +544,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -562,7 +594,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(), current.redriveIntent(), current.failedStepIndex(),
+                    current.failedCommandId(), current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -596,7 +629,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.version() + 1, current.currentStepIndex(), current.attempt(), null, 0L, nextDueEpochMs,
                     transitionKey, current.inputPayload(), current.awaitUnitId(), null, reason, truncate(errorMessage),
                     current.createdAtEpochMs(), nowEpochMs, current.ttlEpochS(), firstCircuitDeferredAtEpochMs,
-                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity);
+                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity,
+                    current.redriveIntent(), current.failedStepIndex(), current.failedCommandId(),
+                    current.redriveTargetCommandId(), current.redriveReason());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -719,15 +754,62 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         ExecutionRedriveIntent intent,
         String transitionKey,
         long nowEpochMs) {
+        return redriveTerminalExecution(
+            tenantId,
+            executionId,
+            expectedVersion,
+            allowFailed,
+            intent,
+            Optional.empty(),
+            Optional.empty(),
+            transitionKey,
+            nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent,
+        Optional<String> targetCommandId,
+        Optional<String> reason,
+        String transitionKey,
+        long nowEpochMs) {
         ExecutionRedriveIntent resolvedIntent = Objects.requireNonNull(intent, "intent must not be null");
+        Optional<String> resolvedTarget = Optional.ofNullable(targetCommandId).orElseGet(Optional::empty);
+        Optional<String> resolvedReason = Optional.ofNullable(reason).orElseGet(Optional::empty);
+        boolean reissue = resolvedIntent == ExecutionRedriveIntent.REISSUE_COMMAND;
+        if (reissue) {
+            if (allowFailed) {
+                throw new IllegalArgumentException("Command reissue does not accept allowFailed=true");
+            }
+            if (resolvedTarget.filter(value -> !value.isBlank()).isEmpty()) {
+                throw new IllegalArgumentException("Command reissue requires targetCommandId");
+            }
+            if (resolvedReason.filter(value -> !value.isBlank()).isEmpty()) {
+                throw new IllegalArgumentException("Command reissue requires a nonblank reason");
+            }
+        }
+        Optional<String> retainedTarget = reissue ? resolvedTarget : Optional.empty();
+        Optional<String> retainedReason = reissue ? resolvedReason : Optional.empty();
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
                 ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
                 if (current == null
                     || current.version() != expectedVersion
-                    || !redrivable(current.status(), allowFailed)) {
+                    || !redrivable(current.status(), allowFailed, resolvedIntent)) {
                     return Optional.empty();
+                }
+                Object redriveInput = current.inputPayload();
+                if (reissue) {
+                    if (!initialInputByScopedId.containsKey(scopedId)) {
+                        throw new IllegalStateException(
+                            "Command reissue requires the retained initial execution input: " + executionId);
+                    }
+                    redriveInput = snapshotValue(initialInputByScopedId.get(scopedId));
                 }
                 ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
                     current.tenantId(),
@@ -739,13 +821,13 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.resultShape(),
                     ExecutionStatus.QUEUED,
                     current.version() + 1,
-                    current.currentStepIndex(),
+                    reissue ? 0 : current.currentStepIndex(),
                     current.attempt() + 1,
                     null,
                     0L,
                     nowEpochMs,
                     transitionKey,
-                    current.inputPayload(),
+                    redriveInput,
                     current.awaitUnitId(),
                     null,
                     null,
@@ -758,7 +840,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.circuitIdentity(),
                     resolvedIntent,
                     current.failedStepIndex(),
-                    current.failedCommandId());
+                    current.failedCommandId(),
+                    retainedTarget,
+                    retainedReason);
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -776,6 +860,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     ExecutionRecord<Object, Object> record = entry.getValue();
                     if (isExpired(record, nowEpochMs)) {
                         iterator.remove();
+                        initialInputByScopedId.remove(entry.getKey());
                         executionIdByScopedKey.remove(scopedExecutionKey(record.tenantId(), record.executionKey()));
                         continue;
                     }
@@ -811,7 +896,13 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return ttl <= nowEpochS;
     }
 
-    private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
+    private static boolean redrivable(
+        ExecutionStatus status,
+        boolean allowFailed,
+        ExecutionRedriveIntent intent) {
+        if (intent == ExecutionRedriveIntent.REISSUE_COMMAND) {
+            return !allowFailed && status == ExecutionStatus.SUCCEEDED;
+        }
         return status == ExecutionStatus.DLQ
             || (allowFailed && (status == ExecutionStatus.FAILED
                 || status == ExecutionStatus.REMOTE_OUTCOME_UNKNOWN));
@@ -826,6 +917,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
             return current;
         }
         executionsByScopedId.remove(scopedId);
+        initialInputByScopedId.remove(scopedId);
         executionIdByScopedKey.remove(scopedExecutionKey(current.tenantId(), current.executionKey()));
         return null;
     }

@@ -80,6 +80,7 @@ class NativeCommandOutcomeTest {
     @AfterEach
     void clearContext() {
         PipelineExecutionContextHolder.clear();
+        CommandRetryTestAccess.clear();
     }
 
     @Test
@@ -287,6 +288,35 @@ class NativeCommandOutcomeTest {
             .await().atMost(Duration.ofSeconds(5)).orElseThrow();
         assertEquals(List.of(CommandEffectStatus.FAILED_RETRYABLE, CommandEffectStatus.SUCCEEDED),
             record.attempts().stream().map(CommandEffectAttemptRecord::status).toList());
+    }
+
+    @Test
+    void deliberateNativeReissueChangesProviderOccurrenceAndKeepsLogicalIdentity() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution-1", 1));
+        operation.outcome = new CommandOutcome.Succeeded<>(
+            "first", CommandConfirmation.none(), Set.of(), List.of());
+        assertEquals("first", support.<String, String>execute(
+            descriptor(), (ignored, input) -> "stable-reissue", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+
+        operation.outcome = new CommandOutcome.Succeeded<>(
+            "second", CommandConfirmation.none(), Set.of(), List.of());
+        CommandRetryTestAccess.installReissue(
+            "stable-reissue", "execution-1:0:2", "operator approved");
+        assertEquals("second", support.<String, String>execute(
+            descriptor(), (ignored, input) -> "stable-reissue", "input")
+            .await().atMost(Duration.ofSeconds(5)));
+        CommandRetryTestAccess.requireConsumed();
+
+        CommandDispatchIdentity initial = operation.dispatchIdentities.get(0);
+        CommandDispatchIdentity reissued = operation.dispatchIdentities.get(1);
+        assertEquals("stable-reissue", initial.commandId());
+        assertEquals("stable-reissue", initial.occurrenceId());
+        assertEquals("stable-reissue", initial.providerIdempotencyKey());
+        assertEquals("stable-reissue", reissued.commandId());
+        assertFalse(reissued.occurrenceId().equals(initial.occurrenceId()));
+        assertEquals(reissued.occurrenceId(), reissued.providerIdempotencyKey());
+        assertFalse(reissued.attemptId().equals(initial.attemptId()));
     }
 
     @Test
