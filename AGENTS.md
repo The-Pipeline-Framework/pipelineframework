@@ -168,6 +168,8 @@ Use Repowise first for orientation and discovery before broad repo search, but t
 Do not refresh or rebuild Repowise automatically unless explicitly requested.
 Repowise may point at a canonical indexed checkout, not the active worktree.
 Verify conclusions against source before editing.
+Repowise intentionally has no LLM answer provider here; `degraded: no-llm-provider` is expected and non-blocking.
+Use its retrieval tools and synthesize answers yourself; do not configure a Repowise LLM provider.
 
 ### Change The Semantic Owner Boldly
 
