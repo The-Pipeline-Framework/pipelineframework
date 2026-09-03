@@ -402,6 +402,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/evolve/publishing'},
                     {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
                     {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
+                    {text: 'Author MCP Operations', link: '/evolve/author-mcp-operations'},
                     {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
                 ]
             },
