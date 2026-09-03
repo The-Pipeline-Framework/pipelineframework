@@ -31,30 +31,30 @@ class RepresentationProviderGenerationPhaseTest {
         ResolvedProviderBoundary boundary = boundary("Extract document");
 
         assertTrue(RepresentationProviderGenerationPhase.isBoundaryModel(
-            model("ProcessExtractDocumentService", "org.example/document-segment"), boundary));
+            model("ProcessExtractDocumentService", "org.example/document-block"), boundary));
         assertFalse(RepresentationProviderGenerationPhase.isBoundaryModel(
-            model("ProcessInspectDocumentService", "org.example/document-segment"), boundary));
+            model("ProcessInspectDocumentService", "org.example/document-block"), boundary));
     }
 
     @Test
     void nestedBoundaryDoesNotReplaceAnIdenticalRootModel() {
-        ResolvedProviderBoundary boundary = boundary("Extract document", "org.example/document-segment");
+        ResolvedProviderBoundary boundary = boundary("Extract document", "org.example/document-block");
         PipelineStepModel root = model("ProcessExtractDocumentService", "$root");
-        PipelineStepModel nested = model("ProcessExtractDocumentService", "org.example/document-segment");
+        PipelineStepModel nested = model("ProcessExtractDocumentService", "org.example/document-block");
         var context = new org.pipelineframework.processor.PipelineCompilationContext(null, null);
         context.setStepModels(List.of(root));
-        context.setLocalDefinitionStepModels(Map.of("org.example/document-segment", List.of(nested)));
+        context.setLocalDefinitionStepModels(Map.of("org.example/document-block", List.of(nested)));
 
         RepresentationProviderGenerationPhase.replaceServiceWithFacade(context, boundary);
 
         assertEquals(root.serviceClassName(), context.getStepModels().getFirst().serviceClassName());
         assertEquals(ClassName.bestGuess("example.GeneratedDocumentFacade"),
-            context.getLocalDefinitionStepModels().get("org.example/document-segment")
+            context.getLocalDefinitionStepModels().get("org.example/document-block")
                 .getFirst().serviceClassName());
     }
 
     private static ResolvedProviderBoundary boundary(String stepName) {
-        return boundary(stepName, "org.example/document-segment");
+        return boundary(stepName, "org.example/document-block");
     }
 
     private static ResolvedProviderBoundary boundary(String stepName, String definition) {

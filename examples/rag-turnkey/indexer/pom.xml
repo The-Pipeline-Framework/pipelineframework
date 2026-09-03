@@ -12,7 +12,7 @@
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey-support</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework.segments</groupId><artifactId>document-text-extraction</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>document-text-extraction</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>vector-store-pgvector-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>object-ingest-connector</artifactId><version>${project.version}</version></dependency>

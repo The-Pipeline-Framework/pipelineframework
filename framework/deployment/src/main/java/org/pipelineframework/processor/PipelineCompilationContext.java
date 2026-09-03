@@ -26,7 +26,7 @@ import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
-import org.pipelineframework.processor.segment.ImportedPipelineDefinition;
+import org.pipelineframework.processor.block.ImportedPipelineDefinition;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.

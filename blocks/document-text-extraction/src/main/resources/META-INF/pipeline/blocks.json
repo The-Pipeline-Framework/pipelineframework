@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.document",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "document-text-extraction",
+    "version": "${project.version}"
+  },
+  "definitions": [
+    {
+      "name": "document-text-extraction",
+      "resource": "META-INF/pipeline/document-text-extraction.yaml"
+    }
+  ]
+}

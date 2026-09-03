@@ -61,7 +61,7 @@ independently distributed definition can instead supply the canonical Java class
 ```yaml
 types:
   DocumentFile:
-    java: org.pipelineframework.segments.document.DocumentFile
+    java: org.pipelineframework.blocks.document.DocumentFile
     fields: [[sourceId, string], [fileName, string], [contentType, string], [content, payload_ref]]
 ```
 
@@ -467,7 +467,7 @@ Propagation never guesses across a union, a branch, or a predecessor without one
 
 ### Local and packaged pipeline composition
 
-`pipelines` declares compile-time local definitions. Installed segment artifacts can contribute the
+`pipelines` declares compile-time local definitions. Installed block artifacts can contribute the
 same definition shape from an ordinary Maven or Gradle dependency. A `pipeline` step invokes either
 source as an ordinary typed step; the compiler links the definition into the root release contract,
 and the runtime returns its result to the caller without creating another execution or publishing
@@ -475,7 +475,7 @@ another terminal output.
 
 ```xml
 <dependency>
-  <groupId>org.pipelineframework.segments</groupId>
+  <groupId>org.pipelineframework.blocks</groupId>
   <artifactId>document-text-extraction</artifactId>
   <version>1.0.0</version>
 </dependency>
@@ -491,7 +491,7 @@ steps:
 
 Package definitions have qualified identities such as
 `org.pipelineframework.document/document-text-extraction`. In an application, the short name is accepted only
-when it is unique and does not collide with a local definition. Inside a segment package, a short reference
+when it is unique and does not collide with a local definition. Inside a block package, a short reference
 resolves to that package's own definition; use a qualified identity for an explicit cross-package reference.
 Removing the dependency makes the reference fail at compilation. Schema v3 release metadata records the
 artifact version, definition resource, and definition fingerprint; changing them changes the consuming

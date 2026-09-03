@@ -127,7 +127,7 @@ public class PipelineContractMetadataGenerator {
 
     private List<Map<String, Object>> importedDefinitions(PipelineCompilationContext ctx) {
         return ctx.getImportedPipelineDefinitions().stream()
-            .sorted(Comparator.comparing(org.pipelineframework.processor.segment.ImportedPipelineDefinition::qualifiedId))
+            .sorted(Comparator.comparing(org.pipelineframework.processor.block.ImportedPipelineDefinition::qualifiedId))
             .map(definition -> immutableSortedMap(Map.of(
                 "qualifiedId", definition.qualifiedId(),
                 "logicalName", definition.logicalName(),

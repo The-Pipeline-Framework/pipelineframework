@@ -4,8 +4,8 @@ import java.util.Objects;
 import java.util.Optional;
 import org.pipelineframework.objectingest.ObjectSnapshot;
 import org.pipelineframework.objectingest.ObjectSnapshotMapper;
-import org.pipelineframework.segments.document.DocumentFile;
-import org.pipelineframework.segments.document.DocumentTextExtractor;
+import org.pipelineframework.blocks.document.DocumentFile;
+import org.pipelineframework.blocks.document.DocumentTextExtractor;
 
 /** Projects immutable object provenance into the public INDEXER input. */
 public final class DocumentObjectMapper implements ObjectSnapshotMapper<DocumentFile> {

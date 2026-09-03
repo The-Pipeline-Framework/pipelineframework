@@ -51,7 +51,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.protocol.ProtocolTypeIdentity;
-import org.pipelineframework.processor.segment.ImportedPipelineDefinition;
+import org.pipelineframework.processor.block.ImportedPipelineDefinition;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -262,8 +262,8 @@ class PipelineContractMetadataGeneratorTest {
 
     @Test
     void includesImportedDefinitionProvenanceInTheBreakingSchemaThreeContractAndHash() throws IOException {
-        Path firstOutput = tempDir.resolve("segment-first");
-        Path secondOutput = tempDir.resolve("segment-second");
+        Path firstOutput = tempDir.resolve("block-first");
+        Path secondOutput = tempDir.resolve("block-second");
 
         writeImportedDefinitionMetadata(firstOutput, "1.0.0", "sha256:first");
         writeImportedDefinitionMetadata(secondOutput, "1.1.0", "sha256:second");

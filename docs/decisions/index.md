@@ -32,7 +32,7 @@ authoritative for exact syntax and release support.
 | [0021](./0021-host-owned-connector-authentication.md) | Expose connector invocation semantics while leaving external authentication and credential resolution with the host. |
 | [0022](./0022-hibernate-find-many-provider-strategy.md) | Preserve finite row streaming and declared total order in both Hibernate `find.many` providers. |
 | [0023](./0023-hosted-llm-query-defaults-to-reactive-client.md) | Default hosted LLM Query to non-blocking provider I/O while retaining an explicit blocking implementation. |
-| [0024](./0024-packaged-segments-are-static-composition-imports.md) | Link packaged functional-core segments as ordinary version 3 composition imports. |
+| [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Link packaged functional-core blocks as ordinary version 3 composition imports. |
 | [0025](./0025-command-reissue-uses-occurrence-identity.md) | Give intentional Command reissue a new provider occurrence identity without weakening replay safety. |
 
 ## Maintenance

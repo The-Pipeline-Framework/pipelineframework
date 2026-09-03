@@ -2410,16 +2410,16 @@ class PipelineTemplateConfigLoaderTest {
             transport: LOCAL
             types:
               DocumentFile:
-                java: org.example.segment.DocumentFile
+                java: org.example.block.DocumentFile
                 fields: [[content, payload_ref]]
             contract: { input: DocumentFile, output: DocumentFile }
             steps:
-              - { name: identity, service: org.example.Identity, cardinality: ONE_TO_ONE, input: DocumentFile, output: DocumentFile, java: { input: org.example.segment.DocumentFile, output: org.example.segment.DocumentFile } }
+              - { name: identity, service: org.example.Identity, cardinality: ONE_TO_ONE, input: DocumentFile, output: DocumentFile, java: { input: org.example.block.DocumentFile, output: org.example.block.DocumentFile } }
             """);
 
         PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
 
-        assertEquals("org.example.segment.DocumentFile",
+        assertEquals("org.example.block.DocumentFile",
             config.typeModel().javaTypeBinding("DocumentFile").orElseThrow());
     }
 
@@ -2469,7 +2469,7 @@ class PipelineTemplateConfigLoaderTest {
               DocumentFile:
                 fields: [[content, payload_ref]]
               DocumentAlias:
-                java: org.example.segment.DocumentFile
+                java: org.example.block.DocumentFile
                 alias: DocumentFile
             contract: { input: DocumentFile, output: DocumentFile }
             steps: []
@@ -2491,10 +2491,10 @@ class PipelineTemplateConfigLoaderTest {
             transport: LOCAL
             types:
               DocumentFile:
-                java: org.example.segment.DocumentBoundary
+                java: org.example.block.DocumentBoundary
                 fields: [[content, payload_ref]]
               ExtractedDocument:
-                java: org.example.segment.DocumentBoundary
+                java: org.example.block.DocumentBoundary
                 fields: [[text, string]]
             contract: { input: DocumentFile, output: ExtractedDocument }
             steps: []
@@ -2504,6 +2504,6 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertTrue(exception.getMessage().contains(
-            "Canonical Java type 'org.example.segment.DocumentBoundary' cannot be bound to both"));
+            "Canonical Java type 'org.example.block.DocumentBoundary' cannot be bound to both"));
     }
 }
