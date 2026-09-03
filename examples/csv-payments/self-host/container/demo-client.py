@@ -45,6 +45,25 @@ def request(method, url, token=None, body=None, timeout=10):
         raise RuntimeError(f"{method} {url} failed with HTTP {exc.code}: {raw}") from exc
 
 
+def fixture_deadline(args):
+    configured_deadline = getattr(args, "deadline_epoch_seconds", None)
+    if configured_deadline is not None:
+        return configured_deadline
+    return time.time() + args.timeout_seconds
+
+
+def remaining_request_timeout(deadline, maximum_timeout, operation):
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        raise RuntimeError(f"Fixture deadline elapsed before {operation}")
+    return min(maximum_timeout, remaining)
+
+
+def require_fixture_time(deadline, operation):
+    if time.time() >= deadline:
+        raise RuntimeError(f"Fixture deadline elapsed while {operation}")
+
+
 def wait_health(args):
     deadline = time.time() + args.timeout_seconds
     url = f"{args.base_url}/q/health/live"
@@ -199,7 +218,7 @@ def default_idempotency_key(args, input_file):
     return f"csv-{digest[:24]}"
 
 
-def submit_csv_input_file(args, input_file):
+def submit_csv_input_file(args, input_file, deadline):
     path = Path(input_file).resolve()
     folder = path.parent
     body = {
@@ -217,24 +236,27 @@ def submit_csv_input_file(args, input_file):
         f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions",
         token=args.control_plane_token,
         body=body,
-        timeout=30,
+        timeout=remaining_request_timeout(deadline, 30, "submitting the CSV execution"),
     )
+    require_fixture_time(deadline, "submitting the CSV execution")
     print(f"Submitted CSV execution {accepted['executionId']} for file {path}")
     return accepted["executionId"]
 
 
-def wait_status(args, execution_id, timeout_seconds):
-    deadline = time.time() + timeout_seconds
+def wait_status(args, execution_id, deadline):
     last = None
     last_error = None
     interval = 1.0
     url = f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}"
-    while time.time() < deadline:
+    while True:
+        request_timeout = remaining_request_timeout(
+            deadline, 10, f"waiting for execution {execution_id}")
         try:
-            last = request("GET", url, token=args.control_plane_token, timeout=10)
+            last = request("GET", url, token=args.control_plane_token, timeout=request_timeout)
         except Exception as exc:
             last_error = exc
         else:
+            require_fixture_time(deadline, f"waiting for execution {execution_id}")
             last_error = None
             status = last["status"]
             if status == "SUCCEEDED":
@@ -286,15 +308,15 @@ def prepare_input(args):
     return target
 
 
-def wait_output(output_dir, output_name, timeout_seconds):
-    deadline = time.time() + timeout_seconds
+def wait_output(output_dir, output_name, deadline):
     output = Path(output_dir).resolve() / output_name
     while time.time() < deadline:
         if output.is_file() and output.stat().st_size > 0:
+            require_fixture_time(deadline, "waiting for CSV output")
             print(f"Observed CSV output {output} ({output.stat().st_size} bytes)")
             return output
-        time.sleep(1)
-    raise RuntimeError(f"No non-empty CSV output appeared at {output}")
+        time.sleep(min(1, max(0.0, deadline - time.time())))
+    raise RuntimeError(f"Fixture deadline elapsed before a non-empty CSV output appeared at {output}")
 
 
 def assert_output_record_count(output, expected_record_count):
@@ -306,8 +328,8 @@ def assert_output_record_count(output, expected_record_count):
             raise RuntimeError(f"CSV output {output} does not contain the required CSV Id column")
         csv_ids = []
         for row in reader:
-            csv_id = row.get("CSV Id", "").strip()
-            if not csv_id:
+            csv_id = row.get("CSV Id", "")
+            if not csv_id.strip():
                 raise RuntimeError(f"CSV output {output} contains a row without a CSV Id")
             csv_ids.append(csv_id)
 
@@ -328,27 +350,30 @@ def assert_output_record_count(output, expected_record_count):
     print(f"CSV output record count matches expected {expected_record_count}")
 
 
-def validate_output_path(output_dir, output_file_name, record_count, timeout_seconds):
-    output = wait_output(output_dir, output_file_name, timeout_seconds)
+def validate_output_path(output_dir, output_file_name, record_count, deadline):
+    output = wait_output(output_dir, output_file_name, deadline)
     assert_output_record_count(output, record_count)
+    require_fixture_time(deadline, "validating CSV output")
 
 
 def validate_output(args):
-    validate_output_path(args.output_dir, args.output_file_name, args.record_count, args.timeout_seconds)
+    validate_output_path(args.output_dir, args.output_file_name, args.record_count, fixture_deadline(args))
 
 
-def inspect_result(args, execution_id):
+def inspect_result(args, execution_id, deadline):
     result = request(
         "GET",
         f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}/result",
         token=args.control_plane_token,
-        timeout=30,
+        timeout=remaining_request_timeout(deadline, 30, f"inspecting execution {execution_id}"),
     )
+    require_fixture_time(deadline, f"inspecting execution {execution_id}")
     print(json.dumps(result, indent=2, sort_keys=True))
     return result
 
 
 def run_flow(args):
+    deadline = fixture_deadline(args)
     input_file = prepare_input(args)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -356,11 +381,11 @@ def run_flow(args):
     output_file = output_dir / output_file_name
     if output_file.exists():
         output_file.unlink()
-    execution_id = submit_csv_input_file(args, input_file)
-    wait_status(args, execution_id, args.timeout_seconds)
-    inspect_result(args, execution_id)
+    execution_id = submit_csv_input_file(args, input_file, deadline)
+    wait_status(args, execution_id, deadline)
+    inspect_result(args, execution_id, deadline)
     if not args.defer_output_validation:
-        validate_output_path(output_dir, output_file_name, args.record_count, args.timeout_seconds)
+        validate_output_path(output_dir, output_file_name, args.record_count, deadline)
 
 
 def main():
@@ -408,6 +433,7 @@ def main():
     run.add_argument("--record-count", type=int, default=0)
     run.add_argument("--idempotency-key")
     run.add_argument("--timeout-seconds", type=int, default=240)
+    run.add_argument("--deadline-epoch-seconds", type=float)
     run.add_argument("--defer-output-validation", action="store_true")
     run.set_defaults(func=run_flow)
 
@@ -416,6 +442,7 @@ def main():
     validate.add_argument("--output-file-name", required=True)
     validate.add_argument("--record-count", type=int, default=0)
     validate.add_argument("--timeout-seconds", type=int, default=240)
+    validate.add_argument("--deadline-epoch-seconds", type=float)
     validate.set_defaults(func=validate_output)
 
     args = parser.parse_args()

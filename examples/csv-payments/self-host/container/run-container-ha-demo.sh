@@ -113,8 +113,8 @@ if [[ "${TPF_CSV_ADMISSION_PROFILE}" != "burst" && -n "${TPF_CSV_BURST_PERFORMAN
   echo "ERROR: TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS applies only to the burst profile." >&2
   exit 1
 fi
-if ! [[ "${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE}" =~ ^(P[0-9]+D(T(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S)))?|PT(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S))|[0-9]+(\.[0-9]+)?(ms|s|m|h|d|us|ns|S|M|H))$ ]]; then
-  echo "ERROR: TPF_CSV_TRANSITION_TRANSPORT_DEADLINE must be in ISO-8601 duration format (e.g., PT10S, PT1M30S, P1D) or Quarkus shorthand duration format (e.g., 10s, 1500ms, 1M, 2h, 5m)." >&2
+if ! [[ "${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE}" =~ ^(P[0-9]+D(T(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S)))?|PT(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S))|[0-9]+|[0-9]+(\.[0-9]+)?(ms|s|m|h|d|us|ns|S|M|H))$ ]]; then
+  echo "ERROR: TPF_CSV_TRANSITION_TRANSPORT_DEADLINE must be in ISO-8601 duration format (e.g., PT10S, PT1M30S, P1D) or Quarkus shorthand duration format (e.g., 180, 10s, 1500ms, 1M, 2h, 5m)." >&2
   exit 1
 fi
 
@@ -429,6 +429,7 @@ python3 "${CLIENT}" register-activate \
 run_flow() {
   local started_at
   started_at="$(date +%s)"
+  local deadline=$(( started_at + TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS ))
   local input_name
   if (( TPF_CSV_RECORD_COUNT > 0 )); then
     input_name="payments_${TPF_CSV_RECORD_COUNT}.csv"
@@ -458,6 +459,7 @@ run_flow() {
     --source-csv "${TPF_SOURCE_CSV}" \
     --record-count "${TPF_CSV_RECORD_COUNT}" \
     --defer-output-validation \
+    --deadline-epoch-seconds "${deadline}" \
     --timeout-seconds "${remaining}" 2>&1 | tee -a "${flow_log}"
   flow_result="${PIPESTATUS[0]}"
   set -e
@@ -483,6 +485,7 @@ run_flow() {
     --output-dir "${TPF_OUTPUT_DIR}" \
     --output-file-name "${input_name}.out" \
     --record-count "${TPF_CSV_RECORD_COUNT}" \
+    --deadline-epoch-seconds "${deadline}" \
     --timeout-seconds "${remaining}" 2>&1 | tee -a "${flow_log}"
   flow_result="${PIPESTATUS[0]}"
   set -e
