@@ -306,6 +306,7 @@ class PipelineTemplateConfigLoaderTest {
               Decision:
                 variants:
                   call: <tpf.llm.AgentCall>
+                  askUser: <tpf.llm.AskUser>
                   complete: Complete
             steps:
               - name: Decide
@@ -327,14 +328,26 @@ class PipelineTemplateConfigLoaderTest {
                 new PipelineTemplateTypeDefinition.Field("binding", new PipelineTemplateTypeReference.Scalar("string")),
                 new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")),
                 new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")))));
+        ProtocolTypeDescriptor askUser = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AskUser"),
+            new PipelineTemplateTypeDefinition.RecordType("AskUser", List.of(
+                new PipelineTemplateTypeDefinition.Field("prompt", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field(
+                    "choices", new PipelineTemplateTypeReference.Scalar("string"), true))));
 
-        PipelineTemplateStep step = loader(agentCall).load(configPath).steps().getFirst();
+        PipelineTemplateConfig config = loader(agentCall, askUser).load(configPath);
+        PipelineTemplateStep step = config.steps().getFirst();
 
         var callable = step.callables().get("charge");
         assertEquals("payments", callable.using());
         assertEquals("charge.create", callable.operation());
         assertEquals(2, callable.operationVersion());
         assertEquals("ChargeArguments", callable.input());
+        PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
+            config.typeModel().definition("Decision").orElseThrow();
+        assertEquals("AskUser", decision.variants().get("askUser").payload().name());
+        assertEquals("tpf.llm.AskUser",
+            config.typeModel().contributedTypeIdentity("AskUser").orElseThrow().qualifiedName());
     }
 
     @Test

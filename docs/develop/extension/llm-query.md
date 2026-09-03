@@ -9,7 +9,9 @@ application state + release-pinned callable catalogue
                          ↓
                     LLM Query
                          ↓
-       call:<tpf.llm.AgentCall> | complete:ApplicationResult
+       call:<tpf.llm.AgentCall>
+       | askUser:<tpf.llm.AskUser>
+       | complete:ApplicationResult
 ```
 
 ## Define the decision
@@ -40,10 +42,29 @@ types:
   InvoiceDecision:
     variants:
       call: <tpf.llm.AgentCall>
+      askUser: <tpf.llm.AskUser>
       complete: InvoiceResult
 ```
 
 `AgentCall` contains only `binding`, `operation`, and canonical `argumentsJson`. It has no provider identity, credentials, runtime handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
+
+`AskUser` is an inert clarification request with two fields:
+
+- `prompt`: plain text suitable for display after the receiving boundary escapes it;
+- `choices`: a list of allowed answers, or an empty list for a free-text response.
+
+The type deliberately has no provider metadata, runtime handle, conversation memory, Agent execution
+ID, approval state, or correlation field. Canonical output validation rejects undeclared fields, and
+provider observation metadata remains beside the typed Query output rather than entering `AskUser`.
+Exclude sensitive application-state paths from model input with `modelInputExcludes`; display boundaries
+must continue to treat model-authored prompt and choice text as untrusted plain text.
+
+An `askUser` result ends the current Query and pipeline handling proceeds like any other typed union
+branch. A boundary that supports deferred completion may correlate and durably suspend using its
+ordinary pipeline/interaction identity, then map the submitted answer into application-authored state
+before a later LLM Query invocation. No model or framework Agent loop remains alive while the user is
+away. `AskUser` is clarification only: Command confirmation, approval, idempotency, and effect authority
+remain on the native Command path.
 
 For a one-turn application completion with no tool selection, use an ordinary non-union output and
 omit `callables`. TPF exposes one required `complete` alternative whose schema is that authored output
@@ -157,10 +178,16 @@ State -> LLM Query -> call:<tpf.llm.AgentCall>
       -> <tpf.connector.OperationObservation> -> authored reducer
       -> State -> pipeline:self
 
+State -> LLM Query -> askUser:<tpf.llm.AskUser>
+      -> application boundary / general deferred completion
+      -> authored answer mapping -> State -> later pipeline invocation
+
 State -> LLM Query -> complete:ApplicationResult -> terminal
 ```
 
-The model still makes exactly one decision per Query invocation. The dynamic adapter invokes at
+The model still makes exactly one decision per Query invocation. Returning `AskUser` ends that
+invocation; it does not create polling, a child execution, or an Agent-specific suspension ledger.
+The dynamic adapter invokes at
 most one release-pinned capability and never chooses whether another turn is needed. The reducer
 alone interprets the observation and advances application state; the existing recursive pipeline
 depth limit provides the framework-owned safety bound.
@@ -171,7 +198,7 @@ metadata, and a stateless adapter whose response depends only on canonical `Agen
 
 After compilation, inspect `META-INF/pipeline/pipeline-contract.json` for contributed protocol types,
 the dynamic operation descriptor, and the named recursive binding; `order.json` for the finite root
-invocation; and `branching.json` for the `call`/`complete` routes. The existing
+invocation; and `branching.json` for the `call`/`askUser`/`complete` routes. The existing
 `connector-bindings.json` exposes the release-pinned callable catalogue as generated inspection
 metadata. Runtime capabilities are resolved from `PipelineYamlConfig` and the trusted
 `ConnectorProviderManifestCatalog`; none of these artifacts introduces an Agent runtime or semantic

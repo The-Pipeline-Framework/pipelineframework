@@ -30,7 +30,7 @@ import org.pipelineframework.repository.PayloadReference;
  *
  * <p>A non-union output selects direct-completion mode: the model receives one required
  * {@code complete} tool whose schema is the application-authored output type, and the callable
- * catalogue must be empty. Union outputs retain the AgentCall-based callable/completion contract.</p>
+ * catalogue must be empty. Union outputs retain the AgentCall-based callable/decision contract.</p>
  */
 final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfiguration, Object> {
     private static final long MAX_PAYLOAD_BYTES = 20L * 1024L * 1024L;
@@ -240,7 +240,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         ClassLoader classLoader,
         CanonicalTypeCatalogue catalogue,
         Map<String, LlmCallableConfiguration> callables,
-        Map<String, String> completionVariants,
+        Map<String, String> decisionVariants,
         Optional<String> callDiscriminator,
         Optional<String> directCompletionType,
         Optional<LlmDirectCompletionProjection> directCompletion,
@@ -248,7 +248,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
     ) {
         private DecisionContract {
             callables = Map.copyOf(callables);
-            completionVariants = Map.copyOf(completionVariants);
+            decisionVariants = Map.copyOf(decisionVariants);
             callDiscriminator = Objects.requireNonNull(callDiscriminator, "call discriminator must not be null");
             directCompletionType = Objects.requireNonNull(
                 directCompletionType, "direct completion type must not be null");
@@ -297,20 +297,20 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     + "' must declare exactly one <tpf.llm.AgentCall> variant");
             }
             String callDiscriminator = callVariants.getFirst();
-            Map<String, String> completions = new LinkedHashMap<>();
+            Map<String, String> decisions = new LinkedHashMap<>();
             variants.forEach((discriminator, payload) -> {
                 if (!discriminator.equals(callDiscriminator)) {
-                    completions.put(discriminator, payload);
+                    decisions.put(discriminator, payload);
                 }
             });
-            if (configuration.callableCatalogue().isEmpty() && completions.isEmpty()) {
-                throw new IllegalStateException("LLM Query has no callable or completion alternative");
+            if (configuration.callableCatalogue().isEmpty() && decisions.isEmpty()) {
+                throw new IllegalStateException("LLM Query has no callable or decision alternative");
             }
             List<LlmToolDefinition> tools = new ArrayList<>();
             configuration.callableCatalogue().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-                if (completions.containsKey(entry.getKey())) {
+                if (decisions.containsKey(entry.getKey())) {
                     throw new IllegalStateException("LLM callable alias '" + entry.getKey()
-                        + "' conflicts with completion discriminator");
+                        + "' conflicts with decision discriminator");
                 }
                 LlmCallableConfiguration callable = entry.getValue();
                 tools.add(new LlmToolDefinition(
@@ -318,15 +318,15 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     "Propose " + callable.using() + "/" + callable.operation(),
                     catalogue.schema(callable.input())));
             });
-            completions.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
+            decisions.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
                 tools.add(new LlmToolDefinition(
-                    entry.getKey(), "Complete with " + entry.getValue(), catalogue.schema(entry.getValue()))));
+                    entry.getKey(), "Return " + entry.getValue(), catalogue.schema(entry.getValue()))));
             return new DecisionContract(
                 outputType,
                 classLoader,
                 catalogue,
                 configuration.callableCatalogue(),
-                completions,
+                decisions,
                 Optional.of(callDiscriminator),
                 Optional.empty(),
                 Optional.empty(),
@@ -369,19 +369,19 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     throw new InvalidModelDecisionException(failure.getMessage(), failure);
                 }
             }
-            String completionType = completionVariants.get(proposal.alias());
-            if (completionType == null) {
+            String decisionType = decisionVariants.get(proposal.alias());
+            if (decisionType == null) {
                 throw new InvalidModelDecisionException("model selected unknown tool alias '" + proposal.alias() + "'");
             }
             try {
-                String arguments = catalogue.validateAndCanonicalize(completionType, proposal.argumentsJson());
-                Class<?> payloadType = Class.forName(outputType.getPackageName() + "." + completionType, true,
+                String arguments = catalogue.validateAndCanonicalize(decisionType, proposal.argumentsJson());
+                Class<?> payloadType = Class.forName(outputType.getPackageName() + "." + decisionType, true,
                     classLoader);
                 return instantiateVariant(proposal.alias(), JSON.readValue(arguments, payloadType));
             } catch (InvalidModelDecisionException failure) {
                 throw failure;
             } catch (Exception failure) {
-                throw new InvalidModelDecisionException("completion payload cannot be materialized", failure);
+                throw new InvalidModelDecisionException("decision payload cannot be materialized", failure);
             }
         }
 

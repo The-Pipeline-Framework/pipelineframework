@@ -34,6 +34,7 @@ authoritative for exact syntax and release support.
 | [0023](./0023-hosted-llm-query-defaults-to-reactive-client.md) | Default hosted LLM Query to non-blocking provider I/O while retaining an explicit blocking implementation. |
 | [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Link packaged functional-core blocks as ordinary version 3 composition imports. |
 | [0025](./0025-command-reissue-uses-occurrence-identity.md) | Give intentional Command reissue a new provider occurrence identity without weakening replay safety. |
+| [0026](./0026-llm-clarification-is-inert-protocol-data.md) | Treat an LLM request for human information as inert typed protocol data. |
 
 ## Maintenance
 
