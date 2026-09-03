@@ -35,8 +35,8 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.parser.StepDefinitionParser;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
-import org.pipelineframework.processor.segment.ImportedPipelineSources;
-import org.pipelineframework.processor.segment.SegmentDefinitionImporter;
+import org.pipelineframework.processor.block.ImportedPipelineSources;
+import org.pipelineframework.processor.block.BlockDefinitionImporter;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 
 /**
@@ -162,8 +162,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         if (configPath.isPresent()) {
             ClassLoader metadataClassLoader = ConnectorProviderManifestLoader.metadataClassLoader(
                 PipelineDiscoveryPhase.class);
-            try (ImportedPipelineSources imported = new SegmentDefinitionImporter(
-                metadataClassLoader, applicationSegmentManifests(ctx, configPath.orElseThrow()))
+            try (ImportedPipelineSources imported = new BlockDefinitionImporter(
+                metadataClassLoader, applicationBlockManifests(ctx, configPath.orElseThrow()))
                 .importInto(configPath.orElseThrow())) {
                 Optional<Path> effectiveConfigPath = Optional.of(imported.configPath());
                 ctx.setImportedPipelineDefinitions(imported.definitions());
@@ -206,12 +206,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setOrchestratorModels(orchestratorModels);
     }
 
-    private List<URL> applicationSegmentManifests(PipelineCompilationContext ctx, Path applicationConfig) {
+    private List<URL> applicationBlockManifests(PipelineCompilationContext ctx, Path applicationConfig) {
         if (ctx.getProcessingEnv() == null) {
             return List.of();
         }
         Map<String, URL> manifests = new LinkedHashMap<>();
-        locateClasspathResource(ctx, SegmentDefinitionImporter.MANIFEST_RESOURCE)
+        locateClasspathResource(ctx, BlockDefinitionImporter.MANIFEST_RESOURCE)
             .ifPresent(resource -> manifests.put(resource.toExternalForm(), resource));
         Object document = new PipelineYamlDocumentLoader().load(applicationConfig);
         for (String javaType : pipelineInvocationJavaTypes(document)) {
@@ -248,7 +248,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                     return Optional.empty();
                 }
                 URL manifest = new URL(external.substring(0, separator + 2)
-                    + SegmentDefinitionImporter.MANIFEST_RESOURCE);
+                    + BlockDefinitionImporter.MANIFEST_RESOURCE);
                 try (var ignored = manifest.openStream()) {
                     return Optional.of(manifest);
                 }
@@ -258,7 +258,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 for (int index = 0; index < classResourcePath.split("/").length; index++) {
                     root = root.getParent();
                 }
-                Path manifest = root.resolve(SegmentDefinitionImporter.MANIFEST_RESOURCE);
+                Path manifest = root.resolve(BlockDefinitionImporter.MANIFEST_RESOURCE);
                 return Files.isRegularFile(manifest) ? Optional.of(manifest.toUri().toURL()) : Optional.empty();
             }
             return Optional.empty();

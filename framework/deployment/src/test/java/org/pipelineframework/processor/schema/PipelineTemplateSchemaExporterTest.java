@@ -190,7 +190,7 @@ class PipelineTemplateSchemaExporterTest {
             .filter(definition -> definition.getAsJsonObject("properties").has("alias"))
             .forEach(definition -> assertFalse(definition.getAsJsonObject("properties").has("java")));
         String javaClassName = definitions.getAsJsonObject("javaClassName").get("pattern").getAsString();
-        assertTrue(java.util.regex.Pattern.matches(javaClassName, "org.example.segment.DocumentFile"));
+        assertTrue(java.util.regex.Pattern.matches(javaClassName, "org.example.block.DocumentFile"));
         assertFalse(java.util.regex.Pattern.matches(javaClassName, "."));
         assertFalse(java.util.regex.Pattern.matches(javaClassName, "DocumentFile"));
 

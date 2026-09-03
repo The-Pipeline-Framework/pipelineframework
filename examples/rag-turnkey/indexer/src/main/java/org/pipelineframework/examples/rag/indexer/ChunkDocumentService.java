@@ -6,7 +6,7 @@ import java.util.List;
 import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.examples.rag.indexer.domain.Chunk;
-import org.pipelineframework.segments.document.ExtractedDocument;
+import org.pipelineframework.blocks.document.ExtractedDocument;
 import org.pipelineframework.examples.rag.support.ChunkId;
 import org.pipelineframework.service.ReactiveStreamingService;
 

@@ -128,7 +128,7 @@ class ModelExtractionPhaseTest {
     @Test
     void resolvesProviderBoundaryTypesWithinTheOwningLocalDefinition() {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        PipelineReference definition = new PipelineReference("org.example/document-segment");
+        PipelineReference definition = new PipelineReference("org.example/document-block");
         CanonicalType canonical = new CanonicalType("DocumentFile", "example.DocumentFile",
             CanonicalTypeShape.RECORD);
         context.registerResolvedProviderBoundary(new ResolvedProviderBoundary(
@@ -151,7 +151,7 @@ class ModelExtractionPhaseTest {
     @Test
     void keepsIdenticallyNamedModelsOwnedByDifferentDefinitions() {
         PipelineStepModel root = modelOwnedBy("$root");
-        PipelineStepModel nested = modelOwnedBy("org.example/document-segment");
+        PipelineStepModel nested = modelOwnedBy("org.example/document-block");
 
         List<PipelineStepModel> deduplicated = ModelExtractionPhase.deduplicateByDefinitionServiceAndRole(
             List.of(root, nested, root));

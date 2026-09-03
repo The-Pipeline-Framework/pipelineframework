@@ -10,8 +10,8 @@ import org.pipelineframework.connector.vector.VectorUpsertResult;
 import org.pipelineframework.examples.rag.support.ChunkId;
 import org.pipelineframework.objectingest.ObjectSnapshot;
 import org.pipelineframework.repository.PayloadReference;
-import org.pipelineframework.segments.document.ExtractedDocument;
-import org.pipelineframework.segments.document.ExtractionDiagnostics;
+import org.pipelineframework.blocks.document.ExtractedDocument;
+import org.pipelineframework.blocks.document.ExtractionDiagnostics;
 
 class IndexerServicesTest {
     @Test void createsStableFanOutFromPackagedExtractionOutput() {

@@ -30,7 +30,7 @@ sources:
 input:
   from: document-inbox
   emits:
-    type: org.pipelineframework.segments.document.DocumentFile
+    type: org.pipelineframework.blocks.document.DocumentFile
     typeName: DocumentFile
     mapper: org.pipelineframework.examples.rag.indexer.DocumentObjectMapper
 
@@ -39,8 +39,8 @@ types:
   IndexReceipt: { fields: [[sourceId, string], [chunks, int32]] }
 
 steps:
-  - { name: Extract document text, pipeline: document-text-extraction, cardinality: ONE_TO_ONE, input: DocumentFile, output: ExtractedDocument, java: { input: org.pipelineframework.segments.document.DocumentFile, output: org.pipelineframework.segments.document.ExtractedDocument } }
-  - { name: Chunk document, service: org.pipelineframework.examples.rag.indexer.ChunkDocumentService, cardinality: ONE_TO_MANY, input: ExtractedDocument, output: Chunk, java: { input: org.pipelineframework.segments.document.ExtractedDocument, output: org.pipelineframework.examples.rag.indexer.domain.Chunk } }
+  - { name: Extract document text, pipeline: document-text-extraction, cardinality: ONE_TO_ONE, input: DocumentFile, output: ExtractedDocument, java: { input: org.pipelineframework.blocks.document.DocumentFile, output: org.pipelineframework.blocks.document.ExtractedDocument } }
+  - { name: Chunk document, service: org.pipelineframework.examples.rag.indexer.ChunkDocumentService, cardinality: ONE_TO_MANY, input: ExtractedDocument, output: Chunk, java: { input: org.pipelineframework.blocks.document.ExtractedDocument, output: org.pipelineframework.examples.rag.indexer.domain.Chunk } }
   - { name: Prepare embedding, service: org.pipelineframework.examples.rag.indexer.ChunkEmbeddingRequestService, cardinality: ONE_TO_ONE, input: Chunk, output: <tpf.embedding.EmbeddingRequest>, java: { input: org.pipelineframework.examples.rag.indexer.domain.Chunk, output: org.pipelineframework.connector.embedding.EmbeddingRequest } }
   - { name: Embed chunk, kind: query, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingRequest>, output: <tpf.embedding.EmbeddingResult>, using: embedder, operation: embed, operationVersion: 1, capture: { keyFields: [itemId, text] }, java: { input: org.pipelineframework.connector.embedding.EmbeddingRequest, output: org.pipelineframework.connector.embedding.EmbeddingResult } }
   - { name: Prepare vector upsert, service: org.pipelineframework.examples.rag.indexer.VectorUpsertRequestService, cardinality: ONE_TO_ONE, input: <tpf.embedding.EmbeddingResult>, output: <tpf.vector.VectorUpsertRequest>, java: { input: org.pipelineframework.connector.embedding.EmbeddingResult, output: org.pipelineframework.connector.vector.VectorUpsertRequest } }
