@@ -31,6 +31,7 @@ import org.eclipse.microprofile.openapi.models.PathItem;
 import org.eclipse.microprofile.openapi.models.callbacks.Callback;
 import org.eclipse.microprofile.openapi.models.headers.Header;
 import org.eclipse.microprofile.openapi.models.media.Content;
+import org.eclipse.microprofile.openapi.models.media.Discriminator;
 import org.eclipse.microprofile.openapi.models.media.Schema;
 import org.eclipse.microprofile.openapi.models.parameters.Parameter;
 import org.eclipse.microprofile.openapi.models.parameters.RequestBody;
@@ -173,6 +174,21 @@ public final class PublicApiContractFilter implements OASFilter {
         schemaList(schema.getAnyOf(), schemas, reachable);
         schemaList(schema.getOneOf(), schemas, reachable);
         schemaList(schema.getPrefixItems(), schemas, reachable);
+        discriminator(schema.getDiscriminator(), schemas, reachable);
+    }
+
+    private void discriminator(Discriminator discriminator, Map<String, Schema> schemas, Set<String> reachable) {
+        if (discriminator == null || discriminator.getMapping() == null) {
+            return;
+        }
+        discriminator.getMapping().values().forEach(reference -> {
+            String name = reference.startsWith(SCHEMA_REFERENCE_PREFIX)
+                ? reference.substring(SCHEMA_REFERENCE_PREFIX.length())
+                : reference;
+            if (reachable.add(name)) {
+                schema(schemas.get(name), schemas, reachable);
+            }
+        });
     }
 
     private void schemaMap(Map<String, Schema> values, Map<String, Schema> schemas, Set<String> reachable) {

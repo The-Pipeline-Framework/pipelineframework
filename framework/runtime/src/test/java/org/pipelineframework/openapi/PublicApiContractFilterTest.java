@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.microprofile.openapi.OASFactory;
@@ -41,9 +42,13 @@ class PublicApiContractFilterTest {
         Schema caseRequest = OASFactory.createSchema()
             .addProperty("operation", reference("ProposedOperation"));
         Schema proposedOperation = OASFactory.createSchema()
-            .oneOf(List.of(reference("SetField"), reference("AddMember")));
+            .oneOf(List.of(reference("SetField"), reference("AddMember")))
+            .discriminator(OASFactory.createDiscriminator()
+                .propertyName("operation")
+                .mapping(Map.of("mapped", "#/components/schemas/MappedVariant")));
         Schema setField = OASFactory.createSchema().addProperty("path", OASFactory.createSchema());
         Schema addMember = OASFactory.createSchema().addProperty("relationship", OASFactory.createSchema());
+        Schema mappedVariant = OASFactory.createSchema().addProperty("value", OASFactory.createSchema());
         Schema hostedRequest = OASFactory.createSchema().addProperty("payload", reference("JsonNode"));
 
         Components components = OASFactory.createComponents()
@@ -51,6 +56,7 @@ class PublicApiContractFilterTest {
             .addSchema("ProposedOperation", proposedOperation)
             .addSchema("SetField", setField)
             .addSchema("AddMember", addMember)
+            .addSchema("MappedVariant", mappedVariant)
             .addSchema("HostedRequest", hostedRequest)
             .addSchema("JsonNode", OASFactory.createSchema());
         Paths paths = OASFactory.createPaths()
@@ -62,7 +68,7 @@ class PublicApiContractFilterTest {
 
         assertEquals(Set.of("/api/cases/{caseId}/operations"), openApi.getPaths().getPathItems().keySet());
         assertEquals(
-            Set.of("CaseRequest", "ProposedOperation", "SetField", "AddMember"),
+            Set.of("CaseRequest", "ProposedOperation", "SetField", "AddMember", "MappedVariant"),
             openApi.getComponents().getSchemas().keySet());
     }
 
