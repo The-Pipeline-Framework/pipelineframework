@@ -33,6 +33,8 @@ composition                        -> pipeline step / nested pipeline
 typed iteration / agentic looping -> bounded recursive nested pipeline
 ```
 
+Do not introduce repositories/services/providers as architectural seams merely because implementation APIs exist. In TPF applications, first express persistence, Queries, Commands, nested pipelines and other execution semantics in pipeline.yaml. Application code should implement domain transformations and adapters behind those compiler-owned boundaries.
+
 These are different jobs with different authorities. Do not collapse them into an application registry.
 
 ## Author the functional core
@@ -97,13 +99,15 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 
 Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
 
-When the TPF Author MCP tools are available, use `tpf_versions` to confirm that the
+Use the TPF Author MCP tools `tpf_versions` to confirm that the
 application's exact pinned TPF release is supported, then use version-exact
 `tpf_search`, `tpf_context`, and `tpf_source` evidence. Never substitute `latest`, a
 different patch, or a different minor line. If the tools or pinned release are not
 available, search the matching tagged documentation, source, examples, and tests
 directly. The Skill remains the architectural prior; MCP results supply release-exact
 evidence rather than replacing that model.
+
+Implementation classes prove capability; they do not define application architecture. Prefer canonical authoring docs/ADRs/DSL examples for design.
 
 ## Before you implement
 
