@@ -29,7 +29,7 @@ Use this page as the release front door. The older full procedure remains availa
 | Cut and publish framework artifacts | [Framework Release Process](/evolve/framework-release-process) |
 | Consume or republish the current framework snapshot | [Publishing Reference — Nightly Snapshot Publishing](/evolve/publishing-reference#nightly-snapshot-publishing) |
 | Validate docs snapshots and route rewrites | [Docs Snapshot Process](/evolve/docs-snapshot-process) |
-| Publish versioned author MCP knowledge | Automatic final jobs in `.github/workflows/publish.yml` and `.github/workflows/publish-snapshots.yml` |
+| Publish or recover versioned author MCP knowledge | [TPF Author MCP Operations](/evolve/author-mcp-operations) |
 | Troubleshoot Maven Central details | [Publishing Reference](/evolve/publishing-reference) |
 
 ## Author MCP knowledge
@@ -41,6 +41,12 @@ One-time repository setup requires the `TPF_MCP_DISPATCH_TOKEN` Actions secret i
 The live `.repowise` database is not committed: it contains mutable local index state, locks, and machine-specific data. In each configured clone, MCP export and delivery are attached to one stable, clean `main` checkout; their shared Git-hook blocks ignore activity from sibling feature worktrees. They cover locally created commits and newly merged or pulled commits in that checkout. Each healthy, non-stale export is written first to a durable local outbox and then uploaded to private Cloudflare R2 under a commit-addressed immutable key. A network or Cloudflare failure leaves the export queued for bounded retries and later Git activity; it never discards the only copy. Any authorized maintainer with a healthy index for that exact commit can supply the immutable input. This work happens as the knowledge base is refreshed, outside the release critical path; maintainers do not prepare or upload a separate bundle while cutting a release.
 
 The downstream MCP publication waits briefly for a delayed delivery but never substitutes another commit's knowledge. If the exact commit-addressed export remains missing or its checksum/provenance does not match, only the MCP knowledge publication fails with an actionable diagnostic; the workflow does not re-index with model credentials or silently publish stale content. After connectivity returns and the queued upload succeeds, rerun the MCP workflow without repeating Maven Central or GitHub publication.
+
+This applies equally to nightly snapshots and `v*` tag releases. The tag workflow has
+already published Maven artifacts and created the GitHub release before dispatching its
+Author MCP job, so repair and rerun only that downstream job. See
+[TPF Author MCP Operations](/evolve/author-mcp-operations) for the end-to-end ownership,
+hook, worktree, verification, and recovery runbook.
 
 ## Guardrails
 
