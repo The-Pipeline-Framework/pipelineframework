@@ -78,6 +78,33 @@ class PublicApiContractFilterTest {
         assertThrows(IllegalArgumentException.class, () -> new PublicApiContractFilter(List.of("api/cases")));
     }
 
+    @Test
+    void prunesSchemasFromAComponentsOnlyDocument() {
+        Components components = OASFactory.createComponents()
+            .addSchema("Unused", OASFactory.createSchema());
+        OpenAPI openApi = OASFactory.createOpenAPI().components(components);
+
+        new PublicApiContractFilter(List.of("/api/cases")).filterOpenAPI(openApi);
+
+        assertEquals(Set.of(), openApi.getComponents().getSchemas().keySet());
+    }
+
+    @Test
+    void retainsSchemasReferencedThroughAComponentRequestBody() {
+        Components components = OASFactory.createComponents()
+            .addSchema("CaseRequest", OASFactory.createSchema())
+            .addSchema("Unused", OASFactory.createSchema())
+            .addRequestBody("CaseBody", referenceBody("CaseRequest"));
+        Paths paths = OASFactory.createPaths()
+            .addPathItem("/api/cases", post(OASFactory.createRequestBody()
+                .ref("#/components/requestBodies/CaseBody")));
+        OpenAPI openApi = OASFactory.createOpenAPI().components(components).paths(paths);
+
+        new PublicApiContractFilter(List.of("/api/cases")).filterOpenAPI(openApi);
+
+        assertEquals(Set.of("CaseRequest"), openApi.getComponents().getSchemas().keySet());
+    }
+
     private PathItem post(RequestBody body) {
         Operation operation = OASFactory.createOperation().requestBody(body);
         return OASFactory.createPathItem().POST(operation);
