@@ -62,7 +62,7 @@ the consuming release identity.
 
 ## Consequences
 
-- Installing a block is a build dependency operation; there is no runtime download, registry, or
+- Installing a block is a build-time dependency operation; there is no runtime download, registry, or
   discovery path.
 - Block implementation classes and transitive libraries use the application's normal classpath and
   dependency injection mechanisms.
