@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -405,6 +406,13 @@ public final class BlockDefinitionImporter {
 
         Object rawSteps = normalizedDefinition.get("steps");
         List<Object> steps = (List<Object>) rawSteps;
+        Map<Object, String> declaredRequirements = new IdentityHashMap<>();
+        for (Object rawStep : steps) {
+            Map<String, Object> step = (Map<String, Object>) rawStep;
+            Object declaredUsing = step.get("using");
+            declaredRequirements.put(rawStep,
+                declaredUsing == null ? "" : String.valueOf(declaredUsing).strip());
+        }
         List<ImportedPipelineDefinition.ResolvedBlockRequirement> resolved = new ArrayList<>();
         for (Map.Entry<String, BlockPackageManifest.Requirement> requirementEntry
             : definition.requirements().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -450,7 +458,7 @@ public final class BlockDefinitionImporter {
             for (Object rawStep : steps) {
                 Map<String, Object> step = (Map<String, Object>) rawStep;
                 String stepKind = String.valueOf(step.getOrDefault("kind", "")).trim().toUpperCase(Locale.ROOT);
-                String stepRequirement = String.valueOf(step.get("using")).strip();
+                String stepRequirement = declaredRequirements.get(rawStep);
                 if (!kind.equals(stepKind) || !requirementName.equals(stepRequirement)) {
                     continue;
                 }

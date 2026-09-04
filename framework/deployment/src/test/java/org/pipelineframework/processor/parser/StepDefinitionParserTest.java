@@ -844,7 +844,8 @@ class StepDefinitionParserTest {
             assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
             assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
 
-            Files.writeString(manifest, Files.readString(manifest).replace(
+            String validManifest = Files.readString(manifest);
+            Files.writeString(manifest, validManifest.replace(
                 "\"input\":\"com.example.FindInvoice\",\"output\":\"com.example.Invoice\"",
                 "\"input\":\"com.example.FindInvoice\",\"output\":\"com.other.Invoice\""));
             List<String> typeDiagnostics = new ArrayList<>();
@@ -856,6 +857,20 @@ class StepDefinitionParserTest {
             assertTrue(typeDiagnostics.stream().anyMatch(message ->
                 message.contains("do not match provider operation types")
                     && message.contains("com.other.Invoice")), typeDiagnostics.toString());
+
+            Files.writeString(manifest, validManifest);
+            Files.writeString(pipeline, Files.readString(pipeline).replace(
+                "      lookup:\n        using: work\n        operation: invoice.find\n",
+                "      lookup:\n        using: work\n        operation:\n"));
+            List<String> callableDiagnostics = new ArrayList<>();
+            List<StepDefinition> invalidCallable = new StepDefinitionParser(
+                (kind, message) -> callableDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+            assertEquals(1, invalidCallable.size(), callableDiagnostics.toString());
+            assertTrue(callableDiagnostics.stream().anyMatch(message ->
+                message.contains("callable 'lookup' field 'operation' must not be null")),
+                callableDiagnostics.toString());
         }
     }
 

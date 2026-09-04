@@ -2019,13 +2019,13 @@ public final class PipelineTemplateSchemaExporter {
       "description": "Compile-time application bindings for imported Block capability requirements.",
       "propertyNames": {
         "type": "string",
-        "pattern": "^[a-z][a-z0-9]*(?:\\\\.[a-z][a-z0-9]*)*/[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        "pattern": "^[^/\\\\s](?:[^/]*[^/\\\\s])?/[^/\\\\s](?:[^/]*[^/\\\\s])?$"
       },
       "additionalProperties": {
         "type": "object",
         "propertyNames": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(?:\\\\.[a-z][a-z0-9]*)*$"
+          "pattern": "^[^/\\\\s](?:[^/]*[^/\\\\s])?$"
         },
         "additionalProperties": { "$ref": "#/$defs/blockCapabilityBinding" }
       }
@@ -2662,6 +2662,17 @@ public final class PipelineTemplateSchemaExporter {
     }
   },
   "allOf": [
+    {
+      "if": {
+        "not": {
+          "properties": { "version": { "const": 3 } },
+          "required": ["version"]
+        }
+      },
+      "then": {
+        "properties": { "blockBindings": false }
+      }
+    },
     {
       "if": {
         "properties": {

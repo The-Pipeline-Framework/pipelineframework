@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,6 +16,18 @@ import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 
 class BlockDefinitionImporterTest {
     @TempDir Path directory;
+
+    @Test void normalizesAndValidatesManifestRequirementNamesBeforeCopying() {
+        var requirements = new LinkedHashMap<String, BlockPackageManifest.Requirement>();
+        requirements.put(" graphql.read ", new BlockPackageManifest.Requirement("query"));
+        var definition = new BlockPackageManifest.Definition("lookup", "definition.yaml", requirements);
+        assertTrue(definition.requires().containsKey("graphql.read"));
+
+        requirements.put("invalid", null);
+        var invalid = assertThrows(IllegalArgumentException.class,
+            () -> new BlockPackageManifest.Definition("lookup", "definition.yaml", requirements));
+        assertTrue(invalid.getMessage().contains("entry must not be null"));
+    }
 
     @Test void discoversDependencyMetadataAndLinksOrdinaryV3Definitions() throws Exception {
         Path dependency = dependency("first", "org.example.documents", "documents", "1.2.3",
@@ -136,6 +149,13 @@ class BlockDefinitionImporterTest {
                         "    graphql.read:\n      using: primary\n    extra.read:\n      using: primary\n"))));
             assertTrue(extra.getMessage().contains("unknown requirement 'extra.read'"));
 
+            var queryWithCommandAuthority = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "    graphql.read:\n      using: primary\n",
+                        "    graphql.read:\n      using: primary\n      duplicatePolicy: FAIL\n"))));
+            assertTrue(queryWithCommandAuthority.getMessage().contains("unsupported field 'duplicatePolicy'"));
+
             var missingCommandAuthority = assertThrows(IllegalStateException.class,
                 () -> new BlockDefinitionImporter(loader).importInto(application(
                     operationBlockApplication("primary").replace(
@@ -148,6 +168,34 @@ class BlockDefinitionImporterTest {
                         "org.example.operations/lookup", "org.example.operations/missing"))));
             assertTrue(unknownDefinition.getMessage().contains("unknown qualified Block definition"),
                 unknownDefinition.getMessage());
+        }
+    }
+
+    @Test void keepsRequirementMatchingStableWhileRewritingMultipleCapabilities() throws Exception {
+        Path dependency = multiRequirementBlockDependency();
+        Path application = application("""
+            version: 3
+            basePackage: com.example
+            connectors:
+              z: { provider: acme.operations, version: 1, config: { connection: z-connection } }
+              final: { provider: acme.operations, version: 1, config: { connection: final-connection } }
+            blockBindings:
+              org.example.multi/multi:
+                a: { using: z }
+                z: { using: final }
+            types:
+              LookupRequest: { java: com.example.LookupRequest, fields: [[key, string]] }
+              LookupResult: { java: com.example.LookupResult, fields: [[value, string]] }
+            steps: []
+            """);
+
+        try (URLClassLoader loader = loader(dependency);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
+            var requirements = imported.definitions().getFirst().resolvedRequirements();
+            assertEquals("a", requirements.get(0).name());
+            assertEquals("first", requirements.get(0).operations().getFirst().id());
+            assertEquals("z", requirements.get(1).name());
+            assertEquals("second", requirements.get(1).operations().getFirst().id());
         }
     }
 
@@ -448,6 +496,36 @@ class BlockDefinitionImporterTest {
             "reconciliationSupported":false,"executionPosture":"AUTOMATED",
             "maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED","userConfirmationSupported":false,
             "durableReferenceKinds":[]}}]}]}
+            """);
+        return root;
+    }
+
+    private Path multiRequirementBlockDependency() throws Exception {
+        Path root = directory.resolve("multi-requirement-block");
+        Path metadata = root.resolve("META-INF/pipeline");
+        Files.createDirectories(metadata);
+        Files.writeString(metadata.resolve("blocks.json"), """
+            {"schemaVersion":1,"namespace":"org.example.multi",
+             "artifact":{"groupId":"org.example","artifactId":"multi","version":"1.0.0"},
+             "definitions":[{"name":"multi","resource":"META-INF/pipeline/definition.yaml",
+               "requires":{"a":{"kind":"QUERY"},"z":{"kind":"QUERY"}}}]}
+            """);
+        Files.writeString(metadata.resolve("definition.yaml"), """
+            version: 3
+            pipelines:
+              multi:
+                input: LookupRequest
+                output: LookupResult
+                steps:
+                  - { name: First, kind: query, using: a, operation: first, input: LookupRequest, output: LookupResult, java: { input: com.example.LookupRequest, output: com.example.LookupResult } }
+                  - { name: Second, kind: query, using: z, operation: second, input: LookupRequest, output: LookupResult, java: { input: com.example.LookupRequest, output: com.example.LookupResult } }
+            """);
+        Files.writeString(metadata.resolve("connector-providers.json"), """
+            {"schemaVersion":4,"providers":[{"id":"acme.operations","version":{"major":1,"minor":0},
+             "configurationSchema":{"id":"acme.operations.binding","version":1,"fields":[{"name":"connection","type":"CONNECTION_REF","required":true}]},
+             "operations":[
+               {"id":"first","kind":"tpf:query","majorVersion":1,"queryCardinality":"ONE_TO_ONE","typeContract":{"input":"com.example.LookupRequest","output":"com.example.LookupResult"}},
+               {"id":"second","kind":"tpf:query","majorVersion":1,"queryCardinality":"ONE_TO_ONE","typeContract":{"input":"com.example.LookupRequest","output":"com.example.LookupResult"}}]}]}
             """);
         return root;
     }

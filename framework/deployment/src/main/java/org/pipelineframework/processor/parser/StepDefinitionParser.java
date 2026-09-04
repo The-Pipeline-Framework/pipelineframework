@@ -1194,7 +1194,7 @@ public class StepDefinitionParser {
             terminal);
     }
 
-    private static Map<String, Object> withCallableCatalogue(
+    private Map<String, Object> withCallableCatalogue(
         Map<String, Object> operationConfig,
         Map<String, Object> stepData
     ) {
@@ -1203,17 +1203,24 @@ public class StepDefinitionParser {
             return operationConfig;
         }
         Map<String, Object> callableConfig = new LinkedHashMap<>();
-        callables.forEach((alias, rawCallable) -> {
-            if (rawCallable instanceof Map<?, ?> callable) {
-                Map<String, Object> descriptor = new LinkedHashMap<>();
-                copyIfPresent(callable, descriptor, "using");
-                copyIfPresent(callable, descriptor, "operation");
-                copyIfPresent(callable, descriptor, "kind");
-                copyIfPresent(callable, descriptor, "operationVersion");
-                copyIfPresent(callable, descriptor, "input");
-                callableConfig.put(String.valueOf(alias), Map.copyOf(descriptor));
+        for (Map.Entry<?, ?> entry : callables.entrySet()) {
+            String alias = String.valueOf(entry.getKey());
+            if (!(entry.getValue() instanceof Map<?, ?> callable)) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + getStringValue(stepData, "name")
+                    + "': callable '" + alias + "' must be a map");
+                throw new StepSkippedException();
             }
-        });
+            Map<String, Object> descriptor = new LinkedHashMap<>();
+            for (String field : List.of("using", "operation", "kind", "operationVersion", "input")) {
+                if (callable.containsKey(field) && callable.get(field) == null) {
+                    report(Diagnostic.Kind.ERROR, "Skipping step '" + getStringValue(stepData, "name")
+                        + "': callable '" + alias + "' field '" + field + "' must not be null");
+                    throw new StepSkippedException();
+                }
+                copyIfPresent(callable, descriptor, field);
+            }
+            callableConfig.put(alias, Map.copyOf(descriptor));
+        }
         Map<String, Object> result = new LinkedHashMap<>(operationConfig);
         result.put("callables", Map.copyOf(callableConfig));
         return Map.copyOf(result);
