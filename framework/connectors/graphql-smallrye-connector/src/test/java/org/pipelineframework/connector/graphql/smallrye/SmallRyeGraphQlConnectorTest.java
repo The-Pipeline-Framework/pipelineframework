@@ -131,6 +131,43 @@ class SmallRyeGraphQlConnectorTest {
             mutation(unavailable, "customer.update", context("tenant-b")));
     }
 
+    @Test void mapsSynchronousAndNullConnectionResolutionFailuresToRetryableMutationOutcomes() {
+        SmallRyeGraphQlConnector synchronous = new SmallRyeGraphQlConnector(getClass().getClassLoader());
+        synchronous.start(runtimeContext(new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                throw new IllegalStateException("synchronous resolver failure");
+            }
+        }), configuration()).toCompletableFuture().join();
+        assertInstanceOf(CommandOutcome.RetryableFailure.class,
+            mutation(synchronous, "customer.update", context("tenant-a")));
+
+        SmallRyeGraphQlConnector nullStage = new SmallRyeGraphQlConnector(getClass().getClassLoader());
+        nullStage.start(runtimeContext(new ConnectionResolver() {
+            @Override
+            public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                return null;
+            }
+        }), configuration()).toCompletableFuture().join();
+        assertInstanceOf(CommandOutcome.RetryableFailure.class,
+            mutation(nullStage, "customer.update", context("tenant-a")));
+    }
+
+    @Test void distinguishesSynchronousPreDispatchFailureFromInvalidPostDispatchResponse() {
+        DynamicGraphQLClient synchronousFailure = mock(DynamicGraphQLClient.class);
+        when(synchronousFailure.executeAsync(anyString(), anyMap(), eq("CustomerUpdate")))
+            .thenThrow(new IllegalStateException("request construction failed"));
+        assertInstanceOf(CommandOutcome.RetryableFailure.class,
+            mutation(started(synchronousFailure, new ArrayList<>()), "customer.update", context("tenant-a")));
+
+        DynamicGraphQLClient invalidResponse = mock(DynamicGraphQLClient.class);
+        Response emptyResponse = response(null, List.of());
+        when(invalidResponse.executeAsync(anyString(), anyMap(), eq("CustomerUpdate")))
+            .thenReturn(Uni.createFrom().item(emptyResponse));
+        assertInstanceOf(CommandOutcome.Ambiguous.class,
+            mutation(started(invalidResponse, new ArrayList<>()), "customer.update", context("tenant-a")));
+    }
+
     @Test void propagatesQueryConnectionAndTransportFailuresThroughNativeQuerySemantics() {
         SmallRyeGraphQlConnector unavailable = new SmallRyeGraphQlConnector(getClass().getClassLoader());
         unavailable.start(runtimeContext(failingResolver()), configuration()).toCompletableFuture().join();
@@ -165,21 +202,27 @@ class SmallRyeGraphQlConnectorTest {
 
         var badDigest = configuration(Map.of("customer.lookup", new GraphQlPersistedOperation(
             GraphQlOperationKind.QUERY, "CustomerLookup", "graphql/customer-lookup.graphql", "0".repeat(64))));
-        assertThrows(Exception.class,
+        CompletionException digestFailure = assertThrows(CompletionException.class,
             () -> connector.start(runtimeContext(resolver(client, new ArrayList<>())), badDigest)
                 .toCompletableFuture().join());
+        assertInstanceOf(IllegalArgumentException.class, digestFailure.getCause());
+        assertTrue(digestFailure.getCause().getMessage().contains("has SHA-256"));
 
         var badName = configuration(Map.of("customer.lookup", new GraphQlPersistedOperation(
             GraphQlOperationKind.QUERY, "OtherLookup", "graphql/customer-lookup.graphql", QUERY_SHA)));
-        assertThrows(Exception.class,
+        CompletionException nameFailure = assertThrows(CompletionException.class,
             () -> connector.start(runtimeContext(resolver(client, new ArrayList<>())), badName)
                 .toCompletableFuture().join());
+        assertInstanceOf(IllegalArgumentException.class, nameFailure.getCause());
+        assertTrue(nameFailure.getCause().getMessage().contains("rather than 'OtherLookup'"));
 
         var badKind = configuration(Map.of("customer.lookup", new GraphQlPersistedOperation(
             GraphQlOperationKind.MUTATION, "CustomerLookup", "graphql/customer-lookup.graphql", QUERY_SHA)));
-        assertThrows(Exception.class,
+        CompletionException kindFailure = assertThrows(CompletionException.class,
             () -> connector.start(runtimeContext(resolver(client, new ArrayList<>())), badKind)
                 .toCompletableFuture().join());
+        assertInstanceOf(IllegalArgumentException.class, kindFailure.getCause());
+        assertTrue(kindFailure.getCause().getMessage().contains("is QUERY but the binding declares MUTATION"));
         verify(client, never()).executeAsync(anyString(), anyMap(), anyString());
     }
 

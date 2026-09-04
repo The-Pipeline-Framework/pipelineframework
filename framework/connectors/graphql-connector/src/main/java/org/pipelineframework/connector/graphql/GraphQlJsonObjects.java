@@ -23,7 +23,9 @@ final class GraphQlJsonObjects {
             throw new IllegalArgumentException(label + " must not exceed " + MAX_JSON_LENGTH + " characters");
         }
         try {
-            return MAPPER.writeValueAsString(MAPPER.readValue(json, OBJECT));
+            Map<String, Object> object = MAPPER.readValue(json, OBJECT);
+            if (object == null) throw new IllegalArgumentException(label + " must be a JSON object");
+            return MAPPER.writeValueAsString(object);
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException(label + " must be a JSON object", exception);
         }

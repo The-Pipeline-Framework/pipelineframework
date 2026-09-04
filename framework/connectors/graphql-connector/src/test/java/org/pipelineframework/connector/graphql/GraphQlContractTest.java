@@ -28,6 +28,8 @@ class GraphQlContractTest {
         assertEquals(CommandMachineConfirmation.NONE,
             new TestMutationOperation().capabilities().maximumMachineConfirmation());
         assertThrows(IllegalArgumentException.class, () -> new GraphQlVariablesJson("[]"));
+        assertThrows(IllegalArgumentException.class, () -> new GraphQlVariablesJson("null"));
+        assertThrows(IllegalArgumentException.class, () -> new GraphQlDataJson("null"));
         assertThrows(IllegalArgumentException.class, () -> new GraphQlQueryRequest(" ", json));
         assertThrows(IllegalArgumentException.class,
             () -> new GraphQlMutationRequest("customer.update", " ", json));

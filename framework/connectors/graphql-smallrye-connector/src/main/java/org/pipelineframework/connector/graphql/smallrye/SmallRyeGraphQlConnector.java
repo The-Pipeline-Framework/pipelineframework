@@ -18,6 +18,7 @@ import io.smallrye.graphql.client.Response;
 import io.smallrye.graphql.client.dynamic.api.DynamicGraphQLClient;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
 
 import org.pipelineframework.connector.CommandCapabilities;
 import org.pipelineframework.connector.CommandConfirmation;
@@ -51,6 +52,7 @@ import org.pipelineframework.connector.graphql.GraphQlVariablesJson;
 /** SmallRye asynchronous dynamic-client adapter for application-pinned GraphQL operations. */
 @ApplicationScoped
 public final class SmallRyeGraphQlConnector implements ConnectorProvider<GraphQlProviderConfiguration> {
+    private static final Logger LOG = Logger.getLogger(SmallRyeGraphQlConnector.class);
     public static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("graphql.smallrye");
     private static final ConnectorConfigSchema<GraphQlProviderConfiguration> CONFIGURATION =
         ConnectorConfigSchema.record(GraphQlProviderConfiguration.class, "graphql.smallrye.provider", 1);
@@ -146,21 +148,33 @@ public final class SmallRyeGraphQlConnector implements ConnectorProvider<GraphQl
                 .thenCompose(stage -> stage)
                 .handle((connection, failure) -> {
                     if (failure != null) {
+                        LOG.errorf(failure, "GraphQL mutation connection resolution failed for operation %s",
+                            operation.operationName());
                         return CompletableFuture.<CommandOutcome<GraphQlResponse>>completedStage(
                             retryable("graphql-connection-unavailable"));
                     }
                     try {
                         return execute(connection.client(), operation, variables)
                             .handle((response, dispatchFailure) -> {
-                                if (dispatchFailure != null) return ambiguous("graphql-dispatch-ambiguous");
+                                if (dispatchFailure != null) {
+                                    LOG.errorf(dispatchFailure,
+                                        "GraphQL mutation dispatch became ambiguous for operation %s",
+                                        operation.operationName());
+                                    return ambiguous("graphql-dispatch-ambiguous");
+                                }
                                 try {
                                     return (CommandOutcome<GraphQlResponse>) new CommandOutcome.Succeeded<>(
                                         normalize(response), ACKNOWLEDGED, List.of());
                                 } catch (RuntimeException invalidResponse) {
+                                    LOG.errorf(invalidResponse,
+                                        "GraphQL mutation returned an invalid response for operation %s",
+                                        operation.operationName());
                                     return ambiguous("graphql-response-ambiguous");
                                 }
                             });
                     } catch (RuntimeException definitePreDispatchFailure) {
+                        LOG.errorf(definitePreDispatchFailure,
+                            "GraphQL mutation dispatch did not start for operation %s", operation.operationName());
                         return CompletableFuture.<CommandOutcome<GraphQlResponse>>completedStage(
                             retryable("graphql-dispatch-not-started"));
                     }
@@ -172,10 +186,19 @@ public final class SmallRyeGraphQlConnector implements ConnectorProvider<GraphQl
     private CompletionStage<AuthenticatedGraphQlConnection> connection(
         org.pipelineframework.connector.ConnectorExecutionContext context
     ) {
-        ActiveBinding binding = active();
-        CompletionStage<AuthenticatedGraphQlConnection> resolved = binding.resolver().resolve(
-            new ConnectionResolutionRequest<>(binding.connection(), AuthenticatedGraphQlConnection.class, context));
-        return Objects.requireNonNull(resolved, "host ConnectionResolver returned a null GraphQL stage");
+        try {
+            ActiveBinding binding = active();
+            CompletionStage<AuthenticatedGraphQlConnection> resolved = binding.resolver().resolve(
+                new ConnectionResolutionRequest<>(
+                    binding.connection(), AuthenticatedGraphQlConnection.class, context));
+            if (resolved == null) {
+                return CompletableFuture.failedStage(
+                    new IllegalStateException("host ConnectionResolver returned a null GraphQL stage"));
+            }
+            return resolved;
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedStage(failure);
+        }
     }
 
     private static CompletionStage<Response> execute(
