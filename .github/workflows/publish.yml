@@ -74,6 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: release-docs-promotion
+      queue: max
       cancel-in-progress: false
     permissions:
       contents: write
