@@ -4,7 +4,7 @@
     <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>26.9.2-SNAPSHOT</version><relativePath>../../pom.xml</relativePath></parent>
     <artifactId>llm-query-connector</artifactId>
     <name>The Pipeline Framework - Portable LLM Query Connector</name>
-    <description>Provider-neutral one-turn LLM Query contract and portable AgentCall vocabulary.</description>
+    <description>Provider-neutral one-turn LLM Query contract and portable decision vocabulary.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>

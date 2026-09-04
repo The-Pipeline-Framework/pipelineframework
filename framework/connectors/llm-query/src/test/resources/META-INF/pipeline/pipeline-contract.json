@@ -18,6 +18,17 @@
         ]
       }
     },
+    "AskUser": {
+      "contributedIdentity": "tpf.llm.AskUser",
+      "definition": {
+        "id": "AskUser",
+        "kind": "record",
+        "fields": [
+          {"name":"choices","type":{"kind":"scalar","id":"string"},"repeated":true},
+          {"name":"prompt","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
     "CompleteResult": {
       "definition": {
         "id": "CompleteResult",
@@ -30,6 +41,7 @@
         "id": "Decision",
         "kind": "union",
         "variants": [
+          {"discriminator":"askUser","payload":{"kind":"named","id":"AskUser"}},
           {"discriminator":"call","payload":{"kind":"named","id":"AgentCall"}},
           {"discriminator":"complete","payload":{"kind":"named","id":"CompleteResult"}}
         ]
