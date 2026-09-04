@@ -52,7 +52,7 @@ class LlmQueryOperationTest {
         QueryObservation observation = observation();
         LlmDecisionClient client = request -> {
             calls.incrementAndGet();
-            assertEquals(java.util.List.of("charge", "complete"),
+            assertEquals(java.util.List.of("charge", "askUser", "complete"),
                 request.tools().stream().map(LlmToolDefinition::alias).toList());
             return CompletableFuture.completedFuture(new LlmDecision(
                 new LlmToolProposal("charge", "{\"note\":\"invoice 7\",\"amount\":42}"),
@@ -68,6 +68,38 @@ class LlmQueryOperationTest {
         assertEquals("{\"amount\":42,\"note\":\"invoice 7\"}", call.value().argumentsJson());
         assertEquals(Optional.of(observation), outcome.observation());
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void returnsTypedAskUserFromOneInferenceWithoutStartingAnAgentLoop() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmDecisionClient client = request -> {
+            calls.incrementAndGet();
+            assertEquals(java.util.List.of("charge", "askUser", "complete"),
+                request.tools().stream().map(LlmToolDefinition::alias).toList());
+            return CompletableFuture.completedFuture(new LlmDecision(new LlmToolProposal(
+                "askUser",
+                "{\"prompt\":\"Which account should be charged?\",\"choices\":[\"personal\",\"business\"]}")));
+        };
+
+        QueryOutcome<Object> outcome = query(client);
+
+        Decision.AskUser askUser = assertInstanceOf(Decision.AskUser.class,
+            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+        assertEquals("Which account should be charged?", askUser.value().prompt());
+        assertEquals(java.util.List.of("personal", "business"), askUser.value().choices());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void rejectsProviderOrRuntimeMetadataOutsideThePortableAskUserShape() {
+        QueryOutcome<Object> outcome = query(request -> CompletableFuture.completedFuture(
+            new LlmDecision(new LlmToolProposal(
+                "askUser",
+                "{\"prompt\":\"Which account?\",\"choices\":[],\"providerModel\":\"secret-runtime-data\"}"))));
+
+        assertEquals("invalid-model-decision",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
     }
 
     @Test

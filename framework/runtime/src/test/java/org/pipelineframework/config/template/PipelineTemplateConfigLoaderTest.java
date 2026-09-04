@@ -131,6 +131,29 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void rejectsTheCompilerReservedRootPipelineId() throws Exception {
+        Path configPath = tempDir.resolve("reserved-root-v3-local-pipeline.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Reserved root catalog entry
+            basePackage: com.example.local
+            contract: { input: Value, output: Value }
+            types: { Value: { fields: [[id, string]] } }
+            pipelines:
+              $root:
+                input: Value
+                output: Value
+                steps: [{ name: X, cardinality: ONE_TO_ONE, input: Value, output: Value }]
+            steps: [{ name: Root, cardinality: ONE_TO_ONE, input: Value, output: Value }]
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("Pipeline definition ID '$root' is reserved by the compiler.", failure.getMessage());
+    }
+
+    @Test
     void rejectsEmptyV3LocalPipelineDefinition() throws Exception {
         Path configPath = tempDir.resolve("empty-v3-local-pipeline.yaml");
         Files.writeString(configPath, """
@@ -283,6 +306,7 @@ class PipelineTemplateConfigLoaderTest {
               Decision:
                 variants:
                   call: <tpf.llm.AgentCall>
+                  askUser: <tpf.llm.AskUser>
                   complete: Complete
             steps:
               - name: Decide
@@ -304,14 +328,26 @@ class PipelineTemplateConfigLoaderTest {
                 new PipelineTemplateTypeDefinition.Field("binding", new PipelineTemplateTypeReference.Scalar("string")),
                 new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")),
                 new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")))));
+        ProtocolTypeDescriptor askUser = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AskUser"),
+            new PipelineTemplateTypeDefinition.RecordType("AskUser", List.of(
+                new PipelineTemplateTypeDefinition.Field("prompt", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field(
+                    "choices", new PipelineTemplateTypeReference.Scalar("string"), true))));
 
-        PipelineTemplateStep step = loader(agentCall).load(configPath).steps().getFirst();
+        PipelineTemplateConfig config = loader(agentCall, askUser).load(configPath);
+        PipelineTemplateStep step = config.steps().getFirst();
 
         var callable = step.callables().get("charge");
         assertEquals("payments", callable.using());
         assertEquals("charge.create", callable.operation());
         assertEquals(2, callable.operationVersion());
         assertEquals("ChargeArguments", callable.input());
+        PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
+            config.typeModel().definition("Decision").orElseThrow();
+        assertEquals("AskUser", decision.variants().get("askUser").payload().name());
+        assertEquals("tpf.llm.AskUser",
+            config.typeModel().contributedTypeIdentity("AskUser").orElseThrow().qualifiedName());
     }
 
     @Test
@@ -2375,5 +2411,112 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertEquals("Top-level representations require version: 3", exception.getMessage());
+    }
+
+    @Test
+    void bindsAQualifiedPackageOwnedJavaTypeIntoTheCanonicalV3Model() throws Exception {
+        Path configPath = tempDir.resolve("v3-package-owned-java-type.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Packaged Types
+            basePackage: com.example.consumer
+            transport: LOCAL
+            types:
+              DocumentFile:
+                java: org.example.block.DocumentFile
+                fields: [[content, payload_ref]]
+            contract: { input: DocumentFile, output: DocumentFile }
+            steps:
+              - { name: identity, service: org.example.Identity, cardinality: ONE_TO_ONE, input: DocumentFile, output: DocumentFile, java: { input: org.example.block.DocumentFile, output: org.example.block.DocumentFile } }
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals("org.example.block.DocumentFile",
+            config.typeModel().javaTypeBinding("DocumentFile").orElseThrow());
+    }
+
+    @Test
+    void rejectsMalformedCanonicalJavaTypeBindingsFromYamlAndDirectConstruction() throws Exception {
+        for (var invalid : List.of(
+            Map.entry(".", "."),
+            Map.entry("DocumentFile", "DocumentFile"),
+            Map.entry("\" org.example.DocumentFile \"", " org.example.DocumentFile ")
+        )) {
+            Path configPath = tempDir.resolve("v3-invalid-java-type.yaml");
+            Files.writeString(configPath, """
+                version: 3
+                appName: Invalid Java binding
+                basePackage: com.example.consumer
+                transport: LOCAL
+                types:
+                  DocumentFile:
+                    java: %s
+                    fields: [[content, payload_ref]]
+                contract: { input: DocumentFile, output: DocumentFile }
+                steps: []
+                """.formatted(invalid.getKey()));
+
+            IllegalStateException parsed = assertThrows(IllegalStateException.class,
+                () -> new PipelineTemplateConfigLoader().load(configPath));
+            assertTrue(parsed.getMessage().contains("must be a fully-qualified class name"));
+
+            var definition = new PipelineTemplateTypeDefinition.RecordType("DocumentFile", List.of());
+            IllegalStateException constructed = assertThrows(IllegalStateException.class,
+                () -> new PipelineTemplateTypeModel(
+                    Map.of("DocumentFile", definition), Map.of(), Map.of(), Map.of(),
+                    Map.of("DocumentFile", invalid.getValue())));
+            assertTrue(constructed.getMessage().contains("Invalid canonical Java type binding"));
+        }
+    }
+
+    @Test
+    void rejectsCanonicalJavaBindingsOnAliases() throws Exception {
+        Path configPath = tempDir.resolve("v3-alias-java-type.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Alias binding
+            basePackage: com.example.consumer
+            transport: LOCAL
+            types:
+              DocumentFile:
+                fields: [[content, payload_ref]]
+              DocumentAlias:
+                java: org.example.block.DocumentFile
+                alias: DocumentFile
+            contract: { input: DocumentFile, output: DocumentFile }
+            steps: []
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("Alias type 'DocumentAlias' cannot declare"));
+    }
+
+    @Test
+    void rejectsOneCanonicalJavaClassBoundToMultipleSemanticTypes() throws Exception {
+        Path configPath = tempDir.resolve("v3-duplicate-java-type.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Duplicate binding
+            basePackage: com.example.consumer
+            transport: LOCAL
+            types:
+              DocumentFile:
+                java: org.example.block.DocumentBoundary
+                fields: [[content, payload_ref]]
+              ExtractedDocument:
+                java: org.example.block.DocumentBoundary
+                fields: [[text, string]]
+            contract: { input: DocumentFile, output: ExtractedDocument }
+            steps: []
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains(
+            "Canonical Java type 'org.example.block.DocumentBoundary' cannot be bound to both"));
     }
 }

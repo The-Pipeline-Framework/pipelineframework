@@ -67,6 +67,11 @@ class DynamoExecutionStateStoreTest {
         assertEquals("release-17", createdItem.get("input_pipeline_version").s());
         assertEquals("true", createdItem.get("input_pipeline_replay_mode").s());
         assertEquals("require-cache", createdItem.get("input_pipeline_cache_policy").s());
+        assertEquals(createdItem.get("input_payload_json"), createdItem.get("initial_input_payload_json"));
+        assertEquals(createdItem.get("input_shape"), createdItem.get("initial_input_shape"));
+        assertEquals(createdItem.get("input_pipeline_version"), createdItem.get("initial_input_pipeline_version"));
+        assertEquals(createdItem.get("input_pipeline_replay_mode"), createdItem.get("initial_input_pipeline_replay_mode"));
+        assertEquals(createdItem.get("input_pipeline_cache_policy"), createdItem.get("initial_input_pipeline_cache_policy"));
 
         Map<String, AttributeValue> persisted = new HashMap<>(executionItem(
             "tenant-a", "execution-context", "context-key", ttl, ExecutionStatus.RUNNING));
@@ -923,6 +928,7 @@ class DynamoExecutionStateStoreTest {
             request.conditionExpression().contains("#version = :expected")
                 && request.conditionExpression().contains("#status = :dlq OR #status = :failed")
                 && request.updateExpression().contains("#attempt = #attempt + :one")
+                && !request.expressionAttributeNames().containsKey("#currentStep")
                 && request.updateExpression().contains("REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")));
     }
 
@@ -984,6 +990,76 @@ class DynamoExecutionStateStoreTest {
             request.updateExpression().contains("#redriveIntent = :redriveIntent")
                 && request.expressionAttributeValues().get(":redriveIntent").s()
                     .equals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND.name())));
+    }
+
+    @Test
+    void commandReissueConditionallyReopensSucceededExecutionFromRootWithAuditMetadata() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> succeededItem = new HashMap<>(executionItem(
+            "tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.SUCCEEDED));
+        succeededItem.put("version", AttributeValue.builder().n("2").build());
+        succeededItem.put("current_step_index", AttributeValue.builder().n("5").build());
+        succeededItem.put("input_payload_json", AttributeValue.builder().s("\"continuation-input\"").build());
+        succeededItem.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.UNI.name()).build());
+        succeededItem.put("input_payload_type_id", AttributeValue.builder().s(String.class.getName()).build());
+        succeededItem.put("input_payload_encoding", AttributeValue.builder().s(JsonTransitionPayloadCodec.ENCODING).build());
+        succeededItem.put("initial_input_payload_json", AttributeValue.builder().s("\"initial-input\"").build());
+        succeededItem.put("initial_input_shape", AttributeValue.builder().s(ExecutionInputShape.RAW.name()).build());
+        succeededItem.put("initial_input_payload_type_id", AttributeValue.builder().s(String.class.getName()).build());
+        succeededItem.put("initial_input_payload_encoding", AttributeValue.builder().s(JsonTransitionPayloadCodec.ENCODING).build());
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(succeededItem).build());
+        Map<String, AttributeValue> queuedItem = new HashMap<>(executionItem(
+            "tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.QUEUED));
+        queuedItem.put("attempt", AttributeValue.builder().n("3").build());
+        queuedItem.put("current_step_index", AttributeValue.builder().n("0").build());
+        queuedItem.put("redrive_intent", AttributeValue.builder()
+            .s(ExecutionRedriveIntent.REISSUE_COMMAND.name()).build());
+        queuedItem.put("redrive_target_command_id", AttributeValue.builder()
+            .s("archive:confirmation-7").build());
+        queuedItem.put("redrive_reason", AttributeValue.builder()
+            .s("customer approved").build());
+        queuedItem.put("input_payload_json", succeededItem.get("initial_input_payload_json"));
+        queuedItem.put("input_shape", succeededItem.get("initial_input_shape"));
+        queuedItem.put("input_payload_type_id", succeededItem.get("initial_input_payload_type_id"));
+        queuedItem.put("input_payload_encoding", succeededItem.get("initial_input_payload_encoding"));
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(queuedItem).build());
+
+        ExecutionRecord<Object, Object> result = store.redriveTerminalExecution(
+                "tenant-a",
+                "exec-1",
+                2L,
+                false,
+                ExecutionRedriveIntent.REISSUE_COMMAND,
+                Optional.of("archive:confirmation-7"),
+                Optional.of("customer approved"),
+                "command-reissue:exec-1:2",
+                now)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, result.redriveIntent());
+        assertEquals(0, result.currentStepIndex());
+        assertEquals(Optional.of("archive:confirmation-7"), result.redriveTargetCommandId());
+        assertEquals(Optional.of("customer approved"), result.redriveReason());
+        assertEquals("initial-input",
+            assertInstanceOf(ExecutionInputSnapshot.class, result.inputPayload()).payload());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.conditionExpression().contains("#status = :succeeded")
+                && request.updateExpression().contains("#currentStep = :zero")
+                && request.updateExpression().contains("#redriveTarget = :redriveTarget")
+                && request.updateExpression().contains("#redriveReason = :redriveReason")
+                && "archive:confirmation-7".equals(
+                    request.expressionAttributeValues().get(":redriveTarget").s())
+                && "customer approved".equals(
+                    request.expressionAttributeValues().get(":redriveReason").s())
+                && request.updateExpression().contains("#restoreInitialInput1 = :restoreInitialInput1")
+                && "\"initial-input\"".equals(
+                    request.expressionAttributeValues().get(":restoreInitialInput1").s())));
     }
 
     @Test

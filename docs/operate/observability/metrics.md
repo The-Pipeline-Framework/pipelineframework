@@ -233,6 +233,7 @@ Command effect metrics:
 | --- | --- | --- | --- |
 | `tpf.command.effect.transition.total` | `tpf_command_effect_transition_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.status` |
 | `tpf.command.effect.duplicate.total` | `tpf_command_effect_duplicate_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.duplicate_policy`, `tpf.command.duplicate_result` |
+| `tpf.command.effect.admission.total` | `tpf_command_effect_admission_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.admission` |
 | `tpf.command.effect.duration` | `tpf_command_effect_duration_*` | histogram | `tpf.command`, `tpf.command.step`, `tpf.command.status` |
 
 Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryable`, `ambiguous`,
@@ -240,6 +241,8 @@ Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryab
 barriers even though their enclosing pipeline execution follows the established terminal
 failure/DLQ path.
 Duplicate result values are `returned_recorded`, `rejected`, and `in_progress`.
+Admission values are `initial`, `replay`, `retry`, and `reissue`, so intentional new occurrences
+remain distinguishable from recorded-output replay and failed-attempt retry.
 
 Command step SLO examples:
 

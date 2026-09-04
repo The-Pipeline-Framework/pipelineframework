@@ -26,6 +26,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 
 /**
  * Generates deterministic semantic pipeline contract metadata for coordinator/worker validation.
@@ -71,7 +72,9 @@ public class PipelineContractMetadataGenerator {
             .orElseGet(PipelineCompositionDescriptor::empty);
         boolean hasContributedTypes = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
             && !config.typeModel().contributedTypeIdentities().isEmpty();
-        int schemaVersion = composition.present() || hasContributedTypes ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
+        List<Map<String, Object>> importedDefinitions = importedDefinitions(ctx);
+        int schemaVersion = composition.present() || hasContributedTypes || !importedDefinitions.isEmpty()
+            ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
@@ -85,6 +88,9 @@ public class PipelineContractMetadataGenerator {
         contractWithoutHash.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
         if (composition.present()) {
             contractWithoutHash.put("composition", composition);
+        }
+        if (schemaVersion == 3) {
+            contractWithoutHash.put("importedDefinitions", importedDefinitions);
         }
         contractWithoutHash.put("capabilities", capabilities());
 
@@ -105,6 +111,9 @@ public class PipelineContractMetadataGenerator {
         if (composition.present()) {
             finalContract.put("composition", composition);
         }
+        if (schemaVersion == 3) {
+            finalContract.put("importedDefinitions", importedDefinitions);
+        }
         finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
 
         if (processingEnv != null) {
@@ -114,6 +123,21 @@ public class PipelineContractMetadataGenerator {
                 writer.write(PRETTY_GSON.toJson(finalContract));
             }
         }
+    }
+
+    private List<Map<String, Object>> importedDefinitions(PipelineCompilationContext ctx) {
+        return ctx.getImportedPipelineDefinitions().stream()
+            .sorted(Comparator.comparing(org.pipelineframework.processor.block.ImportedPipelineDefinition::qualifiedId))
+            .map(definition -> immutableSortedMap(Map.of(
+                "qualifiedId", definition.qualifiedId(),
+                "logicalName", definition.logicalName(),
+                "namespace", definition.namespace(),
+                "groupId", definition.groupId(),
+                "artifactId", definition.artifactId(),
+                "version", definition.version(),
+                "resource", definition.resource(),
+                "definitionFingerprint", definition.definitionFingerprint())))
+            .toList();
     }
 
     private Map<String, Object> canonicalTypes(PipelineCompilationContext ctx) {
@@ -129,7 +153,9 @@ public class PipelineContractMetadataGenerator {
             Map<String, Object> binding = new LinkedHashMap<>();
             binding.put("definition", definition);
             binding.put("definitionFingerprint", fingerprint);
-            binding.put("runtimeClass", config.basePackage() + ".domain." + entry.getKey());
+            binding.put("runtimeClass", new V3JavaTypeResolver(config).resolve(entry.getKey())
+                .map(com.squareup.javapoet.ClassName::canonicalName)
+                .orElse(config.basePackage() + ".domain." + entry.getKey()));
             model.contributedTypeIdentity(entry.getKey())
                 .ifPresent(identity -> binding.put("contributedIdentity", identity.qualifiedName()));
             types.put(entry.getKey(), immutableSortedMap(binding));

@@ -25,7 +25,8 @@ public record PipelineContractDescriptor(
     PipelineBundleCapabilities capabilities,
     Map<String, Map<String, Object>> canonicalTypes,
     String canonicalCatalogFingerprint,
-    PipelineCompositionDescriptor composition
+    PipelineCompositionDescriptor composition,
+    List<ImportedPipelineDefinitionDescriptor> importedDefinitions
 ) {
     public static final int CURRENT_SCHEMA_VERSION = 3;
     public static final String RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
@@ -48,8 +49,12 @@ public record PipelineContractDescriptor(
                 entry -> Map.copyOf(entry.getValue())));
         canonicalCatalogFingerprint = canonicalCatalogFingerprint == null ? "" : canonicalCatalogFingerprint;
         composition = composition == null ? PipelineCompositionDescriptor.empty() : composition;
+        importedDefinitions = importedDefinitions == null ? List.of() : List.copyOf(importedDefinitions);
         if (schemaVersion < 3 && composition.present()) {
             throw new IllegalArgumentException("Pipeline composition requires contract schemaVersion 3");
+        }
+        if (schemaVersion < 3 && !importedDefinitions.isEmpty()) {
+            throw new IllegalArgumentException("Imported pipeline definitions require contract schemaVersion 3");
         }
     }
 
@@ -68,7 +73,7 @@ public record PipelineContractDescriptor(
         PipelineBundleCapabilities capabilities
     ) {
         this(schemaVersion, pipelineId, contractVersion, contractHash, platform, transport, module, pluginHost,
-            runtimeLayout, steps, capabilities, Map.of(), "", PipelineCompositionDescriptor.empty());
+            runtimeLayout, steps, capabilities, Map.of(), "", PipelineCompositionDescriptor.empty(), List.of());
     }
 
     /** Schema-v2 source compatibility; v2 contracts have no composition descriptor. */
@@ -89,7 +94,28 @@ public record PipelineContractDescriptor(
     ) {
         this(schemaVersion, pipelineId, contractVersion, contractHash, platform, transport, module, pluginHost,
             runtimeLayout, steps, capabilities, canonicalTypes, canonicalCatalogFingerprint,
-            PipelineCompositionDescriptor.empty());
+            PipelineCompositionDescriptor.empty(), List.of());
+    }
+
+    /** Source compatibility for schema-v3 contracts created before imported definition provenance was added. */
+    public PipelineContractDescriptor(
+        int schemaVersion,
+        String pipelineId,
+        String contractVersion,
+        String contractHash,
+        String platform,
+        String transport,
+        String module,
+        boolean pluginHost,
+        String runtimeLayout,
+        List<PipelineBundleStepDescriptor> steps,
+        PipelineBundleCapabilities capabilities,
+        Map<String, Map<String, Object>> canonicalTypes,
+        String canonicalCatalogFingerprint,
+        PipelineCompositionDescriptor composition
+    ) {
+        this(schemaVersion, pipelineId, contractVersion, contractHash, platform, transport, module, pluginHost,
+            runtimeLayout, steps, capabilities, canonicalTypes, canonicalCatalogFingerprint, composition, List.of());
     }
 
     public static PipelineContractDescriptor localFallback() {
@@ -107,6 +133,7 @@ public record PipelineContractDescriptor(
             PipelineBundleCapabilities.defaults(),
             Map.of(),
             "",
-            PipelineCompositionDescriptor.empty());
+            PipelineCompositionDescriptor.empty(),
+            List.of());
     }
 }

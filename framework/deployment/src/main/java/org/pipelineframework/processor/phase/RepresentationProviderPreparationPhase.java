@@ -21,6 +21,7 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.representation.RepresentationProviderRegistry;
 import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
+import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
@@ -36,6 +37,7 @@ import org.pipelineframework.representation.spi.ResolvedRepresentation;
  * before the core classifies an internal service and leaves ordinary steps untouched when no provider claims them.
  */
 public final class RepresentationProviderPreparationPhase implements PipelineCompilationPhase {
+    private static final PipelineReference ROOT = new PipelineReference("$root");
     public RepresentationProviderPreparationPhase() {
     }
 
@@ -54,12 +56,19 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         ctx.setRepresentationProviderRegistry(providers);
         reportDiagnostics(ctx, providers.validate(globalConfigurations(config)));
         for (StepDefinition step : ctx.getStepDefinitions()) {
-            resolveBoundary(ctx, config, providers, step);
+            resolveBoundary(ctx, config, providers, ROOT, step);
+        }
+        for (var entry : ctx.getParsedPipelineDefinitionCatalog().localDefinitions().entrySet()) {
+            PipelineReference definition = new PipelineReference(entry.getKey());
+            for (StepDefinition step : entry.getValue()) {
+                resolveBoundary(ctx, config, providers, definition, step);
+            }
         }
     }
 
     private void resolveBoundary(PipelineCompilationContext ctx, PipelineTemplateConfig config,
-                                 RepresentationProviderRegistry providers, StepDefinition step) {
+                                 RepresentationProviderRegistry providers, PipelineReference definition,
+                                 StepDefinition step) {
         if (step.executionClass() == null || step.inputType() == null || step.outputType() == null) {
             return;
         }
@@ -99,7 +108,7 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
             validateClasses(ctx, representation);
             ctx.getResolvedRepresentationRegistry().register(representation);
         });
-        ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(request, claim.orElseThrow(), resolved,
+        ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(definition, request, claim.orElseThrow(), resolved,
             generationConfiguration(mappings)));
     }
 

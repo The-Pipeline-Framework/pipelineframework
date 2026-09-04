@@ -41,11 +41,50 @@ import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.branching.BranchVariantIdentity;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 
 class PipelineBranchingMetadataGeneratorTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void writesGeneratedClientRuntimeClassForExplicitV3RootWhenLegacyFlagIsFalse() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-v3-root");
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(false);
+        PipelineTemplateConfig template = mock(PipelineTemplateConfig.class);
+        when(template.dialect()).thenReturn(PipelineTemplateDialect.V3);
+        ctx.setPipelineTemplateConfig(template);
+        ctx.setStepModels(List.of(
+            stepModel("RecordCaseRevision", "com.example.caseapp", "AcceptedCaseRevision", "AcceptedCaseRevision")));
+        ctx.setBranchingPlan(new PipelineBranchingPlan(
+            true,
+            0,
+            List.of(new PipelineBranchingPlan.BranchStep(
+                0,
+                "Record Case Revision",
+                "CaseFlow",
+                "AcceptedCaseRevision",
+                List.of("AcceptedCaseRevision"),
+                List.of("AcceptedCaseRevision"),
+                List.of(ClassName.get("com.example.common.domain", "AcceptedCaseRevision")),
+                true))));
+
+        new PipelineBranchingMetadataGenerator(processingEnv).writeBranchingMetadata(ctx);
+
+        JsonObject metadata = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/branching.json")), JsonObject.class);
+        assertEquals(
+            "com.example.caseapp.pipeline.RecordCaseRevisionLocalClientStep",
+            metadata.getAsJsonArray("steps").get(0).getAsJsonObject().get("runtimeStepClass").getAsString());
+    }
 
     @Test
     void writesBranchingMetadataWithRuntimeClassesAndAcceptedContracts() throws IOException {

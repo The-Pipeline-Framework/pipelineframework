@@ -1,8 +1,12 @@
 package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,11 +17,13 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
+import javax.tools.StandardLocation;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
@@ -29,6 +35,9 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.parser.StepDefinitionParser;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
+import org.pipelineframework.processor.block.ImportedPipelineSources;
+import org.pipelineframework.processor.block.BlockDefinitionImporter;
+import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 
 /**
  * Discovers and loads pipeline configuration, aspects, and semantic models.
@@ -148,26 +157,45 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setFunctionHttpBridge(parseStrictBooleanOption(options, "pipeline.function.httpBridge", false));
         ctx.setRendererProfile(parseRendererProfile(options));
 
-        // Load pipeline aspects
-        List<PipelineAspectModel> aspects = loadPipelineAspects(configPath, messager);
-        ctx.setAspectModels(aspects);
+        PipelineTemplateConfig templateConfig;
+        PipelineStepConfigLoader.StepConfig stepConfig;
+        if (configPath.isPresent()) {
+            ClassLoader metadataClassLoader = ConnectorProviderManifestLoader.metadataClassLoader(
+                PipelineDiscoveryPhase.class);
+            try (ImportedPipelineSources imported = new BlockDefinitionImporter(
+                metadataClassLoader, applicationBlockManifests(ctx, configPath.orElseThrow()))
+                .importInto(configPath.orElseThrow())) {
+                Optional<Path> effectiveConfigPath = Optional.of(imported.configPath());
+                ctx.setImportedPipelineDefinitions(imported.definitions());
 
-        // Load pipeline template config
-        PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(configPath, messager);
-        ctx.setPipelineTemplateConfig(templateConfig);
+                List<PipelineAspectModel> aspects = loadPipelineAspects(effectiveConfigPath, messager);
+                ctx.setAspectModels(aspects);
 
-        // Parse step definitions from YAML
-        ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(configPath, messager);
-        ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
-        ctx.setStepDefinitions(parsedDefinitions.rootSteps());
-        validateCheckpointBoundaries(templateConfig, ctx, messager);
+                templateConfig = loadPipelineTemplateConfig(effectiveConfigPath, messager);
+                ctx.setPipelineTemplateConfig(templateConfig);
+
+                ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(effectiveConfigPath, messager);
+                ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
+                ctx.setStepDefinitions(parsedDefinitions.rootSteps());
+                validateCheckpointBoundaries(templateConfig, ctx, messager);
+                stepConfig = loadPipelineStepConfig(effectiveConfigPath, options, messager);
+            }
+        } else {
+            ctx.setAspectModels(List.of());
+            ctx.setImportedPipelineDefinitions(List.of());
+            templateConfig = null;
+            ctx.setPipelineTemplateConfig(null);
+            ParsedPipelineDefinitionCatalog parsedDefinitions = new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
+            ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
+            ctx.setStepDefinitions(parsedDefinitions.rootSteps());
+            stepConfig = DEFAULT_STEP_CONFIG;
+        }
 
         // Load runtime mapping config (optional)
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport and platform modes
-        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, options, messager);
         PipelineTransport transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
         ctx.setTransportMode(transportMode);
         PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
@@ -176,6 +204,89 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Discover orchestrator models if present
         List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
         ctx.setOrchestratorModels(orchestratorModels);
+    }
+
+    private List<URL> applicationBlockManifests(PipelineCompilationContext ctx, Path applicationConfig) {
+        if (ctx.getProcessingEnv() == null) {
+            return List.of();
+        }
+        Map<String, URL> manifests = new LinkedHashMap<>();
+        locateClasspathResource(ctx, BlockDefinitionImporter.MANIFEST_RESOURCE)
+            .ifPresent(resource -> manifests.put(resource.toExternalForm(), resource));
+        Object document = new PipelineYamlDocumentLoader().load(applicationConfig);
+        for (String javaType : pipelineInvocationJavaTypes(document)) {
+            String classResource = javaType.replace('.', '/') + ".class";
+            locateClasspathResource(ctx, classResource)
+                .map(resource -> manifestAlongside(resource, classResource))
+                .flatMap(java.util.function.Function.identity())
+                .ifPresent(resource -> manifests.put(resource.toExternalForm(), resource));
+        }
+        return List.copyOf(manifests.values());
+    }
+
+    private Optional<URL> locateClasspathResource(PipelineCompilationContext ctx, String resourcePath) {
+        try {
+            var resource = ctx.getProcessingEnv().getFiler().getResource(
+                StandardLocation.CLASS_PATH, "", resourcePath);
+            if (resource == null) {
+                return Optional.empty();
+            }
+            try (var ignored = resource.openInputStream()) {
+                return Optional.of(resource.toUri().toURL());
+            }
+        } catch (IOException | IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<URL> manifestAlongside(URL classResource, String classResourcePath) {
+        try {
+            if ("jar".equals(classResource.getProtocol())) {
+                String external = classResource.toExternalForm();
+                int separator = external.indexOf("!/");
+                if (separator < 0) {
+                    return Optional.empty();
+                }
+                URL manifest = new URL(external.substring(0, separator + 2)
+                    + BlockDefinitionImporter.MANIFEST_RESOURCE);
+                try (var ignored = manifest.openStream()) {
+                    return Optional.of(manifest);
+                }
+            }
+            if ("file".equals(classResource.getProtocol())) {
+                Path root = Path.of(classResource.toURI());
+                for (int index = 0; index < classResourcePath.split("/").length; index++) {
+                    root = root.getParent();
+                }
+                Path manifest = root.resolve(BlockDefinitionImporter.MANIFEST_RESOURCE);
+                return Files.isRegularFile(manifest) ? Optional.of(manifest.toUri().toURL()) : Optional.empty();
+            }
+            return Optional.empty();
+        } catch (Exception exception) {
+            return Optional.empty();
+        }
+    }
+
+    private Set<String> pipelineInvocationJavaTypes(Object node) {
+        Set<String> types = new LinkedHashSet<>();
+        collectPipelineInvocationJavaTypes(node, types);
+        return Set.copyOf(types);
+    }
+
+    private void collectPipelineInvocationJavaTypes(Object node, Set<String> types) {
+        if (node instanceof Map<?, ?> map) {
+            if (map.containsKey("pipeline") && map.get("java") instanceof Map<?, ?> java) {
+                for (String direction : List.of("input", "output")) {
+                    Object value = java.get(direction);
+                    if (value instanceof String type && !type.isBlank()) {
+                        types.add(type.trim());
+                    }
+                }
+            }
+            map.values().forEach(value -> collectPipelineInvocationJavaTypes(value, types));
+        } else if (node instanceof Iterable<?> values) {
+            values.forEach(value -> collectPipelineInvocationJavaTypes(value, types));
+        }
     }
 
     private boolean parseStrictBooleanOption(Map<String, String> options, String key, boolean defaultValue) {

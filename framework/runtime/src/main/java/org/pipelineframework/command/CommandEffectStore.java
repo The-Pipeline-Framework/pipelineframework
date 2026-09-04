@@ -47,6 +47,27 @@ public interface CommandEffectStore {
             "deliberate Command retry requires a CommandEffectStore that persists attempt history"));
     }
 
+    /** Whether this store can atomically append the requested deliberate attempt kind. */
+    default boolean supportsAttempt(CommandAttemptPurpose purpose) {
+        return purpose == CommandAttemptPurpose.RETRY && supportsRetryAttempts();
+    }
+
+    /**
+     * Atomically appends one deliberate retry or reissue attempt. Compatibility stores retain
+     * retry support through {@link #createRetryAttempt}; reissue is opt-in.
+     */
+    default Uni<CommandEffectRecord> createAttempt(
+        CommandRequest<?> request,
+        CommandAttemptAdmission admission,
+        long nowEpochMs
+    ) {
+        if (admission.purpose() == CommandAttemptPurpose.RETRY) {
+            return createRetryAttempt(request, nowEpochMs);
+        }
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Command reissue requires a CommandEffectStore that persists occurrence history"));
+    }
+
     /**
      * Marks an existing pending command as dispatching. Retrying this transition may be
      * accepted only when the stored state already reflects the same dispatch.

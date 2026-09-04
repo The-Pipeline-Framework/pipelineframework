@@ -22,6 +22,8 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.AspectExpansionProcessor;
 import org.pipelineframework.processor.ResolvedStep;
@@ -62,7 +64,8 @@ public final class PipelineBranchingMetadataGenerator {
         }
         List<StepMetadata> steps = new ArrayList<>();
         if (rootBranchAware) {
-            appendPlan(ctx, rootPlan, indexModelsByStepName(orderedModels(ctx)), false, "$root", steps);
+            appendPlan(ctx, rootPlan, indexModelsByStepName(orderedModels(ctx)),
+                usesGeneratedRootRuntime(ctx), "$root", steps);
             appendSideEffectDescriptors(
                 ctx,
                 withSyntheticAspects(ctx, ctx.getStepModels()),
@@ -103,6 +106,12 @@ public final class PipelineBranchingMetadataGenerator {
                 writer.write(gson.toJson(metadata));
             }
         }
+    }
+
+    private boolean usesGeneratedRootRuntime(PipelineCompilationContext ctx) {
+        return ctx.isOrchestratorGenerated()
+            || ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+                && config.dialect() == PipelineTemplateDialect.V3;
     }
 
     private List<PipelineStepModel> withSyntheticAspects(

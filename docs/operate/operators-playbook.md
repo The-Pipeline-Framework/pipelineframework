@@ -131,6 +131,20 @@ Fast triage checklist:
 5. DLQ messages are triage evidence; the durable execution record is the source of re-drive truth.
 6. Re-drive in bounded execution batches and keep ordering by execution context when required by downstream side effects.
 
+### Successful Command Reissue Guidance
+
+1. Use `REISSUE_COMMAND` only when a second external effect is the intended business action, not as
+   a repair shortcut for an ambiguous or in-flight provider result.
+2. Confirm that both the durable execution and the exact target Command effect are `SUCCEEDED`.
+3. Submit the observed `expectedVersion`, exact `targetCommandId`, a nonblank audit `reason`, and
+   `allowFailed=false`; stale or competing decisions fail with a conflict.
+4. Treat the returned `intent` and `targetCommandId` as the accepted authorization summary. Retain
+   the reason with the incident or customer request that justified the second occurrence.
+5. Do not use reissue for `FAILED`, `DLQ`, `AMBIGUOUS`, `USER_ACTION_REQUIRED`, `PENDING`, or
+   `DISPATCHING` effects. Reconcile or resolve those states through their own operational path.
+6. Monitor `tpf.command.effect.admission.total` by `tpf.command.admission`; `replay`, `retry`, and
+   `reissue` are separate admissions.
+
 ### Item Reject Re-drive Guidance
 
 1. Treat item reject entries as at-least-once replays of item-level processing failures.

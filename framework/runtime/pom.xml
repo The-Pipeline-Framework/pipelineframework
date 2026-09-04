@@ -21,13 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.8.2-SNAPSHOT</version>
+        <version>26.9.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipelineframework</artifactId>
-    <version>26.8.2-SNAPSHOT</version>
+    <version>26.9.2-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
     <name>The Pipeline Framework Extension (Runtime)</name>
@@ -192,6 +192,16 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-client-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.microprofile.openapi</groupId>
+            <artifactId>microprofile-openapi-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye</groupId>
+            <artifactId>smallrye-open-api-core</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

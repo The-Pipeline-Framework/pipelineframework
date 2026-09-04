@@ -157,10 +157,18 @@ The transition identity and logical `CommandId` derive a stable attempt identity
 one admission. If the transition worker is recovered after the attempt has already failed,
 the same admission reports the recorded retryable failure instead of appending another attempt.
 
-The stable `CommandId` remains the provider idempotency identity across attempts. Legacy connectors
-receive the individual `attemptId` on `CommandRequest`; native operations receive both values through
-`CommandInvocation.dispatchIdentity()`. Attempt IDs are diagnostic dispatch identities, not new
-logical effects and not provider idempotency keys.
+The initial occurrence uses the stable `CommandId` as its provider idempotency key. Intentional
+reissue creates a new occurrence under the same logical history, while retry keeps the current
+occurrence. Legacy connectors receive `commandId`, `occurrenceId`, and `attemptId` on
+`CommandRequest`; native operations receive the same three values through
+`CommandInvocation.dispatchIdentity()`. Use `providerIdempotencyKey()` (the occurrence id) for the
+external provider request. Attempt ids are diagnostic dispatch identities and must not be used as
+provider idempotency keys.
+
+`REISSUE_COMMAND` is admitted only for an exact retained `SUCCEEDED` target. It bypasses duplicate
+policy for that target alone; other successful Commands keep ordinary recorded-output replay. A
+connector does not decide whether reissue is allowed—it receives the occurrence identity only after
+the execution control plane and effect store have atomically admitted it.
 
 ## Native Provider Queries
 
@@ -301,7 +309,7 @@ public class OpenSearchIndexDocumentCommandConnector
   public Uni<SearchIndexWriteResult> execute(CommandRequest<SearchIndexDocument> request) {
     SearchIndexDocument input = request.input();
 
-    return upsertIntoOpenSearch(input.externalId, input)
+    return upsertIntoOpenSearch(input.externalId, input, request.providerIdempotencyKey())
         .map(ignored -> {
           SearchIndexWriteResult result = new SearchIndexWriteResult();
           result.commandId = request.commandId();
@@ -315,7 +323,9 @@ public class OpenSearchIndexDocumentCommandConnector
 }
 ```
 
-Use `request.commandId()` as the provider idempotency key when the provider supports it. If the provider has its own document id or external id, derive it from the same stable business fields.
+Use `request.providerIdempotencyKey()` as the provider idempotency key. Keep
+`request.commandId()` for the logical effect identity. If the provider has its own document id or
+external id, derive it from the same stable business fields.
 
 ## What TPF Handles
 

@@ -51,6 +51,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.protocol.ProtocolTypeIdentity;
+import org.pipelineframework.processor.block.ImportedPipelineDefinition;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -260,6 +261,26 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void includesImportedDefinitionProvenanceInTheBreakingSchemaThreeContractAndHash() throws IOException {
+        Path firstOutput = tempDir.resolve("block-first");
+        Path secondOutput = tempDir.resolve("block-second");
+
+        writeImportedDefinitionMetadata(firstOutput, "1.0.0", "sha256:first");
+        writeImportedDefinitionMetadata(secondOutput, "1.1.0", "sha256:second");
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        JsonObject imported = first.getAsJsonArray("importedDefinitions").get(0).getAsJsonObject();
+        assertEquals(3, first.get("schemaVersion").getAsInt());
+        assertEquals("org.example.documents/document-text-extraction",
+            imported.get("qualifiedId").getAsString());
+        assertEquals("org.example:document-text-extraction", imported.get("groupId").getAsString()
+            + ":" + imported.get("artifactId").getAsString());
+        assertEquals("1.0.0", imported.get("version").getAsString());
+        assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
+    }
+
+    @Test
     void emitsOneDescriptorPerAuthoredStepWhenMonolithHasClientAndServerModels() throws IOException {
         Path pipelineYaml = writePipelineYaml();
         Path output = tempDir.resolve("monolith");
@@ -326,6 +347,18 @@ class PipelineContractMetadataGeneratorTest {
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
+    }
+
+    private void writeImportedDefinitionMetadata(Path outputDir, String version, String fingerprint) throws IOException {
+        ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of());
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setStepModels(List.of(step("ProcessImportedService", "Input", "Output",
+            StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.LOCAL_CLIENT_STEP))));
+        ctx.setImportedPipelineDefinitions(List.of(new ImportedPipelineDefinition(
+            "org.example.documents/document-text-extraction", "document-text-extraction", "org.example.documents",
+            "org.example", "document-text-extraction", version,
+            "META-INF/pipeline/document-text-extraction.yaml", fingerprint)));
+        new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
     }
 
     private void writeV3Metadata(Path pipelineYaml, Path outputDir, PipelineTemplateTypeModel typeModel) throws IOException {

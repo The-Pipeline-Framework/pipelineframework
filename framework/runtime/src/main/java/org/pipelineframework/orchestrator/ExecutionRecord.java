@@ -34,11 +34,15 @@ public record ExecutionRecord<I, R>(
     String circuitIdentity,
     ExecutionRedriveIntent redriveIntent,
     int failedStepIndex,
-    Optional<String> failedCommandId
+    Optional<String> failedCommandId,
+    Optional<String> redriveTargetCommandId,
+    Optional<String> redriveReason
 ) {
     public ExecutionRecord {
         redriveIntent = redriveIntent == null ? ExecutionRedriveIntent.REPLAY : redriveIntent;
         failedCommandId = Optional.ofNullable(failedCommandId).orElseGet(Optional::empty);
+        redriveTargetCommandId = Optional.ofNullable(redriveTargetCommandId).orElseGet(Optional::empty);
+        redriveReason = Optional.ofNullable(redriveReason).orElseGet(Optional::empty);
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
             if (failedStepIndex < 0) {
                 throw new IllegalArgumentException(
@@ -49,6 +53,55 @@ public record ExecutionRecord<I, R>(
                     "deliberate Command retry requires the exact failed logical Command identity");
             }
         }
+        if (redriveIntent == ExecutionRedriveIntent.REISSUE_COMMAND) {
+            if (redriveTargetCommandId.filter(value -> !value.isBlank()).isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Command reissue requires the exact logical Command identity");
+            }
+            if (redriveReason.filter(value -> !value.isBlank()).isEmpty()) {
+                throw new IllegalArgumentException("Command reissue requires a nonblank audit reason");
+            }
+        }
+    }
+
+    /** Compatibility constructor for records created before reissue target and audit metadata existed. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        String circuitIdentity,
+        ExecutionRedriveIntent redriveIntent,
+        int failedStepIndex,
+        Optional<String> failedCommandId
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion,
+            resultShape, status, version, currentStepIndex, attempt, leaseOwner,
+            leaseExpiresEpochMs, nextDueEpochMs, lastTransitionKey, inputPayload, awaitUnitId,
+            resultPayload, errorCode, errorMessage, createdAtEpochMs, updatedAtEpochMs, ttlEpochS,
+            firstCircuitDeferredAtEpochMs, circuitDeferralCount, circuitIdentity, redriveIntent,
+            failedStepIndex, failedCommandId, Optional.empty(), Optional.empty());
     }
 
     /** Compatibility constructor for records created before exact failed Command identity was retained. */
@@ -292,6 +345,8 @@ public record ExecutionRecord<I, R>(
             circuitIdentity,
             redriveIntent,
             failedStepIndex,
-            failedCommandId);
+            failedCommandId,
+            redriveTargetCommandId,
+            redriveReason);
     }
 }

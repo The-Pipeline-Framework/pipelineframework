@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -567,6 +568,102 @@ class CommandStepSupportTest {
     assertEquals(2, connector.calls.get());
   }
 
+  @Test
+  void authorizedReissueAppendsOneSuccessfulOccurrenceAndPreservesPriorOutput() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    CommandOutput original = support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("reissue"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandRetryTestAccess.installReissue(
+        "cmd-reissue", "exec-1:0:2", "operator confirmed a second provider effect");
+    CommandOutput reissued = support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("reissue"))
+        .await().atMost(Duration.ofSeconds(5));
+    CommandRetryTestAccess.requireConsumed();
+
+    CommandEffectRecord record = store.find("tenant", "cmd-reissue")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(2, connector.calls.get());
+    assertNotEquals(original, reissued);
+    assertSame(reissued, record.output());
+    assertEquals(List.of(CommandAttemptPurpose.INITIAL, CommandAttemptPurpose.REISSUE),
+        record.attempts().stream().map(CommandEffectAttemptRecord::purpose).toList());
+    assertEquals("cmd-reissue", record.attempts().get(0).occurrenceId());
+    assertNotEquals(record.attempts().get(0).occurrenceId(), record.attempts().get(1).occurrenceId());
+    assertSame(original, record.attempts().get(0).output().orElseThrow());
+    assertSame(reissued, record.attempts().get(1).output().orElseThrow());
+    assertEquals(Optional.of("operator confirmed a second provider effect"),
+        record.attempts().get(1).reason());
+    assertEquals(connector.occurrenceIds.get(1), record.attempts().get(1).occurrenceId());
+  }
+
+  @Test
+  void reissueBypassesFailDuplicatePolicyOnlyForExactTarget() {
+    CommandDescriptor failDuplicates = new CommandDescriptor(
+        descriptor.stepId(), descriptor.command(), descriptor.inputType(), descriptor.outputType(),
+        descriptor.commandIdGenerator(), CommandDuplicatePolicy.FAIL, descriptor.config());
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    support.<CommandInput, CommandOutput>execute(
+        failDuplicates, new StaticCommandIdGenerator(), new CommandInput("target"))
+        .await().atMost(Duration.ofSeconds(5));
+    support.<CommandInput, CommandOutput>execute(
+        failDuplicates, new StaticCommandIdGenerator(), new CommandInput("other"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    CommandRetryTestAccess.installReissue("cmd-target", "exec-1:0:2", "approved");
+    assertThrows(NonRetryableException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            failDuplicates, new StaticCommandIdGenerator(), new CommandInput("other"))
+            .await().atMost(Duration.ofSeconds(5)));
+    support.<CommandInput, CommandOutput>execute(
+        failDuplicates, new StaticCommandIdGenerator(), new CommandInput("target"))
+        .await().atMost(Duration.ofSeconds(5));
+    CommandRetryTestAccess.requireConsumed();
+
+    assertEquals(3, connector.calls.get());
+    assertEquals(1, store.find("tenant", "cmd-other").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+    assertEquals(2, store.find("tenant", "cmd-target").await().atMost(Duration.ofSeconds(5))
+        .orElseThrow().attempts().size());
+  }
+
+  @Test
+  void retryAfterFailedReissueReusesTheReissueOccurrence() {
+    PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("failed-reissue"))
+        .await().atMost(Duration.ofSeconds(5));
+
+    connector.failure = new IllegalStateException("provider unavailable");
+    CommandRetryTestAccess.installReissue("cmd-failed-reissue", "exec-1:0:2", "approved");
+    assertThrows(IllegalStateException.class, () ->
+        support.<CommandInput, CommandOutput>execute(
+            descriptor, new StaticCommandIdGenerator(), new CommandInput("failed-reissue"))
+            .await().atMost(Duration.ofSeconds(5)));
+    CommandRetryTestAccess.requireConsumed();
+    CommandEffectRecord failed = store.find("tenant", "cmd-failed-reissue")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    String reissueOccurrence = failed.currentAttempt().occurrenceId();
+    assertEquals(CommandAttemptPurpose.REISSUE, failed.currentAttempt().purpose());
+    assertTrue(failed.attempts().get(0).output().isPresent());
+    assertNull(failed.output());
+
+    connector.failure = null;
+    CommandRetryTestAccess.install("cmd-failed-reissue", "exec-1:0:3");
+    support.<CommandInput, CommandOutput>execute(
+        descriptor, new StaticCommandIdGenerator(), new CommandInput("failed-reissue"))
+        .await().atMost(Duration.ofSeconds(5));
+    CommandRetryTestAccess.requireConsumed();
+
+    CommandEffectRecord recovered = store.find("tenant", "cmd-failed-reissue")
+        .await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(List.of(CommandAttemptPurpose.INITIAL, CommandAttemptPurpose.REISSUE, CommandAttemptPurpose.RETRY),
+        recovered.attempts().stream().map(CommandEffectAttemptRecord::purpose).toList());
+    assertEquals(reissueOccurrence, recovered.currentAttempt().occurrenceId());
+    assertEquals(reissueOccurrence, connector.occurrenceIds.get(2));
+  }
+
   private static void installExecutionRetry(String commandId) {
     PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "exec-1", 4));
     CommandRetryTestAccess.install(commandId, "exec-1:4:2");
@@ -852,6 +949,7 @@ class CommandStepSupportTest {
     final AtomicReference<PipelineExecutionContext> lastExecutionContext = new AtomicReference<>();
     final List<String> commandIds = new CopyOnWriteArrayList<>();
     final List<String> attemptIds = new CopyOnWriteArrayList<>();
+    final List<String> occurrenceIds = new CopyOnWriteArrayList<>();
     RuntimeException failure;
 
     @Override
@@ -864,6 +962,7 @@ class CommandStepSupportTest {
       calls.incrementAndGet();
       commandIds.add(request.commandId());
       attemptIds.add(request.attemptId());
+      occurrenceIds.add(request.occurrenceId());
       lastExecutionContext.set(request.executionContext());
       if (failure != null) {
         return Uni.createFrom().failure(failure);

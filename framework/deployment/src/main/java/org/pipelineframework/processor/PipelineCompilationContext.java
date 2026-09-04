@@ -26,6 +26,7 @@ import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
+import org.pipelineframework.processor.block.ImportedPipelineDefinition;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -68,6 +69,8 @@ public class PipelineCompilationContext {
     @Setter
     private ParsedPipelineDefinitionCatalog parsedPipelineDefinitionCatalog;
     @Setter
+    private List<ImportedPipelineDefinition> importedPipelineDefinitions;
+    @Setter
     private Map<String, List<PipelineStepModel>> localDefinitionStepModels;
     @Setter
     private List<String> generatedRootPipelineStepClasses;
@@ -75,7 +78,8 @@ public class PipelineCompilationContext {
     private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
     @Setter
     private org.pipelineframework.processor.representation.RepresentationProviderRegistry representationProviderRegistry;
-    private final Map<String, org.pipelineframework.processor.representation.ResolvedProviderBoundary> resolvedProviderBoundaries
+    private final Map<org.pipelineframework.processor.composition.DefinitionLocalLocation,
+        org.pipelineframework.processor.representation.ResolvedProviderBoundary> resolvedProviderBoundaries
         = new java.util.LinkedHashMap<>();
     
     // Resolved generation targets
@@ -131,6 +135,7 @@ public class PipelineCompilationContext {
         this.branchingPlan = null;
         this.localDefinitionBranchingPlans = Map.of();
         this.parsedPipelineDefinitionCatalog = new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
+        this.importedPipelineDefinitions = List.of();
         this.localDefinitionStepModels = Map.of();
         this.generatedRootPipelineStepClasses = List.of();
         this.resolvedRepresentationRegistry = new ResolvedRepresentationRegistry();
@@ -175,16 +180,27 @@ public class PipelineCompilationContext {
 
     public void registerResolvedProviderBoundary(
             org.pipelineframework.processor.representation.ResolvedProviderBoundary boundary) {
-        var previous = resolvedProviderBoundaries.putIfAbsent(boundary.boundary().stepName(), boundary);
+        var location = new org.pipelineframework.processor.composition.DefinitionLocalLocation(
+            boundary.definition(), boundary.boundary().stepName());
+        var previous = resolvedProviderBoundaries.putIfAbsent(location, boundary);
         if (previous != null) {
             throw new IllegalStateException("Representation provider boundary already resolved for step '"
-                + boundary.boundary().stepName() + "'.");
+                + boundary.boundary().stepName() + "' in definition '" + boundary.definition().logicalId() + "'.");
         }
     }
 
     public java.util.Optional<org.pipelineframework.processor.representation.ResolvedProviderBoundary>
             getResolvedProviderBoundary(String stepName) {
-        return java.util.Optional.ofNullable(resolvedProviderBoundaries.get(stepName));
+        return getResolvedProviderBoundary(
+            new org.pipelineframework.processor.composition.PipelineReference("$root"), stepName);
+    }
+
+    public java.util.Optional<org.pipelineframework.processor.representation.ResolvedProviderBoundary>
+            getResolvedProviderBoundary(
+                org.pipelineframework.processor.composition.PipelineReference definition,
+                String stepName) {
+        return java.util.Optional.ofNullable(resolvedProviderBoundaries.get(
+            new org.pipelineframework.processor.composition.DefinitionLocalLocation(definition, stepName)));
     }
 
     public java.util.Collection<org.pipelineframework.processor.representation.ResolvedProviderBoundary>
