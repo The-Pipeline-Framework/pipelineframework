@@ -23,7 +23,11 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
 public final class McpSchemaNormalizer {
     private static final ConnectorProviderId NAMESPACE = ConnectorProviderId.of("mcp.client");
     private static final Set<String> UNSUPPORTED = Set.of(
-        "$ref", "$defs", "definitions", "oneOf", "anyOf", "allOf", "not", "enum", "const");
+        "$ref", "$defs", "definitions", "oneOf", "anyOf", "allOf", "not", "enum", "const",
+        "multipleOf", "minItems", "maxItems", "uniqueItems", "contains", "minContains", "maxContains",
+        "prefixItems", "additionalItems", "unevaluatedItems", "minProperties", "maxProperties",
+        "patternProperties", "propertyNames", "dependentRequired", "dependentSchemas", "unevaluatedProperties",
+        "if", "then", "else", "contentEncoding", "contentMediaType", "contentSchema");
 
     public List<ProtocolTypeDescriptor> normalize(String rootName, Map<String, Object> schema, String source) {
         String root = requireName(rootName, source);
@@ -61,7 +65,8 @@ public final class McpSchemaNormalizer {
             if (!Boolean.FALSE.equals(schema.get("additionalProperties"))) {
                 throw failure(path + ".additionalProperties", "must be false for importer v1");
             }
-            Map<String, Object> properties = map(schema.get("properties"), path + ".properties");
+            Map<String, Object> properties = schema.containsKey("properties")
+                ? map(schema.get("properties"), path + ".properties") : Map.of();
             Set<String> required = strings(schema.get("required"), path + ".required");
             if (!properties.keySet().containsAll(required)) {
                 throw failure(path + ".required", "names an undeclared property");

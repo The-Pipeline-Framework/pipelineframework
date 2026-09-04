@@ -50,6 +50,17 @@ class McpSchemaNormalizerTest {
     }
 
     @Test
+    void mapsAClosedZeroArgumentSchemaWithoutProperties() {
+        var types = normalizer.normalize(
+            "NoArguments", Map.of("type", "object", "additionalProperties", false), "tool input");
+
+        PipelineTemplateTypeDefinition.RecordType root = assertInstanceOf(
+            PipelineTemplateTypeDefinition.RecordType.class, types.getFirst().definition());
+        assertEquals("NoArguments", root.name());
+        assertTrue(root.fields().isEmpty());
+    }
+
+    @Test
     void rejectsImporterV1LimitationsWithJsonPathDiagnostics() {
         IllegalArgumentException open = assertThrows(IllegalArgumentException.class, () -> normalizer.normalize(
             "Request", Map.of("type", "object", "properties", Map.of()), "tool input"));
@@ -76,6 +87,17 @@ class McpSchemaNormalizerTest {
                         "type", "array", "items", Map.of("type", "string"),
                         "oneOf", List.of(Map.of("type", "array"))))), "tool input"));
         assertTrue(arrayComposition.getMessage().contains("$.properties.values.oneOf"));
+
+        for (String keyword : List.of("minItems", "maxItems", "uniqueItems")) {
+            IllegalArgumentException arrayConstraint = assertThrows(IllegalArgumentException.class,
+                () -> normalizer.normalize(
+                    "Request", Map.of(
+                        "type", "object", "additionalProperties", false, "required", List.of("values"),
+                        "properties", Map.of("values", Map.of(
+                            "type", "array", "items", Map.of("type", "string"), keyword, 1))),
+                    "tool input"));
+            assertTrue(arrayConstraint.getMessage().contains("$.properties.values." + keyword));
+        }
     }
 
     @Test
