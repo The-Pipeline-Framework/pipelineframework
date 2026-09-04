@@ -71,6 +71,17 @@ class RefreshMcpImportMojoTest {
         assertTrue(failure.getMessage().contains("absolute HTTP(S) URI"));
     }
 
+    @Test
+    void rejectsHostHeadersOverPlainHttpBeforeConnecting() throws Exception {
+        RefreshMcpImportMojo mojo = mojo("streamable-http");
+        set(mojo, "endpoint", "http://127.0.0.1:1/mcp");
+        set(mojo, "headers", Map.of("Authorization", "PATH"));
+
+        MojoExecutionException failure = assertThrows(MojoExecutionException.class, mojo::execute);
+
+        assertTrue(failure.getMessage().contains("headers require an HTTPS endpoint"));
+    }
+
     private RefreshMcpImportMojo mojo(String transport) throws Exception {
         McpToolMapping mapping = new McpToolMapping();
         mapping.mcpName = "selected";

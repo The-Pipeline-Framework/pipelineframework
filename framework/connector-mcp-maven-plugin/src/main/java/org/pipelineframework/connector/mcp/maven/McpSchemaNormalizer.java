@@ -145,8 +145,17 @@ public final class McpSchemaNormalizer {
                     default -> throw failure(path + ".format", "unsupported string format '" + format + "'");
                 };
                 case "boolean" -> "bool";
-                case "integer" -> "int32".equals(format) ? "int32" : "int64";
-                case "number" -> "float".equals(format) ? "float32" : "double".equals(format) ? "float64" : "decimal";
+                case "integer" -> switch (format) {
+                    case "int32" -> "int32";
+                    case "", "int64" -> "int64";
+                    default -> throw failure(path + ".format", "unsupported integer format '" + format + "'");
+                };
+                case "number" -> switch (format) {
+                    case "float" -> "float32";
+                    case "double" -> "float64";
+                    case "", "decimal" -> "decimal";
+                    default -> throw failure(path + ".format", "unsupported number format '" + format + "'");
+                };
                 default -> throw failure(path + ".type", "unsupported type '" + type + "'");
             };
         }
@@ -233,10 +242,18 @@ public final class McpSchemaNormalizer {
             if (value == null) {
                 return Optional.empty();
             }
-            if (!(value instanceof Number number) || number.intValue() < 0) {
+            if (!(value instanceof Number number)) {
                 throw failure(path, "must be a non-negative integer");
             }
-            return Optional.of(number.intValue());
+            try {
+                BigDecimal decimal = new BigDecimal(number.toString()).stripTrailingZeros();
+                if (decimal.signum() < 0 || decimal.scale() > 0) {
+                    throw failure(path, "must be a non-negative integer");
+                }
+                return Optional.of(decimal.intValueExact());
+            } catch (ArithmeticException | NumberFormatException invalid) {
+                throw failure(path, "must be a non-negative integer");
+            }
         }
 
         private Optional<BigDecimal> optionalDecimal(Object value, String path) {

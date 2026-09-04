@@ -61,6 +61,32 @@ class McpSchemaNormalizerTest {
     }
 
     @Test
+    void rejectsLossyLengthBoundsAndUnsupportedNumericFormats() {
+        for (Number invalid : List.of(1.5d, Long.MAX_VALUE)) {
+            IllegalArgumentException length = assertThrows(IllegalArgumentException.class,
+                () -> normalizer.normalize(
+                    "Request", Map.of(
+                        "type", "object", "additionalProperties", false, "required", List.of("value"),
+                        "properties", Map.of("value", Map.of(
+                            "type", "string", "minLength", invalid))),
+                    "tool input"));
+            assertTrue(length.getMessage().contains("$.properties.value.minLength"));
+        }
+
+        for (Map<String, Object> unsupported : List.<Map<String, Object>>of(
+            Map.of("type", "integer", "format", "uint64"),
+            Map.of("type", "number", "format", "float16"))) {
+            IllegalArgumentException format = assertThrows(IllegalArgumentException.class,
+                () -> normalizer.normalize(
+                    "Request", Map.of(
+                        "type", "object", "additionalProperties", false, "required", List.of("value"),
+                        "properties", Map.of("value", unsupported)),
+                    "tool input"));
+            assertTrue(format.getMessage().contains("$.properties.value.format"));
+        }
+    }
+
+    @Test
     void rejectsImporterV1LimitationsWithJsonPathDiagnostics() {
         IllegalArgumentException open = assertThrows(IllegalArgumentException.class, () -> normalizer.normalize(
             "Request", Map.of("type", "object", "properties", Map.of()), "tool input"));

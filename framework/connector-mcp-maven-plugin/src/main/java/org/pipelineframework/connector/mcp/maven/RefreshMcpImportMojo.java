@@ -153,6 +153,9 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
             String base = uri.getScheme() + "://" + uri.getAuthority();
             String resource = Optional.ofNullable(uri.getRawPath()).filter(value -> !value.isBlank()).orElse("/mcp");
             Map<String, String> resolvedHeaders = resolveEnvironment(headers, "HTTP headers");
+            if (!resolvedHeaders.isEmpty() && !"https".equalsIgnoreCase(uri.getScheme())) {
+                throw new MojoExecutionException("Streamable HTTP MCP headers require an HTTPS endpoint");
+            }
             HttpRequest.Builder request = HttpRequest.newBuilder();
             resolvedHeaders.forEach(request::header);
             return HttpClientStreamableHttpTransport.builder(base)
