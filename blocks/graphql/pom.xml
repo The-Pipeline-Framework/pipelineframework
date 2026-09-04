@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>pipeline-blocks</artifactId><version>26.9.2-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <groupId>org.pipelineframework.blocks</groupId>
+    <artifactId>graphql</artifactId>
+    <name>Pipeline Block - GraphQL</name>
+    <description>Reusable GraphQL request validation, Query/Command composition, and response normalization.</description>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+    </dependencies>
+    <build>
+        <resources><resource><directory>src/main/resources</directory><filtering>true</filtering></resource></resources>
+        <plugins><plugin><groupId>io.smallrye</groupId><artifactId>jandex-maven-plugin</artifactId></plugin></plugins>
+    </build>
+</project>

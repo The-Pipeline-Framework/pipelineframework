@@ -30,6 +30,7 @@ import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGra
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StepDefinition;
+import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.util.ClientStepClassNames;
 
 /** Generates the local CDI realization selected from compiler-owned invocation bindings. */
@@ -129,11 +130,20 @@ public final class LocalPipelineInvocationRenderer {
             }
             return type;
         }
-        PipelineStepModel model = ctx.getLocalDefinitionStepModels().getOrDefault(parent.target().logicalId(), List.of()).stream()
-            .filter(candidate -> candidate.serviceName().equals(toYamlServiceName(child.localStepId())))
+        List<PipelineStepModel> available = ctx.getLocalDefinitionStepModels()
+            .getOrDefault(parent.target().logicalId(), List.of());
+        PipelineStepModel model = available.stream()
+            .filter(candidate -> matchesAuthoredStep(candidate, child.localStepId()))
             .findFirst().orElseThrow(() -> new IllegalStateException("No generated child step model for '"
-                + child.localStepId() + "' in definition '" + parent.target().logicalId() + "'."));
+                + child.localStepId() + "' in definition '" + parent.target().logicalId()
+                + "'. Available models: " + available.stream().map(PipelineStepModel::serviceName).toList()));
         return ClassName.bestGuess(ClientStepClassNames.className(model, ctx.getTransportMode()));
+    }
+
+    static boolean matchesAuthoredStep(PipelineStepModel candidate, String authoredStepName) {
+        return candidate.connectorOperationSelection()
+            .map(selection -> selection.authoredStepName().equals(authoredStepName))
+            .orElseGet(() -> candidate.serviceName().equals(toYamlServiceName(authoredStepName)));
     }
 
     private List<String> rootClasses(PipelineCompilationContext ctx,
@@ -256,11 +266,7 @@ public final class LocalPipelineInvocationRenderer {
         if (stepName == null || stepName.isBlank()) {
             return "ProcessStepService";
         }
-        String stripped = stepName.replaceFirst("(?i)^process\\s+", "");
-        String formatted = java.util.Arrays.stream(stripped.split("[^A-Za-z0-9]+"))
-            .filter(part -> !part.isBlank())
-            .map(part -> Character.toUpperCase(part.charAt(0)) + part.substring(1))
-            .collect(java.util.stream.Collectors.joining());
+        String formatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
         return formatted == null || formatted.isBlank() ? "ProcessStepService" : "Process" + formatted + "Service";
     }
 }

@@ -1,0 +1,70 @@
+version: 3
+appName: GraphQL Block Proof
+basePackage: org.pipelineframework.examples.graphqlproof
+transport: LOCAL
+platform: COMPUTE
+contract:
+  input: <tpf.graphql.GraphQlQueryRequest>
+  output: <tpf.graphql.GraphQlResult>
+
+connectors:
+  primary-graphql:
+    provider: graphql.smallrye
+    version: 1
+    config:
+      connection: primary-graphql
+      operations:
+        customer.lookup:
+          kind: QUERY
+          operationName: CustomerLookup
+          resource: graphql/customer-lookup.graphql
+          sha256: bce03f6448ac6810ddd31d019cc6f6ebb9644d1c556d1b67fd64328fe91bdc18
+        customer.update:
+          kind: MUTATION
+          operationName: CustomerUpdate
+          resource: graphql/customer-update.graphql
+          sha256: d8880449c38b3c50c2102bff7a8132267d31ec249ba6e60d2d721d6c21235514
+
+blockBindings:
+  org.pipelineframework.graphql/graphql-query:
+    graphql.read:
+      using: primary-graphql
+  org.pipelineframework.graphql/graphql-mutation:
+    graphql.write:
+      using: primary-graphql
+      commandIdGenerator: org.pipelineframework.blocks.graphql.GraphQlEffectKeyCommandIdGenerator
+      duplicatePolicy: RETURN_RECORDED
+      policy:
+        requiredExecutionPosture: AUTOMATED
+        minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+
+types:
+  ProofMarker:
+    fields: [[value, string]]
+
+steps:
+  - name: Run reusable GraphQL Query
+    pipeline: graphql-query
+    cardinality: ONE_TO_ONE
+    input: <tpf.graphql.GraphQlQueryRequest>
+    output: <tpf.graphql.GraphQlResult>
+    java:
+      input: org.pipelineframework.connector.graphql.GraphQlQueryRequest
+      output: org.pipelineframework.connector.graphql.GraphQlResult
+  - name: Select application mutation
+    service: org.pipelineframework.examples.graphqlproof.PrepareProofMutationService
+    cardinality: ONE_TO_ONE
+    input: <tpf.graphql.GraphQlResult>
+    output: <tpf.graphql.GraphQlMutationRequest>
+    java:
+      input: org.pipelineframework.connector.graphql.GraphQlResult
+      output: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+  - name: Run reusable GraphQL Mutation
+    pipeline: graphql-mutation
+    cardinality: ONE_TO_ONE
+    input: <tpf.graphql.GraphQlMutationRequest>
+    output: <tpf.graphql.GraphQlResult>
+    terminal: true
+    java:
+      input: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+      output: org.pipelineframework.connector.graphql.GraphQlResult

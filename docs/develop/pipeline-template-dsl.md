@@ -565,6 +565,10 @@ steps. Application bindings retain endpoint, credentials, tenant/account selecti
 and Command policy. Imported Query and Command steps normalize to the same descriptors and runtime
 support used by local steps; there is no Block execution subsystem.
 
+The [GraphQL Connector and Blocks](./extension/graphql-connector.md) proof applies this split to a
+persisted Query and Mutation catalogue while leaving documents, connections, tenant selection, and
+Command policy in the consuming application.
+
 ### Bounded recursion
 
 ```yaml

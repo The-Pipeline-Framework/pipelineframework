@@ -1,0 +1,67 @@
+version: 3
+
+pipelines:
+  graphql-query:
+    input: <tpf.graphql.GraphQlQueryRequest>
+    output: <tpf.graphql.GraphQlResult>
+    steps:
+      - name: Canonicalize GraphQL Query
+        service: org.pipelineframework.blocks.graphql.CanonicalizeGraphQlQueryService
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlQueryRequest>
+        output: <tpf.graphql.GraphQlQueryRequest>
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlQueryRequest
+          output: org.pipelineframework.connector.graphql.GraphQlQueryRequest
+      - name: Execute GraphQL Query
+        kind: query
+        using: graphql.read
+        operation: execute.query
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlQueryRequest>
+        output: <tpf.graphql.GraphQlResponse>
+        capture: { keyFields: [operationKey, variablesJson] }
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlQueryRequest
+          output: org.pipelineframework.connector.graphql.GraphQlResponse
+      - name: Normalize GraphQL Query response
+        service: org.pipelineframework.blocks.graphql.NormalizeGraphQlResponseService
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlResponse>
+        output: <tpf.graphql.GraphQlResult>
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlResponse
+          output: org.pipelineframework.connector.graphql.GraphQlResult
+
+  graphql-mutation:
+    input: <tpf.graphql.GraphQlMutationRequest>
+    output: <tpf.graphql.GraphQlResult>
+    steps:
+      - name: Canonicalize GraphQL Mutation
+        service: org.pipelineframework.blocks.graphql.CanonicalizeGraphQlMutationService
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlMutationRequest>
+        output: <tpf.graphql.GraphQlMutationRequest>
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+          output: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+      - name: Execute GraphQL Mutation
+        kind: command
+        using: graphql.write
+        operation: execute.mutation
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlMutationRequest>
+        output: <tpf.graphql.GraphQlResponse>
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+          output: org.pipelineframework.connector.graphql.GraphQlResponse
+      - name: Normalize GraphQL Mutation response
+        service: org.pipelineframework.blocks.graphql.NormalizeGraphQlResponseService
+        cardinality: ONE_TO_ONE
+        input: <tpf.graphql.GraphQlResponse>
+        output: <tpf.graphql.GraphQlResult>
+        java:
+          input: org.pipelineframework.connector.graphql.GraphQlResponse
+          output: org.pipelineframework.connector.graphql.GraphQlResult
