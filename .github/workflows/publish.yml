@@ -10,6 +10,8 @@ jobs:
     name: Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    outputs:
+      release_commit: ${{ steps.release.outputs.commit }}
     permissions:
       contents: write
 
@@ -65,3 +67,46 @@ jobs:
             --arg framework_commit "$RELEASE_COMMIT" \
             '{ref:"main",inputs:{version:$version,tag:$tag,framework_commit:$framework_commit}}' \
             | gh api --method POST repos/The-Pipeline-Framework/tpf-mcp-bridge/actions/workflows/publish-knowledge.yml/dispatches --input -
+
+  promote-docs:
+    name: Promote Released Docs
+    needs: publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-docs-promotion
+      cancel-in-progress: false
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout released commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.release_commit }}
+
+      - name: Promote released commit to the public docs branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.publish.outputs.release_commit }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          LATEST_RELEASE_TAG="$(
+            gh api --paginate 'repos/${{ github.repository }}/releases?per_page=100' \
+              --jq '.[].tag_name' \
+              | sort -V \
+              | tail -1
+          )"
+          if [ "$RELEASE_TAG" != "$LATEST_RELEASE_TAG" ]; then
+            echo "Skipping stale docs promotion for $RELEASE_TAG; latest release is $LATEST_RELEASE_TAG."
+            exit 0
+          fi
+
+          REMOTE_SHA="$(git ls-remote --refs origin refs/heads/release-docs | cut -f1)"
+          if [ -n "$REMOTE_SHA" ]; then
+            git push \
+              --force-with-lease="refs/heads/release-docs:$REMOTE_SHA" \
+              origin \
+              "${RELEASE_COMMIT}:refs/heads/release-docs"
+          else
+            git push origin "${RELEASE_COMMIT}:refs/heads/release-docs"
+          fi
