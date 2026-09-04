@@ -1,0 +1,6 @@
+query CustomerLookup($id: ID!) {
+  customer(id: $id) {
+    id
+    name
+  }
+}

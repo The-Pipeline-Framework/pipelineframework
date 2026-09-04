@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.graphql",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "graphql",
+    "version": "${project.version}"
+  },
+  "definitions": [
+    {
+      "name": "graphql-query",
+      "resource": "META-INF/pipeline/graphql.yaml",
+      "requires": {
+        "graphql.read": { "kind": "QUERY" }
+      }
+    },
+    {
+      "name": "graphql-mutation",
+      "resource": "META-INF/pipeline/graphql.yaml",
+      "requires": {
+        "graphql.write": { "kind": "COMMAND" }
+      }
+    }
+  ]
+}

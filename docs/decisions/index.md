@@ -37,6 +37,7 @@ authoritative for exact syntax and release support.
 | [0026](./0026-llm-clarification-is-inert-protocol-data.md) | Treat an LLM request for human information as inert typed protocol data. |
 | [0027](./0027-mcp-imports-pinned-connector-operations.md) | Import selected MCP tools as pinned Connector operations without making MCP an Agent authority or runtime. |
 | [0028](./0028-block-connector-capabilities-are-application-bound.md) | Bind imported Block Query and Command requirements to application-owned connector authority at compilation. |
+| [0029](./0029-graphql-operations-are-application-pinned.md) | Execute only application-pinned GraphQL operations through ordinary Query and Command authority. |
 
 ## Maintenance
 

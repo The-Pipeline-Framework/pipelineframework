@@ -16,6 +16,7 @@
     </properties>
     <modules>
         <module>document-text-extraction</module>
+        <module>graphql</module>
     </modules>
     <dependencyManagement>
         <dependencies>
