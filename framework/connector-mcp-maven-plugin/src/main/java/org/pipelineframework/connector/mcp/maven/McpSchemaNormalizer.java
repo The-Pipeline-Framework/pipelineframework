@@ -59,8 +59,10 @@ public final class McpSchemaNormalizer {
             boolean root
         ) {
             rejectUnsupported(schema, path);
-            if (!"object".equals(type(schema, path).base())) {
-                throw failure(path, root ? "root schema must have type object" : "nested schema must have type object");
+            JsonType objectType = type(schema, path);
+            if (!"object".equals(objectType.base()) || (root && objectType.nullable())) {
+                throw failure(path,
+                    root ? "root schema must have non-null type object" : "nested schema must have type object");
             }
             if (!Boolean.FALSE.equals(schema.get("additionalProperties"))) {
                 throw failure(path + ".additionalProperties", "must be false for importer v1");

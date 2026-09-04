@@ -61,6 +61,17 @@ class McpSchemaNormalizerTest {
     }
 
     @Test
+    void rejectsNullableRootObjectSchema() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> normalizer.normalize(
+                "Request",
+                Map.of("type", List.of("object", "null"), "additionalProperties", false),
+                "tool input"));
+
+        assertTrue(failure.getMessage().contains("root schema must have non-null type object"));
+    }
+
+    @Test
     void rejectsLossyLengthBoundsAndUnsupportedNumericFormats() {
         for (Number invalid : List.of(1.5d, Long.MAX_VALUE)) {
             IllegalArgumentException length = assertThrows(IllegalArgumentException.class,
