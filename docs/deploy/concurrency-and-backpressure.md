@@ -120,6 +120,22 @@ await-unit completion or resume events. That overlap is the backpressure signal 
 parser, brokered await, status steps, terminal merge, and Object Publish are moving as connected
 live segments, with durable fallback available for recovery.
 
+### HA scale fixture budgets
+
+The CSV Payments self-host HA reference deliberately tests two different concerns: the `slow`
+profile proves bounded admission and eventual liveness under intentional provider delay, while
+the `burst` profile proves scale with exact, distinct output IDs. Its three timing limits are not
+interchangeable:
+
+- `TPF_CSV_TRANSITION_TRANSPORT_DEADLINE` bounds one coordinator-to-worker REST call.
+- `TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS` bounds the flow and its assertions.
+- `TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS` is an optional burst-only throughput gate, set only
+  from a measured healthy HA baseline or explicit service objective.
+
+Changing the transport deadline alone is not a scale or recovery fix. The fixture writes its
+observed budget classification alongside the admission observation; its runnable configuration is
+documented in `examples/csv-payments/self-host/container/README.md`.
+
 ### Retry amplification example (real-world)
 
 When an upstream source can admit work faster than a downstream step can call a slow third-party

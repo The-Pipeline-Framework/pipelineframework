@@ -69,6 +69,11 @@ export TPF_SKIP_CONTAINER_BUILD="${TPF_SKIP_CONTAINER_BUILD:-false}"
 export TPF_CSV_ADMISSION_PROFILE="${TPF_CSV_ADMISSION_PROFILE:-}"
 TPF_CSV_RECORD_COUNT="${TPF_CSV_RECORD_COUNT:-}"
 export TPF_CSV_VERIFY_ADMISSION="${TPF_CSV_VERIFY_ADMISSION:-false}"
+# These three limits deliberately name different concerns. Keep the transport deadline unchanged
+# until remote transition timeout ownership is fenced; a larger number alone is not a correctness fix.
+export TPF_CSV_TRANSITION_TRANSPORT_DEADLINE="${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE:-PT180S}"
+export TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS="${TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS:-300}"
+export TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS="${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS:-}"
 
 case "${TPF_CSV_ADMISSION_PROFILE}" in
   "")
@@ -94,6 +99,24 @@ case "${TPF_CSV_ADMISSION_PROFILE}" in
     exit 1
     ;;
 esac
+
+if ! [[ "${TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS must be a positive integer." >&2
+  exit 1
+fi
+if [[ -n "${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}" \
+  && ! "${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS must be empty or a positive integer." >&2
+  exit 1
+fi
+if [[ "${TPF_CSV_ADMISSION_PROFILE}" != "burst" && -n "${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}" ]]; then
+  echo "ERROR: TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS applies only to the burst profile." >&2
+  exit 1
+fi
+if ! [[ "${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE}" =~ ^(P[0-9]+D(T(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S)))?|PT(([0-9]+H)|([0-9]+M)|([0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M)|([0-9]+H[0-9]+(\.[0-9]+)?S)|([0-9]+M[0-9]+(\.[0-9]+)?S)|([0-9]+H[0-9]+M[0-9]+(\.[0-9]+)?S))|[0-9]+|[0-9]+(\.[0-9]+)?(ms|s|m|h|d|us|ns|S|M|H))$ ]]; then
+  echo "ERROR: TPF_CSV_TRANSITION_TRANSPORT_DEADLINE must be in ISO-8601 duration format (e.g., PT10S, PT1M30S, P1D) or Quarkus shorthand duration format (e.g., 180, 10s, 1500ms, 1M, 2h, 5m)." >&2
+  exit 1
+fi
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" && -n "${TPF_CSV_ADMISSION_PROFILE}" ]]; then
   # The admission profiles deliberately bound outstanding awaits. Give the Kafka request and
@@ -203,6 +226,68 @@ dynamo_count() {
     --consistent-read \
     --select COUNT \
     --output json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Count"])'
+}
+
+remaining_fixture_seconds() {
+  local started_at="$1"
+  local elapsed=$(( $(date +%s) - started_at ))
+  local remaining=$(( TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS - elapsed ))
+  if (( remaining <= 0 )); then
+    echo "0"
+    return
+  fi
+  echo "${remaining}"
+}
+
+write_scale_budget_report() {
+  local started_at="$1"
+  local outcome="$2"
+  local exceeded_budget="$3"
+  local report_path="${TPF_RUN_DIR}/ha-scale-budget-report.json"
+  local elapsed=$(( $(date +%s) - started_at ))
+  python3 - "${report_path}" "${TPF_CSV_AWAIT_TRANSPORT}" "${TPF_CSV_ADMISSION_PROFILE}" \
+    "${TPF_CSV_RECORD_COUNT}" "${TPF_CSV_TRANSITION_TRANSPORT_DEADLINE}" \
+    "${TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS}" "${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}" \
+    "${elapsed}" "${outcome}" "${exceeded_budget}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+performance_budget = sys.argv[7]
+payload = {
+    "admissionProfile": sys.argv[3] or None,
+    "awaitTransport": sys.argv[2],
+    "elapsedSeconds": int(sys.argv[8]),
+    "exceededBudget": sys.argv[10] or None,
+    "fixtureRunDeadlineSeconds": int(sys.argv[6]),
+    "inputRecords": int(sys.argv[4]),
+    "outcome": sys.argv[9],
+    "performanceBudgetSeconds": int(performance_budget) if performance_budget else None,
+    "transitionTransportDeadline": sys.argv[5],
+}
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+print(f"HA scale budget report: {json.dumps(payload, sort_keys=True)}")
+PY
+}
+
+classify_flow_failure() {
+  local started_at="$1"
+  local flow_log="$2"
+  local elapsed=$(( $(date +%s) - started_at ))
+  if grep -q 'REMOTE_OUTCOME_UNKNOWN' "${flow_log}"; then
+    echo "remote-outcome-unknown"
+    return
+  fi
+  if grep -q 'HttpTimeoutException' "${flow_log}"; then
+    echo "transition-transport"
+    return
+  fi
+  if (( elapsed >= TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS )); then
+    echo "fixture-run"
+    return
+  fi
+  echo "execution"
 }
 
 observe_admission_budget() {
@@ -342,6 +427,9 @@ python3 "${CLIENT}" register-activate \
   --worker-endpoint "${TPF_WORKER_ENDPOINT}"
 
 run_flow() {
+  local started_at
+  started_at="$(date +%s)"
+  local deadline=$(( started_at + TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS ))
   local input_name
   if (( TPF_CSV_RECORD_COUNT > 0 )); then
     input_name="payments_${TPF_CSV_RECORD_COUNT}.csv"
@@ -349,6 +437,17 @@ run_flow() {
     input_name="$(basename "${TPF_SOURCE_CSV}")"
   fi
   local output_path="${TPF_OUTPUT_DIR}/${input_name}.out"
+  local flow_log="${TPF_RUN_DIR}/ha-scale-flow.log"
+  local flow_result
+  local remaining
+  : > "${flow_log}"
+  remaining="$(remaining_fixture_seconds "${started_at}")"
+  if (( remaining <= 0 )); then
+    write_scale_budget_report "${started_at}" "failed" "fixture-run"
+    echo "HA scale fixture deadline (${TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS}s) elapsed before flow submission." >&2
+    return 1
+  fi
+  set +e
   python3 "${CLIENT}" run-flow \
     --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \
     --tenant-id "${TPF_TENANT_ID}" \
@@ -360,16 +459,51 @@ run_flow() {
     --source-csv "${TPF_SOURCE_CSV}" \
     --record-count "${TPF_CSV_RECORD_COUNT}" \
     --defer-output-validation \
-    --timeout-seconds 300
+    --deadline-epoch-seconds "${deadline}" \
+    --timeout-seconds "${remaining}" 2>&1 | tee -a "${flow_log}"
+  flow_result="${PIPESTATUS[0]}"
+  set -e
+  if (( flow_result != 0 )); then
+    local exceeded_budget
+    exceeded_budget="$(classify_flow_failure "${started_at}" "${flow_log}")"
+    write_scale_budget_report "${started_at}" "failed" "${exceeded_budget}"
+    echo "HA scale flow failed; exceeded budget=${exceeded_budget}. See ${flow_log}." >&2
+    return "${flow_result}"
+  fi
   # Filesystem publish preserves the secure temporary-file mode. The runtime
   # container owns that file on a bind mount, so grant the host CI client read
   # access before it performs the example's output assertion.
   compose exec -T --user 0 runtime chmod a+r "${output_path}"
+  remaining="$(remaining_fixture_seconds "${started_at}")"
+  if (( remaining <= 0 )); then
+    write_scale_budget_report "${started_at}" "failed" "fixture-run"
+    echo "HA scale fixture deadline (${TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS}s) elapsed before output validation." >&2
+    return 1
+  fi
+  set +e
   python3 "${CLIENT}" validate-output \
     --output-dir "${TPF_OUTPUT_DIR}" \
     --output-file-name "${input_name}.out" \
     --record-count "${TPF_CSV_RECORD_COUNT}" \
-    --timeout-seconds 300
+    --deadline-epoch-seconds "${deadline}" \
+    --timeout-seconds "${remaining}" 2>&1 | tee -a "${flow_log}"
+  flow_result="${PIPESTATUS[0]}"
+  set -e
+  if (( flow_result != 0 )); then
+    local exceeded_budget
+    exceeded_budget="$(classify_flow_failure "${started_at}" "${flow_log}")"
+    write_scale_budget_report "${started_at}" "failed" "${exceeded_budget}"
+    echo "HA scale output validation failed; exceeded budget=${exceeded_budget}. See ${flow_log}." >&2
+    return "${flow_result}"
+  fi
+  local elapsed=$(( $(date +%s) - started_at ))
+  if [[ -n "${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}" \
+    && (( elapsed > TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS )) ]]; then
+    write_scale_budget_report "${started_at}" "failed" "performance"
+    echo "HA burst performance budget (${TPF_CSV_BURST_PERFORMANCE_BUDGET_SECONDS}s) exceeded after ${elapsed}s." >&2
+    return 1
+  fi
+  write_scale_budget_report "${started_at}" "succeeded" ""
 }
 
 if [[ "${TPF_CSV_VERIFY_ADMISSION}" == "true" ]]; then

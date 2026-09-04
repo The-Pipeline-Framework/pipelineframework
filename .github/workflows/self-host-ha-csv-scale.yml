@@ -56,6 +56,9 @@ jobs:
           java-version: 21
           cache: maven
 
+      - name: Validate CSV HA fixture helpers
+        run: python3 -m unittest -v examples/csv-payments/self-host/container/test_demo_client.py
+
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
         with:
@@ -111,6 +114,8 @@ jobs:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
           TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
           TPF_CSV_RECORD_COUNT: "10000"
+          TPF_CSV_TRANSITION_TRANSPORT_DEADLINE: "PT180S"
+          TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS: "300"
           TPF_SKIP_CONTAINER_BUILD: "true"
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
