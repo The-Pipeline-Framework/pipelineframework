@@ -103,6 +103,24 @@ class NativeQueryOperationTest {
     }
 
     @Test
+    void liveOnlyCapabilityStillUsesQueryCaptureAndReplay() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "live-only-execution", 3));
+        operation.outcome = new QueryOutcome.Found<>(new Snapshot("customer-1", "MEDIUM"));
+        operation.capabilities = QueryCapabilities.conservative();
+        QueryStepDescriptor descriptor = descriptor(Map.of("index", "customers"), QueryCapabilities.conservative());
+
+        Snapshot first = support.queryOneToOne(descriptor, new Lookup("customer-1"), Snapshot.class)
+            .await().atMost(Duration.ofSeconds(2));
+        QueryStepSupport replayWithoutProvider = new QueryStepSupport(
+            List.of(), List.of(captureStore), unavailableBindings());
+        Snapshot replayed = replayWithoutProvider.queryOneToOne(
+            descriptor, new Lookup("customer-1"), Snapshot.class).await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(first, replayed);
+        assertEquals(1, operation.invocations.get());
+    }
+
+    @Test
     void capturesLiveObservationAndMarksSemanticReplayWithoutAnotherProviderCall() {
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "observed-execution", 3));
         QueryObservation observation = observation();
@@ -309,6 +327,13 @@ class NativeQueryOperationTest {
     }
 
     private QueryStepDescriptor descriptor(Map<String, Object> configuration) {
+        return descriptor(configuration, FakeQueryOperation.CAPABILITIES);
+    }
+
+    private QueryStepDescriptor descriptor(
+        Map<String, Object> configuration,
+        QueryCapabilities capabilities
+    ) {
         ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
             ConnectorProviderId.of("acme.lookup"), "find.customer", ConnectorOperationKind.QUERY, 1);
         return QueryStepDescriptor.nativeQuery(
@@ -318,7 +343,7 @@ class NativeQueryOperationTest {
             "ONE_TO_ONE",
             new NativeQuerySelector(ConnectorBindingName.of("lookup"), identity, 1),
             configuration,
-            FakeQueryOperation.CAPABILITIES,
+            capabilities,
             Optional.empty());
     }
 
@@ -477,6 +502,7 @@ class NativeQueryOperationTest {
         private boolean returnNullStage;
         private RuntimeException immediateFailure;
         private CompletionStage<QueryOutcome<Snapshot>> stageOverride;
+        private QueryCapabilities capabilities = CAPABILITIES;
 
         @Override
         public String id() {
@@ -485,7 +511,7 @@ class NativeQueryOperationTest {
 
         @Override
         public QueryCapabilities capabilities() {
-            return CAPABILITIES;
+            return capabilities;
         }
 
         @Override

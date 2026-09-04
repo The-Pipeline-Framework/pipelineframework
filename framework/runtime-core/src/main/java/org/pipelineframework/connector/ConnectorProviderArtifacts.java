@@ -8,7 +8,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+
+import org.pipelineframework.protocol.ProtocolTypeDescriptor;
 
 /** Generates consumer-side static metadata and direct ServiceLoader registration from providers. */
 public final class ConnectorProviderArtifacts {
@@ -47,7 +50,8 @@ public final class ConnectorProviderArtifacts {
         }
     }
 
-    static String json(ConnectorProviderManifest manifest) {
+    public static String json(ConnectorProviderManifest manifest) {
+        Objects.requireNonNull(manifest, "connector provider manifest must not be null");
         StringBuilder json = new StringBuilder("{\"schemaVersion\":")
             .append(manifest.schemaVersion()).append(",\"providers\":[");
         appendJoined(json, manifest.providers(), ConnectorProviderArtifacts::provider);
@@ -62,7 +66,82 @@ public final class ConnectorProviderArtifacts {
         provider.configurationSchema().ifPresent(schema -> json.append(",\"configurationSchema\":").append(schema(schema)));
         json.append(",\"operations\":[");
         appendJoined(json, artifact.operations(), ConnectorProviderArtifacts::operation);
-        return json.append("]}").toString();
+        json.append(']');
+        if (!artifact.protocolTypes().isEmpty()) {
+            json.append(",\"protocolTypes\":[");
+            appendJoined(json, artifact.protocolTypes(), ConnectorProviderArtifacts::protocolType);
+            json.append(']');
+        }
+        return json.append('}').toString();
+    }
+
+    private static String protocolType(ProtocolTypeDescriptor descriptor) {
+        var definition = descriptor.definition();
+        StringBuilder json = new StringBuilder("{\"name\":").append(quote(definition.name()));
+        if (definition instanceof org.pipelineframework.config.template.PipelineTemplateTypeDefinition.RecordType record) {
+            json.append(",\"fields\":[");
+            appendJoined(json, record.fields(), ConnectorProviderArtifacts::protocolField);
+            return json.append("]}").toString();
+        }
+        if (definition instanceof org.pipelineframework.config.template.PipelineTemplateTypeDefinition.WrapperType wrapper) {
+            json.append(",\"wraps\":").append(quote(wrapper.wraps().name()));
+            appendConstraints(json, wrapper.constraints());
+            return json.append('}').toString();
+        }
+        if (definition instanceof org.pipelineframework.config.template.PipelineTemplateTypeDefinition.AliasType alias) {
+            return json.append(",\"alias\":").append(quote(protocolReference(alias.target()))).append('}').toString();
+        }
+        var union = (org.pipelineframework.config.template.PipelineTemplateTypeDefinition.UnionType) definition;
+        json.append(",\"variants\":{");
+        appendJoined(json, union.variants().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList(), entry ->
+            quote(entry.getKey()) + ":" + quote(protocolReference(entry.getValue().payload())));
+        return json.append("}}").toString();
+    }
+
+    private static String protocolField(
+        org.pipelineframework.config.template.PipelineTemplateTypeDefinition.Field field
+    ) {
+        StringBuilder json = new StringBuilder("{\"name\":").append(quote(field.name()))
+            .append(",\"type\":").append(quote(protocolReference(field.type())));
+        if (field.repeated()) {
+            json.append(",\"repeated\":true");
+        }
+        if (field.presence()
+            != org.pipelineframework.config.template.PipelineFieldPresence.REQUIRED) {
+            json.append(",\"presence\":").append(quote(field.presence().name()));
+        }
+        if (field.nullability()
+            != org.pipelineframework.config.template.PipelineFieldNullability.NON_NULL) {
+            json.append(",\"nullability\":").append(quote(field.nullability().name()));
+        }
+        return json.append('}').toString();
+    }
+
+    private static String protocolReference(
+        org.pipelineframework.config.template.PipelineTemplateTypeReference reference
+    ) {
+        if (reference instanceof org.pipelineframework.config.template.PipelineTemplateTypeReference.Scalar scalar) {
+            return scalar.name();
+        }
+        if (reference instanceof org.pipelineframework.config.template.PipelineTemplateTypeReference.Contributed contributed) {
+            return contributed.name();
+        }
+        throw new IllegalArgumentException("provider protocol type contains a non-portable reference: " + reference);
+    }
+
+    private static void appendConstraints(
+        StringBuilder json,
+        org.pipelineframework.config.template.PipelineTemplateWrapperConstraints constraints
+    ) {
+        constraints.minLength().ifPresent(value -> json.append(",\"minLength\":").append(value));
+        constraints.maxLength().ifPresent(value -> json.append(",\"maxLength\":").append(value));
+        constraints.pattern().ifPresent(value -> json.append(",\"pattern\":").append(quote(value)));
+        constraints.format().ifPresent(value -> json.append(",\"format\":")
+            .append(quote(value.name().toLowerCase(java.util.Locale.ROOT))));
+        constraints.minimum().ifPresent(value -> json.append(",\"minimum\":").append(value.toPlainString()));
+        constraints.minimumExclusive().ifPresent(value -> json.append(",\"minimumExclusive\":").append(value.toPlainString()));
+        constraints.maximum().ifPresent(value -> json.append(",\"maximum\":").append(value.toPlainString()));
+        constraints.maximumExclusive().ifPresent(value -> json.append(",\"maximumExclusive\":").append(value.toPlainString()));
     }
 
     private static String operation(ConnectorOperationDescriptor operation) {

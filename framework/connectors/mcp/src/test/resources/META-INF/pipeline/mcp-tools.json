@@ -1,0 +1,1 @@
+{"schemaVersion":1,"provider":"mcp.client","tools":[{"mcpName":"lookup","operation":"customer.lookup","kind":"tpf:query","majorVersion":1,"input":"McpRequest","output":"McpResult"},{"mcpName":"write","operation":"customer.write","kind":"tpf:command","majorVersion":1,"input":"McpRequest","output":"McpResult"}]}

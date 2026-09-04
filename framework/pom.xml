@@ -71,6 +71,7 @@
         <langchain4j.version>1.19.0</langchain4j.version>
         <quarkus-langchain4j.version>1.13.1</quarkus-langchain4j.version>
         <google.gmail.api.version>v1-rev20260727-2.0.0</google.gmail.api.version>
+        <mcp.java.sdk.version>2.0.1</mcp.java.sdk.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>
         <skipUnitTests>false</skipUnitTests>
@@ -83,6 +84,7 @@
         <module>representation-provider-api</module>
         <module>runtime-core</module>
         <module>connector-maven-plugin</module>
+        <module>connector-mcp-maven-plugin</module>
         <module>runtime-spring</module>
         <module>runtime</module>
         <module>representation-provider-fixture</module>
@@ -110,6 +112,16 @@
                 <version>${quarkus.amazon.services.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-core</artifactId>
+                <version>${mcp.java.sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson2</artifactId>
+                <version>${mcp.java.sdk.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.google.apis</groupId>
