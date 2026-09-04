@@ -1,6 +1,6 @@
 # Builds and Continuous Integration (CI)
 
-The project uses three independent workflows:
+The primary framework, release, and docs checks are split across these workflows:
 
 1. **build.yml** — PR/non‑main builds
     - Fast build
@@ -16,7 +16,18 @@ The project uses three independent workflows:
 3. **publish.yml** — `v*` tags
     - Release build
     - Deploys to Maven Central
+    - Promotes the exact released commit to the `release-docs` branch after the release workflow succeeds
     - No tests (already validated in main)
+
+4. **docs.yml** — documentation pull requests
+    - Validates the docs build and generated replay assets
+    - Does not publish the public docs site
+
+Cloudflare Pages keeps its Git integration enabled. Pushes to `main` publish the staging site at
+`https://pipelineframework.pages.dev`, and pull-request branches keep their temporary preview
+deployments. The public `https://pipelineframework.org` domain targets the
+`release-docs.pipelineframework.pages.dev` branch alias, so it advances only after a successful
+Maven Central release.
 
 ## Search Cloud Example Workflows
 

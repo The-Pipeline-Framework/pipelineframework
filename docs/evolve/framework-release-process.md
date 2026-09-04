@@ -34,6 +34,8 @@ After validation:
 2. push the immutable release tag,
 3. let GitHub Actions publish signed artifacts to Maven Central,
 4. verify the artifacts on Sonatype Central,
-5. create or verify the GitHub release.
+5. create or verify the GitHub release,
+6. verify that the workflow promoted the release commit to `release-docs` and that
+   `https://pipelineframework.org` serves that deployment.
 
 For detailed Central plugin, GPG, and troubleshooting notes, see [Publishing Reference](/evolve/publishing-reference).
