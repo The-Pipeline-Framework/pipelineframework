@@ -9,6 +9,8 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.pipelineframework.config.template.PipelineTemplateScalarTypes;
+import org.pipelineframework.config.template.PipelineFieldNullability;
+import org.pipelineframework.config.template.PipelineFieldPresence;
 import org.pipelineframework.config.template.ProtocolTypeReferences;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
@@ -60,12 +62,16 @@ public final class ConnectorProviderManifestReader {
         }
         List<ProtocolTypeDescriptor> protocolTypes = value.containsKey("protocolTypes")
             ? array(value, "protocolTypes").stream()
-                .map(entry -> protocolType(provider.id(), object(entry, "protocol type descriptor"))).toList()
+                .map(entry -> protocolType(provider.id(), object(entry, "protocol type descriptor"), schemaVersion)).toList()
             : List.of();
         return new ConnectorProviderArtifactDescriptor(provider, operations, protocolTypes);
     }
 
-    private static ProtocolTypeDescriptor protocolType(ConnectorProviderId namespace, Map<String, Object> value) {
+    private static ProtocolTypeDescriptor protocolType(
+        ConnectorProviderId namespace,
+        Map<String, Object> value,
+        int schemaVersion
+    ) {
         requireOnly(value, "name", "fields", "wraps", "alias", "variants",
             "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
         String name = string(value, "name");
@@ -81,7 +87,7 @@ public final class ConnectorProviderManifestReader {
         if (fields) {
             rejectConstraints(value, name);
             List<PipelineTemplateTypeDefinition.Field> parsed = array(value, "fields").stream()
-                .map(entry -> protocolField(name, object(entry, "protocol type field"))).toList();
+                .map(entry -> protocolField(name, object(entry, "protocol type field"), schemaVersion)).toList();
             if (parsed.stream().map(PipelineTemplateTypeDefinition.Field::name).distinct().count() != parsed.size()) {
                 throw new IllegalArgumentException("protocol type '" + name + "' declares duplicate field names");
             }
@@ -120,10 +126,27 @@ public final class ConnectorProviderManifestReader {
         return new ProtocolTypeDescriptor(new ProtocolTypeIdentity(namespace, name), definition);
     }
 
-    private static PipelineTemplateTypeDefinition.Field protocolField(String owner, Map<String, Object> value) {
-        requireOnly(value, "name", "type");
+    private static PipelineTemplateTypeDefinition.Field protocolField(
+        String owner,
+        Map<String, Object> value,
+        int schemaVersion
+    ) {
+        requireOnly(value, "name", "type", "repeated", "presence", "nullability");
+        if (schemaVersion < 5 && (value.containsKey("repeated") || value.containsKey("presence")
+            || value.containsKey("nullability"))) {
+            throw new IllegalArgumentException(
+                "connector provider manifest schema versions before 5 cannot declare protocol field modifiers");
+        }
         String name = string(value, "name");
-        return new PipelineTemplateTypeDefinition.Field(name, protocolReference(string(value, "type"), owner + "." + name));
+        boolean repeated = value.containsKey("repeated") && bool(value, "repeated");
+        PipelineFieldPresence presence = value.containsKey("presence")
+            ? enumValue(PipelineFieldPresence.class, string(value, "presence"), "presence")
+            : PipelineFieldPresence.REQUIRED;
+        PipelineFieldNullability nullability = value.containsKey("nullability")
+            ? enumValue(PipelineFieldNullability.class, string(value, "nullability"), "nullability")
+            : PipelineFieldNullability.NON_NULL;
+        return new PipelineTemplateTypeDefinition.Field(
+            name, protocolReference(string(value, "type"), owner + "." + name), repeated, presence, nullability);
     }
 
     private static PipelineTemplateTypeReference protocolReference(String value, String owner) {
@@ -564,21 +587,54 @@ public final class ConnectorProviderManifestReader {
             throw error("expected an integer");
         }
 
-        private Integer number() {
+        private Number number() {
             int start = index;
-            if (consume('-')) {
-                throw error("negative numbers are not supported in connector provider manifests");
+            consume('-');
+            if (index >= source.length()) {
+                throw error("expected a number");
             }
+
+            if (consume('0')) {
+                if (index < source.length() && Character.isDigit(source.charAt(index))) {
+                    throw error("leading zeroes are not permitted in numbers");
+                }
+            } else {
+                digits("expected a number");
+            }
+
+            boolean decimal = false;
+            if (consume('.')) {
+                decimal = true;
+                digits("expected a digit after decimal point");
+            }
+            if (index < source.length() && (source.charAt(index) == 'e' || source.charAt(index) == 'E')) {
+                decimal = true;
+                index++;
+                if (index < source.length() && (source.charAt(index) == '+' || source.charAt(index) == '-')) {
+                    index++;
+                }
+                digits("expected an exponent digit");
+            }
+
+            String token = source.substring(start, index);
+            try {
+                return decimal ? new BigDecimal(token) : Integer.valueOf(token);
+            } catch (NumberFormatException exception) {
+                try {
+                    return new BigDecimal(token);
+                } catch (NumberFormatException ignored) {
+                    throw error("number is out of range");
+                }
+            }
+        }
+
+        private void digits(String failure) {
+            int start = index;
             while (index < source.length() && Character.isDigit(source.charAt(index))) {
                 index++;
             }
             if (start == index) {
-                throw error("expected an integer");
-            }
-            try {
-                return Integer.valueOf(source.substring(start, index));
-            } catch (NumberFormatException exception) {
-                throw error("integer is out of range");
+                throw error(failure);
             }
         }
 

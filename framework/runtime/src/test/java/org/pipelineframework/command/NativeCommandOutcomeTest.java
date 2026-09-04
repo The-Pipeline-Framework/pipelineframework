@@ -98,6 +98,7 @@ class NativeCommandOutcomeTest {
 
         assertEquals("done", support.<String, String>execute(descriptor(), (ignored, input) -> "stable-1", "input")
             .await().atMost(Duration.ofSeconds(5)));
+        assertSame(String.class, operation.outputType);
         CommandEffectRecord record = store.find("tenant", "stable-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
         assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
         assertEquals(List.of(new CommandReference("ticket", "TKT-1", CommandReferencePurpose.RECONCILIATION)),
@@ -613,6 +614,7 @@ class NativeCommandOutcomeTest {
         private boolean retryRedriveSupported = true;
         private final List<CommandDispatchIdentity> dispatchIdentities = new java.util.ArrayList<>();
         private ConnectorExecutionContext executionContext;
+        private Class<?> outputType;
 
         @Override
         public String id() {
@@ -639,6 +641,7 @@ class NativeCommandOutcomeTest {
             invocations++;
             dispatchIdentities.add(invocation.dispatchIdentity().orElseThrow());
             executionContext = invocation.executionContext();
+            outputType = invocation.outputType();
             if (immediateFailure != null) {
                 throw immediateFailure;
             }

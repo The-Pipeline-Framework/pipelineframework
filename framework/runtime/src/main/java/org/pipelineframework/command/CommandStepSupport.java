@@ -493,11 +493,24 @@ public class CommandStepSupport {
             raw.dispatch(new org.pipelineframework.connector.CommandInvocation<>(
                 request.input(),
                 boundConfiguration,
+                commandOutputType(request.descriptor()),
                 connectorExecutionContext(request, selector, binding),
                 Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
                     request.commandId(), request.occurrenceId(), request.attemptId())))));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(CommandStepSupport::unwrapTransportFailure);
+    }
+
+    private static Class<?> commandOutputType(CommandDescriptor descriptor) {
+        try {
+            return Class.forName(
+                descriptor.outputType(),
+                true,
+                org.pipelineframework.config.pipeline.PipelineResources.resolveClassLoader());
+        } catch (ClassNotFoundException failure) {
+            throw new IllegalStateException(
+                "Command output type has no generated Java class: " + descriptor.outputType(), failure);
+        }
     }
 
     private <O> Uni<O> applyNativeOutcome(

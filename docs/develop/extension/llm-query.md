@@ -140,6 +140,9 @@ The compiler emits the canonical v3 catalogue into the release contract. At runt
 
 Model aliases are untrusted observations. TPF looks up the exact compiled alias and constructs `binding + operation` from the catalogue; it never copies a provider or operation identity supplied inside model arguments.
 
+MCP-backed operations use this same path after explicit pinned import. Discovery, import, and
+callable exposure are separate stages; see [Import MCP tools as Connector operations](./mcp-connector-import.md).
+
 `structuredOutputSchema` defaults to `REQUIRED`. In required mode an adapter that cannot enforce the supplied decision schemas for the compiled alternatives fails before inference. The LangChain4j adapter uses the selected provider's native JSON Schema response format for a single direct `complete` alternative; multi-alternative tool selection is not claimed as natively schema-enforced. `OPTIONAL` is an explicit best-effort mode for prompt-guided tool selection; TPF still validates the single response against the canonical v3 contract. Neither mode performs a hidden repair call or reinference.
 
 ## Invoke one proposal

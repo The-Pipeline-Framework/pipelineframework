@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 3,
+  "pipelineId": "mcp-connector-test",
+  "contractVersion": "sha256:test",
+  "contractHash": "test",
+  "steps": [],
+  "canonicalCatalogFingerprint": "sha256:test",
+  "canonicalTypes": {
+    "McpRequest": {
+      "contributedIdentity": "mcp.client.McpRequest",
+      "definition": {
+        "id": "McpRequest",
+        "kind": "record",
+        "fields": [{"name":"id","type":{"kind":"scalar","id":"string"}}]
+      }
+    },
+    "McpResult": {
+      "contributedIdentity": "mcp.client.McpResult",
+      "definition": {
+        "id": "McpResult",
+        "kind": "record",
+        "fields": [{"name":"value","type":{"kind":"scalar","id":"string"}}]
+      }
+    }
+  }
+}

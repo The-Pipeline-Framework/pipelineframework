@@ -166,6 +166,11 @@ Model and base URL remain connector binding semantics. They identify the externa
 whose observations TPF captures; they are not credential-selection or security-policy fields.
 Captured replay precedes live provider resolution and therefore requires no LLM credential.
 
+Provider `mcp.client` uses the same seam. The host resolves an initialized MCP client and owns its
+transport, session, and lifecycle, including creation and shutdown of any STDIO process. The
+connector never persists or closes that handle. See
+[Import MCP tools as Connector operations](./mcp-connector-import.md).
+
 ## Security boundary
 
 Keep these values out of pipeline inputs and mappings:
