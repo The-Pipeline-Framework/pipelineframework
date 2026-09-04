@@ -81,7 +81,8 @@ public record StepDefinition(
         List<String> accepts,
         boolean terminal,
         Optional<String> pipelineReference,
-        Optional<String> dynamicOperationSource
+        Optional<String> dynamicOperationSource,
+        Optional<ConnectorOperationSelection> connectorOperationSelection
 ) {
 
     /** Creates the typed immutable state for a statically linked pipeline invocation step. */
@@ -98,7 +99,26 @@ public record StepDefinition(
             name, StepKind.PIPELINE, null, Optional.empty(), null, Map.of(), null, List.of(), null, null,
             null, Map.of(), null, Map.of(), List.of(), null, null, null, MapperFallbackMode.NONE,
             inputType, outputType, streamingShapeHint, false, accepts, terminal,
-            Optional.ofNullable(pipelineReference), Optional.empty());
+            Optional.ofNullable(pipelineReference), Optional.empty(), Optional.empty());
+    }
+
+    /** Backward-compatible canonical constructor shape before typed connector selections were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal, Optional<String> pipelineReference,
+        Optional<String> dynamicOperationSource
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
+            Optional.empty());
     }
 
     /** Backward-compatible canonical constructor shape before dynamic operation bindings were added. */
@@ -115,7 +135,18 @@ public record StepDefinition(
         this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
             idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
             queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, Optional.empty());
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, Optional.empty(),
+            Optional.empty());
+    }
+
+    /** Returns this definition with its normalized operation-first connector selection. */
+    public StepDefinition withConnectorOperationSelection(ConnectorOperationSelection selection) {
+        return new StepDefinition(
+            name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
+            Optional.of(Objects.requireNonNull(selection, "connector operation selection must not be null")));
     }
 
     /** Backward-compatible canonical constructor shape before pipeline references were added. */
@@ -543,6 +574,8 @@ public record StepDefinition(
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
         dynamicOperationSource = normalizeOptionalString(dynamicOperationSource);
+        connectorOperationSelection = connectorOperationSelection == null
+            ? Optional.empty() : connectorOperationSelection;
         if (runOnVirtualThreads && (kind != StepKind.INTERNAL || dynamicOperationSource.isPresent())) {
             throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
         }

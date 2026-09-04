@@ -12,6 +12,7 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
@@ -21,12 +22,19 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.QueryCapabilities;
+import org.pipelineframework.connector.QueryOperationCardinality;
 
 class QueryClientStepRendererTest {
 
@@ -88,6 +96,39 @@ class QueryClientStepRendererTest {
         assertTrue(source.contains("QueryStepSupport support"));
         assertTrue(source.contains("QueryStepDescriptorFactory descriptorFactory"));
         assertTrue(source.contains("support.queryOneToOne(descriptorFactory.descriptor(\"LoadCustomerRisk\", "));
+    }
+
+    @Test
+    void rendersOperationFirstQueryFromTypedSelectionWithoutReloadingApplicationYaml() throws IOException {
+        ConnectorOperationSelection selection = ConnectorOperationSelection.query(
+            "Execute operation",
+            ConnectorBindingName.of("primary-graphql"),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("graphql.smallrye"), "execute.query",
+                ConnectorOperationKind.QUERY, 1),
+            1,
+            Map.of("document", "catalogued"),
+            new ConnectorOperationSelection.QuerySelection(
+                QueryOperationCardinality.ONE_TO_ONE,
+                QueryCapabilities.conservative(),
+                Optional.empty(),
+                Map.of(),
+                java.util.List.of("operationKey")));
+        PipelineStepModel model = model(
+            ClassName.get("com.example.common.domain", "CustomerRiskLookup"),
+            ClassName.get("com.example.common.domain", "CustomerRiskSnapshot"))
+            .toBuilder().connectorOperationSelection(selection).build();
+
+        new QueryClientStepRenderer().render(model, generationContext("LOCAL"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+        assertTrue(source.contains("QueryStepDescriptor.nativeQuery"));
+        assertTrue(source.contains("ConnectorBindingName.of(\"primary-graphql\")"));
+        assertTrue(source.contains("ConnectorProviderId.of(\"graphql.smallrye\")"));
+        assertTrue(source.contains("\"execute.query\""));
+        assertTrue(source.contains("support.queryOneToOne(QueryStepDescriptor.nativeQuery("));
+        assertTrue(!source.contains("QueryStepDescriptorFactory"));
     }
 
     @Test

@@ -36,6 +36,7 @@ authoritative for exact syntax and release support.
 | [0025](./0025-command-reissue-uses-occurrence-identity.md) | Give intentional Command reissue a new provider occurrence identity without weakening replay safety. |
 | [0026](./0026-llm-clarification-is-inert-protocol-data.md) | Treat an LLM request for human information as inert typed protocol data. |
 | [0027](./0027-mcp-imports-pinned-connector-operations.md) | Import selected MCP tools as pinned Connector operations without making MCP an Agent authority or runtime. |
+| [0028](./0028-block-connector-capabilities-are-application-bound.md) | Bind imported Block Query and Command requirements to application-owned connector authority at compilation. |
 
 ## Maintenance
 

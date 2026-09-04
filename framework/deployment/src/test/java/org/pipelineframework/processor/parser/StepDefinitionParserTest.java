@@ -760,19 +760,23 @@ class StepDefinitionParserTest {
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
-            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
             "configurationSchema":{"id":"acme.work.provider","version":1,"fields":[
             {"name":"connection","type":"CONNECTION_REF","required":true}]},
             "operations":[
             {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
+            "typeContract":{"input":"com.example.Invoice","output":"com.example.SendResult"},
             "configurationSchema":{"id":"acme.work.send","version":1,"fields":[
             {"name":"destination","type":"STRING","required":true}]},
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
             "reconciliationSupported":false,"executionPosture":"AUTOMATED","maximumMachineConfirmation":"NONE",
             "userConfirmationSupported":false,"durableReferenceKinds":[]}},
             {"id":"invoice.find","kind":"tpf:query","majorVersion":1,
+            "typeContract":{"input":"com.example.FindInvoice","output":"com.example.Invoice"},
+            "queryCardinality":"ONE_TO_ONE",
             "configurationSchema":{"id":"acme.work.find","version":1,"fields":[
-            {"name":"index","type":"STRING","required":true}]}}]}]}
+            {"name":"index","type":"STRING","required":true},
+            {"name":"callables","type":"MAP","required":false}]}}]}]}
             """);
         Path pipeline = tempDir.resolve("binding-operations.yaml");
         Files.writeString(pipeline, """
@@ -807,6 +811,13 @@ class StepDefinitionParserTest {
                 using: work
                 config:
                   index: invoices
+                callables:
+                  lookup:
+                    using: work
+                    operation: invoice.find
+                    operationVersion: 1
+                    kind: query
+                    input: FindInvoice
                 input: FindInvoice
                 output: Invoice
                 java:
@@ -821,12 +832,30 @@ class StepDefinitionParserTest {
                 loader).parseStepDefinitions(pipeline);
 
             assertEquals(2, steps.size(), diagnostics.toString());
-            assertEquals("work", steps.get(0).commandConfig().get("__tpf_native_binding"));
             assertEquals("native-binding:work/invoice.send", steps.get(0).command());
             assertEquals("native-binding:work/invoice.find", steps.get(1).queryId());
-            assertEquals("work", steps.get(1).queryConfig().get("__tpf_native_binding"));
+            assertEquals("work", steps.get(0).connectorOperationSelection().orElseThrow().binding().value());
+            assertEquals("work", steps.get(1).connectorOperationSelection().orElseThrow().binding().value());
+            Map<?, ?> callables = (Map<?, ?>) steps.get(1).connectorOperationSelection().orElseThrow()
+                .operationConfiguration().get("callables");
+            assertEquals("invoice.find", ((Map<?, ?>) callables.get("lookup")).get("operation"));
+            assertTrue(steps.get(0).commandConfig().keySet().stream().noneMatch(key -> key.startsWith("__tpf_native_")));
+            assertTrue(steps.get(1).queryConfig().keySet().stream().noneMatch(key -> key.startsWith("__tpf_native_")));
             assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
             assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
+
+            Files.writeString(manifest, Files.readString(manifest).replace(
+                "\"input\":\"com.example.FindInvoice\",\"output\":\"com.example.Invoice\"",
+                "\"input\":\"com.example.FindInvoice\",\"output\":\"com.other.Invoice\""));
+            List<String> typeDiagnostics = new ArrayList<>();
+            List<StepDefinition> typeMismatch = new StepDefinitionParser(
+                (kind, message) -> typeDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+            assertEquals(1, typeMismatch.size(), typeDiagnostics.toString());
+            assertTrue(typeDiagnostics.stream().anyMatch(message ->
+                message.contains("do not match provider operation types")
+                    && message.contains("com.other.Invoice")), typeDiagnostics.toString());
         }
     }
 
@@ -836,7 +865,7 @@ class StepDefinitionParserTest {
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
-            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
             "operations":[
             {"id":"invoice.send","kind":"tpf:command","majorVersion":1,
             "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
@@ -897,8 +926,10 @@ class StepDefinitionParserTest {
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
-            {"schemaVersion":1,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
+            {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
             "operations":[{"id":"invoice.find","kind":"tpf:query","majorVersion":1,
+            "typeContract":{"input":"com.example.FindInvoice","output":"com.example.Invoice"},
+            "queryCardinality":"ONE_TO_ONE",
             "queryCapabilities":{"cacheability":"CACHEABLE","maximumNegativeCacheTtl":"PT30S"}}]}]}
             """);
         Path pipeline = tempDir.resolve("query-negative-cache.yaml");
@@ -938,6 +969,7 @@ class StepDefinitionParserTest {
         Files.writeString(manifest, """
             {"schemaVersion":4,"providers":[{"id":"acme.work","version":{"major":1,"minor":0},
             "operations":[{"id":"invoice.find.many","kind":"tpf:query","majorVersion":1,
+            "typeContract":{"input":"com.example.FindInvoices","output":"com.example.Invoice"},
             "queryCardinality":"ONE_TO_MANY"}]}]}
             """);
         Path pipeline = tempDir.resolve("streaming-query.yaml");

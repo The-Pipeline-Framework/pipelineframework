@@ -76,6 +76,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("providerFirstCommandSelector"));
         assertTrue(definitions.has("connectorBinding"));
         assertTrue(definitions.has("pipelineConnectorBindings"));
+        assertTrue(definitions.has("blockCapabilityBinding"));
+        assertTrue(definitions.has("blockBindings"));
         assertTrue(definitions.getAsJsonObject("providerFirstCommandSelector").has("description"));
         String bindingNamePattern = definitions.getAsJsonObject("pipelineConnectorBindings")
             .getAsJsonObject("propertyNames").get("pattern").getAsString();
@@ -100,6 +102,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("queries"));
         assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+        assertEquals("#/$defs/blockBindings",
+            properties.getAsJsonObject("blockBindings").get("$ref").getAsString());
         assertTrue(properties.getAsJsonObject("version").getAsJsonArray("enum").asList().stream()
             .anyMatch(value -> value.getAsInt() == 3));
     }

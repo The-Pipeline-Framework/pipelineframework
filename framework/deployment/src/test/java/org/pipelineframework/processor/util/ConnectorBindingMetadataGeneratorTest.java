@@ -29,6 +29,7 @@ import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 
 class ConnectorBindingMetadataGeneratorTest {
     @TempDir
@@ -72,10 +73,11 @@ class ConnectorBindingMetadataGeneratorTest {
         Path classOutput = tempDir.resolve("class-output");
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipeline.toString()));
+        when(processingEnv.getOptions()).thenReturn(Map.of());
         PipelineCompilationContext context = new PipelineCompilationContext(
             processingEnv, mock(RoundEnvironment.class));
         context.setModuleDir(tempDir);
+        context.setEffectivePipelineConfig(new PipelineYamlConfigLoader().load(pipeline));
 
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {

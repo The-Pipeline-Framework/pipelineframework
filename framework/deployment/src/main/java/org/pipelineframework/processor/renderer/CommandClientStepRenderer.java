@@ -8,6 +8,7 @@ import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -21,6 +22,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -54,6 +56,7 @@ public class CommandClientStepRenderer {
         TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(transportMode))
             .orElseGet(() -> clientStepType(domainOutputType, transportMode, configHints.basePackage()));
         boolean transportMapped = transportMode != PipelineTransport.LOCAL;
+        Optional<ConnectorOperationSelection> connectorSelection = model.connectorOperationSelection();
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.command", "CommandStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -107,8 +110,10 @@ public class CommandClientStepRenderer {
             .addSuperinterface(ClassName.get("org.pipelineframework.command", "CommandStep"))
             .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
             .addField(support)
-            .addField(descriptorFactory)
             .addField(commandIdGenerator);
+        if (connectorSelection.isEmpty()) {
+            typeBuilder.addField(descriptorFactory);
+        }
         if (inputMapper != null) {
             typeBuilder.addField(inputMapper);
         }
@@ -136,7 +141,8 @@ public class CommandClientStepRenderer {
                     domainOutputType,
                     model.cacheKeyGenerator().canonicalName(),
                     normalizedTransport.input().isPresent(),
-                    normalizedTransport.output().isPresent()))
+                    normalizedTransport.output().isPresent(),
+                    connectorSelection))
                 .build())
             .build();
 
@@ -152,42 +158,88 @@ public class CommandClientStepRenderer {
         TypeName domainOutputType,
         String commandIdGeneratorName,
         boolean normalizedInput,
-        boolean normalizedOutput
+        boolean normalizedOutput,
+        Optional<ConnectorOperationSelection> connectorSelection
     ) {
         com.squareup.javapoet.CodeBlock.Builder body = com.squareup.javapoet.CodeBlock.builder();
+        CodeBlock descriptor = connectorSelection
+            .map(selection -> nativeDescriptor(
+                selection, domainInputType.toString(), domainOutputType.toString(), commandIdGeneratorName))
+            .orElseGet(() -> CodeBlock.of("descriptorFactory.descriptor($S, null, $S, $S, $S)",
+                model.serviceName(), domainInputType.toString(), domainOutputType.toString(), commandIdGeneratorName));
         if (transportMode == PipelineTransport.LOCAL) {
-            body.addStatement("return support.execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, input)",
-                model.serviceName(),
-                domainInputType.toString(),
-                domainOutputType.toString(),
-                commandIdGeneratorName);
+            body.addStatement("return support.execute($L, commandIdGenerator, input)", descriptor);
             return body.build();
         }
         if (transportMode == PipelineTransport.REST) {
             body.addStatement("$T commandInput = inputMapper.fromExternal(input)", domainInputType)
-                .addStatement("return support.<$T, $T>execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, commandInput)\n"
+                .addStatement("return support.<$T, $T>execute($L, commandIdGenerator, commandInput)\n"
                         + "    .map(commandOutput -> outputMapper.toExternal(commandOutput))",
                     domainInputType,
                     domainOutputType,
-                    model.serviceName(),
-                    domainInputType.toString(),
-                    domainOutputType.toString(),
-                    commandIdGeneratorName);
+                    descriptor);
             return body.build();
         }
         String fromGrpc = normalizedInput ? "fromGrpc" : "fromGrpcFromDto";
         String toGrpc = normalizedOutput ? "toGrpc" : "toDtoToGrpc";
         body.addStatement("$T commandInput = inputMapper.$L(input)", domainInputType, fromGrpc)
-            .addStatement("return support.<$T, $T>execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, commandInput)\n"
+            .addStatement("return support.<$T, $T>execute($L, commandIdGenerator, commandInput)\n"
                     + "    .map(commandOutput -> outputMapper.$L(commandOutput))",
                 domainInputType,
                 domainOutputType,
-                model.serviceName(),
-                domainInputType.toString(),
-                domainOutputType.toString(),
-                commandIdGeneratorName,
+                descriptor,
                 toGrpc);
         return body.build();
+    }
+
+    private CodeBlock nativeDescriptor(
+        ConnectorOperationSelection selection,
+        String inputType,
+        String outputType,
+        String commandIdGenerator
+    ) {
+        ConnectorOperationSelection.CommandSelection command = selection.command().orElseThrow(() ->
+            new IllegalArgumentException("Command client step requires Command connector selection semantics"));
+        org.pipelineframework.connector.CommandPolicy policy = command.policy();
+        CodeBlock selector = CodeBlock.of(
+            "new $T($T.of($T.of($S)), new $T($T.of($S), $S, $T.COMMAND, $L), $L, $L)",
+            ClassName.get("org.pipelineframework.command", "NativeCommandSelector"),
+            Optional.class,
+            org.pipelineframework.connector.ConnectorBindingName.class,
+            selection.binding().value(),
+            org.pipelineframework.connector.ConnectorOperationIdentity.class,
+            org.pipelineframework.connector.ConnectorProviderId.class,
+            selection.operation().providerId().value(),
+            selection.operation().operationId(),
+            org.pipelineframework.connector.ConnectorOperationKind.class,
+            selection.operation().majorVersion(),
+            selection.providerMajorVersion(),
+            commandPolicy(policy));
+        return CodeBlock.of(
+            "$T.nativeCommand($S, $L, $S, $S, $S, $T.$L, $L)",
+            ClassName.get("org.pipelineframework.command", "CommandDescriptor"),
+            selection.runtimeStepId(), selector, inputType, outputType, commandIdGenerator,
+            org.pipelineframework.command.CommandDuplicatePolicy.class,
+            command.duplicatePolicy().name(),
+            JavaPoetLiteral.value(selection.operationConfiguration()));
+    }
+
+    private static CodeBlock commandPolicy(org.pipelineframework.connector.CommandPolicy policy) {
+        return CodeBlock.of(
+            "new $T($L, $L, $L, $L, $L, $L)",
+            org.pipelineframework.connector.CommandPolicy.class,
+            policy.requireRetryRedrive(),
+            policy.requireIdempotency(),
+            policy.requireReconciliation(),
+            optionalEnum(policy.requiredExecutionPosture(), org.pipelineframework.connector.CommandExecutionPosture.class),
+            optionalEnum(policy.minimumMachineConfirmation(), org.pipelineframework.connector.CommandMachineConfirmation.class),
+            policy.requireUserConfirmation());
+    }
+
+    private static <T extends Enum<T>> CodeBlock optionalEnum(Optional<T> value, Class<T> type) {
+        return value
+            .map(entry -> CodeBlock.of("$T.of($T.$L)", Optional.class, type, entry.name()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {

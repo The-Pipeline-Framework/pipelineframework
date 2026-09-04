@@ -63,7 +63,7 @@ class BlockDefinitionImporterTest {
         }
     }
 
-    @Test void rejectsExternalAuthorityInsideImportedDefinition() throws Exception {
+    @Test void rejectsUndeclaredExternalAuthorityInsideImportedDefinition() throws Exception {
         Path dependency = dependency("query", "org.example.bad", "bad", "1.0.0", "bad-block", """
             version: 3
             types:
@@ -80,7 +80,122 @@ class BlockDefinitionImporterTest {
         try (URLClassLoader loader = loader(dependency)) {
             var failure = assertThrows(IllegalStateException.class,
                 () -> new BlockDefinitionImporter(loader).importInto(application(minimalApplication())));
-            assertTrue(failure.getMessage().contains("forbidden step kind 'query'"));
+            assertTrue(failure.getMessage().contains("undeclared requirement 'external'"));
+        }
+    }
+
+    @Test void linksApplicationBoundQueryAndCommandRequirementsIntoOrdinaryV3Steps() throws Exception {
+        Path dependency = operationBlockDependency();
+        Path application = application(operationBlockApplication("primary"));
+
+        try (URLClassLoader loader = loader(dependency);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
+            var yaml = new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader().load(imported.configPath());
+            var query = yaml.localPipelines().get("org.example.operations/lookup").getFirst();
+            var command = yaml.localPipelines().get("org.example.operations/update").getFirst();
+
+            assertEquals("primary", query.operationSelection().orElseThrow().using());
+            assertEquals("primary", command.operationSelection().orElseThrow().using());
+            assertEquals("com.example.EffectKeyCommandId", command.commandIdGenerator());
+            assertEquals("RETURN_RECORDED", command.duplicatePolicy());
+            assertEquals("AUTOMATED", command.operationSelection().orElseThrow().policy()
+                .get("requiredExecutionPosture"));
+
+            ImportedPipelineDefinition queryProvenance = imported.definitions().stream()
+                .filter(definition -> definition.logicalName().equals("lookup"))
+                .findFirst().orElseThrow();
+            assertFalse(queryProvenance.definitionFingerprint().equals(
+                queryProvenance.linkedDefinitionFingerprint()));
+            var requirement = queryProvenance.resolvedRequirements().getFirst();
+            assertEquals("graphql.read", requirement.name());
+            assertEquals("QUERY", requirement.kind());
+            assertEquals("primary", requirement.binding());
+            assertEquals("acme.operations", requirement.provider());
+            assertEquals(64, requirement.connectorConfigurationDigest().length());
+        }
+    }
+
+    @Test void rejectsMissingUnknownAndExtraBlockRequirementMappings() throws Exception {
+        Path dependency = operationBlockDependency();
+        try (URLClassLoader loader = loader(dependency)) {
+            var missing = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "  org.example.operations/lookup:\n    graphql.read:\n      using: primary\n", ""))));
+            assertTrue(missing.getMessage().contains("requires application capability mappings"));
+
+            var unknownBinding = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("missing"))));
+            assertTrue(unknownBinding.getMessage().contains("unknown connector binding 'missing'"));
+
+            var extra = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "    graphql.read:\n      using: primary\n",
+                        "    graphql.read:\n      using: primary\n    extra.read:\n      using: primary\n"))));
+            assertTrue(extra.getMessage().contains("unknown requirement 'extra.read'"));
+
+            var missingCommandAuthority = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "      commandIdGenerator: com.example.EffectKeyCommandId\n", ""))));
+            assertTrue(missingCommandAuthority.getMessage().contains("requires commandIdGenerator"));
+
+            var unknownDefinition = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "org.example.operations/lookup", "org.example.operations/missing"))));
+            assertTrue(unknownDefinition.getMessage().contains("unknown qualified Block definition"),
+                unknownDefinition.getMessage());
+        }
+    }
+
+    @Test void rejectsRequirementKindMismatchAndUnusedRequirements() throws Exception {
+        Path dependency = operationBlockDependency();
+        Path manifest = dependency.resolve("META-INF/pipeline/blocks.json");
+        Files.writeString(manifest, Files.readString(manifest).replace(
+            "\"graphql.read\": { \"kind\": \"QUERY\" }",
+            "\"graphql.read\": { \"kind\": \"COMMAND\" }"));
+        try (URLClassLoader loader = loader(dependency)) {
+            var mismatch = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(operationBlockApplication("primary"))));
+            assertTrue(mismatch.getMessage().contains("requirement 'graphql.read' is COMMAND but is used by a QUERY"),
+                mismatch.getMessage());
+        }
+
+        operationBlockDependency();
+        Files.writeString(manifest, Files.readString(manifest).replace(
+            "\"graphql.read\": { \"kind\": \"QUERY\" }",
+            "\"graphql.read\": { \"kind\": \"QUERY\" }, \"unused.read\": { \"kind\": \"QUERY\" }"));
+        try (URLClassLoader loader = loader(dependency)) {
+            var unused = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(
+                    operationBlockApplication("primary").replace(
+                        "    graphql.read:\n      using: primary\n",
+                        "    graphql.read:\n      using: primary\n    unused.read:\n      using: primary\n"))));
+            assertTrue(unused.getMessage().contains("declares unused requirement 'unused.read'"));
+        }
+    }
+
+    @Test void rejectsBlockBindingsWhenThePackageDependencyIsMissing() throws Exception {
+        try (URLClassLoader loader = loader()) {
+            var failure = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(operationBlockApplication("primary"))));
+            assertTrue(failure.getMessage().contains("Blocks that are not installed"), failure.getMessage());
+        }
+    }
+
+    @Test void rejectsPackageOwnedCommandAuthority() throws Exception {
+        Path dependency = operationBlockDependency();
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition).replace(
+            "using: graphql.write",
+            "using: graphql.write\n        duplicatePolicy: FAIL"));
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class,
+                () -> new BlockDefinitionImporter(loader).importInto(application(operationBlockApplication("primary"))));
+            assertTrue(failure.getMessage().contains("application-owned Command field 'duplicatePolicy'"));
         }
     }
 
@@ -266,6 +381,110 @@ class BlockDefinitionImporterTest {
             """.formatted(namespace, artifact, version, definition));
         Files.writeString(metadata.resolve("definition.yaml"), yaml);
         return root;
+    }
+
+    private Path operationBlockDependency() throws Exception {
+        Path root = directory.resolve("operation-block");
+        Path metadata = root.resolve("META-INF/pipeline");
+        Files.createDirectories(metadata);
+        Files.writeString(metadata.resolve("blocks.json"), """
+            {
+              "schemaVersion": 1,
+              "namespace": "org.example.operations",
+              "artifact": { "groupId": "org.example", "artifactId": "operation-block", "version": "1.0.0" },
+              "definitions": [
+                { "name": "lookup", "resource": "META-INF/pipeline/definition.yaml",
+                  "requires": { "graphql.read": { "kind": "QUERY" } } },
+                { "name": "update", "resource": "META-INF/pipeline/definition.yaml",
+                  "requires": { "graphql.write": { "kind": "COMMAND" } } }
+              ]
+            }
+            """);
+        Files.writeString(metadata.resolve("definition.yaml"), """
+            version: 3
+            types:
+              LookupRequest: { java: com.example.LookupRequest, fields: [[key, string]] }
+              LookupResult: { java: com.example.LookupResult, fields: [[value, string]] }
+              UpdateRequest: { java: com.example.UpdateRequest, fields: [[effectKey, string]] }
+              UpdateResult: { java: com.example.UpdateResult, fields: [[accepted, boolean]] }
+            pipelines:
+              lookup:
+                input: LookupRequest
+                output: LookupResult
+                steps:
+                  - name: Execute operation
+                    kind: query
+                    cardinality: ONE_TO_ONE
+                    using: graphql.read
+                    operation: lookup
+                    operationVersion: 1
+                    input: LookupRequest
+                    output: LookupResult
+                    java: { input: com.example.LookupRequest, output: com.example.LookupResult }
+              update:
+                input: UpdateRequest
+                output: UpdateResult
+                steps:
+                  - name: Execute operation
+                    kind: command
+                    cardinality: ONE_TO_ONE
+                    using: graphql.write
+                    operation: update
+                    operationVersion: 1
+                    input: UpdateRequest
+                    output: UpdateResult
+                    java: { input: com.example.UpdateRequest, output: com.example.UpdateResult }
+            """);
+        Files.writeString(metadata.resolve("connector-providers.json"), """
+            {"schemaVersion":4,"providers":[{"id":"acme.operations","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.operations.binding","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},
+            "operations":[
+            {"id":"lookup","kind":"tpf:query","majorVersion":1,"queryCardinality":"ONE_TO_ONE",
+            "typeContract":{"input":"com.example.LookupRequest","output":"com.example.LookupResult"}},
+            {"id":"update","kind":"tpf:command","majorVersion":1,
+            "typeContract":{"input":"com.example.UpdateRequest","output":"com.example.UpdateResult"},
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":false,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED",
+            "maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED","userConfirmationSupported":false,
+            "durableReferenceKinds":[]}}]}]}
+            """);
+        return root;
+    }
+
+    private static String operationBlockApplication(String binding) {
+        return """
+            version: 3
+            appName: Consumer
+            basePackage: com.example
+            transport: LOCAL
+            platform: COMPUTE
+            contract: { input: LookupRequest, output: LookupResult }
+            connectors:
+              primary:
+                provider: acme.operations
+                version: 1
+                config: { connection: primary-connection }
+            blockBindings:
+              org.example.operations/lookup:
+                graphql.read:
+                  using: %s
+              org.example.operations/update:
+                graphql.write:
+                  using: %s
+                  commandIdGenerator: com.example.EffectKeyCommandId
+                  duplicatePolicy: RETURN_RECORDED
+                  policy:
+                    requiredExecutionPosture: AUTOMATED
+                    minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+            steps:
+              - name: Lookup
+                pipeline: lookup
+                cardinality: ONE_TO_ONE
+                input: LookupRequest
+                output: LookupResult
+                java: { input: com.example.LookupRequest, output: com.example.LookupResult }
+            """.formatted(binding, binding);
     }
 
     private Path application(String yaml) throws Exception {

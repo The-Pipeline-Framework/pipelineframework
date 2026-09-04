@@ -398,12 +398,17 @@ class ContributedProtocolTransportGenerationTest {
         Path manifest = root.resolve("META-INF/pipeline/connector-providers.json");
         Files.createDirectories(manifest.getParent());
         Files.writeString(manifest, """
-            {"schemaVersion":1,"providers":[
+            {"schemaVersion":4,"providers":[
               {"id":"proof.embedding","version":{"major":1,"minor":0},"operations":[
                 {"id":"embed","kind":"tpf:query","majorVersion":1,
+                 "queryCardinality":"ONE_TO_ONE",
+                 "typeContract":{"input":"org.pipelineframework.connector.embedding.EmbeddingRequest",
+                 "output":"org.pipelineframework.connector.embedding.EmbeddingResult"},
                  "queryCapabilities":{"cacheability":"CACHEABLE"}}]},
               {"id":"proof.vector","version":{"major":1,"minor":0},"operations":[
                 {"id":"upsert","kind":"tpf:command","majorVersion":1,
+                 "typeContract":{"input":"org.pipelineframework.connector.vector.VectorUpsertRequest",
+                 "output":"org.pipelineframework.connector.vector.VectorUpsertResult"},
                  "commandCapabilities":{"retryRedriveSupported":false,
                  "providerIdempotencySupported":true,"reconciliationSupported":false,
                  "executionPosture":"AUTOMATED","maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",

@@ -128,16 +128,50 @@ public class PipelineContractMetadataGenerator {
     private List<Map<String, Object>> importedDefinitions(PipelineCompilationContext ctx) {
         return ctx.getImportedPipelineDefinitions().stream()
             .sorted(Comparator.comparing(org.pipelineframework.processor.block.ImportedPipelineDefinition::qualifiedId))
-            .map(definition -> immutableSortedMap(Map.of(
-                "qualifiedId", definition.qualifiedId(),
-                "logicalName", definition.logicalName(),
-                "namespace", definition.namespace(),
-                "groupId", definition.groupId(),
-                "artifactId", definition.artifactId(),
-                "version", definition.version(),
-                "resource", definition.resource(),
-                "definitionFingerprint", definition.definitionFingerprint())))
+            .map(this::importedDefinition)
             .toList();
+    }
+
+    private Map<String, Object> importedDefinition(
+        org.pipelineframework.processor.block.ImportedPipelineDefinition definition
+    ) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("qualifiedId", definition.qualifiedId());
+        value.put("logicalName", definition.logicalName());
+        value.put("namespace", definition.namespace());
+        value.put("groupId", definition.groupId());
+        value.put("artifactId", definition.artifactId());
+        value.put("version", definition.version());
+        value.put("resource", definition.resource());
+        value.put("definitionFingerprint", definition.definitionFingerprint());
+        value.put("linkedDefinitionFingerprint", definition.linkedDefinitionFingerprint());
+        value.put("resolvedRequirements", definition.resolvedRequirements().stream()
+            .map(this::resolvedRequirement)
+            .toList());
+        return immutableSortedMap(value);
+    }
+
+    private Map<String, Object> resolvedRequirement(
+        org.pipelineframework.processor.block.ImportedPipelineDefinition.ResolvedBlockRequirement requirement
+    ) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("name", requirement.name());
+        value.put("kind", requirement.kind());
+        value.put("binding", requirement.binding());
+        value.put("provider", requirement.provider());
+        value.put("providerVersion", requirement.providerVersion());
+        value.put("operations", requirement.operations().stream()
+            .map(operation -> immutableSortedMap(Map.of("id", operation.id(), "version", operation.version())))
+            .toList());
+        if (!requirement.commandIdGenerator().isBlank()) {
+            value.put("commandIdGenerator", requirement.commandIdGenerator());
+            value.put("duplicatePolicy", requirement.duplicatePolicy());
+            value.put("commandPolicy", immutableSortedMap(requirement.commandPolicy()));
+        }
+        if (!requirement.connectorConfigurationDigest().isBlank()) {
+            value.put("connectorConfigurationDigest", requirement.connectorConfigurationDigest());
+        }
+        return immutableSortedMap(value);
     }
 
     private Map<String, Object> canonicalTypes(PipelineCompilationContext ctx) {
@@ -277,6 +311,9 @@ public class PipelineContractMetadataGenerator {
     }
 
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
+        if (ctx.getEffectivePipelineConfig() != null) {
+            return ctx.getEffectivePipelineConfig();
+        }
         Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;

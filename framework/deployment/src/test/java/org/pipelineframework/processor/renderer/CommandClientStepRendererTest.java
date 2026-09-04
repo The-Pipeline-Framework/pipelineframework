@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
@@ -16,11 +17,20 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.command.CommandDuplicatePolicy;
+import org.pipelineframework.connector.CommandExecutionPosture;
+import org.pipelineframework.connector.CommandMachineConfirmation;
+import org.pipelineframework.connector.CommandPolicy;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
 
 class CommandClientStepRendererTest {
     @TempDir
@@ -48,6 +58,36 @@ class CommandClientStepRendererTest {
         assertTrue(source.contains("return support.execute(descriptorFactory.descriptor(\"ProcessWriteSearchIndexDocumentService\", "
             + "null, \"com.example.search.SearchIndexDocument\", \"com.example.search.SearchIndexWriteResult\", "
             + "\"com.example.search.SearchIndexDocumentCommandIdGenerator\"), commandIdGenerator, input)"));
+    }
+
+    @Test
+    void rendersOperationFirstCommandFromTypedSelectionWithoutReloadingApplicationYaml() throws IOException {
+        ConnectorOperationSelection selection = ConnectorOperationSelection.command(
+            "Execute mutation",
+            ConnectorBindingName.of("primary-graphql"),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("graphql.smallrye"), "execute.mutation",
+                ConnectorOperationKind.COMMAND, 1),
+            1,
+            Map.of("catalogue", "application-owned"),
+            new ConnectorOperationSelection.CommandSelection(
+                ClassName.get("com.example.search", "SearchIndexDocumentCommandIdGenerator"),
+                CommandDuplicatePolicy.RETURN_RECORDED,
+                new CommandPolicy(false, false, false,
+                    Optional.of(CommandExecutionPosture.AUTOMATED),
+                    Optional.of(CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED), false)));
+        PipelineStepModel model = commandStepModel().toBuilder()
+            .connectorOperationSelection(selection).build();
+
+        new CommandClientStepRenderer().render(model, generationContext("LOCAL"));
+
+        String source = generatedSource();
+        assertTrue(source.contains("CommandDescriptor.nativeCommand"));
+        assertTrue(source.contains("ConnectorBindingName.of(\"primary-graphql\")"));
+        assertTrue(source.contains("ConnectorProviderId.of(\"graphql.smallrye\")"));
+        assertTrue(source.contains("\"execute.mutation\""));
+        assertTrue(source.contains("support.execute(CommandDescriptor.nativeCommand("));
+        assertTrue(!source.contains("CommandStepDescriptorFactory"));
     }
 
     @Test
