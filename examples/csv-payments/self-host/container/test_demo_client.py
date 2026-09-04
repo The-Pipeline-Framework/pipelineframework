@@ -18,22 +18,25 @@ class DemoClientOutputValidationTest(unittest.TestCase):
     def test_generated_output_requires_each_input_id_once(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "payments_3.csv.out"
-            output.write_text("CSV Id,Recipient\n1,one\n2,two\n3,three\n", encoding="utf-8")
+            output.write_text(
+                "'CSV ID','RECIPIENT'\n'1','one'\n'2','two'\n'3','three'\n", encoding="utf-8")
 
             demo_client.assert_output_record_count(output, 3)
 
     def test_generated_output_rejects_duplicate_input_ids(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "payments_3.csv.out"
-            output.write_text("CSV Id,Recipient\n1,one\n2,two\n2,three\n", encoding="utf-8")
+            output.write_text(
+                "'CSV ID','RECIPIENT'\n'1','one'\n'2','two'\n'2','three'\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(RuntimeError, "duplicate CSV Id"):
+            with self.assertRaisesRegex(RuntimeError, "duplicate CSV ID"):
                 demo_client.assert_output_record_count(output, 3)
 
     def test_generated_output_rejects_missing_input_ids(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "payments_3.csv.out"
-            output.write_text("CSV Id,Recipient\n1,one\n2,two\n4,four\n", encoding="utf-8")
+            output.write_text(
+                "'CSV ID','RECIPIENT'\n'1','one'\n'2','two'\n'4','four'\n", encoding="utf-8")
 
             with self.assertRaisesRegex(RuntimeError, "does not preserve the generated input IDs"):
                 demo_client.assert_output_record_count(output, 3)
@@ -41,7 +44,8 @@ class DemoClientOutputValidationTest(unittest.TestCase):
     def test_generated_output_rejects_padded_input_id(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "payments_3.csv.out"
-            output.write_text("CSV Id,Recipient\n 1 ,one\n2,two\n3,three\n", encoding="utf-8")
+            output.write_text(
+                "'CSV ID','RECIPIENT'\n' 1 ','one'\n'2','two'\n'3','three'\n", encoding="utf-8")
 
             with self.assertRaisesRegex(RuntimeError, "does not preserve the generated input IDs"):
                 demo_client.assert_output_record_count(output, 3)

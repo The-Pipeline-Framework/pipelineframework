@@ -323,14 +323,14 @@ def assert_output_record_count(output, expected_record_count):
     if expected_record_count <= 0:
         return
     with output.open("r", encoding="utf-8", newline="") as generated:
-        reader = csv.DictReader(generated)
-        if not reader.fieldnames or "CSV Id" not in reader.fieldnames:
-            raise RuntimeError(f"CSV output {output} does not contain the required CSV Id column")
+        reader = csv.DictReader(generated, quotechar="'")
+        if not reader.fieldnames or "CSV ID" not in reader.fieldnames:
+            raise RuntimeError(f"CSV output {output} does not contain the required CSV ID column")
         csv_ids = []
         for row in reader:
-            csv_id = row.get("CSV Id", "")
+            csv_id = row.get("CSV ID", "")
             if not csv_id.strip():
-                raise RuntimeError(f"CSV output {output} contains a row without a CSV Id")
+                raise RuntimeError(f"CSV output {output} contains a row without a CSV ID")
             csv_ids.append(csv_id)
 
     actual_record_count = len(csv_ids)
@@ -339,7 +339,7 @@ def assert_output_record_count(output, expected_record_count):
             f"CSV output {output} has {actual_record_count} records; expected {expected_record_count}")
     distinct_csv_ids = set(csv_ids)
     if len(distinct_csv_ids) != actual_record_count:
-        raise RuntimeError(f"CSV output {output} contains duplicate CSV Id values")
+        raise RuntimeError(f"CSV output {output} contains duplicate CSV ID values")
     expected_csv_ids = {str(record_id) for record_id in range(1, expected_record_count + 1)}
     if distinct_csv_ids != expected_csv_ids:
         missing = sorted(expected_csv_ids - distinct_csv_ids, key=int)
