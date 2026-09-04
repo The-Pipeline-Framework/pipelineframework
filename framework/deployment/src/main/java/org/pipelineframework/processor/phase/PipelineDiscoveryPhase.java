@@ -167,6 +167,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 .importInto(configPath.orElseThrow())) {
                 Optional<Path> effectiveConfigPath = Optional.of(imported.configPath());
                 ctx.setImportedPipelineDefinitions(imported.definitions());
+                ctx.setEffectivePipelineConfig(new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(
+                    options::get, System::getenv).load(imported.configPath()));
 
                 List<PipelineAspectModel> aspects = loadPipelineAspects(effectiveConfigPath, messager);
                 ctx.setAspectModels(aspects);
@@ -174,7 +176,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 templateConfig = loadPipelineTemplateConfig(effectiveConfigPath, messager);
                 ctx.setPipelineTemplateConfig(templateConfig);
 
-                ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(effectiveConfigPath, messager);
+                ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(
+                    effectiveConfigPath, messager, imported.definitions().stream()
+                        .map(org.pipelineframework.processor.block.ImportedPipelineDefinition::qualifiedId)
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet()));
                 ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
                 ctx.setStepDefinitions(parsedDefinitions.rootSteps());
                 validateCheckpointBoundaries(templateConfig, ctx, messager);
@@ -183,6 +188,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         } else {
             ctx.setAspectModels(List.of());
             ctx.setImportedPipelineDefinitions(List.of());
+            ctx.setEffectivePipelineConfig(null);
             templateConfig = null;
             ctx.setPipelineTemplateConfig(null);
             ParsedPipelineDefinitionCatalog parsedDefinitions = new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
@@ -490,7 +496,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param messager the messager used to emit diagnostics, may be null
      * @return a list of StepDefinition parsed from the template; empty if none or on error
      */
-    private ParsedPipelineDefinitionCatalog parseStepDefinitions(Optional<Path> configPath, Messager messager) {
+    private ParsedPipelineDefinitionCatalog parseStepDefinitions(
+        Optional<Path> configPath,
+        Messager messager,
+        Set<String> definitionsRequiringExactOperationTypes
+    ) {
         if (configPath.isEmpty()) {
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
@@ -498,7 +508,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
             reportDiagnostic(messager, kind, message));
         try {
-            return parser.parseDefinitionCatalog(configPath.get());
+            return parser.parseDefinitionCatalog(configPath.get(), definitionsRequiringExactOperationTypes);
         } catch (IOException e) {
             reportDiagnostic(
                 messager,

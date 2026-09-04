@@ -43,19 +43,23 @@ public final class ConnectorBindingMetadataGenerator {
     }
 
     public void writeMetadata(PipelineCompilationContext context) throws IOException {
-        Optional<Path> configPath = resolvePipelineConfigPath(context);
-        if (configPath.isEmpty()) {
-            return;
+        PipelineYamlConfig config = context.getEffectivePipelineConfig();
+        if (config == null) {
+            Optional<Path> configPath = resolvePipelineConfigPath(context);
+            if (configPath.isEmpty()) {
+                return;
+            }
+            config = new PipelineYamlConfigLoader(processingEnv.getOptions()::get, System::getenv)
+                .load(configPath.orElseThrow());
         }
-        PipelineYamlConfig config = new PipelineYamlConfigLoader(processingEnv.getOptions()::get, System::getenv)
-            .load(configPath.orElseThrow());
         if (config.connectors().isEmpty()) {
             return;
         }
+        PipelineYamlConfig effectiveConfig = config;
         ConnectorProviderManifestCatalog catalog = ConnectorProviderManifestLoader.load(metadataClassLoader());
         List<BindingMetadata> bindings = config.connectors().values().stream()
             .sorted(Comparator.comparing(PipelineYamlConnectorBinding::name))
-            .map(binding -> metadata(binding, config, catalog))
+            .map(binding -> metadata(binding, effectiveConfig, catalog))
             .toList();
         var resource = processingEnv.getFiler()
             .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);

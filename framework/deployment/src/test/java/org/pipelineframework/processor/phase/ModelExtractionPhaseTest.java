@@ -19,6 +19,10 @@ package org.pipelineframework.processor.phase;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -30,6 +34,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,6 +43,8 @@ import org.mockito.quality.Strictness;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.composition.PipelineReference;
+import org.pipelineframework.processor.block.ImportedPipelineDefinition;
+import org.pipelineframework.processor.parser.StepDefinitionParser;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -61,6 +68,9 @@ import static org.mockito.Mockito.when;
 /** Unit tests for ModelExtractionPhase */
 @ExtendWith(MockitoExtension.class)
 class ModelExtractionPhaseTest {
+
+    @TempDir
+    Path tempDir;
 
     @Mock
     private ProcessingEnvironment processingEnv;
@@ -157,6 +167,79 @@ class ModelExtractionPhaseTest {
             List.of(root, nested, root));
 
         assertEquals(List.of(root, nested), deduplicated);
+    }
+
+    @Test
+    void importedOperationsWithIdenticalStepNamesReceiveDistinctGeneratedAndRuntimeIdentities() throws Exception {
+        Path metadata = tempDir.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(metadata.getParent());
+        Files.writeString(metadata, """
+            {"schemaVersion":4,"providers":[{"id":"acme.lookup","version":{"major":1,"minor":0},
+            "operations":[{"id":"lookup","kind":"tpf:query","majorVersion":1,
+            "queryCardinality":"ONE_TO_ONE",
+            "typeContract":{"input":"com.example.Lookup","output":"com.example.Result"}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            connectors:
+              primary: { provider: acme.lookup, version: 1 }
+            pipelines:
+              org.one/lookup:
+                input: Lookup
+                output: Result
+                steps:
+                  - &lookup
+                    name: Execute operation
+                    kind: query
+                    cardinality: ONE_TO_ONE
+                    operation: lookup
+                    using: primary
+                    input: Lookup
+                    output: Result
+                    java: { input: com.example.Lookup, output: com.example.Result }
+              org.two/lookup:
+                input: Lookup
+                output: Result
+                steps:
+                  - *lookup
+            steps:
+              - name: Invoke lookup
+                pipeline: org.one/lookup
+                input: Lookup
+                output: Result
+                java: { input: com.example.Lookup, output: com.example.Result }
+            """);
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { tempDir.toUri().toURL() }, previous)) {
+            Thread.currentThread().setContextClassLoader(loader);
+            var parsed = new StepDefinitionParser().parseDefinitionCatalog(pipeline);
+            PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+            context.setStepDefinitions(parsed.rootSteps());
+            context.setParsedPipelineDefinitionCatalog(parsed);
+            context.setImportedPipelineDefinitions(List.of(
+                imported("org.one/lookup"), imported("org.two/lookup")));
+
+            new ModelExtractionPhase().execute(context);
+
+            PipelineStepModel first = context.getLocalDefinitionStepModels().get("org.one/lookup").getFirst();
+            PipelineStepModel second = context.getLocalDefinitionStepModels().get("org.two/lookup").getFirst();
+            assertNotEquals(first.generatedName(), second.generatedName());
+            assertNotEquals(first.serviceName(), second.serviceName());
+            assertEquals("org.one/lookup#Execute operation",
+                first.connectorOperationSelection().orElseThrow().runtimeStepId());
+            assertEquals("org.two/lookup#Execute operation",
+                second.connectorOperationSelection().orElseThrow().runtimeStepId());
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    private static ImportedPipelineDefinition imported(String qualifiedId) {
+        return new ImportedPipelineDefinition(
+            qualifiedId, "lookup", qualifiedId.substring(0, qualifiedId.indexOf('/')),
+            "org.example", "lookup", "1.0.0", "META-INF/pipeline/lookup.yaml", "sha256:test");
     }
 
     private static PipelineStepModel modelOwnedBy(String definition) {

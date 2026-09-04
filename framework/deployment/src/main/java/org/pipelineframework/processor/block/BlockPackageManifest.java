@@ -1,6 +1,8 @@
 package org.pipelineframework.processor.block;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Static compiler manifest published by a block artifact. */
 public record BlockPackageManifest(
@@ -33,10 +35,34 @@ public record BlockPackageManifest(
         }
     }
 
-    public record Definition(String name, String resource) {
+    public record Definition(String name, String resource, Map<String, Requirement> requires) {
         public Definition {
             name = requireIdentityComponent(name, "definition.name");
             resource = requireText(resource, "definition.resource");
+            Map<String, Requirement> normalizedRequirements = new LinkedHashMap<>();
+            Map<String, Requirement> declaredRequirements = requires == null ? Map.of() : requires;
+            declaredRequirements.forEach((requirementName, requirement) -> {
+                String normalizedName = requireIdentityComponent(requirementName, "definition.requires name");
+                if (requirement == null) {
+                    throw new IllegalArgumentException("definition.requires entry must not be null");
+                }
+                if (normalizedRequirements.putIfAbsent(normalizedName, requirement) != null) {
+                    throw new IllegalArgumentException("definition.requires declares '"
+                        + normalizedName + "' more than once after normalization");
+                }
+            });
+            requires = Map.copyOf(normalizedRequirements);
+        }
+    }
+
+    /** Compile-time connector authority required by one exported Block definition. */
+    public record Requirement(String kind) {
+        public Requirement {
+            kind = requireText(kind, "definition.requires.kind").toUpperCase(java.util.Locale.ROOT);
+            if (!"QUERY".equals(kind) && !"COMMAND".equals(kind)) {
+                throw new IllegalArgumentException(
+                    "definition.requires.kind must be QUERY or COMMAND, got '" + kind + "'");
+            }
         }
     }
 

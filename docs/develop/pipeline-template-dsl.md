@@ -497,10 +497,73 @@ Removing the dependency makes the reference fail at compilation. Schema v3 relea
 artifact version, definition resource, and definition fingerprint; changing them changes the consuming
 contract hash.
 
-Initial packaged definitions are functional-core only. They may contain authored service steps and
-nested `pipeline:` calls, using ordinary supported cardinalities and representation providers. They
-cannot contain Query, Command, Await, remote Operators/delegates, connectors, or checkpoint authority.
-Those restrictions apply to packaging, not to the rest of the consuming application.
+Packaged definitions may contain authored service steps, nested `pipeline:` calls, and
+operation-first Query or Command steps. A Block declares the external capabilities required by each
+definition in its schema 1 package manifest; it does not declare application connector bindings:
+
+```json
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.graphql",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "graphql",
+    "version": "1.0.0"
+  },
+  "definitions": [{
+    "name": "graphql-mutation",
+    "resource": "META-INF/pipeline/graphql.yaml",
+    "requires": {
+      "graphql.write": { "kind": "COMMAND" }
+    }
+  }]
+}
+```
+
+Inside that definition, `using` names the requirement and the remaining fields are ordinary v3
+operation-first fields:
+
+```yaml
+- name: Execute mutation
+  kind: command
+  using: graphql.write
+  operation: execute.mutation
+  operationVersion: 1
+  input: <tpf.graphql.GraphQlMutationRequest>
+  output: <tpf.graphql.GraphQlResponse>
+```
+
+The application grants the capability at compilation, once per qualified Block definition:
+
+```yaml
+connectors:
+  primary-graphql:
+    provider: graphql.smallrye
+    version: 1
+    config: { connection: primary-graphql }
+
+blockBindings:
+  org.pipelineframework.graphql/graphql-mutation:
+    graphql.write:
+      using: primary-graphql
+      commandIdGenerator: com.example.GraphQlMutationCommandId
+      duplicatePolicy: RETURN_RECORDED
+      policy:
+        requiredExecutionPosture: AUTOMATED
+        minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+```
+
+`blockBindings` is compile-time input: it is removed before ordinary v3 parsing and does not become
+runtime configuration. Query mappings contain only `using`. Command mappings must explicitly select
+`commandIdGenerator`, `duplicatePolicy`, and `policy`; a Block is forbidden from supplying those
+authority choices. The selected provider operation must match the Block step's kind, provider and
+operation major versions, cardinality, and canonical input/output Java contracts exactly.
+
+Blocks still cannot package connector bindings, legacy `query:` or `command:` declarations, inline
+connectors, Await, checkpoint handoff, remote Operators/delegates, callables, or dynamic-operation
+steps. Application bindings retain endpoint, credentials, tenant/account selection, authorization,
+and Command policy. Imported Query and Command steps normalize to the same descriptors and runtime
+support used by local steps; there is no Block execution subsystem.
 
 ### Bounded recursion
 

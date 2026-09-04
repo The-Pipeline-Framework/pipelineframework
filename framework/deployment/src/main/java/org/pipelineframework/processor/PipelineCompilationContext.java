@@ -27,6 +27,7 @@ import org.pipelineframework.processor.representation.ResolvedRepresentationRegi
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
 import org.pipelineframework.processor.block.ImportedPipelineDefinition;
+import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -70,6 +71,8 @@ public class PipelineCompilationContext {
     private ParsedPipelineDefinitionCatalog parsedPipelineDefinitionCatalog;
     @Setter
     private List<ImportedPipelineDefinition> importedPipelineDefinitions;
+    @Setter
+    private PipelineYamlConfig effectivePipelineConfig;
     @Setter
     private Map<String, List<PipelineStepModel>> localDefinitionStepModels;
     @Setter

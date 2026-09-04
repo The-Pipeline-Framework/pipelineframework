@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -76,6 +77,22 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("providerFirstCommandSelector"));
         assertTrue(definitions.has("connectorBinding"));
         assertTrue(definitions.has("pipelineConnectorBindings"));
+        assertTrue(definitions.has("blockCapabilityBinding"));
+        assertTrue(definitions.has("blockBindings"));
+        JsonObject blockBindings = definitions.getAsJsonObject("blockBindings");
+        String blockIdPattern = blockBindings.getAsJsonObject("propertyNames").get("pattern").getAsString();
+        assertTrue(Pattern.compile(blockIdPattern).matcher("Acme/My_Block").matches());
+        String requirementPattern = blockBindings.getAsJsonObject("additionalProperties")
+            .getAsJsonObject("propertyNames").get("pattern").getAsString();
+        assertTrue(Pattern.compile(requirementPattern).matcher("GraphQL_Read").matches());
+        assertTrue(schema.getAsJsonArray("allOf").asList().stream().anyMatch(rule -> {
+            JsonObject then = rule.getAsJsonObject().getAsJsonObject("then");
+            return then != null
+                && then.has("properties")
+                && then.getAsJsonObject("properties").has("blockBindings")
+                && then.getAsJsonObject("properties").get("blockBindings").isJsonPrimitive()
+                && !then.getAsJsonObject("properties").get("blockBindings").getAsBoolean();
+        }), "versions other than v3 must reject blockBindings");
         assertTrue(definitions.getAsJsonObject("providerFirstCommandSelector").has("description"));
         String bindingNamePattern = definitions.getAsJsonObject("pipelineConnectorBindings")
             .getAsJsonObject("propertyNames").get("pattern").getAsString();
@@ -100,6 +117,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("queries"));
         assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+        assertEquals("#/$defs/blockBindings",
+            properties.getAsJsonObject("blockBindings").get("$ref").getAsString());
         assertTrue(properties.getAsJsonObject("version").getAsJsonArray("enum").asList().stream()
             .anyMatch(value -> value.getAsInt() == 3));
     }
@@ -236,6 +255,8 @@ class PipelineTemplateSchemaExporterTest {
 
         JsonObject versionThreeRule = schema.getAsJsonArray("allOf").asList().stream().map(JsonElement::getAsJsonObject)
             .filter(rule -> rule.has("if") && rule.getAsJsonObject("if").toString().contains("\"const\":3"))
+            .filter(rule -> rule.has("then") && rule.getAsJsonObject("then").has("properties")
+                && rule.getAsJsonObject("then").getAsJsonObject("properties").has("steps"))
             .findFirst().orElseThrow();
         JsonArray stepRules = versionThreeRule.getAsJsonObject("then").getAsJsonObject("properties")
             .getAsJsonObject("steps").getAsJsonObject("items").getAsJsonArray("allOf");

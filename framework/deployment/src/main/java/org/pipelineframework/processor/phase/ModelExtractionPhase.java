@@ -281,19 +281,30 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
             }
             case COMMAND -> {
-                yield createCommandStepModel(ctx, stepDef, ctxWarningLogger);
+                yield createCommandStepModel(ctx, definition, stepDef, ctxWarningLogger);
             }
             case QUERY -> {
-                yield createQueryStepModel(ctx, stepDef, ctxWarningLogger);
+                yield createQueryStepModel(ctx, definition, stepDef, ctxWarningLogger);
             }
             case PIPELINE -> null;
             };
         }
-        return model == null ? null : model.toBuilder().definition(definition).build();
+        if (model == null) {
+            return null;
+        }
+        String runtimeStepId = isImportedDefinition(ctx, definition)
+            ? definition.logicalId() + "#" + stepDef.name()
+            : model.serviceName();
+        return model.toBuilder()
+            .definition(definition)
+            .connectorOperationSelection(stepDef.connectorOperationSelection()
+                .map(selection -> selection.withLinkedIdentity(definition, runtimeStepId)))
+            .build();
     }
 
     private PipelineStepModel createCommandStepModel(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
@@ -319,7 +330,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
-        String serviceName = toYamlServiceName(stepDef.name());
+        String serviceName = operationServiceName(ctx, definition, stepDef.name());
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
@@ -341,6 +352,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
     private PipelineStepModel createQueryStepModel(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
@@ -367,7 +379,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
-        String serviceName = toYamlServiceName(stepDef.name());
+        String serviceName = operationServiceName(ctx, definition, stepDef.name());
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
@@ -1263,6 +1275,35 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return "ProcessStepService";
         }
         return "Process" + formatted + "Service";
+    }
+
+    private String operationServiceName(
+        PipelineCompilationContext ctx,
+        PipelineReference definition,
+        String authoredStepName
+    ) {
+        String ordinary = toYamlServiceName(authoredStepName);
+        if (!isImportedDefinition(ctx, definition)) {
+            return ordinary;
+        }
+        String base = ordinary.substring(0, ordinary.length() - "Service".length());
+        return base + "Block" + shortFingerprint(definition.logicalId() + "#" + authoredStepName) + "Service";
+    }
+
+    private static boolean isImportedDefinition(PipelineCompilationContext ctx, PipelineReference definition) {
+        return ctx.getImportedPipelineDefinitions() != null
+            && ctx.getImportedPipelineDefinitions().stream()
+                .anyMatch(imported -> imported.qualifiedId().equals(definition.logicalId()));
+    }
+
+    private static String shortFingerprint(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest, 0, 8);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     /**

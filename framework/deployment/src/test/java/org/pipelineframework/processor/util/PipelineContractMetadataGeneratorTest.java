@@ -265,8 +265,8 @@ class PipelineContractMetadataGeneratorTest {
         Path firstOutput = tempDir.resolve("block-first");
         Path secondOutput = tempDir.resolve("block-second");
 
-        writeImportedDefinitionMetadata(firstOutput, "1.0.0", "sha256:first");
-        writeImportedDefinitionMetadata(secondOutput, "1.1.0", "sha256:second");
+        writeImportedDefinitionMetadata(firstOutput, "1.0.0", "sha256:first", "RETURN_RECORDED");
+        writeImportedDefinitionMetadata(secondOutput, "1.1.0", "sha256:second", "FAIL");
 
         JsonObject first = readContract(firstOutput);
         JsonObject second = readContract(secondOutput);
@@ -277,6 +277,17 @@ class PipelineContractMetadataGeneratorTest {
         assertEquals("org.example:document-text-extraction", imported.get("groupId").getAsString()
             + ":" + imported.get("artifactId").getAsString());
         assertEquals("1.0.0", imported.get("version").getAsString());
+        assertEquals("sha256:linked-RETURN_RECORDED",
+            imported.get("linkedDefinitionFingerprint").getAsString());
+        JsonObject requirement = imported.getAsJsonArray("resolvedRequirements").get(0).getAsJsonObject();
+        assertEquals("graphql.write", requirement.get("name").getAsString());
+        assertEquals("primary-graphql", requirement.get("binding").getAsString());
+        assertEquals("graphql.smallrye", requirement.get("provider").getAsString());
+        assertEquals("execute.mutation", requirement.getAsJsonArray("operations")
+            .get(0).getAsJsonObject().get("id").getAsString());
+        assertEquals("RETURN_RECORDED", requirement.get("duplicatePolicy").getAsString());
+        assertEquals("configuration-digest", requirement.get("connectorConfigurationDigest").getAsString());
+        assertFalse(first.toString().contains("credential"));
         assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
     }
 
@@ -349,7 +360,12 @@ class PipelineContractMetadataGeneratorTest {
         generator.writePipelineContract(ctx);
     }
 
-    private void writeImportedDefinitionMetadata(Path outputDir, String version, String fingerprint) throws IOException {
+    private void writeImportedDefinitionMetadata(
+        Path outputDir,
+        String version,
+        String fingerprint,
+        String duplicatePolicy
+    ) throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of());
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
         ctx.setStepModels(List.of(step("ProcessImportedService", "Input", "Output",
@@ -357,7 +373,13 @@ class PipelineContractMetadataGeneratorTest {
         ctx.setImportedPipelineDefinitions(List.of(new ImportedPipelineDefinition(
             "org.example.documents/document-text-extraction", "document-text-extraction", "org.example.documents",
             "org.example", "document-text-extraction", version,
-            "META-INF/pipeline/document-text-extraction.yaml", fingerprint)));
+            "META-INF/pipeline/document-text-extraction.yaml", fingerprint,
+            "sha256:linked-" + duplicatePolicy,
+            List.of(new ImportedPipelineDefinition.ResolvedBlockRequirement(
+                "graphql.write", "COMMAND", "primary-graphql", "graphql.smallrye", 1,
+                List.of(new ImportedPipelineDefinition.ResolvedOperation("execute.mutation", 1)),
+                "com.example.GraphQlMutationCommandId", duplicatePolicy,
+                Map.of("requiredExecutionPosture", "AUTOMATED"), "configuration-digest")))));
         new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
     }
 

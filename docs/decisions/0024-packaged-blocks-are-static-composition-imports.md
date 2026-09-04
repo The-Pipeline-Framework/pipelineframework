@@ -1,9 +1,13 @@
 ---
 title: Packaged blocks are static composition imports
-status: accepted
+status: deprecated
 ---
 
 # ADR-0024: Packaged blocks are static composition imports
+
+Superseded by [ADR-0028](./0028-block-connector-capabilities-are-application-bound.md), which retains
+static Block linking while replacing the initial functional-core-only restriction with
+application-bound Query and Command capability requirements.
 
 ## Context
 

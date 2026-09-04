@@ -36,6 +36,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.representation.PersistenceRepresentationMappingResolver;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
@@ -58,9 +59,11 @@ public class QueryClientStepRenderer {
         String className = baseName + "QueryClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         boolean streaming = model.streamingShape() == StreamingShape.UNARY_STREAMING;
+        Optional<ConnectorOperationSelection> connectorSelection = model.connectorOperationSelection();
         Optional<NativeCacheRequirements> nativeCacheRequirements = streaming
             ? Optional.empty()
-            : resolveNativeCacheRequirements(model, ctx);
+            : connectorSelection.map(this::nativeCacheRequirements)
+                .or(() -> resolveNativeCacheRequirements(model, ctx));
         Optional<QueryPersistenceRepresentation> persistenceRepresentation =
             resolveQueryPersistenceRepresentation(model, ctx, configHints);
         CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
@@ -69,6 +72,14 @@ public class QueryClientStepRenderer {
             .orElseGet(() -> clientStepType(model.inboundDomainType(), configHints.transportMode(), configHints.basePackage()));
         TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(configHints.transportMode()))
             .orElseGet(() -> clientStepType(model.outboundDomainType(), configHints.transportMode(), configHints.basePackage()));
+        String descriptorInputType = normalizedTransport.input().isPresent()
+            ? model.inboundDomainType().toString() : inputType.toString();
+        String descriptorOutputType = normalizedTransport.output().isPresent()
+            ? model.outboundDomainType().toString() : outputType.toString();
+        CodeBlock descriptor = connectorSelection
+            .map(selection -> nativeDescriptor(selection, descriptorInputType, descriptorOutputType))
+            .orElseGet(() -> CodeBlock.of("descriptorFactory.descriptor($S, $S, $S)",
+                model.serviceName(), descriptorInputType, descriptorOutputType));
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.query", "QueryStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -100,34 +111,30 @@ public class QueryClientStepRenderer {
             }
             String queryInput = normalizedTransport.input().isPresent() ? "queryInput" : "input";
             TypeName queryOutput = normalizedTransport.output().isPresent() ? model.outboundDomainType() : outputType;
-            String inputIdentity = normalizedTransport.input().isPresent()
-                ? model.inboundDomainType().toString() : inputType.toString();
-            String outputIdentity = normalizedTransport.output().isPresent()
-                ? model.outboundDomainType().toString() : outputType.toString();
             String invocation = streaming
-                ? "support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), " + queryInput + ", $T.class)"
-                : "support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), " + queryInput + ", $T.class)";
+                ? "support.queryOneToMany($L, " + queryInput + ", $T.class)"
+                : "support.queryOneToOne($L, " + queryInput + ", $T.class)";
             if (normalizedTransport.output().isPresent()) {
                 invocation += ".map(outputMapper::$L)";
                 apply.addStatement("return " + invocation,
-                    model.serviceName(), inputIdentity, outputIdentity, queryOutput, toMethod);
+                    descriptor, queryOutput, toMethod);
             } else {
                 apply.addStatement("return " + invocation,
-                    model.serviceName(), inputIdentity, outputIdentity, queryOutput);
+                    descriptor, queryOutput);
             }
         } else {
             persistenceRepresentation.ifPresentOrElse(
                 mapping -> apply.addStatement(
                 streaming
-                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)"
-                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class, $T.class, representationMapper)",
-                model.serviceName(), inputType.toString(), outputType.toString(), outputType,
+                    ? "return support.queryOneToMany($L, input, $T.class, $T.class, representationMapper)"
+                    : "return support.queryOneToOne($L, input, $T.class, $T.class, representationMapper)",
+                descriptor, outputType,
                 mapping.representationType()),
             () -> apply.addStatement(
                 streaming
-                    ? "return support.queryOneToMany(descriptorFactory.descriptor($S, $S, $S), input, $T.class)"
-                    : "return support.queryOneToOne(descriptorFactory.descriptor($S, $S, $S), input, $T.class)",
-                model.serviceName(), inputType.toString(), outputType.toString(), outputType));
+                    ? "return support.queryOneToMany($L, input, $T.class)"
+                    : "return support.queryOneToOne($L, input, $T.class)",
+                descriptor, outputType));
         }
 
         TypeSpec.Builder type = TypeSpec.classBuilder(className)
@@ -147,9 +154,11 @@ public class QueryClientStepRenderer {
             .addSuperinterface(ParameterizedTypeName.get(
                 ClassName.get(streaming ? StepOneToMany.class : StepOneToOne.class), inputType, outputType))
             .addField(support)
-            .addField(descriptorFactory)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(apply.build());
+        if (connectorSelection.isEmpty()) {
+            type.addField(descriptorFactory);
+        }
 
         normalizedTransport.input().ifPresent(binding -> type.addField(
             FieldSpec.builder(binding.mapperType(configHints.transportMode()), "inputMapper", Modifier.PRIVATE, Modifier.FINAL)
@@ -219,6 +228,59 @@ public class QueryClientStepRenderer {
             .build();
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
             .build().writeTo(ctx.outputDir());
+    }
+
+    private CodeBlock nativeDescriptor(
+        ConnectorOperationSelection selection,
+        String inputType,
+        String outputType
+    ) {
+        ConnectorOperationSelection.QuerySelection query = selection.query().orElseThrow(() ->
+            new IllegalArgumentException("Query client step requires Query connector selection semantics"));
+        CodeBlock selector = CodeBlock.of(
+            "new $T($T.of($S), new $T($T.of($S), $S, $T.QUERY, $L), $L)",
+            ClassName.get("org.pipelineframework.query", "NativeQuerySelector"),
+            org.pipelineframework.connector.ConnectorBindingName.class,
+            selection.binding().value(),
+            ConnectorOperationIdentity.class,
+            ConnectorProviderId.class,
+            selection.operation().providerId().value(),
+            selection.operation().operationId(),
+            ConnectorOperationKind.class,
+            selection.operation().majorVersion(),
+            selection.providerMajorVersion());
+        if (query.cardinality() == org.pipelineframework.connector.QueryOperationCardinality.ONE_TO_MANY) {
+            return CodeBlock.of(
+                "$T.nativeStreamingQuery($S, $S, $S, $L, $L, $L)",
+                ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"),
+                selection.runtimeStepId(), inputType, outputType, selector,
+                JavaPoetLiteral.value(selection.operationConfiguration()),
+                JavaPoetLiteral.value(query.keyFields()));
+        }
+        return CodeBlock.of(
+            "$T.nativeQuery($S, $S, $S, $S, $L, $L, $L, $L, $L)",
+            ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"),
+            selection.runtimeStepId(), inputType, outputType, "ONE_TO_ONE", selector,
+            JavaPoetLiteral.value(selection.operationConfiguration()),
+            JavaPoetLiteral.value(query.keyFields()),
+            queryCapabilities(query.capabilities()),
+            optionalDuration(query.negativeCacheTtl()));
+    }
+
+    private static CodeBlock queryCapabilities(QueryCapabilities capabilities) {
+        return CodeBlock.of(
+            "new $T($T.$L, $L, $L)",
+            QueryCapabilities.class,
+            org.pipelineframework.connector.QueryCacheability.class,
+            capabilities.cacheability().name(),
+            optionalDuration(capabilities.maximumCacheAge()),
+            optionalDuration(capabilities.maximumNegativeCacheTtl()));
+    }
+
+    private static CodeBlock optionalDuration(Optional<java.time.Duration> duration) {
+        return duration
+            .map(value -> CodeBlock.of("$T.of($T.parse($S))", Optional.class, java.time.Duration.class, value.toString()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
     }
 
     private MethodSpec queryCacheRequirementsMethod(NativeCacheRequirements requirements) {
@@ -297,6 +359,17 @@ public class QueryClientStepRenderer {
             operation.operationVersion(),
             capabilities,
             step.negativeCacheTtl()));
+    }
+
+    private NativeCacheRequirements nativeCacheRequirements(ConnectorOperationSelection selection) {
+        ConnectorOperationSelection.QuerySelection query = selection.query().orElseThrow();
+        return new NativeCacheRequirements(
+            selection.operation().providerId().value(),
+            selection.providerMajorVersion(),
+            selection.operation().operationId(),
+            selection.operation().majorVersion(),
+            query.capabilities(),
+            query.negativeCacheTtl());
     }
 
     private Optional<QueryPersistenceRepresentation> resolveQueryPersistenceRepresentation(

@@ -20,6 +20,12 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
 - `order.json`: resolved runtime execution order
 - `telemetry.json`: item-boundary and parent-step telemetry metadata
 - `replay-topology.json`: replay and live-topology metadata used by execution-event playback and trace-aware topology surfaces
+- `connector-bindings.json`: sanitized connector bindings and operations used by both local and
+  imported steps; connection and secret values are never emitted
+- `pipeline-contract.json`: deterministic schema 3 release contract. Imported Blocks include package
+  provenance, source and linked definition fingerprints, and resolved capability metadata. The
+  resolution records binding/provider/operation versions, application-selected Command authority,
+  and a sanitized connector-configuration digest, never raw configuration or credentials.
 
 If you package a grouped runtime such as monolith or pipeline-runtime, keep these resources aligned with the runtime artifact that will execute the pipeline.
 

@@ -61,14 +61,15 @@ public record PipelineStepModel(
         ServiceApiKind serviceApiKind,
         ReactiveReturnKind reactiveReturnKind,
         Optional<AspectPosition> aspectPosition,
-        PipelineReference definition
+        PipelineReference definition,
+        Optional<ConnectorOperationSelection> connectorOperationSelection
 ) {
     /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
     public PipelineStepModel withServiceClassName(ClassName replacement) {
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition, definition);
+            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition, definition, connectorOperationSelection);
     }
 
     /** Returns this model with the implementation contract exposed by a provider-generated facade. */
@@ -82,7 +83,7 @@ public record PipelineStepModel(
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             facadeStreamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition, definition);
+            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition, definition, connectorOperationSelection);
     }
 
     /**
@@ -237,7 +238,38 @@ public record PipelineStepModel(
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
             mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition,
-            new PipelineReference("$root"));
+            new PipelineReference("$root"), Optional.empty());
+    }
+
+    /** Backward-compatible canonical constructor shape before connector selections were promoted into the IR. */
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            Optional<String> delegateMethodName,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind,
+            Optional<AspectPosition> aspectPosition,
+            PipelineReference definition) {
+        this(serviceName, generatedName, servicePackage, serviceClassName, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
+            mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition,
+            definition, Optional.empty());
     }
 
     public PipelineStepModel(String serviceName,
@@ -262,7 +294,8 @@ public record PipelineStepModel(
             ServiceApiKind serviceApiKind,
             ReactiveReturnKind reactiveReturnKind,
             Optional<AspectPosition> aspectPosition,
-            PipelineReference definition) {
+            PipelineReference definition,
+            Optional<ConnectorOperationSelection> connectorOperationSelection) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -304,6 +337,8 @@ public record PipelineStepModel(
         this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
         this.aspectPosition = aspectPosition == null ? Optional.empty() : aspectPosition;
         this.definition = java.util.Objects.requireNonNull(definition, "definition cannot be null");
+        this.connectorOperationSelection = connectorOperationSelection == null
+            ? Optional.empty() : connectorOperationSelection;
     }
 
     /**
@@ -554,6 +589,7 @@ public record PipelineStepModel(
         private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
         private Optional<AspectPosition> aspectPosition = Optional.empty();
         private PipelineReference definition = new PipelineReference("$root");
+        private Optional<ConnectorOperationSelection> connectorOperationSelection = Optional.empty();
 
         /**
          * Sets the service name.
@@ -820,6 +856,17 @@ public record PipelineStepModel(
             return this;
         }
 
+        /** Sets the normalized operation-first connector selection for this step. */
+        public Builder connectorOperationSelection(Optional<ConnectorOperationSelection> selection) {
+            this.connectorOperationSelection = selection == null ? Optional.empty() : selection;
+            return this;
+        }
+
+        /** Sets the normalized operation-first connector selection for this step. */
+        public Builder connectorOperationSelection(ConnectorOperationSelection selection) {
+            return connectorOperationSelection(Optional.ofNullable(selection));
+        }
+
         /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
@@ -868,7 +915,8 @@ public record PipelineStepModel(
                 serviceApiKind,
                 reactiveReturnKind,
                 aspectPosition,
-                definition);
+                definition,
+                connectorOperationSelection);
         }
     }
     
@@ -902,7 +950,8 @@ public record PipelineStepModel(
             serviceApiKind,
             reactiveReturnKind,
             aspectPosition,
-            definition
+            definition,
+            connectorOperationSelection
         );
     }
 
@@ -942,6 +991,7 @@ public record PipelineStepModel(
             .remoteExecution(remoteExecution)
             .serviceApiKind(serviceApiKind)
             .reactiveReturnKind(reactiveReturnKind)
-            .definition(definition);
+            .definition(definition)
+            .connectorOperationSelection(connectorOperationSelection);
     }
 }

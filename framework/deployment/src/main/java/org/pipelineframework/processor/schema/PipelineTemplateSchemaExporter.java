@@ -1991,6 +1991,45 @@ public final class PipelineTemplateSchemaExporter {
       "propertyNames": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$" },
       "additionalProperties": { "$ref": "#/$defs/connectorBinding" }
     },
+    "blockCapabilityBinding": {
+      "type": "object",
+      "description": "Compile-time application selection for one imported Block Query or Command requirement.",
+      "properties": {
+        "using": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "commandIdGenerator": { "$ref": "#/$defs/javaClassName" },
+        "duplicatePolicy": {
+          "type": "string",
+          "enum": ["RETURN_RECORDED", "FAIL", "return_recorded", "fail"]
+        },
+        "policy": { "$ref": "#/$defs/commandPolicy" }
+      },
+      "required": ["using"],
+      "dependentRequired": {
+        "commandIdGenerator": ["duplicatePolicy", "policy"],
+        "duplicatePolicy": ["commandIdGenerator", "policy"],
+        "policy": ["commandIdGenerator", "duplicatePolicy"]
+      },
+      "additionalProperties": false
+    },
+    "blockBindings": {
+      "type": "object",
+      "description": "Compile-time application bindings for imported Block capability requirements.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[^/\\\\s](?:[^/]*[^/\\\\s])?/[^/\\\\s](?:[^/]*[^/\\\\s])?$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[^/\\\\s](?:[^/]*[^/\\\\s])?$"
+        },
+        "additionalProperties": { "$ref": "#/$defs/blockCapabilityBinding" }
+      }
+    },
     "commandTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -2625,6 +2664,17 @@ public final class PipelineTemplateSchemaExporter {
   "allOf": [
     {
       "if": {
+        "not": {
+          "properties": { "version": { "const": 3 } },
+          "required": ["version"]
+        }
+      },
+      "then": {
+        "properties": { "blockBindings": false }
+      }
+    },
+    {
+      "if": {
         "properties": {
           "version": {
             "const": 2
@@ -2862,6 +2912,9 @@ public final class PipelineTemplateSchemaExporter {
     },
     "connectors": {
       "$ref": "#/$defs/pipelineConnectorBindings"
+    },
+    "blockBindings": {
+      "$ref": "#/$defs/blockBindings"
     },
     "aspects": {
       "type": "object",

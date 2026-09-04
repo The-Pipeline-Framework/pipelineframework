@@ -27,6 +27,7 @@ import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
+import org.pipelineframework.command.CommandDuplicatePolicy;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
 import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
@@ -38,6 +39,7 @@ import org.pipelineframework.connector.CommandPolicy;
 import org.pipelineframework.connector.CommandExecutionPosture;
 import org.pipelineframework.connector.ConnectorBindingName;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
+import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
@@ -46,6 +48,7 @@ import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryOperationCardinality;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
+import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
@@ -178,6 +181,16 @@ public class StepDefinitionParser {
      * Parses root and local definitions through the exact same step grammar.
      */
     public ParsedPipelineDefinitionCatalog parseDefinitionCatalog(Path templatePath) throws IOException {
+        return parseDefinitionCatalog(templatePath, Set.of());
+    }
+
+    /** Parses definitions while requiring exact provider type contracts for the selected imported definitions. */
+    public ParsedPipelineDefinitionCatalog parseDefinitionCatalog(
+        Path templatePath,
+        Set<String> definitionsRequiringExactOperationTypes
+    ) throws IOException {
+        Objects.requireNonNull(definitionsRequiringExactOperationTypes,
+            "definitions requiring exact operation types must not be null");
         if (!Files.exists(templatePath)) {
             LOG.warnf("Pipeline template file does not exist: %s", templatePath);
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
@@ -208,7 +221,7 @@ public class StepDefinitionParser {
         Map<String, ParsedConnectorBinding> connectorBindings = parseConnectorBindings(templateData);
 
         List<StepDefinition> rootSteps = parseStepList(
-            templateData.get("steps"), basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings);
+            templateData.get("steps"), basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings, false);
         if (rootSteps.isEmpty() && !(templateData.get("steps") instanceof List)) {
             LOG.debugf("No 'steps' array found in pipeline template");
         }
@@ -230,7 +243,8 @@ public class StepDefinitionParser {
                 Map<String, Object> definition = (Map<String, Object>) rawDefinition;
                 if (definitions.putIfAbsent(id, parseStepList(
                         definition.get("steps"), basePackage, version, v3JavaTypes,
-                        queryDefinitions, connectorBindings)) != null) {
+                        queryDefinitions, connectorBindings,
+                        definitionsRequiringExactOperationTypes.contains(id))) != null) {
                     throw new IOException("Duplicate pipeline definition ID '" + id + "'");
                 }
             }
@@ -270,7 +284,8 @@ public class StepDefinitionParser {
             int version,
             Optional<V3JavaTypeResolver> v3JavaTypes,
             Map<String, QueryDefinition> queryDefinitions,
-            Map<String, ParsedConnectorBinding> connectorBindings) {
+            Map<String, ParsedConnectorBinding> connectorBindings,
+            boolean requireExactOperationTypes) {
         if (!(stepsObj instanceof List<?> stepsList)) {
             return List.of();
         }
@@ -285,7 +300,8 @@ public class StepDefinitionParser {
             StepDefinition stepDef;
             try {
                 stepDef = parseStepDefinition(
-                    stepData, basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings);
+                    stepData, basePackage, version, v3JavaTypes, queryDefinitions, connectorBindings,
+                    requireExactOperationTypes);
             } catch (StepSkippedException ignored) {
                 continue;
             }
@@ -315,7 +331,8 @@ public class StepDefinitionParser {
             int version,
             Optional<V3JavaTypeResolver> v3JavaTypes,
             Map<String, QueryDefinition> queryDefinitions,
-            Map<String, ParsedConnectorBinding> connectorBindings) {
+            Map<String, ParsedConnectorBinding> connectorBindings,
+            boolean requireExactOperationTypes) {
         String name = getStringValue(stepData, "name");
         if (isBlank(name)) {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
@@ -833,11 +850,22 @@ public class StepDefinitionParser {
             }
             if (operationFirst) {
                 nativeSelection = validateNativeCommandBinding(
-                    name, operation, using, stepData, commandConfig, connectorBindings);
+                    name, operation, using, stepData, commandConfig, inputType, outputType,
+                    connectorBindings, requireExactOperationTypes);
                 if (nativeSelection.isEmpty()) {
                     throw new StepSkippedException();
                 }
                 command = nativeSelection.orElseThrow().commandName();
+                if (requireExactOperationTypes
+                    && (isBlank(getStringValue(stepData, "commandIdGenerator"))
+                        || isBlank(getStringValue(stepData, "duplicatePolicy"))
+                        || !(stepData.get("policy") instanceof Map<?, ?>))) {
+                    String message = "Skipping imported Block Command step '" + name
+                        + "': application linking must supply commandIdGenerator, duplicatePolicy, and policy";
+                    LOG.warn(message);
+                    report(Diagnostic.Kind.ERROR, message);
+                    throw new StepSkippedException();
+                }
             }
             String commandIdGeneratorName = getStringValue(stepData, "commandIdGenerator");
             ClassName commandIdGenerator = parseOptionalClassName(commandIdGeneratorName, name, "commandIdGenerator", basePackage, false);
@@ -853,10 +881,10 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            if (nativeSelection.isPresent()) {
+            if (nativeSelection.isPresent() && !operationFirst) {
                 commandConfig = nativeSelection.orElseThrow().embed(commandConfig);
             }
-            return new StepDefinition(
+            StepDefinition commandDefinition = new StepDefinition(
                 name,
                 StepKind.COMMAND,
                 null,
@@ -881,6 +909,22 @@ public class StepDefinitionParser {
                 false,
                 accepts,
                 terminal);
+            if (!operationFirst) {
+                return commandDefinition;
+            }
+            NativeCommandSelection selected = nativeSelection.orElseThrow();
+            return commandDefinition.withConnectorOperationSelection(ConnectorOperationSelection.command(
+                name,
+                ConnectorBindingName.of(selected.binding().orElseThrow()),
+                new ConnectorOperationIdentity(
+                    ConnectorProviderId.of(selected.provider()), selected.operation(),
+                    ConnectorOperationKind.COMMAND, selected.operationVersion()),
+                selected.providerVersion(),
+                commandConfig,
+                new ConnectorOperationSelection.CommandSelection(
+                    commandIdGenerator,
+                    CommandDuplicatePolicy.fromString(duplicatePolicy),
+                    selected.commandPolicy())));
         }
 
         if (kind == StepKind.QUERY) {
@@ -942,21 +986,22 @@ public class StepDefinitionParser {
                 if (operationConfig == null) {
                     throw new StepSkippedException();
                 }
-                Optional<QueryOperationCardinality> validatedCardinality = validateNativeQueryBinding(
+                operationConfig = withCallableCatalogue(operationConfig, stepData);
+                Optional<ValidatedNativeQuerySelection> validatedSelection = validateNativeQueryBinding(
                     name, operation, using, stepData, operationConfig, negativeCacheTtl,
-                    Optional.ofNullable(shape), connectorBindings);
-                if (validatedCardinality.isEmpty()) {
+                    Optional.ofNullable(shape), inputType, outputType, connectorBindings,
+                    requireExactOperationTypes);
+                if (validatedSelection.isEmpty()) {
                     throw new StepSkippedException();
                 }
-                StreamingShape resolvedShape = validatedCardinality.orElseThrow()
+                ValidatedNativeQuerySelection selected = validatedSelection.orElseThrow();
+                StreamingShape resolvedShape = selected.cardinality()
                     == QueryOperationCardinality.ONE_TO_MANY
                     ? StreamingShape.UNARY_STREAMING
                     : StreamingShape.UNARY_UNARY;
                 String bindingName = ConnectorBindingName.of(using).value();
                 queryId = "native-binding:" + bindingName + "/" + operation;
-                Map<String, Object> embedded = embedNativeQuerySelection(
-                    connectorBindings.get(bindingName), operation, operationVersion(stepData), operationConfig);
-                return new StepDefinition(
+                StepDefinition queryDefinition = new StepDefinition(
                     name,
                     StepKind.QUERY,
                     null,
@@ -969,7 +1014,7 @@ public class StepDefinitionParser {
                     null,
                     Map.of(),
                     queryId,
-                    embedded,
+                    operationConfig,
                     keyFields,
                     null,
                     null,
@@ -981,6 +1026,18 @@ public class StepDefinitionParser {
                     false,
                     accepts,
                     terminal);
+                ParsedConnectorBinding binding = connectorBindings.get(bindingName);
+                return queryDefinition.withConnectorOperationSelection(ConnectorOperationSelection.query(
+                    name,
+                    ConnectorBindingName.of(bindingName),
+                    new ConnectorOperationIdentity(
+                        ConnectorProviderId.of(binding.provider()), operation,
+                        ConnectorOperationKind.QUERY, operationVersion(stepData)),
+                    binding.providerVersion(),
+                    operationConfig,
+                    new ConnectorOperationSelection.QuerySelection(
+                        selected.cardinality(), selected.capabilities(), negativeCacheTtl,
+                        captureConfig, keyFields)));
             }
             if (isBlank(queryId)) {
                 String message = "Skipping step '" + name + "': query steps must reference a top-level query id";
@@ -1137,6 +1194,44 @@ public class StepDefinitionParser {
             terminal);
     }
 
+    private Map<String, Object> withCallableCatalogue(
+        Map<String, Object> operationConfig,
+        Map<String, Object> stepData
+    ) {
+        Object rawCallables = stepData.get("callables");
+        if (!(rawCallables instanceof Map<?, ?> callables) || callables.isEmpty()) {
+            return operationConfig;
+        }
+        Map<String, Object> callableConfig = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : callables.entrySet()) {
+            String alias = String.valueOf(entry.getKey());
+            if (!(entry.getValue() instanceof Map<?, ?> callable)) {
+                report(Diagnostic.Kind.ERROR, "Skipping step '" + getStringValue(stepData, "name")
+                    + "': callable '" + alias + "' must be a map");
+                throw new StepSkippedException();
+            }
+            Map<String, Object> descriptor = new LinkedHashMap<>();
+            for (String field : List.of("using", "operation", "kind", "operationVersion", "input")) {
+                if (callable.containsKey(field) && callable.get(field) == null) {
+                    report(Diagnostic.Kind.ERROR, "Skipping step '" + getStringValue(stepData, "name")
+                        + "': callable '" + alias + "' field '" + field + "' must not be null");
+                    throw new StepSkippedException();
+                }
+                copyIfPresent(callable, descriptor, field);
+            }
+            callableConfig.put(alias, Map.copyOf(descriptor));
+        }
+        Map<String, Object> result = new LinkedHashMap<>(operationConfig);
+        result.put("callables", Map.copyOf(callableConfig));
+        return Map.copyOf(result);
+    }
+
+    private static void copyIfPresent(Map<?, ?> source, Map<String, Object> target, String key) {
+        if (source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
+    }
+
     private boolean parseOptionalBoolean(Map<String, Object> stepData, String stepName, String fieldName) {
         if (!stepData.containsKey(fieldName)) {
             return false;
@@ -1206,7 +1301,10 @@ public class StepDefinitionParser {
         String using,
         Map<String, Object> stepData,
         Map<String, Object> operationConfig,
-        Map<String, ParsedConnectorBinding> bindings
+        ClassName inputType,
+        ClassName outputType,
+        Map<String, ParsedConnectorBinding> bindings,
+        boolean requireExactOperationTypes
     ) {
         try {
             ParsedConnectorBinding binding = requiredBinding(stepName, operation, using, bindings);
@@ -1216,6 +1314,10 @@ public class StepDefinitionParser {
             ConnectorOperationIdentity identity = new ConnectorOperationIdentity(
                 ConnectorProviderId.of(binding.provider()), operation, ConnectorOperationKind.COMMAND, operationVersion);
             ConnectorProviderManifestCatalog catalog = providerManifestCatalog();
+            ConnectorOperationDescriptor descriptor = catalog.requireOperation(
+                identity.providerId(), binding.providerVersion(), operation,
+                ConnectorOperationKind.COMMAND, operationVersion);
+            validateOperationTypeContract(stepName, descriptor, inputType, outputType, requireExactOperationTypes);
             catalog.validateOperationConfiguration(
                 identity.providerId(),
                 binding.providerVersion(),
@@ -1226,7 +1328,8 @@ public class StepDefinitionParser {
                 "command step '" + stepName + "' operation " + operation);
             catalog.validateCommandPolicy(identity, binding.providerVersion(), policy);
             return Optional.of(new NativeCommandSelection(
-                Optional.of(binding.name()), binding.provider(), binding.providerVersion(), operation, operationVersion, policyMap));
+                Optional.of(binding.name()), binding.provider(), binding.providerVersion(), operation, operationVersion,
+                policyMap, policy));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
@@ -1259,7 +1362,7 @@ public class StepDefinitionParser {
         return Optional.of(source);
     }
 
-    private Optional<QueryOperationCardinality> validateNativeQueryBinding(
+    private Optional<ValidatedNativeQuerySelection> validateNativeQueryBinding(
         String stepName,
         String operation,
         String using,
@@ -1267,7 +1370,10 @@ public class StepDefinitionParser {
         Map<String, Object> operationConfig,
         Optional<Duration> negativeCacheTtl,
         Optional<StreamingShape> declaredShape,
-        Map<String, ParsedConnectorBinding> bindings
+        ClassName inputType,
+        ClassName outputType,
+        Map<String, ParsedConnectorBinding> bindings,
+        boolean requireExactOperationTypes
     ) {
         try {
             if (stepData.containsKey("policy")) {
@@ -1278,6 +1384,10 @@ public class StepDefinitionParser {
                 ConnectorProviderId.of(binding.provider()), operation, ConnectorOperationKind.QUERY,
                 operationVersion(stepData));
             ConnectorProviderManifestCatalog catalog = providerManifestCatalog();
+            ConnectorOperationDescriptor descriptor = catalog.requireOperation(
+                identity.providerId(), binding.providerVersion(), operation,
+                ConnectorOperationKind.QUERY, identity.majorVersion());
+            validateOperationTypeContract(stepName, descriptor, inputType, outputType, requireExactOperationTypes);
             catalog.validateOperationConfiguration(
                 identity.providerId(),
                 binding.providerVersion(),
@@ -1297,21 +1407,47 @@ public class StepDefinitionParser {
                         + " does not match provider operation cardinality "
                         + cardinality);
             }
+            QueryCapabilities capabilities = QueryCapabilities.conservative();
             if (cardinality == QueryOperationCardinality.ONE_TO_MANY) {
                 if (negativeCacheTtl.isPresent()) {
                     throw new IllegalArgumentException(
                         "streaming query operation " + identity + " does not support negativeCacheTtl");
                 }
             } else {
-                validateNegativeCacheTtl(
-                    identity, catalog.requireQueryCapabilities(identity, binding.providerVersion()), negativeCacheTtl);
+                capabilities = catalog.requireQueryCapabilities(identity, binding.providerVersion());
+                validateNegativeCacheTtl(identity, capabilities, negativeCacheTtl);
             }
-            return Optional.of(cardinality);
+            return Optional.of(new ValidatedNativeQuerySelection(cardinality, capabilities));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid connector binding selection: " + failure.getMessage();
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return Optional.empty();
+        }
+    }
+
+    private static void validateOperationTypeContract(
+        String stepName,
+        ConnectorOperationDescriptor operation,
+        ClassName inputType,
+        ClassName outputType,
+        boolean requireExactOperationTypes
+    ) {
+        var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
+            "provider operation '" + operation.id() + "' does not publish an exact input/output type contract"));
+        String publishedOutput = contract.outputType().orElseThrow(() -> new IllegalArgumentException(
+            "provider operation '" + operation.id() + "' does not publish an output type contract"));
+        if (!requireExactOperationTypes
+            && "java.lang.Object".equals(contract.inputType())
+            && "java.lang.Object".equals(publishedOutput)) {
+            return;
+        }
+        if (!contract.inputType().equals(inputType.canonicalName())
+            || !publishedOutput.equals(outputType.canonicalName())) {
+            throw new IllegalArgumentException("step '" + stepName + "' types ["
+                + inputType.canonicalName() + " -> " + outputType.canonicalName()
+                + "] do not match provider operation types [" + contract.inputType()
+                + " -> " + publishedOutput + "]");
         }
     }
 
@@ -1373,21 +1509,6 @@ public class StepDefinitionParser {
         return requiredNativeVersion(stepData, "operationVersion");
     }
 
-    private static Map<String, Object> embedNativeQuerySelection(
-        ParsedConnectorBinding binding,
-        String operation,
-        int operationVersion,
-        Map<String, Object> configuration
-    ) {
-        Map<String, Object> embedded = new LinkedHashMap<>(configuration);
-        embedded.put("__tpf_native_binding", binding.name());
-        embedded.put("__tpf_native_provider", binding.provider());
-        embedded.put("__tpf_native_provider_version", binding.providerVersion());
-        embedded.put("__tpf_native_operation", operation);
-        embedded.put("__tpf_native_operation_version", operationVersion);
-        return Map.copyOf(embedded);
-    }
-
     private static Map<String, Object> configurationMap(Object value, String subject) {
         if (value == null) {
             return Map.of();
@@ -1423,7 +1544,7 @@ public class StepDefinitionParser {
                 ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion);
             providerManifestCatalog().validateCommandPolicy(identity, providerVersion, policy);
             return Optional.of(new NativeCommandSelection(
-                Optional.empty(), provider, providerVersion, operation, operationVersion, policyMap));
+                Optional.empty(), provider, providerVersion, operation, operationVersion, policyMap, policy));
         } catch (IllegalArgumentException | IllegalStateException failure) {
             String message = "Skipping step '" + stepName + "': invalid native command connector: " + failure.getMessage();
             LOG.warn(message);
@@ -1539,7 +1660,8 @@ public class StepDefinitionParser {
         int providerVersion,
         String operation,
         int operationVersion,
-        Map<String, Object> policy
+        Map<String, Object> policy,
+        CommandPolicy commandPolicy
     ) {
         private NativeCommandSelection {
             binding = Objects.requireNonNull(binding, "connector binding selection must not be null");
@@ -1560,6 +1682,12 @@ public class StepDefinitionParser {
             binding.ifPresent(name -> embedded.put("__tpf_native_binding", name));
             return Map.copyOf(embedded);
         }
+    }
+
+    private record ValidatedNativeQuerySelection(
+        QueryOperationCardinality cardinality,
+        QueryCapabilities capabilities
+    ) {
     }
 
     private record ParsedConnectorBinding(
