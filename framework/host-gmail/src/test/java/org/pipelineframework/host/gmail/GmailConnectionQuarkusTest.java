@@ -66,6 +66,30 @@ class GmailConnectionQuarkusTest {
     }
 
     @Test
+    @TestSecurity(user = "broken", roles = "connection-manager")
+    void unexpectedHostFailureIsServerErrorWithoutSensitiveResponse() {
+        var records = new java.util.concurrent.CopyOnWriteArrayList<java.util.logging.LogRecord>();
+        var logger = java.util.logging.Logger.getLogger(GmailConnectionResource.class.getName());
+        var handler = new java.util.logging.Handler() {
+            @Override public void publish(java.util.logging.LogRecord record) { records.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        logger.addHandler(handler);
+        try {
+            given().header("X-Forwarded-Proto", "https").get("/connections/gmail/status")
+                .then().statusCode(500).header("Cache-Control", "no-store").body(equalTo(""));
+            org.junit.jupiter.api.Assertions.assertEquals(1, records.size());
+            var record = records.getFirst();
+            org.junit.jupiter.api.Assertions.assertNull(record.getThrown());
+            org.junit.jupiter.api.Assertions.assertArrayEquals(new Object[] {GmailConnectionResource.Action.STATUS,
+                IllegalStateException.class.getName()}, record.getParameters());
+        } finally {
+            logger.removeHandler(handler);
+        }
+    }
+
+    @Test
     @TestSecurity(user = "visitor", roles = "viewer")
     void applicationManagementPolicyIsRequired() {
         given().header("X-Forwarded-Proto", "https").get("/connections/gmail/status").then().statusCode(403);
@@ -81,6 +105,7 @@ class GmailConnectionQuarkusTest {
                 }
                 // This proof uses one tenant per authenticated principal. No request field selects it.
                 String actor = security.getUserPrincipal().getName();
+                if (actor.equals("broken")) { throw new IllegalStateException("private diagnostic must not be logged"); }
                 return new Authority(new ConnectionKey(actor, new ConnectionRef("gmail-main")), actor);
             }, URI.create("https://host.example"));
         }

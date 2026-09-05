@@ -47,7 +47,8 @@ public final class JdbcGmailConnectionStore {
                     .orElseThrow(() -> new ConnectionFailure(ConnectionFailure.Reason.STORAGE));
                 Stored stored = json.readValue(encryption.decrypt(id + ":" + revision, payload), Stored.class);
                 if (stored.schemaVersion() != 1) { throw new ConnectionFailure(ConnectionFailure.Reason.STORAGE); }
-                ConnectionState state = Objects.requireNonNull(stored.state(), "Connection state required");
+                ConnectionState state = Optional.ofNullable(stored.state())
+                    .orElseThrow(() -> new ConnectionFailure(ConnectionFailure.Reason.STORAGE));
                 if (state.revision() != revision) { throw new ConnectionFailure(ConnectionFailure.Reason.STORAGE); }
                 return Optional.of(state);
             }

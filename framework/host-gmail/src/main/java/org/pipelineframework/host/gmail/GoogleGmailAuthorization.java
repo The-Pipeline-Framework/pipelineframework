@@ -30,6 +30,7 @@ public final class GoogleGmailAuthorization implements GmailAuthorization {
     private final HttpTransport transport;
     private final JsonFactory json;
     private final Clock clock;
+    private final GoogleIdTokenVerifier idTokenVerifier;
 
     public GoogleGmailAuthorization(String clientId, String clientSecret, URI callback,
                                     HttpTransport transport, JsonFactory json, Clock clock) {
@@ -39,6 +40,8 @@ public final class GoogleGmailAuthorization implements GmailAuthorization {
         this.transport = Objects.requireNonNull(transport);
         this.json = Objects.requireNonNull(json);
         this.clock = Objects.requireNonNull(clock);
+        this.idTokenVerifier = new GoogleIdTokenVerifier.Builder(transport, json)
+            .setAudience(List.of(clientId)).setClock(clock::millis).build();
         if (clientId.isBlank() || clientSecret.isBlank() || !"https".equals(callback.getScheme())
             || callback.getHost() == null || callback.getRawQuery() != null || callback.getRawFragment() != null) {
             throw new IllegalArgumentException("Google registration requires an HTTPS callback without query or fragment");
@@ -73,8 +76,7 @@ public final class GoogleGmailAuthorization implements GmailAuthorization {
             request.setRequestInitializer(this::configureRequest);
             var response = request.execute();
             String idToken = Optional.ofNullable(response.getIdToken()).orElseThrow(this::reauthorize);
-            var verified = Optional.ofNullable(new GoogleIdTokenVerifier.Builder(transport, json)
-                .setAudience(List.of(clientId)).setClock(clock::millis).build().verify(idToken))
+            var verified = Optional.ofNullable(idTokenVerifier.verify(idToken))
                 .orElseThrow(this::reauthorize);
             String subject = verified.getPayload().getSubject();
             Optional<Grant> sameAccount = previous.filter(grant -> grant.subject().equals(subject));

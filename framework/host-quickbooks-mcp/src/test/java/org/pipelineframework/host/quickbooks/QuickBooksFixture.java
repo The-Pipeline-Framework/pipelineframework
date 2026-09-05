@@ -21,6 +21,9 @@ public final class QuickBooksFixture {
         if (arguments.length > 0 && arguments[0].equals("fail")) {
             throw new IllegalStateException("Simulated initialization failure");
         }
+        if (arguments.length > 0 && arguments[0].equals("wait-for-initialization")) {
+            Thread.currentThread().join();
+        }
         if (arguments.length > 0 && arguments[0].equals("stubborn")) {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 while (!Files.exists(file.resolveSibling("allow-exit"))) {

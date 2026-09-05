@@ -77,22 +77,16 @@ public final class QuickBooksMcpClients implements ConnectionResolver, AutoClose
         }
     }
 
-    private synchronized McpClientConnection initialized(Key key) {
-        if (closed) {
-            throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE);
-        }
-        QuickBooksRegistration registration = Optional.ofNullable(registrations.get(key)).orElseThrow(
-            () -> failure(ConnectionResolutionException.Kind.AUTHENTICATION_REQUIRED));
+    private McpClientConnection initialized(Key key) {
         try {
-            Session session = sessions.get(key);
-            if (session == null) {
-                session = new Session(registration);
-                sessions.put(key, session);
-                // Retain uncertain startup; never automatically launch a second instance.
-                session.initialize();
+            Session session;
+            synchronized (this) {
+                if (closed) { throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE); }
+                QuickBooksRegistration registration = Optional.ofNullable(registrations.get(key)).orElseThrow(
+                    () -> failure(ConnectionResolutionException.Kind.AUTHENTICATION_REQUIRED));
+                session = sessions.computeIfAbsent(key, ignored -> new Session(registration));
             }
-            session.client.ping().block(timeout);
-            return new McpClientConnection(session.client);
+            return session.connection();
         } catch (ConnectionResolutionException error) {
             throw error;
         } catch (Exception error) {
@@ -102,28 +96,31 @@ public final class QuickBooksMcpClients implements ConnectionResolver, AutoClose
     }
 
     @Override
-    public synchronized void close() {
-        closed = true;
+    public void close() {
+        Map<Key, Session> closing;
+        synchronized (this) {
+            closed = true;
+            closing = Map.copyOf(sessions);
+        }
+        closing.values().forEach(Session::prepareClose);
         boolean failed = false;
-        var iterator = sessions.values().iterator();
-        while (iterator.hasNext()) {
-            Session session = iterator.next();
+        for (var entry : closing.entrySet()) {
             try {
-                session.close();
-                iterator.remove();
+                entry.getValue().close();
+                synchronized (this) { sessions.remove(entry.getKey(), entry.getValue()); }
             } catch (Exception error) {
-                // Retain the session if process exit is uncertain. Repeating close can finish cleanup.
+                // Retain uncertain sessions for a subsequent cleanup attempt.
                 failed = true;
             }
         }
-        if (failed) {
-            throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE);
-        }
+        if (failed) { throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE); }
     }
 
     private final class Session {
         private final McpAsyncClient client;
         private final OwnedTransport transport;
+        private final Mono<io.modelcontextprotocol.spec.McpSchema.InitializeResult> initialization;
+        private final java.util.concurrent.atomic.AtomicBoolean stopping = new java.util.concurrent.atomic.AtomicBoolean();
 
         private Session(QuickBooksRegistration registration) {
             List<String> command = registration.command();
@@ -135,17 +132,28 @@ public final class QuickBooksMcpClients implements ConnectionResolver, AutoClose
             // Upstream stderr may include provider errors. It must not enter ordinary host logs.
             transport.setStdErrorHandler(ignored -> { });
             client = McpClient.async(transport).requestTimeout(timeout).build();
+            initialization = client.initialize().cache();
         }
 
-        private void initialize() {
-            client.initialize().block(timeout);
+        private synchronized McpClientConnection connection() {
+            if (stopping.get()) { throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE); }
+            initialization.block(timeout);
+            client.ping().block(timeout);
+            if (stopping.get()) { throw failure(ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE); }
+            return new McpClientConnection(client);
+        }
+
+        private void prepareClose() {
+            stopping.set(true);
+            transport.prepareClose();
         }
 
         private void close() {
-            transport.prepareClose();
             // Completion waits for the child to exit. A stale SDK client may reinitialize, but this
             // one-shot transport can never launch again after the host closes it.
-            client.closeGracefully().block(timeout);
+            synchronized (transport) {
+                client.closeGracefully().block(timeout);
+            }
         }
     }
 

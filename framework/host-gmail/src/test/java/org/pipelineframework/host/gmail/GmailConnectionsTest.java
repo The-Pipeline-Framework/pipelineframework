@@ -111,6 +111,42 @@ class GmailConnectionsTest {
     }
 
     @Test
+    void malformedStoredStateFailsAsStorageError() throws Exception {
+        connect(connections, key("tenant-a"), "account-a");
+        try (var connection = database.getConnection(); var query = connection.createStatement();
+             var rows = query.executeQuery("SELECT connection_id, revision FROM tpf_gmail_payloads")) {
+            assertTrue(rows.next());
+            String identity = rows.getString(1);
+            long revision = rows.getLong(2);
+            String malformed = encryption.encrypt(identity + ":" + revision,
+                "{\"schemaVersion\":1,\"state\":null}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            try (var update = connection.prepareStatement("UPDATE tpf_gmail_payloads SET encrypted_state=? WHERE connection_id=?")) {
+                update.setString(1, malformed);
+                update.setString(2, identity);
+                update.executeUpdate();
+            }
+        }
+        assertEquals(ConnectionFailure.Reason.STORAGE,
+            assertThrows(ConnectionFailure.class, () -> store.read(key("tenant-a"))).reason());
+    }
+
+    @Test
+    void abandonedReauthorizationRetainsTheExistingGrantButFreshAuthorizationExpires() {
+        ConnectionKey existing = key("tenant-a");
+        connect(connections, existing, "account-a");
+        var grant = store.read(existing).orElseThrow().grant().orElseThrow();
+        join(connections.begin(existing, "actor"));
+        join(connections.begin(key("tenant-b"), "actor"));
+        clock.advance(600_001);
+        assertEquals(GmailConnections.Phase.READY, join(connections.status(existing)).phase());
+        assertEquals(grant, store.read(existing).orElseThrow().grant().orElseThrow());
+        assertTrue(store.read(existing).orElseThrow().challenge().isEmpty());
+        join(connections.resolve(request("tenant-a")));
+        assertEquals(GmailConnections.Phase.REQUIRES_REAUTHORIZATION,
+            join(connections.status(key("tenant-b"))).phase());
+    }
+
+    @Test
     void durableStoreSurvivesNewManagerAndCoordinatesTwoHosts() throws Exception {
         connect(connections, key("tenant-a"), "account-a");
         clock.advance(3_550_000);

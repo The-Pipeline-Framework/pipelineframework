@@ -197,7 +197,9 @@ public final class GmailConnections implements AutoCloseable {
                 default -> false;
             };
             if (!expired) { return state; }
-            ConnectionState unusable = state.next(Phase.REQUIRES_REAUTHORIZATION, now(), Optional.empty(), Optional.empty());
+            ConnectionState unusable = state.phase() == Phase.CONNECTING && state.grant().isPresent()
+                ? state.next(Phase.READY, now(), state.grant(), Optional.empty())
+                : state.next(Phase.REQUIRES_REAUTHORIZATION, now(), Optional.empty(), Optional.empty());
             if (store.append(key, unusable)) { invalidate(key); return unusable; }
         }
         throw failure(ConnectionFailure.Reason.UNAVAILABLE);

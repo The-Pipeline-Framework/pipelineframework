@@ -63,6 +63,29 @@ class QuickBooksMcpClientsTest {
     }
 
     @Test
+    void stalledInitializationDoesNotBlockAnotherTenantOrShutdown() throws Exception {
+        var slow = registration("slow", "slow-instance");
+        var fast = registration("fast", "fast-instance");
+        var command = new java.util.ArrayList<>(command());
+        command.add("wait-for-initialization");
+        try (ExecutorService executor = Executors.newFixedThreadPool(4);
+             var clients = host(List.of(withCommand(slow, command), fast), executor)) {
+            var stalled = clients.resolve(request("slow")).toCompletableFuture();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+            while (!Files.exists(slow.workingDirectory().resolve("starts")) && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertTrue(Files.exists(slow.workingDirectory().resolve("starts")));
+            assertEquals("fast", result(clients.resolve(request("fast")).toCompletableFuture()
+                .get(10, java.util.concurrent.TimeUnit.SECONDS)).get("instance"));
+            assertFalse(stalled.isDone());
+            java.util.concurrent.CompletableFuture.runAsync(clients::close, executor)
+                .get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertThrows(CompletionException.class, () -> clients.resolve(request("fast")).toCompletableFuture().join());
+        }
+    }
+
+    @Test
     void rejectsDuplicateLocalInstanceBindings() throws Exception {
         var first = registration("tenant-a", "same-instance");
         var second = registration("tenant-b", "same-instance");
@@ -86,7 +109,8 @@ class QuickBooksMcpClientsTest {
         var registration = registration("tenant", "100");
         var command = new java.util.ArrayList<>(command());
         command.add("stubborn");
-        var first = new QuickBooksMcpClients(List.of(withCommand(registration, command)), Runnable::run, Duration.ofSeconds(2));
+        // Allow cold JVM startup on CI; the shutdown hook still deterministically exceeds this bound.
+        var first = new QuickBooksMcpClients(List.of(withCommand(registration, command)), Runnable::run, Duration.ofSeconds(15));
         try {
             first.resolve(request("tenant")).toCompletableFuture().join();
             assertThrows(ConnectionResolutionException.class, first::close);
@@ -106,7 +130,7 @@ class QuickBooksMcpClientsTest {
     }
 
     private QuickBooksMcpClients host(List<QuickBooksRegistration> registrations, java.util.concurrent.Executor executor) {
-        return new QuickBooksMcpClients(registrations, executor, Duration.ofSeconds(5));
+        return new QuickBooksMcpClients(registrations, executor, Duration.ofSeconds(15));
     }
 
     private List<String> command() {

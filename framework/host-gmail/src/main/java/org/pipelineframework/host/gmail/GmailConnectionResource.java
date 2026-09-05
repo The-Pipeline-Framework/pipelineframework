@@ -37,6 +37,7 @@ public class GmailConnectionResource {
     }
 
     private static final String COOKIE = "__Host-tpf-gmail-oauth";
+    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger(GmailConnectionResource.class.getName());
     private final GmailConnections connections;
     private final Access access;
     private final String origin;
@@ -108,14 +109,19 @@ public class GmailConnectionResource {
     }
 
     private Response failed(Throwable failure, Action action) {
-        Throwable cause = failure instanceof java.util.concurrent.CompletionException ? failure.getCause() : failure;
+        Throwable cause = failure instanceof java.util.concurrent.CompletionException
+            ? java.util.Optional.ofNullable(failure.getCause()).orElse(failure) : failure;
         int code = cause instanceof ConnectionFailure connection ? switch (connection.reason()) {
             case INVALID_CALLBACK -> 400;
             case FORBIDDEN -> 403;
             case CONFLICT -> 409;
             case REAUTHORIZE -> 409;
             default -> 503;
-        } : 403;
+        } : 500;
+        if (!(cause instanceof ConnectionFailure)) {
+            LOG.log(java.util.logging.Level.SEVERE, "Gmail connection action {0} failed ({1})",
+                new Object[] {action, cause.getClass().getName()});
+        }
         // Invalid callbacks do not clear a valid outstanding browser transaction.
         return response(code).build();
     }
