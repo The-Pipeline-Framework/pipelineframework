@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.pipelineframework.CommandRetryRuntimeAuthority;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /** Internal invocation-scoped authority for one control-plane-admitted Command attempt. */
@@ -19,19 +20,31 @@ public final class CommandReexecutionScope {
         return new Snapshot(RuntimeAdapters.executionContext(CONTEXT_KEY, Admission.class));
     }
 
-    public static AdmissionHandle installRetry(String targetCommandId, String admissionKey) {
-        return install(targetCommandId, admissionKey, CommandAttemptAdmission.retry());
+    public static AdmissionHandle installRetry(
+        CommandRetryRuntimeAuthority runtimeAuthority,
+        String targetCommandId,
+        String admissionKey
+    ) {
+        return install(runtimeAuthority, targetCommandId, admissionKey, CommandAttemptAdmission.retry());
     }
 
-    public static AdmissionHandle installReissue(String targetCommandId, String admissionKey, String reason) {
-        return install(targetCommandId, admissionKey, CommandAttemptAdmission.reissue(reason));
+    public static AdmissionHandle installReissue(
+        CommandRetryRuntimeAuthority runtimeAuthority,
+        String targetCommandId,
+        String admissionKey,
+        String reason
+    ) {
+        return install(runtimeAuthority, targetCommandId, admissionKey, CommandAttemptAdmission.reissue(reason));
     }
 
     private static AdmissionHandle install(
+        CommandRetryRuntimeAuthority runtimeAuthority,
         String targetCommandId,
         String admissionKey,
         CommandAttemptAdmission attemptAdmission
     ) {
+        Objects.requireNonNull(runtimeAuthority, "runtimeAuthority must not be null")
+            .requireFrameworkAuthority();
         Admission admission = new Admission(targetCommandId, admissionKey, attemptAdmission);
         RuntimeAdapters.setExecutionContext(CONTEXT_KEY, admission);
         return new AdmissionHandle(admission);

@@ -29,6 +29,12 @@ delete, or otherwise manufacture effect state.
 One admitted execution retry deterministically identifies one logical effect attempt, so worker
 recovery cannot turn the same admission into additional attempts.
 
+Mutable Command retry admission is framework-internal invocation authority. It is not part of
+`PipelineExecutionContext` or `CommandRequest`, and application steps and connectors cannot create
+it through the public API. The execution runtime installs a fresh admission through an unforgeable
+runtime capability; only `CommandStepSupport` may claim it for the exact persisted logical
+`CommandId`.
+
 This decision governs `framework/runtime-core` Command contracts,
 `framework/runtime` Command execution, Command connectors, and effect stores.
 

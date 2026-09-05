@@ -621,10 +621,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         final CommandReexecutionScope.AdmissionHandle commandRetryAdmission;
         if (command.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.RETRY_FAILED_COMMAND) {
           commandRetryAdmission = CommandReexecutionScope.installRetry(
-              command.redriveCommandId().orElseThrow(), command.transitionKey());
+              CommandRetryRuntimeAuthority.frameworkAuthority(),
+              command.redriveCommandId().orElseThrow(),
+              command.transitionKey());
         } else if (command.redriveIntent()
             == org.pipelineframework.orchestrator.ExecutionRedriveIntent.REISSUE_COMMAND) {
           commandRetryAdmission = CommandReexecutionScope.installReissue(
+              CommandRetryRuntimeAuthority.frameworkAuthority(),
               command.redriveCommandId().orElseThrow(),
               command.transitionKey(),
               command.redriveReason().orElseThrow(() -> new IllegalStateException(
