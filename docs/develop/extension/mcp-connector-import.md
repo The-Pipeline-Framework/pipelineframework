@@ -304,9 +304,9 @@ connectors:
 `quickbooks-sandbox` is a deployment-owned connection reference. The host's `ConnectionResolver`
 must turn it into an initialized `McpClientConnection` for the current tenant and invocation.
 
-The host owns:
+The deployment must provide:
 
-- QuickBooks OAuth and token renewal;
+- authorization through the selected server's supported workflow (Node owns it for local STDIO);
 - company/realm and tenant selection;
 - MCP client construction and initialization;
 - HTTP sessions and transport state;
@@ -330,17 +330,81 @@ final class QuickBooksConnectionResolver implements ConnectionResolver {
     public <C extends ResolvedConnection> CompletionStage<C> resolve(
         ConnectionResolutionRequest<C> request
     ) {
-        String tenantId = request.invocationContext().tenantId().orElseThrow();
-        return clients.initializedClient(tenantId, request.reference())
-            .thenApply(McpClientConnection::new)
-            .thenApply(request.connectionType()::cast);
+        return clients.resolve(request);
     }
 }
 ```
 
 `QuickBooksMcpClients` is application-host infrastructure, not an authored pipeline service. It
-owns OAuth, initialized-client reuse, health checking, and shutdown. If the application has other
+owns initialized-client reuse, transport health checking, and shutdown. Node owns OAuth for the
+local STDIO case. If the application has other
 authenticated connectors, route all of them behind the same `ConnectionResolver` bean.
+
+The optional [Gmail host connection library](./host-authenticated-connectors.md#durable-gmail-host-connections)
+demonstrates durable authorization behind that boundary; it is not a QuickBooks implementation.
+For a QuickBooks STDIO server that refreshes and persists its own tokens, keep that server or host
+connection infrastructure as the sole refresh authority. Startup environment injection alone does
+not preserve rotated tokens across restarts. Hosted HTTP MCP authorization also has its own resource
+audience and session requirements; an upstream QuickBooks API token is not automatically an MCP token.
+These differences belong in host adapters and do not change imported MCP operation contracts.
+
+### Use the optional local QuickBooks host
+
+`org.pipelineframework:host-quickbooks-mcp` supplies a **local-development STDIO adapter**.
+Node owns authorization end-to-end: consent, callbacks, account selection, credentials, refresh,
+persistence and reauthorization. Java does not read or validate Node's token files, pass tokens,
+inspect realm/client IDs, or impose a credential-storage format.
+
+Configure and authorize the Node server using its own supported workflow. Provide a Node-owned
+launcher that starts the approved server instance with its own configuration. The host registers
+only an opaque instance identity, command and working directory:
+
+```java
+var registration = new QuickBooksRegistration(
+    tenantId, new ConnectionRef("quickbooks-sandbox"), "local-qbo-instance",
+    List.of("/absolute/path/to/node-owned-launcher"),
+    Path.of("/absolute/path/to/local-server-workspace"));
+
+var clients = new QuickBooksMcpClients(
+    List.of(registration), hostBlockingExecutor, Duration.ofSeconds(15));
+```
+
+Types are in `org.pipelineframework.host.quickbooks`. Expose `clients` as the application's single
+`ConnectionResolver`, or route MCP requests to it behind that resolver. Commands and arguments are
+trusted local deployment configuration; never put credentials in arguments or obtain commands,
+instance IDs or account selection from pipeline payloads.
+
+The launcher owns Node-specific settings, including any token-store location or read-only tool
+configuration required by the chosen Intuit server. The Java adapter starts it with an empty
+environment; use an absolute executable and have the launcher explicitly provide its environment.
+The adapter neither downloads the server nor runs its authorization workflow. It does not invent
+a connection-status MCP tool that the server does not support.
+
+Java maps the exact tenant/reference pair to a registered process, initializes and reuses its MCP
+client, and pings it before returning `McpClientConnection`. The tenant-to-instance mapping is
+host-attested. It is not a claim that Java has verified the connected QuickBooks realm. Ping checks
+MCP liveness, not authorization status; authorization failures and recovery belong to Node.
+
+One manager accepts up to 32 registered instances and rejects duplicate instance identities.
+Use one manager for these local instances. There is no cross-process lease, account registry,
+token-file lock, durable disconnect or production failover mechanism. Do not independently launch
+another copy of the same Node instance through the importer or another local client.
+
+After draining invocations, call `clients.close()` on a blocking host thread and then shut down
+the executor. The adapter waits for each child to exit, retains uncertain sessions for cleanup,
+and prevents stale clients or failed initialization from automatically spawning another process.
+Node's private state remains untouched. Upstream stderr is discarded; avoid protocol-body logging
+when using real accounts.
+
+Tests use a real STDIO subprocess whose private state is opaque to the adapter. They cover tenant
+binding, client reuse, state surviving restart, failed initialization and delayed shutdown. They do
+not exercise live Intuit consent. Existing MCP Connector tests prove capture/replay without live
+resolution.
+
+The production hosted Streamable HTTP service is a separate integration with different authorization
+and session requirements. This local adapter establishes no production OAuth, token forwarding or
+connection-management contract. Both still feed the existing initialized `McpClientConnection`
+boundary without changing imported operation contracts.
 
 ## Invoke it as an ordinary Query
 

@@ -17,9 +17,10 @@ host security / connection infrastructure
 connector -> external system
 ```
 
-TPF does not authenticate application users, run OAuth/OIDC flows, handle callbacks, store or
-refresh tokens, or replace Spring Security, Quarkus security, Keycloak, Auth0, IAM, or a connection
-broker.
+The Connector runtime does not authenticate application users, run OAuth/OIDC flows, handle callbacks,
+store or refresh tokens, or replace Spring Security, Quarkus security, Keycloak, Auth0, IAM, or a
+connection broker. The optional [Gmail host connection library](#durable-gmail-host-connections) assembles
+Google's OAuth client and dedicated encrypted storage behind this same runtime boundary.
 
 > **Do not use `SecretRef` or `SecretResolver` for connector authentication.** Those legacy,
 > context-free APIs are deprecated for removal. They receive no tenant, execution, connector, or
@@ -170,6 +171,155 @@ Provider `mcp.client` uses the same seam. The host resolves an initialized MCP c
 transport, session, and lifecycle, including creation and shutdown of any STDIO process. The
 connector never persists or closes that handle. See
 [Import MCP tools as Connector operations](./mcp-connector-import.md).
+
+## Durable Gmail host connections
+
+The optional `org.pipelineframework:host-gmail` artifact provides a bounded read-only Gmail host
+integration. It uses Google's Java OAuth library, verified Google subject identity, a dedicated JDBC
+store, and authenticated Gmail clients. It does not install a resolver, REST resource, security realm,
+database or encryption key automatically.
+
+Add `host-gmail` at the same version as the framework. The host also needs Quarkus REST Jackson, a
+JDBC data source, application authentication and a blocking executor. Apply the packaged
+`META-INF/tpf-gmail-connections.sql` migration explicitly to a dedicated security schema. The SQL is
+PostgreSQL/H2 compatible; the automated proof uses H2, including a running Quarkus REST application.
+Use the authoritative database for every host, never a lagging read replica.
+
+### Construct the host service
+
+The following assembly runs in host infrastructure, outside authored pipeline services:
+
+```java
+ConnectionEncryption encryption = new ConnectionEncryption(activeKeyId, hostEncryptionKeys);
+JdbcGmailConnectionStore store = new JdbcGmailConnectionStore(dataSource, encryption, googleClientId);
+GoogleGmailAuthorization google = new GoogleGmailAuthorization(
+    googleClientId, googleClientSecret, URI.create("https://app.example/connections/gmail/callback"),
+    GoogleNetHttpTransport.newTrustedTransport(), GsonFactory.getDefaultInstance(), Clock.systemUTC());
+GmailConnections connections = new GmailConnections(store, google, hostBlockingExecutor, Clock.systemUTC());
+```
+
+`hostEncryptionKeys` is a host-supplied `Map<String, SecretKey>` of AES keys. Use a managed key/secret
+facility; do not store keys beside database ciphertext. The active key ID is written into encrypted
+envelopes, allowing old keys to remain available while transitions rewrite current payloads with a
+new key. Keep old keys until every retained current payload has migrated. Database backups need their
+own credential retention and key retirement policy.
+
+The registration ID is the actual OAuth client ID and must match the Google adapter. Configure the
+same registration and shared database on all instances. The callback must be an exact registered
+HTTPS URI. The library requests `openid` and Gmail read-only access with offline consent and S256
+PKCE; callback success requires a verified ID token and the actual Gmail read scope. Client secrets,
+OAuth settings, keys and database configuration belong to host deployment configuration.
+
+### Mount authenticated management endpoints
+
+Subclass `GmailConnectionResource` in the application and mount it explicitly:
+
+```java
+@Path("/connections/gmail")
+public class ApplicationGmailResource extends GmailConnectionResource {
+    @Inject
+    public ApplicationGmailResource(GmailConnections connections, ApplicationConnectionAccess access) {
+        super(connections, access, URI.create("https://app.example"));
+    }
+}
+```
+
+`ApplicationConnectionAccess` implements `GmailConnectionResource.Access`. For each action it must
+authorize the authenticated principal to manage a specific tenant's configured logical connection,
+then return `Authority(new ConnectionKey(trustedTenant, configuredReference), stableActorId)`.
+This is intentionally application policy. Do not derive the tenant or reference from Google's
+callback, a submitted account field, or an unverified HTTP header. Callback requests must resume
+the same authenticated actor/session and intended logical connection as the connect request.
+
+| Endpoint suffix | Behavior |
+| --- | --- |
+| `POST connect` | Checks the exact browser `Origin`, creates a ten-minute single-use authorization transaction, and redirects to Google. |
+| `GET callback` | Checks authenticated actor, state, browser cookie and expiry before claiming the code exchange. |
+| `GET status` | Returns only lifecycle phase and revision after host permission checks. |
+| `POST disconnect` | Checks `Origin`, removes usable credentials, invalidates cached access and supersedes outstanding work. |
+
+Serve these endpoints through HTTPS. The browser cookie is Secure, HttpOnly, SameSite=Lax and
+host-only. The resource rejects insecure requests and does not enable CORS. If TLS terminates at a
+proxy, configure Quarkus to trust forwarded information only from that proxy. Preserve host login
+across the Google redirect, and exclude callback query strings and response `Location`/`Set-Cookie`
+headers from access logs, tracing exports and reverse-proxy diagnostics. SDK credential request
+logging is disabled. Responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+
+Only one outstanding browser authorization is supported by the mounted resource's cookie. Starting
+another authorization replaces the pending transaction for that logical connection. An invalid
+callback does not consume a valid pending transaction. A failed/uncertain code exchange requires a
+new connect operation. Expired authorization or exchange/refresh claims are cleared on the next
+status or resolution read. No background renewal, cleanup daemon or administrative UI is installed.
+
+### Resolve an authenticated capability
+
+Route Gmail requests through the application's single existing `ConnectionResolver`:
+
+```java
+@ApplicationScoped
+public class ApplicationConnectionResolver implements ConnectionResolver {
+    private final GmailConnections connections;
+    private final ApplicationInvocationPolicy policy;
+
+    @Inject
+    public ApplicationConnectionResolver(GmailConnections connections, ApplicationInvocationPolicy policy) {
+        this.connections = connections;
+        this.policy = policy;
+    }
+
+    @Override
+    public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+        policy.requireAllowed(request);
+        return connections.resolve(request);
+    }
+}
+```
+
+The application policy validates the invocation target and configured reference against host
+authority. The helper additionally requires tenant context and the `AuthenticatedGmailConnection`
+type. Multiple providers still compose behind one resolver. A binding selects only the logical name:
+
+```yaml
+connectors:
+  mailbox:
+    provider: google.gmail
+    version: 1
+    config:
+      connection: gmail-main
+```
+
+Live resolution reads authoritative state every time. Usable clients are cached by tenant, logical
+connection and revision, with a maximum of 128 entries per manager. SDK requests check that their
+borrowed revision is still usable; they do not perform hidden refresh. Cached Gmail wrappers share
+the host transport. Drain invocations before closing `GmailConnections` during application shutdown,
+then shut down the host executor. A previously dispatched external request cannot be recalled by
+disconnect. Query capture/replay remains unchanged and needs no live connection.
+
+### Renewal, storage and ownership
+
+The manager claims refresh durably before calling Google. Concurrent host instances wait briefly
+for the winner or return a bounded temporary-unavailable failure. Missing refresh-token replacements
+preserve the current refresh token. Required-scope loss or `invalid_grant` requires reauthorization.
+A definite rate limit/temporary rejection permits a later retry. A lost response or otherwise
+uncertain refresh is not automatically sent again: the claim remains pending, and after one minute
+the next resolution marks the connection as requiring reauthorization. This deliberately conservative
+first proof does not implement provider-specific lost-response recovery.
+
+Lifecycle metadata is append-only. Each encrypted payload is bound to connection identity and
+revision using AES-GCM. Successful transitions remove older encrypted payloads transactionally;
+disconnect retains no grant or pending verifier. Non-secret phase/revision/time metadata remains
+for audit. Actor-level access auditing remains part of the host authorization policy.
+
+Within one OAuth registration and shared store, a verified Google account has one logical owner.
+Another tenant or alias cannot create an independent renewal loop for the same grant. Ownership
+reservations survive disconnect; transferring an account requires explicit host administration.
+Do not manage the same grant concurrently in another broker, SDK refresh loop, database, or process.
+
+Disconnect is local. Google grant revocation can affect other scopes and clients in the same project,
+so the helper does not call it automatically. Applications requiring remote revocation must expose a
+separately authorized operation with appropriate disclosure, tracking and recovery. This release
+does not provide a remote revocation queue, Microsoft token-cache adapter, Shopify adapter or
+QuickBooks process manager. See [ADR-0030](/decisions/0030-optional-host-connection-lifecycle).
 
 ## Security boundary
 

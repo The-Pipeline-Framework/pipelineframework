@@ -92,6 +92,8 @@
         <module>representation-provider-file</module>
         <module>deployment</module>
         <module>connectors</module>
+        <module>host-gmail</module>
+        <module>host-quickbooks-mcp</module>
         <module>transport-completeness-tests</module>
         <module>plugins</module>
     </modules>

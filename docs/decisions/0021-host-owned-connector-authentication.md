@@ -5,6 +5,10 @@ status: accepted
 
 # ADR-0021: Host-owned connector authentication
 
+The runtime boundary in this decision remains accepted. [ADR-0030](./0030-optional-host-connection-lifecycle.md)
+extends the original exclusion of framework-supplied host lifecycle helpers with an optional Gmail
+host library. Its security state and management endpoints remain outside Connector runtime semantics.
+
 ## Context
 
 Connectors increasingly need authenticated access to systems such as Gmail, GitHub, Salesforce,
