@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
@@ -119,7 +120,8 @@ class McpConnectorTest {
     void rejectsPinnedInputBeforeQueryOrCommandClientInvocation() {
         McpAsyncClient client = initializedClient(McpSchema.CallToolResult.builder()
             .structuredContent(Map.of("value", "unused")).build());
-        McpConnector connector = started(client);
+        var resolutions = new AtomicInteger();
+        McpConnector connector = started(client, resolver(client, resolutions));
         // Canonical fixture only requires string; this violates the original MCP maxLength pin.
         var invalid = new McpRequest("longer-than-ten");
         var queryResult = McpConnectorTest.<McpResult>query(connector, "customer.lookup").query(new QueryInvocation<>(invalid,
@@ -130,6 +132,7 @@ class McpConnectorTest {
             ConnectorConfigurationDocument.empty(), McpResult.class, ConnectorExecutionContext.empty(), Optional.empty()))
             .toCompletableFuture().join();
         assertEquals("mcp-invalid-arguments", assertInstanceOf(CommandOutcome.TerminalFailure.class, commandResult).code());
+        assertEquals(0, resolutions.get());
         verify(client, never()).callTool(any());
     }
 
@@ -313,9 +316,13 @@ class McpConnectorTest {
     }
 
     private static McpConnector started(McpAsyncClient client) {
+        return started(client, resolver(client));
+    }
+
+    private static McpConnector started(McpAsyncClient client, ConnectionResolver resolver) {
         McpConnector connector = new McpConnector();
         connector.start(
-            ConnectorRuntimeContext.of("test", Runnable::run, Clock.systemUTC(), Optional.of(resolver(client))),
+            ConnectorRuntimeContext.of("test", Runnable::run, Clock.systemUTC(), Optional.of(resolver)),
             new McpProviderConfiguration(new ConnectionRef("test-mcp")))
             .toCompletableFuture().join();
         return connector;
@@ -329,9 +336,14 @@ class McpConnectorTest {
     }
 
     private static ConnectionResolver resolver(McpAsyncClient client) {
+        return resolver(client, new AtomicInteger());
+    }
+
+    private static ConnectionResolver resolver(McpAsyncClient client, AtomicInteger resolutions) {
         return new ConnectionResolver() {
             @Override
             public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
+                resolutions.incrementAndGet();
                 assertEquals("test-mcp", request.reference().value());
                 assertSame(McpClientConnection.class, request.connectionType());
                 return CompletableFuture.completedStage(request.connectionType().cast(new McpClientConnection(client)));
