@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -64,13 +63,15 @@ import reactor.core.publisher.Mono;
 class McpConnectorTest {
     @Test
     void capturesAndReplaysUnstructuredContentThroughOrdinaryOperationObservation() throws Exception {
+        String largeContent = "x".repeat(1_100_000);
         McpSchema.CallToolResult result = new ObjectMapper().readValue("""
             {"content":[{"type":"text","text":"Invoice 42: £19.50\\nSecond line"},
               {"type":"image","data":"AAEC","mimeType":"image/png",
                "annotations":{"audience":["user"],"priority":0.5}},
-              {"type":"resource","resource":{"uri":"urn:invoice:42","mimeType":"text/plain","text":"original"}}],
+              {"type":"resource","resource":{"uri":"urn:invoice:42","mimeType":"text/plain","text":"original"}},
+              {"type":"text","text":"__LARGE_CONTENT__"}],
              "isError":false,"structuredContent":{"extra":"preserved"},"_meta":{"source":"sandbox"}}
-            """, McpSchema.CallToolResult.class);
+            """.replace("__LARGE_CONTENT__", largeContent), McpSchema.CallToolResult.class);
         McpAsyncClient client = initializedClient(result);
         ConnectorRuntimeContext runtime = ConnectorRuntimeContext.of(
             "test", Runnable::run, Clock.systemUTC(), Optional.of(resolver(client)));
@@ -99,6 +100,8 @@ class McpConnectorTest {
         assertEquals("JsonPayload", first.value().resultType());
         assertEquals("application/json", payload.contentType());
         assertEquals("urn:tpf:mcp:call-tool-result:v1", payload.schemaHint());
+        assertEquals(largeContent, new ObjectMapper().readTree(payload.bodyJson())
+            .path("content").get(3).path("text").asText());
         assertEquals(new ObjectMapper().valueToTree(result), new ObjectMapper().readTree(payload.bodyJson()));
         // Recreate support without a binding/client: the normal capture path must supply the result.
         var replay = new OperationDispatchSupport(new QueryStepSupport(List.of(), List.of(store)),
@@ -110,24 +113,6 @@ class McpConnectorTest {
         verify(client).callTool(any());
         verify(client, never()).listTools();
         verify(client, never()).close();
-    }
-
-    @Test
-    void preservesUnstructuredResultsLargerThanThePrivatePinLimit() throws Exception {
-        String content = "x".repeat(1_100_000);
-        McpAsyncClient client = initializedClient(McpSchema.CallToolResult.builder().addTextContent(content).build());
-        QueryOperation<Object, ConnectorConfigurationDocument, JsonPayload> operation =
-            query(started(client), "customer.notes");
-
-        var outcome = operation.query(new QueryInvocation<>(new McpRequest("42"),
-            ConnectorConfigurationDocument.empty(), JsonPayload.class, ConnectorExecutionContext.empty()))
-            .toCompletableFuture().join();
-
-        JsonPayload payload = assertInstanceOf(JsonPayload.class,
-            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
-        assertTrue(payload.bodyJson().length() > 1_048_576);
-        assertEquals(content, new ObjectMapper().readTree(payload.bodyJson())
-            .path("content").get(0).path("text").asText());
     }
 
     @Test
