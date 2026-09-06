@@ -385,7 +385,8 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Type '" + name + "' cannot declare protobuf wire metadata in version: 3.");
         }
         rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants", "mappings", "java",
-            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
+            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive",
+            "allowedValues");
         boolean fields = declaration.containsKey("fields");
         boolean wraps = declaration.containsKey("wraps");
         boolean alias = declaration.containsKey("alias");
@@ -516,8 +517,14 @@ public class PipelineTemplateConfigLoader {
         Optional<BigDecimal> minimumExclusive = readV3DecimalConstraint(name, declaration, "minimumExclusive");
         Optional<BigDecimal> maximum = readV3DecimalConstraint(name, declaration, "maximum");
         Optional<BigDecimal> maximumExclusive = readV3DecimalConstraint(name, declaration, "maximumExclusive");
-        PipelineTemplateWrapperConstraints constraints = new PipelineTemplateWrapperConstraints(
-            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive);
+        List<Object> allowedValues = readV3AllowedValues(name, declaration);
+        PipelineTemplateWrapperConstraints constraints;
+        try {
+            constraints = new PipelineTemplateWrapperConstraints(
+                minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive, allowedValues);
+        } catch (IllegalArgumentException failure) {
+            throw new IllegalStateException("Type '" + name + "' " + failure.getMessage() + ".", failure);
+        }
         PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints)
             .ifPresent(violation -> { throw wrapperConstraintFailure(name, violation); });
         return constraints;
@@ -541,12 +548,19 @@ public class PipelineTemplateConfigLoader {
             case LOWER_BOUNDS_COMBINED -> "cannot declare both minimum and minimumExclusive.";
             case UPPER_BOUNDS_COMBINED -> "cannot declare both maximum and maximumExclusive.";
             case EMPTY_INTERVAL -> "declares an empty numeric constraint interval.";
+            case ALLOWED_VALUES_ON_NON_SCALAR_JSON ->
+                "cannot declare allowedValues for payload_ref because its JSON representation is an object.";
+            case ALLOWED_VALUE_TYPE_MISMATCH ->
+                "allowedValues must use the JSON scalar type represented by its wraps declaration.";
+            case ALLOWED_VALUE_OUTSIDE_CONSTRAINTS ->
+                "allowedValues contains a value rejected by another declared constraint.";
         };
         return new IllegalStateException("Type '" + name + "' " + message);
     }
 
     private void rejectV3WrapperConstraints(String name, Map<?, ?> declaration) {
-        for (String key : List.of("minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive")) {
+        for (String key : List.of("minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive",
+            "allowedValues")) {
             if (declaration.containsKey(key)) {
                 throw new IllegalStateException("Type '" + name + "' can declare '" + key + "' only beside wraps.");
             }
@@ -617,6 +631,22 @@ public class PipelineTemplateConfigLoader {
         }
     }
 
+    private List<Object> readV3AllowedValues(String name, Map<?, ?> declaration) {
+        if (!declaration.containsKey("allowedValues")) {
+            return List.of();
+        }
+        Object raw = declaration.get("allowedValues");
+        if (!(raw instanceof Iterable<?> values) || raw instanceof Map<?, ?> || raw instanceof String) {
+            throw new IllegalStateException("Type '" + name + "' allowedValues must be a non-empty list of JSON scalar values.");
+        }
+        List<Object> result = new ArrayList<>();
+        values.forEach(result::add);
+        if (result.isEmpty()) {
+            throw new IllegalStateException("Type '" + name + "' allowedValues must not be empty.");
+        }
+        return List.copyOf(result);
+    }
+
     private List<PipelineTemplateTypeDefinition.Field> readV3RecordFields(String owner, Object fieldsObj) {
         if (!(fieldsObj instanceof Iterable<?> fields)) {
             throw new IllegalStateException("Type '" + owner + "' fields must be a YAML list.");
@@ -629,6 +659,7 @@ public class PipelineTemplateConfigLoader {
             boolean repeated = false;
             PipelineFieldPresence presence = PipelineFieldPresence.REQUIRED;
             PipelineFieldNullability nullability = PipelineFieldNullability.NON_NULL;
+            PipelineTemplateRepeatedFieldConstraints repeatedConstraints = PipelineTemplateRepeatedFieldConstraints.empty();
             if (fieldObj instanceof List<?> tuple) {
                 if (tuple.size() != 2) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
@@ -646,7 +677,7 @@ public class PipelineTemplateConfigLoader {
                     throw new IllegalStateException("Type '" + owner + "' field " + index + " cannot declare protobuf wire metadata in version: 3.");
                 }
                 rejectUnexpectedV3Keys(fieldMap, owner + " field " + index,
-                    "name", "type", "repeated", "presence", "nullability");
+                    "name", "type", "repeated", "presence", "nullability", "minItems", "maxItems");
                 fieldName = stringify(fieldMap.get("name"));
                 boolean hasType = fieldMap.containsKey("type");
                 boolean hasRepeated = fieldMap.containsKey("repeated");
@@ -655,6 +686,10 @@ public class PipelineTemplateConfigLoader {
                         + " must declare exactly one of 'type' or 'repeated'.");
                 }
                 repeated = hasRepeated;
+                if (!repeated && (fieldMap.containsKey("minItems") || fieldMap.containsKey("maxItems"))) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index
+                        + " can declare minItems or maxItems only with 'repeated'.");
+                }
                 fieldType = stringify(fieldMap.get(repeated ? "repeated" : "type"));
                 if ((fieldName != null && fieldName.endsWith("?")) || (fieldType != null && fieldType.endsWith("?"))) {
                     throw new IllegalStateException("Type '" + owner + "' field " + index
@@ -664,6 +699,15 @@ public class PipelineTemplateConfigLoader {
                     PipelineFieldPresence.REQUIRED, owner, index);
                 nullability = readV3Enum(fieldMap, "nullability", PipelineFieldNullability.class,
                     PipelineFieldNullability.NON_NULL, owner, index);
+                if (repeated) {
+                    try {
+                        repeatedConstraints = new PipelineTemplateRepeatedFieldConstraints(
+                            readV3NonNegativeIntegerConstraint(owner + "' field '" + fieldName, fieldMap, "minItems"),
+                            readV3NonNegativeIntegerConstraint(owner + "' field '" + fieldName, fieldMap, "maxItems"));
+                    } catch (IllegalArgumentException failure) {
+                        throw new IllegalStateException("Type '" + owner + "' field " + index + " " + failure.getMessage() + ".", failure);
+                    }
+                }
             } else {
                 throw new IllegalStateException("Type '" + owner + "' field " + index + " must be an object or [name, type] tuple.");
             }
@@ -675,7 +719,8 @@ public class PipelineTemplateConfigLoader {
                 readV3Reference(fieldType, owner + "." + fieldName),
                 repeated,
                 presence,
-                nullability));
+                nullability,
+                repeatedConstraints));
             index++;
         }
         return List.copyOf(result);

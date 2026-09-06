@@ -2518,6 +2518,8 @@ public final class PipelineTemplateSchemaExporter {
           "properties": {
             "name": { "type": "string", "minLength": 1 },
             "repeated": { "$ref": "#/$defs/v3TypeReference" },
+            "minItems": { "type": "integer", "minimum": 0 },
+            "maxItems": { "type": "integer", "minimum": 0 },
             "presence": { "enum": ["required", "optional"] },
             "nullability": { "enum": ["non_null", "nullable"] }
           },
@@ -2573,6 +2575,7 @@ public final class PipelineTemplateSchemaExporter {
             "maxLength": { "type": "integer", "minimum": 0 },
             "pattern": { "type": "string", "minLength": 1 },
             "format": { "const": "email" },
+            "allowedValues": { "type": "array", "minItems": 1, "items": { "type": "string" } },
             "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
@@ -2593,6 +2596,7 @@ public final class PipelineTemplateSchemaExporter {
             "minimumExclusive": { "type": "number" },
             "maximum": { "type": "number" },
             "maximumExclusive": { "type": "number" },
+            "allowedValues": { "type": "array", "minItems": 1, "items": { "type": "number" } },
             "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
@@ -2602,7 +2606,29 @@ public final class PipelineTemplateSchemaExporter {
           "type": "object",
           "required": ["wraps"],
           "properties": {
-            "wraps": { "type": "string", "enum": ["bool", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] },
+            "wraps": { "const": "bool" },
+            "allowedValues": { "type": "array", "minItems": 1, "items": { "type": "boolean" } },
+            "java": { "$ref": "#/$defs/javaClassName" },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["wraps"],
+          "properties": {
+            "wraps": { "type": "string", "enum": ["uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path"] },
+            "allowedValues": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "java": { "$ref": "#/$defs/javaClassName" },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["wraps"],
+          "properties": {
+            "wraps": { "const": "payload_ref" },
             "java": { "$ref": "#/$defs/javaClassName" },
             "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },

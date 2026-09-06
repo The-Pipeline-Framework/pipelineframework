@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelineFieldNullability;
 import org.pipelineframework.config.template.PipelineFieldPresence;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateRepeatedFieldConstraints;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.config.template.PipelineTemplateWrapperConstraints;
 import org.pipelineframework.protocol.ProtocolTypeDescriptor;
@@ -42,7 +43,7 @@ class ConnectorProviderArtifactsTest {
         assertTrue(json.contains("line\\nfeed"));
         assertTrue(json.contains("tab\\tvalue"));
         assertTrue(json.contains("unit\\u0001separator"));
-        assertTrue(json.contains("\"schemaVersion\":5"));
+        assertTrue(json.contains("\"schemaVersion\":6"));
         assertTrue(!json.contains("executionCapabilities"));
         assertEquals(manifest, parsed);
     }
@@ -66,12 +67,21 @@ class ConnectorProviderArtifactsTest {
                     "note", new PipelineTemplateTypeReference.Scalar("string"), false,
                     PipelineFieldPresence.OPTIONAL, PipelineFieldNullability.NULLABLE),
                 new PipelineTemplateTypeDefinition.Field(
-                    "tags", new PipelineTemplateTypeReference.Scalar("string"), true))));
+                    "tags", new PipelineTemplateTypeReference.Scalar("string"), true,
+                    PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                    new PipelineTemplateRepeatedFieldConstraints(Optional.of(1), Optional.of(3))))));
+        ProtocolTypeDescriptor method = new ProtocolTypeDescriptor(
+            new ProtocolTypeIdentity(providerId, "AccountingMethod"),
+            new PipelineTemplateTypeDefinition.WrapperType(
+                "AccountingMethod", new PipelineTemplateTypeReference.Scalar("string"),
+                new PipelineTemplateWrapperConstraints(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), List.of("Cash", "Accrual"))));
         ConnectorProviderManifest manifest = new ConnectorProviderManifest(
             ConnectorProviderManifest.CURRENT_SCHEMA_VERSION,
             List.of(new ConnectorProviderArtifactDescriptor(
                 new ConnectorProviderDescriptor(providerId, new ConnectorProviderVersion(1, 0)),
-                List.of(), List.of(type))));
+                List.of(), List.of(type, method))));
 
         String json = ConnectorProviderArtifacts.json(manifest);
         ConnectorProviderManifest parsed = ConnectorProviderManifestReader.read(
@@ -81,6 +91,9 @@ class ConnectorProviderArtifactsTest {
         assertTrue(json.contains("\"presence\":\"OPTIONAL\""));
         assertTrue(json.contains("\"nullability\":\"NULLABLE\""));
         assertTrue(json.contains("\"repeated\":true"));
+        assertTrue(json.contains("\"minItems\":1"));
+        assertTrue(json.contains("\"maxItems\":3"));
+        assertTrue(json.contains("\"allowedValues\":[\"Accrual\",\"Cash\"]"));
     }
 
     @Test

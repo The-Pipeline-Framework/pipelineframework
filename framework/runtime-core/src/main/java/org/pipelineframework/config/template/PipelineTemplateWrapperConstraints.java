@@ -18,6 +18,11 @@ package org.pipelineframework.config.template;
 
 import java.beans.Transient;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 
 /** Target-neutral constraints declared beside a v3 nominal wrapper's scalar representation. */
@@ -29,7 +34,8 @@ public record PipelineTemplateWrapperConstraints(
     Optional<BigDecimal> minimum,
     Optional<BigDecimal> minimumExclusive,
     Optional<BigDecimal> maximum,
-    Optional<BigDecimal> maximumExclusive
+    Optional<BigDecimal> maximumExclusive,
+    List<Object> allowedValues
 ) {
     public enum Format { EMAIL }
 
@@ -44,11 +50,25 @@ public record PipelineTemplateWrapperConstraints(
         minimumExclusive = canonical(optional(minimumExclusive));
         maximum = canonical(optional(maximum));
         maximumExclusive = canonical(optional(maximumExclusive));
+        allowedValues = canonicalAllowedValues(allowedValues);
     }
 
     public PipelineTemplateWrapperConstraints() {
         this(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-            Optional.empty(), Optional.empty());
+            Optional.empty(), Optional.empty(), List.of());
+    }
+
+    public PipelineTemplateWrapperConstraints(
+        Optional<Integer> minLength,
+        Optional<Integer> maxLength,
+        Optional<String> pattern,
+        Optional<Format> format,
+        Optional<BigDecimal> minimum,
+        Optional<BigDecimal> minimumExclusive,
+        Optional<BigDecimal> maximum,
+        Optional<BigDecimal> maximumExclusive
+    ) {
+        this(minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive, List.of());
     }
 
     public static PipelineTemplateWrapperConstraints empty() {
@@ -58,7 +78,8 @@ public record PipelineTemplateWrapperConstraints(
     @Transient
     public boolean isEmpty() {
         return minLength.isEmpty() && maxLength.isEmpty() && pattern.isEmpty() && format.isEmpty()
-            && minimum.isEmpty() && minimumExclusive.isEmpty() && maximum.isEmpty() && maximumExclusive.isEmpty();
+            && minimum.isEmpty() && minimumExclusive.isEmpty() && maximum.isEmpty() && maximumExclusive.isEmpty()
+            && allowedValues.isEmpty();
     }
 
     /**
@@ -78,7 +99,67 @@ public record PipelineTemplateWrapperConstraints(
             bound(this.maximum, this.maximumExclusive)));
         change = change.combine(compareOpaque(before.pattern, this.pattern));
         change = change.combine(compareOpaque(before.format, this.format));
+        change = change.combine(compareAllowedValues(before.allowedValues, this.allowedValues));
         return change.compatibility();
+    }
+
+    private static List<Object> canonicalAllowedValues(List<Object> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        List<Object> normalized = new ArrayList<>(values.size());
+        for (Object value : values) {
+            normalized.add(canonicalAllowedValue(value));
+        }
+        normalized.sort(Comparator.comparing(PipelineTemplateWrapperConstraints::allowedValueSortKey));
+        return List.copyOf(new LinkedHashSet<>(normalized));
+    }
+
+    private static Object canonicalAllowedValue(Object value) {
+        if (value instanceof String || value instanceof Boolean) {
+            return value;
+        }
+        if (value instanceof Number number) {
+            try {
+                BigDecimal decimal = new BigDecimal(number.toString()).stripTrailingZeros();
+                return decimal.scale() <= 0 ? decimal.toBigIntegerExact() : decimal;
+            } catch (NumberFormatException | ArithmeticException failure) {
+                throw new IllegalArgumentException("allowedValues must contain only finite JSON scalar values", failure);
+            }
+        }
+        throw new IllegalArgumentException("allowedValues must contain only string, boolean, or finite number values");
+    }
+
+    private static String allowedValueSortKey(Object value) {
+        if (value instanceof String string) {
+            return "0:" + string;
+        }
+        if (value instanceof Boolean bool) {
+            return "1:" + bool;
+        }
+        if (value instanceof BigInteger integer) {
+            return "2:" + integer;
+        }
+        return "3:" + ((BigDecimal) value).toPlainString();
+    }
+
+    private static Change compareAllowedValues(List<Object> before, List<Object> after) {
+        if (before.equals(after)) {
+            return Change.UNCHANGED;
+        }
+        if (before.isEmpty()) {
+            return Change.NARROWING;
+        }
+        if (after.isEmpty()) {
+            return Change.WIDENING;
+        }
+        if (before.containsAll(after)) {
+            return Change.NARROWING;
+        }
+        if (after.containsAll(before)) {
+            return Change.WIDENING;
+        }
+        return Change.INCOMPARABLE;
     }
 
     private static <T> Optional<T> optional(Optional<T> value) {

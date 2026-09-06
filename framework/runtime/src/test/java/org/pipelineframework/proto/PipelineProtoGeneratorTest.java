@@ -321,6 +321,8 @@ class PipelineProtoGeneratorTest {
                 fields:
                   - name: lineItems
                     repeated: LineItem
+                    minItems: 1
+                    maxItems: 2
                   - name: labels
                     repeated: string
             steps:
@@ -345,6 +347,8 @@ class PipelineProtoGeneratorTest {
         assertFalse(proto.contains("optional LineItem line_items"));
         assertTrue(batchSource.contains("java.util.List<LineItem> lineItems"));
         assertTrue(batchSource.contains("lineItems == null ? java.util.List.of() : java.util.List.copyOf(lineItems)"));
+        assertTrue(batchSource.contains("lineItems.size() < 1"));
+        assertTrue(batchSource.contains("lineItems.size() > 2"));
 
         Path stub = outputDir.resolve("com/example/repeated/grpc/PipelineTypes.java");
         Files.createDirectories(stub.getParent());
@@ -409,6 +413,10 @@ class PipelineProtoGeneratorTest {
             List<?> storedItems = (List<?>) batch.getMethod("lineItems").invoke(input);
             assertEquals(List.of(item, item), storedItems, "Repeated values must preserve order and duplicates");
             assertThrows(UnsupportedOperationException.class, storedItems::clear);
+            assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> batch.getConstructor(List.class, List.class).newInstance(List.of(), List.of()));
+            assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> batch.getConstructor(List.class, List.class).newInstance(List.of(item, item, item), List.of()));
 
             Object encoded = adapters.getMethod("toProto", batch).invoke(null, input);
             Object roundTripped = adapters.getMethod("fromProto", encoded.getClass()).invoke(null, encoded);
@@ -607,6 +615,7 @@ class PipelineProtoGeneratorTest {
                 minLength: 3
                 maxLength: 3
                 pattern: "[A-Z]{3}"
+                allowedValues: [USD, EUR]
               ContactEmail:
                 wraps: string
                 format: email
@@ -635,6 +644,7 @@ class PipelineProtoGeneratorTest {
 
         assertTrue(currency.contains("if (value == null) { throw new IllegalArgumentException"));
         assertTrue(currency.contains("validateString(\"CurrencyCode\", value"));
+        assertTrue(currency.contains("must be one of its declared allowedValues"));
         assertTrue(ratio.contains("validateFloat64(\"PositiveRatio\", value"));
         assertTrue(validation.contains("codePointCount"));
         assertTrue(validation.contains("matcher(value).matches()"));
@@ -695,6 +705,7 @@ class PipelineProtoGeneratorTest {
             assertNotNull(email.getConstructor(String.class).newInstance("person@example.com"));
             assertNotNull(ratioClass.getConstructor(Double.class).newInstance(0.5d));
             assertWrapperConstructionFails(currencyClass, "usd");
+            assertWrapperConstructionFails(currencyClass, "GBP");
             assertWrapperConstructionFails(currencyClass, (Object) null);
             assertWrapperConstructionFails(email, "person@.example");
             assertWrapperConstructionFails(ratioClass, Double.NaN);

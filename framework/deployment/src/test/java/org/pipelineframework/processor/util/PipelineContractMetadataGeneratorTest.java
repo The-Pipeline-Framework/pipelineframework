@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import javax.annotation.processing.Filer;
@@ -28,12 +29,16 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelinePlatform;
+import org.pipelineframework.config.template.PipelineFieldNullability;
+import org.pipelineframework.config.template.PipelineFieldPresence;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateMaterialization;
+import org.pipelineframework.config.template.PipelineTemplateRepeatedFieldConstraints;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.config.template.PipelineTemplateWrapperConstraints;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.composition.PipelineDefinition;
@@ -156,6 +161,11 @@ class PipelineContractMetadataGeneratorTest {
             .getAsJsonObject("definition").getAsJsonArray("fields").get(1).getAsJsonObject();
 
         assertTrue(repeatedField.get("repeated").getAsBoolean());
+        assertEquals(1, repeatedField.get("minItems").getAsInt());
+        assertEquals(3, repeatedField.get("maxItems").getAsInt());
+        assertEquals(List.of("Accrual", "Cash"), repeated.getAsJsonObject("canonicalTypes")
+            .getAsJsonObject("AccountingMethod").getAsJsonObject("definition").getAsJsonArray("allowedValues")
+            .asList().stream().map(com.google.gson.JsonElement::getAsString).toList());
         assertNotEquals(singular.get("canonicalCatalogFingerprint").getAsString(),
             repeated.get("canonicalCatalogFingerprint").getAsString());
         assertNotEquals(singular.get("contractHash").getAsString(), repeated.get("contractHash").getAsString());
@@ -430,12 +440,23 @@ class PipelineContractMetadataGeneratorTest {
         PipelineTemplateTypeDefinition zeta = new PipelineTemplateTypeDefinition.RecordType("Zeta", List.of(
             new PipelineTemplateTypeDefinition.Field("attributes", new PipelineTemplateTypeReference.MapType(
                 new PipelineTemplateTypeReference.Scalar("string"), new PipelineTemplateTypeReference.Named("Alpha"))),
-            new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"), true)));
+            new PipelineTemplateTypeDefinition.Field(
+                "description", new PipelineTemplateTypeReference.Scalar("string"), true,
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                new PipelineTemplateRepeatedFieldConstraints(Optional.of(1), Optional.of(3)))));
+        PipelineTemplateTypeDefinition accountingMethod = new PipelineTemplateTypeDefinition.WrapperType(
+            "AccountingMethod", new PipelineTemplateTypeReference.Scalar("string"),
+            new PipelineTemplateWrapperConstraints(
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), reverseDefinitionOrder
+                    ? List.of("Cash", "Accrual", "Cash") : List.of("Accrual", "Cash")));
         if (reverseDefinitionOrder) {
             definitions.put("Zeta", zeta);
+            definitions.put("AccountingMethod", accountingMethod);
             definitions.put("Alpha", alpha);
         } else {
             definitions.put("Alpha", alpha);
+            definitions.put("AccountingMethod", accountingMethod);
             definitions.put("Zeta", zeta);
         }
         return new PipelineTemplateTypeModel(definitions);

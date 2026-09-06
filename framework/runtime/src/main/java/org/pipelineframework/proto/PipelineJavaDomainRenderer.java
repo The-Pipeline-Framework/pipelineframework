@@ -142,6 +142,16 @@ final class PipelineJavaDomainRenderer {
             record.fields().stream().filter(field -> field.repeated()).forEach(field -> builder
                 .append("        ").append(field.name()).append(" = ").append(field.name())
                 .append(" == null ? java.util.List.of() : java.util.List.copyOf(").append(field.name()).append(");\n"));
+            record.fields().stream().filter(field -> field.repeated() && !field.constraints().isEmpty()).forEach(field -> {
+                field.constraints().minItems().ifPresent(minimum -> builder.append("        if (")
+                    .append(field.name()).append(".size() < ").append(minimum).append(") { throw new IllegalArgumentException(\"")
+                    .append(javaStringLiteral(record.name() + "." + field.name() + " must contain at least " + minimum + " items"))
+                    .append("\"); }\n"));
+                field.constraints().maxItems().ifPresent(maximum -> builder.append("        if (")
+                    .append(field.name()).append(".size() > ").append(maximum).append(") { throw new IllegalArgumentException(\"")
+                    .append(javaStringLiteral(record.name() + "." + field.name() + " must contain at most " + maximum + " items"))
+                    .append("\"); }\n"));
+            });
             record.fields().stream().filter(field -> !field.repeated()).forEach(field -> {
                 builder.append("        java.util.Objects.requireNonNull(").append(field.name()).append(", \"")
                     .append(javaStringLiteral(record.name() + "." + field.name() + " must not be null"))
@@ -354,26 +364,74 @@ final class PipelineJavaDomainRenderer {
     private void renderWrapperConstraints(StringBuilder builder, PipelineTemplateTypeDefinition.WrapperType wrapper) {
         PipelineTemplateWrapperConstraints constraints = wrapper.constraints();
         String scalar = wrapper.wraps().name();
-        if ("string".equals(scalar)) {
+        boolean hasStringConstraints = constraints.minLength().isPresent() || constraints.maxLength().isPresent()
+            || constraints.pattern().isPresent() || constraints.format().isPresent();
+        boolean hasNumericConstraints = constraints.minimum().isPresent() || constraints.minimumExclusive().isPresent()
+            || constraints.maximum().isPresent() || constraints.maximumExclusive().isPresent();
+        if ("string".equals(scalar) && hasStringConstraints) {
             builder.append("        ").append(VALIDATION_NAME).append(".validateString(\"")
                 .append(javaStringLiteral(wrapper.name())).append("\", value, ")
                 .append(optionalIntExpression(constraints.minLength())).append(", ")
                 .append(optionalIntExpression(constraints.maxLength())).append(", ")
                 .append(patternExpression(constraints)).append(", ")
                 .append(constraints.format().isPresent()).append(");\n");
-            return;
         }
-        String bounds = numericBoundsExpression(constraints);
-        String method = switch (scalar) {
-            case "int32" -> "validateInt32";
-            case "int64" -> "validateInt64";
-            case "float32" -> "validateFloat32";
-            case "float64" -> "validateFloat64";
-            case "decimal" -> "validateDecimal";
-            default -> throw new IllegalStateException("Unsupported constrained wrapper scalar '" + scalar + "'.");
+        if (hasNumericConstraints) {
+            String bounds = numericBoundsExpression(constraints);
+            String method = switch (scalar) {
+                case "int32" -> "validateInt32";
+                case "int64" -> "validateInt64";
+                case "float32" -> "validateFloat32";
+                case "float64" -> "validateFloat64";
+                case "decimal" -> "validateDecimal";
+                default -> throw new IllegalStateException("Unsupported constrained wrapper scalar '" + scalar + "'.");
+            };
+            builder.append("        ").append(VALIDATION_NAME).append('.').append(method).append("(\"")
+                .append(javaStringLiteral(wrapper.name())).append("\", value, ").append(bounds).append(");\n");
+        }
+        if (!constraints.allowedValues().isEmpty()) {
+            builder.append("        if (!(");
+            for (int index = 0; index < constraints.allowedValues().size(); index++) {
+                if (index > 0) {
+                    builder.append(" || ");
+                }
+                builder.append(allowedValuePredicate(scalar, constraints.allowedValues().get(index)));
+            }
+            builder.append(")) { throw new IllegalArgumentException(\"")
+                .append(javaStringLiteral(wrapper.name() + " must be one of its declared allowedValues"))
+                .append("\"); }\n");
+        }
+    }
+
+    private String allowedValuePredicate(String scalar, Object allowedValue) {
+        String lexical = allowedValue.toString();
+        return switch (scalar) {
+            case "bytes" -> "java.util.Arrays.equals(value, java.util.Base64.getDecoder().decode(\""
+                + javaStringLiteral(lexical) + "\"))";
+            case "decimal" -> "value.compareTo(new java.math.BigDecimal(\"" + javaStringLiteral(lexical) + "\")) == 0";
+            default -> "value.equals(" + allowedValueExpression(scalar, lexical, allowedValue) + ")";
         };
-        builder.append("        ").append(VALIDATION_NAME).append('.').append(method).append("(\"")
-            .append(javaStringLiteral(wrapper.name())).append("\", value, ").append(bounds).append(");\n");
+    }
+
+    private String allowedValueExpression(String scalar, String lexical, Object value) {
+        String quoted = "\"" + javaStringLiteral(lexical) + "\"";
+        return switch (scalar) {
+            case "string" -> quoted;
+            case "bool" -> value.toString();
+            case "int32" -> "Integer.valueOf(" + quoted + ")";
+            case "int64" -> "Long.valueOf(" + quoted + ")";
+            case "float32" -> "Float.valueOf(" + quoted + ")";
+            case "float64" -> "Double.valueOf(" + quoted + ")";
+            case "uuid" -> "java.util.UUID.fromString(" + quoted + ")";
+            case "timestamp" -> "java.time.Instant.parse(" + quoted + ")";
+            case "datetime" -> "java.time.LocalDateTime.parse(" + quoted + ")";
+            case "date" -> "java.time.LocalDate.parse(" + quoted + ")";
+            case "duration" -> "java.time.Duration.parse(" + quoted + ")";
+            case "currency" -> "java.util.Currency.getInstance(" + quoted + ")";
+            case "uri" -> "java.net.URI.create(" + quoted + ")";
+            case "path" -> "java.nio.file.Path.of(" + quoted + ")";
+            default -> throw new IllegalStateException("Unsupported allowedValues wrapper scalar '" + scalar + "'.");
+        };
     }
 
     private String optionalIntExpression(Optional<Integer> value) {

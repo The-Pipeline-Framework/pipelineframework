@@ -61,23 +61,35 @@ public sealed interface PipelineTemplateTypeDefinition
         PipelineTemplateTypeReference type,
         boolean repeated,
         PipelineFieldPresence presence,
-        PipelineFieldNullability nullability
+        PipelineFieldNullability nullability,
+        PipelineTemplateRepeatedFieldConstraints constraints
     ) {
         public Field {
             Objects.requireNonNull(presence, "field presence must not be null");
             Objects.requireNonNull(nullability, "field nullability must not be null");
+            constraints = constraints == null ? PipelineTemplateRepeatedFieldConstraints.empty() : constraints;
             if (repeated && (presence != PipelineFieldPresence.REQUIRED
                 || nullability != PipelineFieldNullability.NON_NULL)) {
                 throw new IllegalArgumentException("Repeated fields do not yet support presence or nullability modifiers.");
             }
+            if (!repeated && !constraints.isEmpty()) {
+                throw new IllegalArgumentException("minItems and maxItems can be declared only on repeated fields.");
+            }
+        }
+
+        public Field(String name, PipelineTemplateTypeReference type, boolean repeated,
+                     PipelineFieldPresence presence, PipelineFieldNullability nullability) {
+            this(name, type, repeated, presence, nullability, PipelineTemplateRepeatedFieldConstraints.empty());
         }
 
         public Field(String name, PipelineTemplateTypeReference type) {
-            this(name, type, false, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL);
+            this(name, type, false, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                PipelineTemplateRepeatedFieldConstraints.empty());
         }
 
         public Field(String name, PipelineTemplateTypeReference type, boolean repeated) {
-            this(name, type, repeated, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL);
+            this(name, type, repeated, PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                PipelineTemplateRepeatedFieldConstraints.empty());
         }
     }
 

@@ -238,8 +238,17 @@ class PipelineTemplateSchemaExporterTest {
             .filter(definition -> !definition.getAsJsonObject("properties").has("minimum"))
             .findFirst().orElseThrow();
         JsonObject otherScalarWraps = otherScalarWrapper.getAsJsonObject("properties").getAsJsonObject("wraps");
-        assertContains(otherScalarWraps.getAsJsonArray("enum"), "payload_ref");
+        assertContains(otherScalarWraps.getAsJsonArray("enum"), "uuid");
         assertFalse(otherScalarWraps.has("pattern"));
+        JsonObject payloadReferenceWrapper = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
+            .map(JsonElement::getAsJsonObject)
+            .filter(definition -> definition.getAsJsonObject("properties").has("wraps"))
+            .filter(definition -> {
+                JsonObject wraps = definition.getAsJsonObject("properties").getAsJsonObject("wraps");
+                return wraps.has("const") && "payload_ref".equals(wraps.get("const").getAsString());
+            })
+            .findFirst().orElseThrow();
+        assertFalse(payloadReferenceWrapper.getAsJsonObject("properties").has("allowedValues"));
 
         JsonObject v3Step = definitions.getAsJsonObject("v3TemplateStep");
         assertContains(v3Step.getAsJsonArray("required"), "input");

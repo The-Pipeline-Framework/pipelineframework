@@ -147,7 +147,7 @@ public final class PipelineIdlStateResolver {
                     }
                     fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(
                         number, field.name(), protoName, field.type().name(), field.repeated(),
-                        field.presence(), field.nullability(), nullMarkerNumber, nullMarkerProtoName));
+                        field.presence(), field.nullability(), field.constraints(), nullMarkerNumber, nullMarkerProtoName));
                 }
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList(),

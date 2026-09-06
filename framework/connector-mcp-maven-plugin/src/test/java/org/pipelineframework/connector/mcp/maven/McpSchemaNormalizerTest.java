@@ -125,7 +125,7 @@ class McpSchemaNormalizerTest {
                         "oneOf", List.of(Map.of("type", "array"))))), "tool input"));
         assertTrue(arrayComposition.getMessage().contains("$.properties.values.oneOf"));
 
-        for (String keyword : List.of("minItems", "maxItems", "uniqueItems")) {
+        for (String keyword : List.of("uniqueItems")) {
             IllegalArgumentException arrayConstraint = assertThrows(IllegalArgumentException.class,
                 () -> normalizer.normalize(
                     "Request", Map.of(
@@ -135,6 +135,61 @@ class McpSchemaNormalizerTest {
                     "tool input"));
             assertTrue(arrayConstraint.getMessage().contains("$.properties.values." + keyword));
         }
+    }
+
+    @Test
+    void projectsEnumConstAndCreateInvoiceCollectionBoundsIntoCanonicalConstraints() {
+        Map<String, Object> schema = Map.of(
+            "type", "object",
+            "additionalProperties", false,
+            "required", List.of("accounting_method", "lines", "send_later"),
+            "properties", Map.of(
+                "accounting_method", Map.of(
+                    "type", "string", "enum", List.of("Cash", "Accrual", "Cash")),
+                "send_later", Map.of("type", "boolean", "const", false),
+                "lines", Map.of(
+                    "type", "array", "minItems", 1, "maxItems", 10,
+                    "items", Map.of("type", "string"))));
+
+        var types = normalizer.normalize("CreateInvoiceRequest", schema, "create_invoice input");
+        PipelineTemplateTypeDefinition.RecordType root = assertInstanceOf(
+            PipelineTemplateTypeDefinition.RecordType.class,
+            types.stream().filter(type -> type.identity().typeName().equals("CreateInvoiceRequest"))
+                .findFirst().orElseThrow().definition());
+        var lines = root.fields().stream().filter(field -> field.name().equals("lines")).findFirst().orElseThrow();
+        assertEquals(1, lines.constraints().minItems().orElseThrow());
+        assertEquals(10, lines.constraints().maxItems().orElseThrow());
+
+        PipelineTemplateTypeDefinition.WrapperType accountingMethod = assertInstanceOf(
+            PipelineTemplateTypeDefinition.WrapperType.class,
+            types.stream().filter(type -> type.identity().typeName().equals("CreateInvoiceRequestAccountingMethodValue"))
+                .findFirst().orElseThrow().definition());
+        assertEquals(List.of("Accrual", "Cash"), accountingMethod.constraints().allowedValues());
+        PipelineTemplateTypeDefinition.WrapperType sendLater = assertInstanceOf(
+            PipelineTemplateTypeDefinition.WrapperType.class,
+            types.stream().filter(type -> type.identity().typeName().equals("CreateInvoiceRequestSendLaterValue"))
+                .findFirst().orElseThrow().definition());
+        assertEquals(List.of(false), sendLater.constraints().allowedValues());
+    }
+
+    @Test
+    void rejectsContradictoryOrIllTypedAllowedValuesAndInvalidArrayBounds() {
+        for (Map<String, Object> invalid : List.<Map<String, Object>>of(
+            Map.of("type", "string", "enum", List.of("Cash"), "const", "Accrual"),
+            Map.of("type", "integer", "enum", List.of("one")))) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> normalizer.normalize("Request", Map.of(
+                    "type", "object", "additionalProperties", false, "required", List.of("value"),
+                    "properties", Map.of("value", invalid)), "tool input"));
+            assertTrue(failure.getMessage().contains("$.properties.value"));
+        }
+        IllegalArgumentException bounds = assertThrows(IllegalArgumentException.class,
+            () -> normalizer.normalize("Request", Map.of(
+                "type", "object", "additionalProperties", false, "required", List.of("values"),
+                "properties", Map.of("values", Map.of(
+                    "type", "array", "minItems", 2, "maxItems", 1, "items", Map.of("type", "string")))),
+                "tool input"));
+        assertTrue(bounds.getMessage().contains("$.properties.values"));
     }
 
     @Test
