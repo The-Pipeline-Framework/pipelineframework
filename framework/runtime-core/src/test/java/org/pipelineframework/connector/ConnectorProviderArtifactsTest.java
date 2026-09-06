@@ -64,6 +64,8 @@ class ConnectorProviderArtifactsTest {
             new ProtocolTypeIdentity(providerId, "Request"),
             new PipelineTemplateTypeDefinition.RecordType("Request", List.of(
                 new PipelineTemplateTypeDefinition.Field(
+                    "method", new PipelineTemplateTypeReference.Contributed("acme.protocol.AccountingMethod"), false),
+                new PipelineTemplateTypeDefinition.Field(
                     "note", new PipelineTemplateTypeReference.Scalar("string"), false,
                     PipelineFieldPresence.OPTIONAL, PipelineFieldNullability.NULLABLE),
                 new PipelineTemplateTypeDefinition.Field(

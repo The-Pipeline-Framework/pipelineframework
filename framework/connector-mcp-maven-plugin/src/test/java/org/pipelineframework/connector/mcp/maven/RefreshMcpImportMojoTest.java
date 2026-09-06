@@ -24,6 +24,47 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.pipelineframework.connector.ConnectorProviderManifestReader;
 
 class RefreshMcpImportMojoTest {
+    @Test
+    void importsOnlySelectedInvoiceFieldsAndRecordsSelectionDeterministically() throws Exception {
+        Map<String, Object> input = Map.of("type", "object", "additionalProperties", false,
+            "required", List.of("params"), "properties", Map.of("params", Map.of(
+                "type", "object", "additionalProperties", false, "required", List.of("customer_id", "line_items"),
+                "properties", Map.of("customer_id", Map.of("type", "string", "minLength", 1),
+                    "line_items", Map.of("type", "array", "minItems", 1, "items", Map.of("type", "string")),
+                    "memo", Map.of("type", "string"),
+                    "linked_txn", Map.of("type", "array", "items", Map.of("oneOf", List.of()))))));
+        var tool = io.modelcontextprotocol.spec.McpSchema.Tool.builder("create_invoice").inputSchema(input)
+            .outputSchema(Map.of("type", "object", "additionalProperties", false, "properties", Map.of())).build();
+        McpToolMapping mapping = new McpToolMapping();
+        mapping.mcpName = "create_invoice";
+        mapping.operation = "invoice.create";
+        mapping.kind = "command";
+        mapping.majorVersion = 1;
+        mapping.inputType = "CreateInvoice";
+        mapping.outputType = "InvoiceCreated";
+        assertThrows(IllegalArgumentException.class, () -> RefreshMcpImportMojo.importTools(List.of(tool), List.of(mapping)));
+        mapping.includeFields = List.of("params.line_items", "params.customer_id");
+        var first = RefreshMcpImportMojo.importTools(List.of(tool, McpImportStdioServerMain.tool("discovered-only")),
+            List.of(mapping));
+        RefreshMcpImportMojo.write(temporary, first);
+        String firstPin = Files.readString(pin());
+        String firstManifest = Files.readString(manifest());
+        assertTrue(firstPin.contains("includeFields"));
+        assertFalse(firstManifest.contains("linked_txn"));
+        assertFalse(firstPin.contains("discovered-only"));
+        assertTrue(firstManifest.contains("minItems"));
+        mapping.includeFields = List.of("params.customer_id", "params.line_items");
+        RefreshMcpImportMojo.write(temporary, RefreshMcpImportMojo.importTools(List.of(tool), List.of(mapping)));
+        assertEquals(firstPin, Files.readString(pin()));
+        assertEquals(firstManifest, Files.readString(manifest()));
+        assertEquals(mapping.includeFields, JSON.convertValue(
+            JSON.readTree(firstPin).path("tools").get(0).path("includeFields"), List.class));
+        mapping.includeFields = List.of("params.customer_id", "params.line_items", "params.memo");
+        RefreshMcpImportMojo.write(temporary, RefreshMcpImportMojo.importTools(List.of(tool), List.of(mapping)));
+        assertFalse(firstPin.equals(Files.readString(pin())));
+        assertTrue(Files.readString(manifest()).contains("memo"));
+    }
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @TempDir

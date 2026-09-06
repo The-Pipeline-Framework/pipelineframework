@@ -223,8 +223,10 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
                 throw new IllegalArgumentException("selected MCP tool has no outputSchema: " + mapping.mcpName);
             }
             ConnectorOperationKind kind = importKind(mapping.kind);
+            McpInputSelection selection = new McpInputSelection(mapping.includeFields);
             List<ProtocolTypeDescriptor> input = normalizer.normalize(
-                mapping.inputType, tool.inputSchema(), "MCP tool '" + mapping.mcpName + "' input");
+                mapping.inputType, selection.project(tool.inputSchema()),
+                "MCP tool '" + mapping.mcpName + "' input");
             List<ProtocolTypeDescriptor> output = normalizer.normalize(
                 mapping.outputType, tool.outputSchema(), "MCP tool '" + mapping.mcpName + "' output");
             java.util.stream.Stream.concat(input.stream(), output.stream()).forEach(type -> {
@@ -241,6 +243,7 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
             pin.put("majorVersion", mapping.majorVersion);
             pin.put("input", mapping.inputType);
             pin.put("output", mapping.outputType);
+            pin.put("includeFields", selection.includeFields());
             pins.add(pin);
         }
         return new ImportedArtifacts(

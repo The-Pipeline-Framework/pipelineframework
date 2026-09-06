@@ -126,7 +126,9 @@ public final class ConnectorProviderArtifacts {
             return scalar.name();
         }
         if (reference instanceof org.pipelineframework.config.template.PipelineTemplateTypeReference.Contributed contributed) {
-            return contributed.name();
+            String identity = org.pipelineframework.config.template.ProtocolTypeReferences
+                .parseContributed(contributed.name()).orElse(contributed.name());
+            return "<" + identity + ">";
         }
         throw new IllegalArgumentException("provider protocol type contains a non-portable reference: " + reference);
     }

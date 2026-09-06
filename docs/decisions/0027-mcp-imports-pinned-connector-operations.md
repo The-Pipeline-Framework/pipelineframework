@@ -31,6 +31,14 @@ The importer-v1 JSON Schema subset is deliberately lossless: unsupported schema 
 with path diagnostics. Those restrictions are importer limitations; they do not narrow or weaken
 canonical v3.
 
+An author may explicitly select a narrower input graph at refresh time. Selected parent objects
+retain every external required field and their original constraints; only optional fields can be
+omitted. The importer rejects unknown, overlapping or incomplete paths and records the sorted
+selection alongside the private execution mapping. Canonical contributed types expose only the
+selected graph, preserving its external names and nesting for ordinary typed serialization.
+This selection is a contract decision, not an additional callable grant. External schema pinning
+and runtime verification remain a separate import-contract concern.
+
 At runtime, the existing named binding selects `mcp.client`. A host `ConnectionResolver` supplies
 an initialized `McpClientConnection`. The host owns credentials, sessions, transports, an STDIO
 process when used, and client/process shutdown. The connector neither creates nor closes them.
