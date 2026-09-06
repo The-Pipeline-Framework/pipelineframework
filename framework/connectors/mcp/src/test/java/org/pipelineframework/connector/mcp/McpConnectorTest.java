@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -109,6 +110,24 @@ class McpConnectorTest {
         verify(client).callTool(any());
         verify(client, never()).listTools();
         verify(client, never()).close();
+    }
+
+    @Test
+    void preservesUnstructuredResultsLargerThanThePrivatePinLimit() throws Exception {
+        String content = "x".repeat(1_100_000);
+        McpAsyncClient client = initializedClient(McpSchema.CallToolResult.builder().addTextContent(content).build());
+        QueryOperation<Object, ConnectorConfigurationDocument, JsonPayload> operation =
+            query(started(client), "customer.notes");
+
+        var outcome = operation.query(new QueryInvocation<>(new McpRequest("42"),
+            ConnectorConfigurationDocument.empty(), JsonPayload.class, ConnectorExecutionContext.empty()))
+            .toCompletableFuture().join();
+
+        JsonPayload payload = assertInstanceOf(JsonPayload.class,
+            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+        assertTrue(payload.bodyJson().length() > 1_048_576);
+        assertEquals(content, new ObjectMapper().readTree(payload.bodyJson())
+            .path("content").get(0).path("text").asText());
     }
 
     @Test

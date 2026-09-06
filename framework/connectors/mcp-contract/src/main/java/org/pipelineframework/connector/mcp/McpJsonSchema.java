@@ -1,13 +1,22 @@
 package org.pipelineframework.connector.mcp;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import com.google.re2j.Pattern;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /** Immutable external schema pin and bounded validator for the importer-v1 schema dialect. */
-public record McpJsonSchema(String json, java.util.List<String> includeFields) {
+public final class McpJsonSchema {
+    private static final ObjectMapper JSON = new ObjectMapper()
+        .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+        .enable(DeserializationFeature.USE_BIG_INTEGER_FOR_INTS);
     private static final Set<String> KEYWORDS = Set.of(
         "$schema", "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly",
         "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems",
@@ -16,28 +25,36 @@ public record McpJsonSchema(String json, java.util.List<String> includeFields) {
     private static final Set<String> TYPES = Set.of("object", "array", "string", "integer", "number", "boolean", "null");
     private static final Set<String> FORMATS = Set.of(
         "email", "uuid", "date-time", "date", "duration", "uri", "int32", "int64", "float", "double", "decimal");
+    private final String json;
+    private final List<String> includeFields;
+    private final JsonNode projectedSchema;
 
-    public McpJsonSchema {
+    public McpJsonSchema(String json, List<String> includeFields) {
         JsonNode schema = McpPinnedJson.parse(json);
-        includeFields = new McpInputSelection(includeFields).includeFields();
-        checkSchema(project(schema, includeFields), "$", true);
-        json = McpPinnedJson.canonicalize(schema);
+        this.includeFields = new McpInputSelection(includeFields).includeFields();
+        this.projectedSchema = project(schema, this.includeFields);
+        checkSchema(projectedSchema, "$", true);
+        this.json = McpPinnedJson.canonicalize(schema);
     }
 
     public McpJsonSchema(String json) {
         this(json, java.util.List.of());
     }
 
-    private static JsonNode project(JsonNode schema, java.util.List<String> includeFields) {
+    private static JsonNode project(JsonNode schema, List<String> includeFields) {
         if (includeFields.isEmpty()) {
             return schema;
         }
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-            .enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
-            .enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_INTEGER_FOR_INTS);
-        java.util.Map<String, Object> original = mapper.convertValue(schema,
-            new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
-        return mapper.valueToTree(new McpInputSelection(includeFields).project(original));
+        Map<String, Object> original = JSON.convertValue(schema, new TypeReference<>() { });
+        return JSON.valueToTree(new McpInputSelection(includeFields).project(original));
+    }
+
+    public String json() {
+        return json;
+    }
+
+    public List<String> includeFields() {
+        return includeFields;
     }
 
     public String sha256() {
@@ -50,7 +67,23 @@ public record McpJsonSchema(String json, java.util.List<String> includeFields) {
 
     public void validateArguments(JsonNode value) {
         JsonNode bounded = McpPinnedJson.parse(McpPinnedJson.canonicalize(value));
-        validate(project(node(), includeFields), bounded, "$", new int[] {0});
+        validate(projectedSchema, bounded, "$", new int[] {0});
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof McpJsonSchema that
+            && json.equals(that.json) && includeFields.equals(that.includeFields);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(json, includeFields);
+    }
+
+    @Override
+    public String toString() {
+        return "McpJsonSchema[json=" + json + ", includeFields=" + includeFields + "]";
     }
 
     private static void checkSchema(JsonNode schema, String path, boolean root) {

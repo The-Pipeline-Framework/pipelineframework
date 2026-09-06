@@ -72,6 +72,7 @@
         <quarkus-langchain4j.version>1.13.1</quarkus-langchain4j.version>
         <google.gmail.api.version>v1-rev20260727-2.0.0</google.gmail.api.version>
         <mcp.java.sdk.version>2.0.1</mcp.java.sdk.version>
+        <re2j.version>1.8</re2j.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>
         <skipUnitTests>false</skipUnitTests>
@@ -129,6 +130,11 @@
                 <groupId>com.google.apis</groupId>
                 <artifactId>google-api-services-gmail</artifactId>
                 <version>${google.gmail.api.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.re2j</groupId>
+                <artifactId>re2j</artifactId>
+                <version>${re2j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -53,6 +55,9 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
     private static final ConnectorConfigSchema<McpProviderConfiguration> PROVIDER_SCHEMA =
         ConnectorConfigSchema.record(McpProviderConfiguration.class, "mcp.client.provider", 1);
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final ObjectMapper RESULT_JSON = PipelineJson.mapper()
+        .enable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
+        .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
 
     private final AtomicReference<Optional<ActiveBinding>> activeBinding =
         new AtomicReference<>(Optional.empty());
@@ -184,7 +189,7 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
                 // Retain the complete result data: ordered content blocks (including annotations),
                 // optional structuredContent, isError and result metadata. Never include client state.
                 output = new JsonPayload("application/json", "urn:tpf:mcp:call-tool-result:v1",
-                    McpPinnedJson.canonicalize(JSON.valueToTree(result)));
+                    RESULT_JSON.writeValueAsString(result));
             } else {
                 if (result.structuredContent() == null) {
                     throw new IllegalStateException("MCP tool returned no structured output");
