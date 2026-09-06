@@ -406,9 +406,11 @@ final class PipelineJavaDomainRenderer {
     private String allowedValuePredicate(String scalar, Object allowedValue) {
         String lexical = allowedValue.toString();
         return switch (scalar) {
-            case "bytes" -> "java.util.Arrays.equals(value, java.util.Base64.getDecoder().decode(\""
-                + javaStringLiteral(lexical) + "\"))";
+            case "bytes" -> "value.equals(com.google.protobuf.ByteString.copyFrom(java.util.Base64.getDecoder().decode(\""
+                + javaStringLiteral(lexical) + "\")))";
             case "decimal" -> "value.compareTo(new java.math.BigDecimal(\"" + javaStringLiteral(lexical) + "\")) == 0";
+            case "float32", "float64" -> "new java.math.BigDecimal(value.toString()).compareTo(new java.math.BigDecimal(\""
+                + javaStringLiteral(lexical) + "\")) == 0";
             default -> "value.equals(" + allowedValueExpression(scalar, lexical, allowedValue) + ")";
         };
     }

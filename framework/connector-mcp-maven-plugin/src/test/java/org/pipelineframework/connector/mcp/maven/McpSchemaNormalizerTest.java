@@ -193,6 +193,31 @@ class McpSchemaNormalizerTest {
     }
 
     @Test
+    void usesJsonNumericEqualityForEnumConstAndNarrowsIneffectiveNullability() {
+        Map<String, Object> schema = Map.of(
+            "type", "object", "additionalProperties", false, "required", List.of("amount", "method"),
+            "properties", Map.of(
+                "amount", Map.of("type", "number", "enum", List.of(1), "const", 1.0d),
+                "method", Map.of("type", List.of("string", "null"), "enum", List.of("Cash"))));
+
+        var types = normalizer.normalize("Request", schema, "tool input");
+        PipelineTemplateTypeDefinition.RecordType root = assertInstanceOf(
+            PipelineTemplateTypeDefinition.RecordType.class,
+            types.stream().filter(type -> type.identity().typeName().equals("Request"))
+                .findFirst().orElseThrow().definition());
+        PipelineTemplateTypeDefinition.Field method = root.fields().stream()
+            .filter(field -> field.name().equals("method")).findFirst().orElseThrow();
+        assertEquals(PipelineFieldNullability.NON_NULL, method.nullability());
+        PipelineTemplateTypeDefinition.WrapperType amount = assertInstanceOf(
+            PipelineTemplateTypeDefinition.WrapperType.class,
+            types.stream().filter(type -> type.identity().typeName().equals("RequestAmountValue"))
+                .findFirst().orElseThrow().definition());
+        Number allowedAmount = (Number) amount.constraints().allowedValues().getFirst();
+        assertEquals(0, new java.math.BigDecimal("1").compareTo(
+            new java.math.BigDecimal(allowedAmount.toString())));
+    }
+
+    @Test
     void discoveryDoesNotImportOrExposeUnmappedTools() {
         Map<String, Object> object = Map.of(
             "type", "object", "additionalProperties", false, "properties", Map.of());

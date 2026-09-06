@@ -19,16 +19,18 @@ package org.pipelineframework.config.template;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Currency;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Shared semantic validation for canonical v3 scalar-wrapper constraints. */
@@ -40,6 +42,12 @@ public final class PipelineTemplateWrapperConstraintValidator {
         Set.of("int32", "int64", "float32", "float64", "decimal");
     private static final Pattern BACK_REFERENCE = Pattern.compile("(?<!\\\\)\\\\[1-9]");
     private static final Pattern QUANTIFIED_GROUP = Pattern.compile("\\)(?:[?*+]|\\{)");
+    private static final String REGEX_ESCAPE = "\\\\(?:x\\{[0-9A-Fa-f]+\\}|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|[pP]\\{[^}]+\\}|.)";
+    private static final String REGEX_ATOM = "(\\[(?:" + REGEX_ESCAPE
+        + "|[^\\]\\\\])*\\]|" + REGEX_ESCAPE + "|\\.|[^\\\\\\[\\]().|^$*+?{}])";
+    private static final String REGEX_QUANTIFIER = "(?:[*+?]|\\{\\d+(?:,\\d*)?\\})[?+]?";
+    private static final Pattern ADJACENT_QUANTIFIED_ATOMS =
+        Pattern.compile(REGEX_ATOM + REGEX_QUANTIFIER + REGEX_ATOM + REGEX_QUANTIFIER);
 
     private PipelineTemplateWrapperConstraintValidator() {
     }
@@ -197,10 +205,117 @@ public final class PipelineTemplateWrapperConstraintValidator {
     private static boolean usesUnsafeRegexFeature(String expression) {
         return BACK_REFERENCE.matcher(expression).find()
             || QUANTIFIED_GROUP.matcher(expression).find()
+            || hasAdjacentOverlappingQuantifiedAtoms(expression)
             || expression.contains("(?=")
             || expression.contains("(?!")
             || expression.contains("(?<=")
             || expression.contains("(?<!");
+    }
+
+    private static boolean hasAdjacentOverlappingQuantifiedAtoms(String expression) {
+        Matcher matcher = ADJACENT_QUANTIFIED_ATOMS.matcher(expression);
+        int from = 0;
+        while (matcher.find(from)) {
+            if (atomsMayOverlap(matcher.group(1), matcher.group(2))) {
+                return true;
+            }
+            from = matcher.start(2);
+        }
+        return false;
+    }
+
+    private static boolean atomsMayOverlap(String left, String right) {
+        if (left.equals(".") || right.equals(".")) {
+            return true;
+        }
+        Optional<Set<Integer>> leftCharacters = atomCharacters(left);
+        Optional<Set<Integer>> rightCharacters = atomCharacters(right);
+        if (leftCharacters.isEmpty() || rightCharacters.isEmpty()) {
+            return true;
+        }
+        return leftCharacters.orElseThrow().stream().anyMatch(rightCharacters.orElseThrow()::contains);
+    }
+
+    private static Optional<Set<Integer>> atomCharacters(String atom) {
+        if (!atom.startsWith("[")) {
+            return atom.startsWith("\\") ? escapedAtomCharacters(atom) : Optional.of(Set.of(atom.codePointAt(0)));
+        }
+        if (atom.length() < 3 || atom.charAt(1) == '^') {
+            return Optional.empty();
+        }
+        Set<Integer> characters = new HashSet<>();
+        for (int index = 1; index < atom.length() - 1; index++) {
+            int current = atom.codePointAt(index);
+            if (current == '\\') {
+                if (++index >= atom.length() - 1) {
+                    return Optional.empty();
+                }
+                current = atom.codePointAt(index);
+            }
+            if (index + 2 < atom.length() - 1 && atom.charAt(index + 1) == '-') {
+                int end = atom.codePointAt(index + 2);
+                if (end == '\\' || current > end || end - current > MAX_PATTERN_INPUT_LENGTH) {
+                    return Optional.empty();
+                }
+                for (int value = current; value <= end; value++) {
+                    characters.add(value);
+                }
+                index += 2;
+            } else {
+                characters.add(current);
+            }
+        }
+        return Optional.of(Set.copyOf(characters));
+    }
+
+    private static Optional<Set<Integer>> escapedAtomCharacters(String atom) {
+        return switch (atom) {
+            case "\\d" -> Optional.of(characterRange('0', '9'));
+            case "\\w" -> {
+                Set<Integer> characters = new HashSet<>(characterRange('0', '9'));
+                characters.addAll(characterRange('A', 'Z'));
+                characters.addAll(characterRange('a', 'z'));
+                characters.add((int) '_');
+                yield Optional.of(Set.copyOf(characters));
+            }
+            case "\\s" -> Optional.of(Set.of((int) ' ', (int) '\t', (int) '\n', 0x0B, (int) '\f', (int) '\r'));
+            case "\\t" -> Optional.of(Set.of((int) '\t'));
+            case "\\n" -> Optional.of(Set.of((int) '\n'));
+            case "\\r" -> Optional.of(Set.of((int) '\r'));
+            case "\\f" -> Optional.of(Set.of((int) '\f'));
+            case "\\a" -> Optional.of(Set.of(0x07));
+            case "\\e" -> Optional.of(Set.of(0x1B));
+            default -> escapedCodePoint(atom).map(Set::of);
+        };
+    }
+
+    private static Optional<Integer> escapedCodePoint(String atom) {
+        try {
+            if (atom.matches("\\\\x[0-9A-Fa-f]{2}")) {
+                return Optional.of(Integer.parseInt(atom.substring(2), 16));
+            }
+            if (atom.matches("\\\\x\\{[0-9A-Fa-f]+}")) {
+                int codePoint = Integer.parseInt(atom.substring(3, atom.length() - 1), 16);
+                return Character.isValidCodePoint(codePoint) ? Optional.of(codePoint) : Optional.empty();
+            }
+            if (atom.matches("\\\\u[0-9A-Fa-f]{4}")) {
+                return Optional.of(Integer.parseInt(atom.substring(2), 16));
+            }
+            if (atom.length() == 2 && ".^$|?*+()[]{}\\\\-".indexOf(atom.charAt(1)) >= 0) {
+                return Optional.of((int) atom.charAt(1));
+            }
+        } catch (NumberFormatException ignored) {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    private static Set<Integer> characterRange(char start, char end) {
+        Set<Integer> characters = new HashSet<>();
+        for (int value = start; value <= end; value++) {
+            characters.add(value);
+        }
+        return Set.copyOf(characters);
     }
 
     private static Optional<Violation> violation(Kind kind) {

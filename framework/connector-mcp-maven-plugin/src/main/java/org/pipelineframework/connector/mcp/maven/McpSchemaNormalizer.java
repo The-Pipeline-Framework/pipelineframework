@@ -112,7 +112,7 @@ public final class McpSchemaNormalizer {
                     fields.add(new PipelineTemplateTypeDefinition.Field(
                         entry.getKey(), reference(name, entry.getKey(), fieldSchema, fieldType, fieldPath), false,
                         isRequired ? PipelineFieldPresence.REQUIRED : PipelineFieldPresence.OPTIONAL,
-                        fieldType.nullable() ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL));
+                        effectiveNullability(fieldSchema, fieldType)));
                 }
             });
             ProtocolTypeIdentity identity = new ProtocolTypeIdentity(NAMESPACE, name);
@@ -226,7 +226,7 @@ public final class McpSchemaNormalizer {
             }
             if (hasConst) {
                 Object constant = schema.get("const");
-                if (hasEnum && !values.contains(constant)) {
+                if (hasEnum && values.stream().noneMatch(value -> jsonValuesEqual(value, constant))) {
                     throw failure(path, "declares contradictory enum and const constraints");
                 }
                 values = new ArrayList<>();
@@ -239,6 +239,31 @@ public final class McpSchemaNormalizer {
                 throw failure(path, "cannot project a scalar allowed-value set containing only null");
             }
             return List.copyOf(values);
+        }
+
+        private PipelineFieldNullability effectiveNullability(Map<String, Object> schema, JsonType type) {
+            if (!type.nullable()) {
+                return PipelineFieldNullability.NON_NULL;
+            }
+            if (schema.containsKey("const")) {
+                return schema.get("const") == null
+                    ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL;
+            }
+            if (schema.get("enum") instanceof List<?> values && values.stream().noneMatch(java.util.Objects::isNull)) {
+                return PipelineFieldNullability.NON_NULL;
+            }
+            return PipelineFieldNullability.NULLABLE;
+        }
+
+        private boolean jsonValuesEqual(Object left, Object right) {
+            if (left instanceof Number leftNumber && right instanceof Number rightNumber) {
+                try {
+                    return new BigDecimal(leftNumber.toString()).compareTo(new BigDecimal(rightNumber.toString())) == 0;
+                } catch (NumberFormatException ignored) {
+                    return false;
+                }
+            }
+            return java.util.Objects.equals(left, right);
         }
 
         private void rejectUnsupported(Map<String, Object> schema, String path) {
