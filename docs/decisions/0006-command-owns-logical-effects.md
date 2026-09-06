@@ -22,12 +22,22 @@ makes redispatch safe under the same logical effect identity.
 
 Ordinary execution re-drive is not authorization to retry a retained effect. Deliberate
 Command retry is an explicit control-plane intent that resumes the failed execution at
-its resumable step. The retained `FAILED_RETRYABLE` logical effect claims that admission;
-successful effects encountered earlier during deterministic composition do not. The Command runtime still asks `CommandEffectStore` to
-atomically append and claim the next attempt; the execution control plane cannot reset,
-delete, or otherwise manufacture effect state.
+its resumable root step while carrying the exact persisted logical `CommandId` reported by
+the terminal Command failure. Resume location and effect identity are separate: only that
+logical effect may claim the invocation-scoped admission, regardless of traversal or
+scheduling order. Successful effects encountered earlier during deterministic composition
+do not consume it. The Command runtime still asks `CommandEffectStore` to atomically append
+and claim the next attempt; the execution control plane cannot reset, delete, or otherwise
+manufacture effect state.
 One admitted execution retry deterministically identifies one logical effect attempt, so worker
 recovery cannot turn the same admission into additional attempts.
+
+The mutable admission is framework runtime state, not application execution identity.
+`PipelineExecutionContext` and `CommandRequest` do not expose it. Invocation machinery may
+propagate an opaque snapshot, but only the Command runtime can install, inspect, claim, or
+verify the admission. This is a framework API ownership boundary; it is not a claim that
+arbitrary hostile code in the same JVM is isolated by JPMS, process boundaries, or a
+cryptographic capability.
 
 This decision governs `framework/runtime-core` Command contracts,
 `framework/runtime` Command execution, Command connectors, and effect stores.

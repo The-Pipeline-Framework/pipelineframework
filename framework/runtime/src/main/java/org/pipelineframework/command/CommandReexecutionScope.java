@@ -16,14 +16,14 @@ public final class CommandReexecutionScope {
     }
 
     public static Snapshot capture() {
-        return new Snapshot(RuntimeAdapters.executionContext(CONTEXT_KEY, Admission.class));
+        return new Snapshot(current());
     }
 
-    public static AdmissionHandle installRetry(String targetCommandId, String admissionKey) {
+    static AdmissionHandle installRetry(String targetCommandId, String admissionKey) {
         return install(targetCommandId, admissionKey, CommandAttemptAdmission.retry());
     }
 
-    public static AdmissionHandle installReissue(String targetCommandId, String admissionKey, String reason) {
+    static AdmissionHandle installReissue(String targetCommandId, String admissionKey, String reason) {
         return install(targetCommandId, admissionKey, CommandAttemptAdmission.reissue(reason));
     }
 
@@ -37,17 +37,15 @@ public final class CommandReexecutionScope {
         return new AdmissionHandle(admission);
     }
 
-    public static void clear() {
+    static void clear() {
         RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 
     public static void restore(Snapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
-        if (snapshot.admission == null) {
-            clear();
-        } else {
-            RuntimeAdapters.setExecutionContext(CONTEXT_KEY, snapshot.admission);
-        }
+        snapshot.admission.ifPresentOrElse(
+            admission -> RuntimeAdapters.setExecutionContext(CONTEXT_KEY, admission),
+            CommandReexecutionScope::clear);
     }
 
     static Optional<Claim> claimAttempt(String commandId, String currentOccurrenceId) {
@@ -70,21 +68,21 @@ public final class CommandReexecutionScope {
     }
 
     public static final class Snapshot {
-        private final Admission admission;
+        private final Optional<Admission> admission;
 
-        private Snapshot(Admission admission) {
-            this.admission = admission;
+        private Snapshot(Optional<Admission> admission) {
+            this.admission = Objects.requireNonNull(admission, "admission must not be null");
         }
     }
 
-    public static final class AdmissionHandle {
+    static final class AdmissionHandle {
         private final Admission admission;
 
         private AdmissionHandle(Admission admission) {
             this.admission = admission;
         }
 
-        public void requireConsumed() {
+        void requireConsumed() {
             admission.requireConsumed();
         }
     }
