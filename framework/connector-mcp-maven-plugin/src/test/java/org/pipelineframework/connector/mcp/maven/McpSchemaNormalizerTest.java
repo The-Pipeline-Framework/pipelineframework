@@ -239,7 +239,7 @@ class McpSchemaNormalizerTest {
         assertEquals(1, imported.operations().size());
         assertEquals("read.selected", imported.operations().getFirst().id());
         assertEquals(ConnectorOperationKind.QUERY, imported.operations().getFirst().kind());
-        assertEquals("selected", imported.pins().getFirst().get("mcpName"));
+        assertEquals("selected", imported.pins().getFirst().mcpName());
     }
 
     @Test

@@ -43,6 +43,7 @@ import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryInvocation;
 import org.pipelineframework.connector.QueryOperation;
 import org.pipelineframework.connector.QueryOutcome;
+import org.pipelineframework.connector.JsonPayload;
 import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 /** Executes explicitly imported MCP tools through ordinary TPF connector semantics. */
@@ -148,17 +149,23 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
         return Objects.requireNonNull(stage, "host ConnectionResolver returned a null stage");
     }
 
-    private static Map<String, Object> arguments(Object input) {
-        return JSON.convertValue(input, new TypeReference<>() { });
+    private static Map<String, Object> arguments(McpImportedTool tool, Object input) {
+        try {
+            Map<String, Object> arguments = JSON.convertValue(input, new TypeReference<>() { });
+            tool.inputSchema().validateArguments(JSON.valueToTree(arguments));
+            return arguments;
+        } catch (RuntimeException failure) {
+            throw new McpInvalidArguments();
+        }
     }
 
     private static CompletionStage<McpSchema.CallToolResult> call(
         McpClientConnection connection,
         McpImportedTool tool,
-        Object input
+        Map<String, Object> arguments
     ) {
         try {
-            return connection.client().callTool(new McpSchema.CallToolRequest(tool.mcpName(), arguments(input))).toFuture();
+            return connection.client().callTool(new McpSchema.CallToolRequest(tool.mcpName(), arguments)).toFuture();
         } catch (RuntimeException failure) {
             return CompletableFuture.failedStage(failure);
         }
@@ -168,15 +175,27 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
         if (result != null && Boolean.TRUE.equals(result.isError())) {
             throw new McpToolReportedError();
         }
-        if (result == null || result.structuredContent() == null) {
-            throw new IllegalStateException("MCP tool returned no structured output");
+        if (result == null) {
+            throw new IllegalStateException("MCP tool returned no result");
         }
         try {
+            Object output;
+            if (tool.resultMode() == McpImportedTool.ResultMode.JSON_PAYLOAD) {
+                // Retain the complete result data: ordered content blocks (including annotations),
+                // optional structuredContent, isError and result metadata. Never include client state.
+                output = new JsonPayload("application/json", "urn:tpf:mcp:call-tool-result:v1",
+                    McpPinnedJson.canonicalize(JSON.valueToTree(result)));
+            } else {
+                if (result.structuredContent() == null) {
+                    throw new IllegalStateException("MCP tool returned no structured output");
+                }
+                output = result.structuredContent();
+            }
             ClassLoader loader = Optional.ofNullable(outputType.getClassLoader())
                 .orElseGet(() -> ConnectorProviderManifestLoader.metadataClassLoader(McpConnector.class));
             CanonicalTypeCatalogue catalogue = catalogues.computeIfAbsent(loader, CanonicalTypeCatalogue::load);
             String canonical = catalogue.validateAndCanonicalize(
-                localTypeName(tool.outputType()), JSON.writeValueAsString(result.structuredContent()));
+                localTypeName(tool.outputType()), JSON.writeValueAsString(output));
             return JSON.readValue(canonical, outputType);
         } catch (McpToolReportedError failure) {
             throw failure;
@@ -221,8 +240,9 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
             QueryInvocation<Object, ConnectorConfigurationDocument, Object> invocation
         ) {
             try {
+                Map<String, Object> arguments = arguments(tool, invocation.input());
                 return resolve(invocation.executionContext())
-                    .thenCompose(connection -> call(connection, tool, invocation.input()))
+                    .thenCompose(connection -> call(connection, tool, arguments))
                     .<QueryOutcome<Object>>handle((result, failure) -> {
                         if (failure != null) {
                             return queryFailure(failure);
@@ -268,11 +288,12 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
             CommandInvocation<Object, ConnectorConfigurationDocument> invocation
         ) {
             try {
+                Map<String, Object> arguments = arguments(tool, invocation.input());
                 return resolve(invocation.executionContext()).handle((connection, resolutionFailure) -> {
                     if (resolutionFailure != null) {
                         return CompletableFuture.completedStage(commandResolutionFailure(resolutionFailure));
                     }
-                    return call(connection, tool, invocation.input())
+                    return call(connection, tool, arguments)
                         .<CommandOutcome<Object>>handle((result, dispatchFailure) -> {
                             if (dispatchFailure != null) {
                                 return new CommandOutcome.Ambiguous<>("mcp-dispatch-uncertain", List.of());
@@ -294,6 +315,9 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
 
     private static QueryOutcome<Object> queryFailure(Throwable failure) {
         Throwable cause = unwrap(failure);
+        if (cause instanceof McpInvalidArguments) {
+            return new QueryOutcome.TerminalFailure<>("mcp-invalid-arguments");
+        }
         if (cause instanceof ConnectionResolutionException resolution) {
             return switch (resolution.kind()) {
                 case AUTHENTICATION_REQUIRED -> new QueryOutcome.AuthenticationRequired<>("mcp-authentication-required");
@@ -306,6 +330,9 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
 
     private static CommandOutcome<Object> commandResolutionFailure(Throwable failure) {
         Throwable cause = unwrap(failure);
+        if (cause instanceof McpInvalidArguments) {
+            return new CommandOutcome.TerminalFailure<>("mcp-invalid-arguments", List.of());
+        }
         if (cause instanceof ConnectionResolutionException resolution
             && resolution.kind() == ConnectionResolutionException.Kind.TEMPORARILY_UNAVAILABLE) {
             return new CommandOutcome.RetryableFailure<>("mcp-connection-unavailable", List.of());
@@ -330,5 +357,8 @@ public final class McpConnector implements ConnectorProvider<McpProviderConfigur
     }
 
     private static final class McpToolReportedError extends RuntimeException {
+    }
+
+    private static final class McpInvalidArguments extends RuntimeException {
     }
 }

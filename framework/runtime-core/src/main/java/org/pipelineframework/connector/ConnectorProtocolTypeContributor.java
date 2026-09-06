@@ -12,6 +12,8 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
 
 /** Portable connector-owned result vocabulary for dynamic operation invocation boundaries. */
 public final class ConnectorProtocolTypeContributor implements ProtocolTypeContributor {
+    public static final ProtocolTypeIdentity JSON_PAYLOAD =
+        new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.connector"), "JsonPayload");
     public static final ProtocolTypeIdentity OPERATION_OBSERVATION =
         new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.connector"), "OperationObservation");
     public static final ProtocolTypeIdentity RESULT_OBSERVATION =
@@ -34,6 +36,11 @@ public final class ConnectorProtocolTypeContributor implements ProtocolTypeContr
         result.add(new PipelineTemplateTypeDefinition.Field("resultType", string));
         result.add(new PipelineTemplateTypeDefinition.Field("resultJson", string));
         return List.of(
+            new ProtocolTypeDescriptor(JSON_PAYLOAD,
+                new PipelineTemplateTypeDefinition.RecordType("JsonPayload", List.of(
+                    new PipelineTemplateTypeDefinition.Field("contentType", string),
+                    new PipelineTemplateTypeDefinition.Field("schemaHint", string),
+                    new PipelineTemplateTypeDefinition.Field("bodyJson", string)))),
             new ProtocolTypeDescriptor(RESULT_OBSERVATION,
                 new PipelineTemplateTypeDefinition.RecordType("OperationResultObservation", result)),
             new ProtocolTypeDescriptor(EMPTY_OBSERVATION,

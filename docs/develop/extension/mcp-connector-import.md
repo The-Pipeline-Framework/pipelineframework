@@ -248,12 +248,13 @@ example as a substitute for refresh.
 
 ### Private MCP execution pin
 
-`mcp-tools.json` preserves the exact external tool name needed by the MCP adapter. It is not a
-second public operation schema:
+`mcp-tools.json` version 2 preserves the external tool name, original input/output schemas,
+their hashes, the importer projection identity, and the selected result mode. These private
+adapter contracts stay outside model-visible callable metadata:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "provider": "mcp.client",
   "tools": [
     {
@@ -263,7 +264,33 @@ second public operation schema:
       "majorVersion": 1,
       "input": "QuickBooksCustomerSearchRequest",
       "output": "QuickBooksCustomerSearchResult",
-      "includeFields": []
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "searchTerm": { "type": "string" } },
+        "required": ["searchTerm"]
+      },
+      "inputSchemaSha256": "sha256:5723da48e6155c443c8901fb2c771948ea54b23121a8f8feb28f924d88d0dc2d",
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "id": { "type": "string" }, "displayName": { "type": "string" } },
+              "required": ["id", "displayName"]
+            }
+          }
+        },
+        "required": ["customers"]
+      },
+      "outputSchemaSha256": "sha256:f4e552a797380f61962f24473a50bcec2ad0de7d70bec218745414fc9aea1129",
+      "projectionId": "tpf-mcp-importer-v1",
+      "resultMode": "structured",
+      "pinSha256": "sha256:852484ccefb5e87cdd37a415f1186215939050926805affd03ef8212db95324f"
     }
   ]
 }
@@ -330,6 +357,77 @@ validates against the narrowed canonical contract before invocation; unknown fie
 Selection does not grant callable exposure: the application must still expose the operation
 through its named binding and release catalogue. A discovered-only tool remains unavailable.
 
+Object keys are sorted recursively and equivalent JSON numbers are normalized before hashing.
+Array order is preserved, including schema arrays. `pinSha256` hashes the complete tool object
+except `pinSha256` itself, so changes to a schema, tool name, operation identity, canonical type
+selection, projection, or result mode change the pin. Hashes detect drift; they do not grant authority.
+
+The strict reader rejects unknown fields, duplicate JSON keys, mismatched hashes, and inconsistent
+result modes. Identical operation pins from multiple classpath resources coalesce; different pins
+for the same kind/operation/major version fail deterministically. Version-1 resources must be
+regenerated with an explicit refresh; they cannot verify the original external contract.
+
+Before dispatch, the adapter validates the final argument object against its committed input
+schema and field selection, in addition to normal canonical validation. The complete original
+schema is retained and hashed, including omitted optional fields. The shared selection algorithm
+retains required fields and parent constraints and rejects omitted fields before dispatch, so
+unsupported schemas in omitted optional subtrees need not be interpreted. Invalid arguments produce
+`mcp-invalid-arguments` without calling the server. The runtime never discovers a replacement schema.
+
+## Tools without an output schema
+
+Omit `<outputType>` when the server does not declare `outputSchema`. Refresh selects the built-in
+`<tpf.connector.JsonPayload>` result, contributes only the imported input types, and writes
+`"resultMode": "json-payload"` in the private pin. Both `outputSchema` and `outputSchemaSha256`
+are absent. A configured output type does not invent a typed contract for an unstructured tool.
+
+The standard provider manifest uses the ordinary type contract:
+
+```json
+"typeContract": {
+  "input": "QuickBooksCustomerSearchRequest",
+  "output": "<tpf.connector.JsonPayload>"
+}
+```
+
+Use that contributed output directly in your Query step:
+
+```yaml
+- name: Read QuickBooks customer data
+  kind: query
+  cardinality: ONE_TO_ONE
+  input: QuickBooksCustomerSearchRequest
+  output: <tpf.connector.JsonPayload>
+  using: quickbooks
+  operation: quickbooks.customer.search
+  operationVersion: 1
+```
+
+The canonical payload has exactly three string fields:
+
+```json
+{
+  "contentType": "application/json",
+  "schemaHint": "urn:tpf:mcp:call-tool-result:v1",
+  "bodyJson": "{\"content\":[{\"text\":\"Customer 42\",\"type\":\"text\"}],\"isError\":false}"
+}
+```
+
+`bodyJson` is deterministic JSON for the complete MCP `CallToolResult` data received by the SDK.
+It preserves content-block order, text, image/audio base64, resource data, annotations, result
+metadata, and any optional `structuredContent`; it does not include client/session state. No text
+is silently parsed into business fields or discarded. Query capture stores this ordinary result,
+and dynamic invocation carries it in `OperationObservation.resultJson`. `LIVE_ONLY` still replays
+captured results without reconnecting to MCP.
+
+For declared output schemas, absent or invalid `structuredContent` remains a provider failure.
+It never switches to the envelope. MCP `isError` results also remain failures. Commands with an
+invalid result after dispatch retain the ordinary ambiguous-effect outcome.
+
+Downstream, parse `bodyJson` with programmatic code to produce a domain type such as
+`QuickBooksInvoice`. An explicitly authored LLM Query can handle experimental extraction or
+remediation after parsing fails; import and invocation do not run an implicit LLM repair step.
+
 ## Importer v1 schema limits
 
 Importer v1 accepts:
@@ -344,6 +442,16 @@ Importer v1 accepts:
 
 It rejects open maps, tuples, optional or nullable arrays, references, recursive definitions,
 object/array `enum` or `const`, and composition keywords. Failures include the relevant schema path.
+
+Private schemas use a bounded importer-v1 dialect: unknown schema keywords and references fail
+refresh rather than being ignored or fetched. Pins accept absent dialect markers, draft 2020-12,
+2019-09, or draft-07 markers within this supported subset. Each JSON resource/schema is limited to
+1 MiB, nesting depth 64, and 20,000 nodes; at most 128 tool entries and 64 classpath pin resources
+are accepted. Arguments and unstructured result JSON use the same size/depth/node limits. Oversized
+values fail explicitly rather than being truncated. These bounds protect import and invocation work.
+Pinned patterns use [RE2/J](https://github.com/google/re2j) to avoid exponential backtracking;
+lookaround and backreferences are rejected, and pattern text/program size is capped at 4,096.
+This is an importer restriction and does not change canonical v3 pattern semantics.
 
 These are importer-v1 projection limits, not limitations added to canonical v3. If a QuickBooks
 tool cannot be projected losslessly, select a simpler operation or place a deliberately shaped MCP

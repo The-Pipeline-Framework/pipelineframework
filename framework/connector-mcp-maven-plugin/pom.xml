@@ -7,6 +7,7 @@
     <name>The Pipeline Framework - MCP Import Maven Plugin</name>
     <description>Explicitly imports selected MCP tool contracts into pinned TPF connector metadata.</description>
     <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>mcp-contract</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-core</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.modelcontextprotocol.sdk</groupId><artifactId>mcp-core</artifactId></dependency>
         <dependency><groupId>io.modelcontextprotocol.sdk</groupId><artifactId>mcp-json-jackson2</artifactId></dependency>

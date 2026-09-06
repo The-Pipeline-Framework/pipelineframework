@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.pipelineframework.connector.mcp.McpInputSelection;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -50,6 +51,9 @@ import org.pipelineframework.connector.ConnectorProviderVersion;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryOperationCardinality;
 import org.pipelineframework.protocol.ProtocolTypeDescriptor;
+import org.pipelineframework.connector.mcp.McpImportedTool;
+import org.pipelineframework.connector.mcp.McpImportedToolCatalog;
+import org.pipelineframework.connector.mcp.McpJsonSchema;
 
 /** Explicitly refreshes selected MCP tools into deterministic release-pinned Connector metadata. */
 @Mojo(name = "refresh-import", requiresProject = true, threadSafe = false)
@@ -208,7 +212,7 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
         McpSchemaNormalizer normalizer = new McpSchemaNormalizer();
         List<ConnectorOperationDescriptor> operations = new ArrayList<>();
         Map<String, ProtocolTypeDescriptor> types = new LinkedHashMap<>();
-        List<Map<String, Object>> pins = new ArrayList<>();
+        List<McpImportedTool> pins = new ArrayList<>();
         Set<String> importedNames = new java.util.HashSet<>();
         for (McpToolMapping mapping : mappings.stream().sorted(Comparator.comparing(value -> value.operation)).toList()) {
             if (!importedNames.add(mapping.mcpName)) {
@@ -219,38 +223,34 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
             if (tool.inputSchema() == null) {
                 throw new IllegalArgumentException("selected MCP tool has no inputSchema: " + mapping.mcpName);
             }
-            if (tool.outputSchema() == null) {
-                throw new IllegalArgumentException("selected MCP tool has no outputSchema: " + mapping.mcpName);
-            }
+            // Bound and validate the private source schema before canonical projection recurses into it.
+            McpJsonSchema inputPin = new McpJsonSchema(JSON.valueToTree(tool.inputSchema()).toString(), mapping.includeFields);
+            Optional<McpJsonSchema> outputPin = Optional.ofNullable(tool.outputSchema())
+                .map(schema -> new McpJsonSchema(JSON.valueToTree(schema).toString()));
+            String outputType = outputPin.isPresent() ? mapping.outputType : McpImportedTool.JSON_PAYLOAD;
             ConnectorOperationKind kind = importKind(mapping.kind);
             McpInputSelection selection = new McpInputSelection(mapping.includeFields);
             List<ProtocolTypeDescriptor> input = normalizer.normalize(
                 mapping.inputType, selection.project(tool.inputSchema()),
                 "MCP tool '" + mapping.mcpName + "' input");
-            List<ProtocolTypeDescriptor> output = normalizer.normalize(
-                mapping.outputType, tool.outputSchema(), "MCP tool '" + mapping.mcpName + "' output");
+            List<ProtocolTypeDescriptor> output = outputPin.isPresent() ? normalizer.normalize(
+                outputType, tool.outputSchema(), "MCP tool '" + mapping.mcpName + "' output") : List.of();
             java.util.stream.Stream.concat(input.stream(), output.stream()).forEach(type -> {
                 ProtocolTypeDescriptor duplicate = types.putIfAbsent(type.identity().qualifiedName(), type);
                 if (duplicate != null && !duplicate.equals(type)) {
                     throw new IllegalArgumentException("conflicting imported canonical type: " + type.identity());
                 }
             });
-            operations.add(descriptor(mapping, kind));
-            Map<String, Object> pin = new LinkedHashMap<>();
-            pin.put("mcpName", mapping.mcpName);
-            pin.put("operation", mapping.operation);
-            pin.put("kind", kind.value());
-            pin.put("majorVersion", mapping.majorVersion);
-            pin.put("input", mapping.inputType);
-            pin.put("output", mapping.outputType);
-            pin.put("includeFields", selection.includeFields());
-            pins.add(pin);
+            operations.add(descriptor(mapping, kind, outputType));
+            pins.add(new McpImportedTool(mapping.mcpName, mapping.operation, kind, mapping.majorVersion,
+                mapping.inputType, outputType, inputPin, outputPin, McpImportedTool.PROJECTION_V1,
+                outputPin.isPresent() ? McpImportedTool.ResultMode.STRUCTURED : McpImportedTool.ResultMode.JSON_PAYLOAD));
         }
         return new ImportedArtifacts(
             operations.stream().sorted(Comparator.comparing(ConnectorOperationDescriptor::id)
                 .thenComparing(value -> value.kind().value()).thenComparingInt(ConnectorOperationDescriptor::majorVersion)).toList(),
             types.values().stream().sorted(Comparator.comparing(value -> value.identity().qualifiedName())).toList(),
-            List.copyOf(pins));
+            new McpImportedToolCatalog(pins).tools());
     }
 
     private static ConnectorOperationKind importKind(String value) {
@@ -263,7 +263,9 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
         throw new IllegalArgumentException("MCP import kind must be query or command: " + value);
     }
 
-    private static ConnectorOperationDescriptor descriptor(McpToolMapping mapping, ConnectorOperationKind kind) {
+    private static ConnectorOperationDescriptor descriptor(
+        McpToolMapping mapping, ConnectorOperationKind kind, String outputType
+    ) {
         Optional<CommandCapabilities> commandCapabilities = kind.equals(ConnectorOperationKind.COMMAND)
             ? Optional.of(new CommandCapabilities(true, false, false, CommandExecutionPosture.UNSPECIFIED,
                 CommandMachineConfirmation.NONE, false, Set.of())) : Optional.empty();
@@ -273,7 +275,7 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
             mapping.operation, kind, mapping.majorVersion, Optional.empty(), commandCapabilities, queryCapabilities,
             kind.equals(ConnectorOperationKind.QUERY)
                 ? Optional.of(QueryOperationCardinality.ONE_TO_ONE) : Optional.empty(),
-            Optional.of(new ConnectorOperationTypeContract(mapping.inputType, Optional.of(mapping.outputType))));
+            Optional.of(new ConnectorOperationTypeContract(mapping.inputType, Optional.of(outputType))));
     }
 
     static void write(Path root, ImportedArtifacts imported) throws MojoExecutionException {
@@ -298,11 +300,7 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
                 ConnectorProviderManifest.CURRENT_SCHEMA_VERSION, providers);
             atomicWrite(manifestPath, ConnectorProviderArtifacts.json(manifest));
 
-            Map<String, Object> pin = new LinkedHashMap<>();
-            pin.put("schemaVersion", 1);
-            pin.put("provider", PROVIDER_ID.value());
-            pin.put("tools", imported.pins());
-            atomicWrite(root.resolve(PIN_PATH), JSON.writeValueAsString(pin) + "\n");
+            atomicWrite(root.resolve(PIN_PATH), new McpImportedToolCatalog(imported.pins()).json());
         } catch (IOException failure) {
             throw new MojoExecutionException("Unable to write pinned MCP import", failure);
         }
@@ -322,7 +320,7 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
     record ImportedArtifacts(
         List<ConnectorOperationDescriptor> operations,
         List<ProtocolTypeDescriptor> types,
-        List<Map<String, Object>> pins
+        List<McpImportedTool> pins
     ) {
     }
 }

@@ -18,7 +18,14 @@ class ConnectorProtocolTypeContributorTest {
             .filter(type -> type.identity().namespace().equals(ConnectorProviderId.of("tpf.connector")))
             .toList();
 
-        assertEquals(3, types.size());
+        assertEquals(4, types.size());
+        var payload = types.stream().filter(type -> type.identity().equals(
+            ConnectorProtocolTypeContributor.JSON_PAYLOAD)).findFirst().orElseThrow();
+        var record = assertInstanceOf(PipelineTemplateTypeDefinition.RecordType.class, payload.definition());
+        assertEquals(java.util.List.of("contentType", "schemaHint", "bodyJson"),
+            record.fields().stream().map(PipelineTemplateTypeDefinition.Field::name).toList());
+        record.fields().forEach(field -> assertEquals(
+            new org.pipelineframework.config.template.PipelineTemplateTypeReference.Scalar("string"), field.type()));
         var observation = types.stream()
             .filter(type -> type.identity().equals(ConnectorProtocolTypeContributor.OPERATION_OBSERVATION))
             .findFirst().orElseThrow();

@@ -15,6 +15,8 @@ public final class McpStdioFixtureMain {
     }
 
     public static void main(String[] arguments) throws InterruptedException {
+        // A test fixture must not outlive its Surefire host if the transport closes asynchronously.
+        ProcessHandle.current().parent().ifPresent(parent -> parent.onExit().thenRun(() -> System.exit(0)));
         var mapper = new JacksonMcpJsonMapper(new ObjectMapper());
         var transport = new StdioServerTransportProvider(mapper);
         Map<String, Object> input = Map.of(
@@ -29,6 +31,9 @@ public final class McpStdioFixtureMain {
             .build();
         McpServer.sync(transport)
             .serverInfo("tpf-test-mcp", "1")
+            .toolCall(McpSchema.Tool.builder("notes").inputSchema(input).build(),
+                (exchange, request) -> McpSchema.CallToolResult.builder()
+                    .addTextContent("notes-" + request.arguments().get("id")).isError(false).build())
             .toolCall(tool, (exchange, request) -> McpSchema.CallToolResult.builder()
                 .structuredContent(Map.of("value", "real-" + request.arguments().get("id")))
                 .content(List.of())

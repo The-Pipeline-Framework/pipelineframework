@@ -6,6 +6,18 @@
   "steps": [],
   "canonicalCatalogFingerprint": "sha256:test",
   "canonicalTypes": {
+    "JsonPayload": {
+      "contributedIdentity": "tpf.connector.JsonPayload",
+      "definition": {
+        "id": "JsonPayload",
+        "kind": "record",
+        "fields": [
+          {"name":"contentType","type":{"kind":"scalar","id":"string"}},
+          {"name":"schemaHint","type":{"kind":"scalar","id":"string"}},
+          {"name":"bodyJson","type":{"kind":"scalar","id":"string"}}
+        ]
+      }
+    },
     "McpRequest": {
       "contributedIdentity": "mcp.client.McpRequest",
       "definition": {

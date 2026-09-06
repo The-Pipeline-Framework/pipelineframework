@@ -22,6 +22,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.pipelineframework.connector.ConnectorProviderManifestReader;
+import org.pipelineframework.connector.mcp.McpImportedTool;
+import org.pipelineframework.connector.mcp.McpImportedToolCatalog;
+import io.modelcontextprotocol.spec.McpSchema;
 
 class RefreshMcpImportMojoTest {
     @Test
@@ -63,12 +66,86 @@ class RefreshMcpImportMojoTest {
         RefreshMcpImportMojo.write(temporary, RefreshMcpImportMojo.importTools(List.of(tool), List.of(mapping)));
         assertFalse(firstPin.equals(Files.readString(pin())));
         assertTrue(Files.readString(manifest()).contains("memo"));
+        var unstructured = McpSchema.Tool.builder("create_invoice").inputSchema(input).build();
+        RefreshMcpImportMojo.write(temporary, RefreshMcpImportMojo.importTools(List.of(unstructured), List.of(mapping)));
+        var restored = McpImportedToolCatalog.read(Files.readString(pin())).tools().getFirst();
+        assertEquals(McpImportedTool.ResultMode.JSON_PAYLOAD, restored.resultMode());
+        assertEquals(mapping.includeFields, restored.inputSchema().includeFields());
+        assertTrue(restored.inputSchema().json().contains("linked_txn"));
+        restored.inputSchema().validateArguments(JSON.readTree(
+            "{\"params\":{\"customer_id\":\"42\",\"line_items\":[\"item\"]}}"));
+        assertThrows(IllegalArgumentException.class, () -> restored.inputSchema().validateArguments(JSON.readTree(
+            "{\"params\":{\"customer_id\":\"42\",\"line_items\":[\"item\"],\"linked_txn\":[]}}")));
     }
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @TempDir
     Path temporary;
+
+    @Test
+    void importsUnstructuredToolWithCanonicalPayloadAndRoundTripsPrivateSchemaPin() throws Exception {
+        McpToolMapping mapping = mapping();
+        var schema = Map.<String, Object>of("type", "object", "additionalProperties", false,
+            "properties", Map.of("id", Map.of("type", "string")), "required", List.of("id"));
+        var selected = McpSchema.Tool.builder("selected").inputSchema(schema).build();
+        var discoveredOnly = McpSchema.Tool.builder("unused").inputSchema(schema).build();
+        var imported = RefreshMcpImportMojo.importTools(List.of(discoveredOnly, selected), List.of(mapping));
+        RefreshMcpImportMojo.write(temporary, imported);
+        var contract = imported.operations().getFirst().typeContract().orElseThrow();
+        assertEquals(McpImportedTool.JSON_PAYLOAD, contract.outputType().orElseThrow());
+        assertEquals(List.of("SelectedRequest"), imported.types().stream().map(t -> t.identity().typeName()).toList());
+        var pins = McpImportedToolCatalog.read(Files.readString(pin()));
+        assertEquals(imported.pins(), pins.tools());
+        assertEquals(McpImportedTool.ResultMode.JSON_PAYLOAD, pins.tools().getFirst().resultMode());
+        assertTrue(pins.tools().getFirst().outputSchema().isEmpty());
+        assertFalse(Files.readString(pin()).contains("unused"));
+        assertFalse(Files.readString(manifest()).contains("bodyJson")); // supplied by tpf.connector, not MCP public metadata
+    }
+
+    @Test
+    void objectKeyReorderingKeepsImportByteIdenticalAndUnselectedSchemasDoNotAffectPins() throws Exception {
+        McpToolMapping mapping = mapping();
+        mapping.outputType = "SelectedResult";
+        var schema = new java.util.LinkedHashMap<String, Object>();
+        schema.put("type", "object");
+        schema.put("additionalProperties", false);
+        schema.put("properties", Map.of("id", Map.of("type", "string")));
+        schema.put("required", List.of("id"));
+        var reverse = new java.util.LinkedHashMap<String, Object>();
+        new java.util.ArrayList<>(schema.keySet()).reversed().forEach(key -> reverse.put(key, schema.get(key)));
+        var first = RefreshMcpImportMojo.importTools(List.of(
+            McpSchema.Tool.builder("selected").inputSchema(schema).outputSchema(schema).build()), List.of(mapping));
+        var second = RefreshMcpImportMojo.importTools(List.of(
+            McpSchema.Tool.builder("selected").inputSchema(reverse).outputSchema(reverse).build(),
+            McpSchema.Tool.builder("unused").inputSchema(Map.of("$ref", "https://unused.invalid")).build()), List.of(mapping));
+        RefreshMcpImportMojo.write(temporary, first);
+        String pinned = Files.readString(pin());
+        String publicContract = Files.readString(manifest());
+        RefreshMcpImportMojo.write(temporary, second);
+        assertEquals(pinned, Files.readString(pin()));
+        assertEquals(publicContract, Files.readString(manifest()));
+        assertEquals(first.pins(), McpImportedToolCatalog.read(pinned).tools());
+    }
+
+    @Test
+    void invalidDeclaredOutputNeverSelectsEnvelope() {
+        var mapping = mapping();
+        mapping.outputType = "SelectedResult";
+        assertThrows(IllegalArgumentException.class, () -> RefreshMcpImportMojo.importTools(List.of(
+            McpSchema.Tool.builder("selected").inputSchema(Map.of("type", "object", "additionalProperties", false))
+                .outputSchema(Map.of("type", "string")).build()), List.of(mapping)));
+    }
+
+    private McpToolMapping mapping() {
+        var mapping = new McpToolMapping();
+        mapping.mcpName = "selected";
+        mapping.operation = "read.selected";
+        mapping.kind = "query";
+        mapping.majorVersion = 1;
+        mapping.inputType = "SelectedRequest";
+        return mapping;
+    }
 
     @Test
     void refreshesFromARealOfficialSdkStdioServerAndOmitsDiscoveredOnlyTools() throws Exception {
