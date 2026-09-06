@@ -96,6 +96,12 @@ class McpConnectorTest {
             .await().atMost(Duration.ofSeconds(2)));
         verify(client, never()).callTool(any());
 
+        // The canonical input exposes only id, even if the external tool has optional fields.
+        assertThrows(IllegalArgumentException.class, () -> dispatch.dispatch(
+                catalogue, "mcp", "customer.lookup", "{\"id\":\"42\",\"linked_txn\":[]}", OperationObservation.class)
+            .await().atMost(Duration.ofSeconds(2)));
+        verify(client, never()).callTool(any());
+
         OperationObservation.Result observation = assertInstanceOf(OperationObservation.Result.class,
             dispatch.dispatch(catalogue, "mcp", "customer.lookup", "{\"id\":\"42\"}",
                     OperationObservation.class)
@@ -106,7 +112,9 @@ class McpConnectorTest {
         assertEquals("tpf:query", observation.value().kind());
         assertEquals("found", observation.value().outcome());
         assertEquals("{\"value\":\"dispatch-found\"}", observation.value().resultJson());
-        verify(client).callTool(any());
+        var request = org.mockito.ArgumentCaptor.forClass(McpSchema.CallToolRequest.class);
+        verify(client).callTool(request.capture());
+        assertEquals(Map.of("id", "42"), request.getValue().arguments());
         verify(client, never()).close();
     }
 

@@ -262,7 +262,8 @@ second public operation schema:
       "kind": "tpf:query",
       "majorVersion": 1,
       "input": "QuickBooksCustomerSearchRequest",
-      "output": "QuickBooksCustomerSearchResult"
+      "output": "QuickBooksCustomerSearchResult",
+      "includeFields": []
     }
   ]
 }
@@ -270,6 +271,64 @@ second public operation schema:
 
 Neither resource contains credentials, endpoints, sessions, process handles, or MCP transport
 objects.
+
+## Select a narrower input
+
+When an optional external property is unsupported or unnecessary, explicitly choose the fields
+your operation accepts. For example, an invoice tool can omit its optional `linked_txn` array:
+
+```xml
+<tool>
+  <mcpName>create_invoice</mcpName>
+  <operation>quickbooks.invoice.create</operation>
+  <kind>command</kind>
+  <majorVersion>1</majorVersion>
+  <inputType>CreateQuickBooksInvoice</inputType>
+  <outputType>QuickBooksInvoiceCreated</outputType>
+  <includeFields>
+    <field>params.customer_id</field>
+    <field>params.line_items</field>
+    <field>params.due_date</field>
+    <field>params.global_tax_calculation</field>
+  </includeFields>
+</tool>
+```
+
+Use the exact discovered names. This example assumes all required fields of your server's
+`params` object are included. The resulting request retains its external structure:
+
+```json
+{
+  "params": {
+    "customer_id": "42",
+    "line_items": [{ "amount": 125 }],
+    "global_tax_calculation": "TaxExcluded"
+  }
+}
+```
+
+Selecting a parent includes its entire subtree. Selecting children keeps only those children;
+each selected parent must remain a closed object and retain every required property. Selecting
+`params.line_items` keeps its complete item schema and collection bounds. Paths through array
+items, renaming, default insertion and computed values are not supported. Duplicate paths,
+parent/child overlaps, unknown paths and omitted required properties fail refresh with a path
+diagnostic. Paths use dot-separated property names containing letters, digits or underscores,
+starting with a letter or underscore. At most 1,024 paths of 1,024 characters each are accepted,
+with no more than 64 nested parent selections.
+
+Omitting `includeFields` (or using an empty list) requests the complete input schema. The importer
+never silently drops unsupported optional fields. Unsupported constraints on selected parents,
+including cross-field dependencies, and unknown schema keywords also fail projection. The
+canonical provider metadata and callable schema contain only the selected graph. The private
+`mcp-tools.json` entry records the sorted
+`includeFields` selection; configuration order does not affect the resources. A changed selection
+changes this private resource even if the selected fields happen to have equivalent types.
+
+The generated input retains the selected external field names and nesting, so ordinary typed
+serialization sends that structure without a separate transformation. Dynamic operation dispatch
+validates against the narrowed canonical contract before invocation; unknown fields are rejected.
+Selection does not grant callable exposure: the application must still expose the operation
+through its named binding and release catalogue. A discovered-only tool remains unavailable.
 
 ## Importer v1 schema limits
 

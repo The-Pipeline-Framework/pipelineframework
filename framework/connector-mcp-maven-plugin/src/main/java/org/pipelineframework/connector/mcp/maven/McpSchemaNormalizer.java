@@ -24,6 +24,11 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
 /** Lossless importer-v1 projection from the supported JSON Schema subset to canonical v3 types. */
 public final class McpSchemaNormalizer {
     private static final ConnectorProviderId NAMESPACE = ConnectorProviderId.of("mcp.client");
+    private static final Set<String> SUPPORTED = Set.of(
+        "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems",
+        "minLength", "maxLength", "pattern", "format", "minimum", "maximum", "exclusiveMinimum",
+        "exclusiveMaximum", "enum", "const", "title", "description", "default", "examples", "deprecated",
+        "readOnly", "writeOnly", "$schema", "$id", "$comment");
     private static final Set<String> UNSUPPORTED = Set.of(
         "$ref", "$defs", "definitions", "oneOf", "anyOf", "allOf", "not",
         "multipleOf", "uniqueItems", "contains", "minContains", "maxContains",
@@ -268,6 +273,9 @@ public final class McpSchemaNormalizer {
 
         private void rejectUnsupported(Map<String, Object> schema, String path) {
             UNSUPPORTED.stream().filter(schema::containsKey).sorted().findFirst().ifPresent(key -> {
+                throw failure(path + "." + key, "is not supported by importer v1");
+            });
+            schema.keySet().stream().filter(key -> !SUPPORTED.contains(key)).sorted().findFirst().ifPresent(key -> {
                 throw failure(path + "." + key, "is not supported by importer v1");
             });
         }

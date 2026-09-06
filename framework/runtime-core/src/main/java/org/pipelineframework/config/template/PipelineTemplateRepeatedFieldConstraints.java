@@ -74,16 +74,7 @@ public record PipelineTemplateRepeatedFieldConstraints(
     }
 
     private static int compareLower(Optional<Integer> before, Optional<Integer> after) {
-        if (before.equals(after)) {
-            return 0;
-        }
-        if (before.isEmpty()) {
-            return 1;
-        }
-        if (after.isEmpty()) {
-            return -1;
-        }
-        return Integer.compare(after.orElseThrow(), before.orElseThrow());
+        return Integer.compare(after.orElse(0), before.orElse(0));
     }
 
     private static int compareUpper(Optional<Integer> before, Optional<Integer> after) {
