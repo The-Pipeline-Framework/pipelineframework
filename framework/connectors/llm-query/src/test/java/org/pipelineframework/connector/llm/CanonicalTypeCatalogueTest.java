@@ -68,4 +68,23 @@ class CanonicalTypeCatalogueTest {
         assertThrows(IllegalArgumentException.class,
             () -> catalogue.validateAndCanonicalize("PatternArguments", "{\"value\":\"" + oversized + "\"}"));
     }
+
+    @Test
+    void projectsAndEnforcesAllowedValuesAndRepeatedFieldBounds() throws Exception {
+        var schema = PipelineJson.mapper().readTree(catalogue.schema("InvoiceArguments"));
+
+        assertEquals(1, schema.path("properties").path("methods").path("minItems").intValue());
+        assertEquals(2, schema.path("properties").path("methods").path("maxItems").intValue());
+        assertEquals("Accrual", schema.path("$defs").path("AccountingMethod").path("enum").get(0).textValue());
+        assertDoesNotThrow(() -> catalogue.validateAndCanonicalize(
+            "InvoiceArguments", "{\"methods\":[\"Cash\"]}"));
+        assertThrows(IllegalArgumentException.class, () -> catalogue.validateAndCanonicalize(
+            "InvoiceArguments", "{}"));
+        assertThrows(IllegalArgumentException.class, () -> catalogue.validateAndCanonicalize(
+            "InvoiceArguments", "{\"methods\":[]}"));
+        assertThrows(IllegalArgumentException.class, () -> catalogue.validateAndCanonicalize(
+            "InvoiceArguments", "{\"methods\":[\"Cash\",\"Accrual\",\"Cash\"]}"));
+        assertThrows(IllegalArgumentException.class, () -> catalogue.validateAndCanonicalize(
+            "InvoiceArguments", "{\"methods\":[\"Hybrid\"]}"));
+    }
 }

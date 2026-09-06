@@ -252,7 +252,7 @@ public record PipelineIdlSnapshot(
                     }
                     fields.add(new TypeFieldSnapshot(number, field.name(),
                         protoName, field.type().name(), field.repeated(), field.presence(), field.nullability(),
-                        nullMarkerNumber, nullMarkerProtoName));
+                        field.constraints(), nullMarkerNumber, nullMarkerProtoName));
                 }
                 result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of(), List.of(), List.of(),
                     PipelineTemplateWrapperConstraints.empty(), contributedIdentity(typeModel, name)));
@@ -376,12 +376,14 @@ public record PipelineIdlSnapshot(
         @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated,
         PipelineFieldPresence presence,
         PipelineFieldNullability nullability,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) PipelineTemplateRepeatedFieldConstraints constraints,
         Optional<Integer> nullMarkerNumber,
         Optional<String> nullMarkerProtoName
     ) {
         public TypeFieldSnapshot {
             presence = presence == null ? PipelineFieldPresence.REQUIRED : presence;
             nullability = nullability == null ? PipelineFieldNullability.NON_NULL : nullability;
+            constraints = constraints == null ? PipelineTemplateRepeatedFieldConstraints.empty() : constraints;
             nullMarkerNumber = nullMarkerNumber == null ? Optional.empty() : nullMarkerNumber;
             nullMarkerProtoName = nullMarkerProtoName == null ? Optional.empty() : nullMarkerProtoName;
             if (nullMarkerNumber.isPresent() != nullMarkerProtoName.isPresent()) {
@@ -391,22 +393,33 @@ public record PipelineIdlSnapshot(
 
         public TypeFieldSnapshot(int number, String name, String protoName, String type, boolean repeated,
                                  PipelineFieldPresence presence, PipelineFieldNullability nullability) {
-            this(number, name, protoName, type, repeated, presence, nullability, Optional.empty(), Optional.empty());
+            this(number, name, protoName, type, repeated, presence, nullability,
+                PipelineTemplateRepeatedFieldConstraints.empty(), Optional.empty(), Optional.empty());
+        }
+
+        public TypeFieldSnapshot(int number, String name, String protoName, String type, boolean repeated,
+                                 PipelineFieldPresence presence, PipelineFieldNullability nullability,
+                                 Optional<Integer> nullMarkerNumber, Optional<String> nullMarkerProtoName) {
+            this(number, name, protoName, type, repeated, presence, nullability,
+                PipelineTemplateRepeatedFieldConstraints.empty(), nullMarkerNumber, nullMarkerProtoName);
         }
 
         public TypeFieldSnapshot(int number, String name, String protoName, String type) {
             this(number, name, protoName, type, false,
-                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                PipelineTemplateRepeatedFieldConstraints.empty(), Optional.empty(), Optional.empty());
         }
 
         public TypeFieldSnapshot(int number, String name, String protoName, String type, boolean repeated) {
             this(number, name, protoName, type, repeated,
-                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                PipelineTemplateRepeatedFieldConstraints.empty(), Optional.empty(), Optional.empty());
         }
 
         public TypeFieldSnapshot(int number, String name, String type) {
             this(number, name, name, type, false,
-                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, Optional.empty(), Optional.empty());
+                PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL,
+                PipelineTemplateRepeatedFieldConstraints.empty(), Optional.empty(), Optional.empty());
         }
     }
 

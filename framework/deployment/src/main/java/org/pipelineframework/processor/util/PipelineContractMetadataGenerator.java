@@ -219,6 +219,9 @@ public class PipelineContractMetadataGenerator {
             constraints.minimumExclusive().ifPresent(value -> encoded.put("minimumExclusive", value));
             constraints.maximum().ifPresent(value -> encoded.put("maximum", value));
             constraints.maximumExclusive().ifPresent(value -> encoded.put("maximumExclusive", value));
+            if (!constraints.allowedValues().isEmpty()) {
+                encoded.put("allowedValues", constraints.allowedValues());
+            }
         } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
             encoded.put("kind", "alias");
             encoded.put("target", typeExpression(alias.target()));
@@ -242,6 +245,8 @@ public class PipelineContractMetadataGenerator {
         encoded.put("nullability", field.nullability().name());
         if (field.repeated()) {
             encoded.put("repeated", true);
+            field.constraints().minItems().ifPresent(value -> encoded.put("minItems", value));
+            field.constraints().maxItems().ifPresent(value -> encoded.put("maxItems", value));
         }
         return immutableSortedMap(encoded);
     }

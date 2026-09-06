@@ -11,6 +11,7 @@ import java.util.regex.PatternSyntaxException;
 import org.pipelineframework.config.template.PipelineTemplateScalarTypes;
 import org.pipelineframework.config.template.PipelineFieldNullability;
 import org.pipelineframework.config.template.PipelineFieldPresence;
+import org.pipelineframework.config.template.PipelineTemplateRepeatedFieldConstraints;
 import org.pipelineframework.config.template.ProtocolTypeReferences;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
@@ -73,7 +74,12 @@ public final class ConnectorProviderManifestReader {
         int schemaVersion
     ) {
         requireOnly(value, "name", "fields", "wraps", "alias", "variants",
-            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
+            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive",
+            "allowedValues");
+        if (schemaVersion < 6 && value.containsKey("allowedValues")) {
+            throw new IllegalArgumentException(
+                "connector provider manifest schema versions before 6 cannot declare allowedValues");
+        }
         String name = string(value, "name");
         boolean fields = value.containsKey("fields");
         boolean wraps = value.containsKey("wraps");
@@ -131,7 +137,7 @@ public final class ConnectorProviderManifestReader {
         Map<String, Object> value,
         int schemaVersion
     ) {
-        requireOnly(value, "name", "type", "repeated", "presence", "nullability");
+        requireOnly(value, "name", "type", "repeated", "presence", "nullability", "minItems", "maxItems");
         if (schemaVersion < 5 && (value.containsKey("repeated") || value.containsKey("presence")
             || value.containsKey("nullability"))) {
             throw new IllegalArgumentException(
@@ -139,14 +145,20 @@ public final class ConnectorProviderManifestReader {
         }
         String name = string(value, "name");
         boolean repeated = value.containsKey("repeated") && bool(value, "repeated");
+        if (schemaVersion < 6 && (value.containsKey("minItems") || value.containsKey("maxItems"))) {
+            throw new IllegalArgumentException(
+                "connector provider manifest schema versions before 6 cannot declare repeated field constraints");
+        }
         PipelineFieldPresence presence = value.containsKey("presence")
             ? enumValue(PipelineFieldPresence.class, string(value, "presence"), "presence")
             : PipelineFieldPresence.REQUIRED;
         PipelineFieldNullability nullability = value.containsKey("nullability")
             ? enumValue(PipelineFieldNullability.class, string(value, "nullability"), "nullability")
             : PipelineFieldNullability.NON_NULL;
+        PipelineTemplateRepeatedFieldConstraints constraints = new PipelineTemplateRepeatedFieldConstraints(
+            optionalInteger(value, "minItems"), optionalInteger(value, "maxItems"));
         return new PipelineTemplateTypeDefinition.Field(
-            name, protocolReference(string(value, "type"), owner + "." + name), repeated, presence, nullability);
+            name, protocolReference(string(value, "type"), owner + "." + name), repeated, presence, nullability, constraints);
     }
 
     private static PipelineTemplateTypeReference protocolReference(String value, String owner) {
@@ -187,6 +199,10 @@ public final class ConnectorProviderManifestReader {
         Optional<BigDecimal> minimumExclusive = optionalDecimal(value, "minimumExclusive");
         Optional<BigDecimal> maximum = optionalDecimal(value, "maximum");
         Optional<BigDecimal> maximumExclusive = optionalDecimal(value, "maximumExclusive");
+        List<Object> allowedValues = value.containsKey("allowedValues") ? array(value, "allowedValues") : List.of();
+        if (value.containsKey("allowedValues") && allowedValues.isEmpty()) {
+            throw new IllegalArgumentException("protocol type '" + name + "' allowedValues must not be empty");
+        }
         pattern.ifPresent(expression -> {
             try {
                 Pattern.compile(expression);
@@ -196,7 +212,7 @@ public final class ConnectorProviderManifestReader {
             }
         });
         PipelineTemplateWrapperConstraints constraints = new PipelineTemplateWrapperConstraints(
-            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive);
+            minLength, maxLength, pattern, format, minimum, minimumExclusive, maximum, maximumExclusive, allowedValues);
         PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints)
             .ifPresent(violation -> { throw protocolConstraintFailure(name, violation); });
         return constraints;
@@ -219,13 +235,17 @@ public final class ConnectorProviderManifestReader {
             case LOWER_BOUNDS_COMBINED, UPPER_BOUNDS_COMBINED ->
                 "cannot declare inclusive and exclusive bounds together";
             case EMPTY_INTERVAL -> "declares an empty numeric constraint interval";
+            case ALLOWED_VALUES_ON_NON_SCALAR_JSON -> "cannot declare allowedValues for payload_ref";
+            case ALLOWED_VALUE_TYPE_MISMATCH -> "allowedValues contains a value with the wrong scalar type";
+            case ALLOWED_VALUE_OUTSIDE_CONSTRAINTS ->
+                "allowedValues contains a value rejected by another declared constraint";
         };
         return new IllegalArgumentException("protocol type '" + name + "' " + message);
     }
 
     private static void rejectConstraints(Map<String, Object> value, String name) {
         for (String key : List.of("minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive",
-            "maximum", "maximumExclusive")) {
+            "maximum", "maximumExclusive", "allowedValues")) {
             if (value.containsKey(key)) {
                 throw new IllegalArgumentException("protocol type '" + name + "' can declare '" + key + "' only beside wraps");
             }

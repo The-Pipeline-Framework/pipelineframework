@@ -106,6 +106,8 @@ public final class ConnectorProviderArtifacts {
         if (field.repeated()) {
             json.append(",\"repeated\":true");
         }
+        field.constraints().minItems().ifPresent(value -> json.append(",\"minItems\":").append(value));
+        field.constraints().maxItems().ifPresent(value -> json.append(",\"maxItems\":").append(value));
         if (field.presence()
             != org.pipelineframework.config.template.PipelineFieldPresence.REQUIRED) {
             json.append(",\"presence\":").append(quote(field.presence().name()));
@@ -142,6 +144,21 @@ public final class ConnectorProviderArtifacts {
         constraints.minimumExclusive().ifPresent(value -> json.append(",\"minimumExclusive\":").append(value.toPlainString()));
         constraints.maximum().ifPresent(value -> json.append(",\"maximum\":").append(value.toPlainString()));
         constraints.maximumExclusive().ifPresent(value -> json.append(",\"maximumExclusive\":").append(value.toPlainString()));
+        if (!constraints.allowedValues().isEmpty()) {
+            json.append(",\"allowedValues\":[");
+            appendJoined(json, constraints.allowedValues(), ConnectorProviderArtifacts::jsonScalar);
+            json.append(']');
+        }
+    }
+
+    private static String jsonScalar(Object value) {
+        if (value instanceof String text) {
+            return quote(text);
+        }
+        if (value instanceof Boolean || value instanceof Number) {
+            return value.toString();
+        }
+        throw new IllegalArgumentException("unsupported canonical scalar value: " + value.getClass().getName());
     }
 
     private static String operation(ConnectorOperationDescriptor operation) {

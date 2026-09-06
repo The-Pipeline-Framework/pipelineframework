@@ -132,6 +132,23 @@
         "kind": "record",
         "fields": [{"name":"value","type":{"kind":"named","id":"PatternedText"}}]
       }
+    },
+    "AccountingMethod": {
+      "definition": {
+        "id": "AccountingMethod",
+        "kind": "wrapper",
+        "wraps": {"kind":"scalar","id":"string"},
+        "allowedValues": ["Accrual", "Cash"]
+      }
+    },
+    "InvoiceArguments": {
+      "definition": {
+        "id": "InvoiceArguments",
+        "kind": "record",
+        "fields": [
+          {"name":"methods","type":{"kind":"named","id":"AccountingMethod"},"repeated":true,"minItems":1,"maxItems":2}
+        ]
+      }
     }
   }
 }

@@ -188,7 +188,7 @@ look like this:
 
 ```json
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "providers": [
     {
       "id": "mcp.client",
@@ -279,10 +279,12 @@ Importer v1 accepts:
 - supported canonical scalars;
 - optional or nullable non-array fields;
 - required, non-null homogeneous arrays;
-- supported string and numeric wrapper constraints.
+- `minItems` and `maxItems` on those arrays;
+- supported string and numeric wrapper constraints;
+- scalar `enum` and `const`, normalized to canonical `allowedValues`.
 
 It rejects open maps, tuples, optional or nullable arrays, references, recursive definitions,
-enums, and composition keywords. Failures include the relevant schema path.
+object/array `enum` or `const`, and composition keywords. Failures include the relevant schema path.
 
 These are importer-v1 projection limits, not limitations added to canonical v3. If a QuickBooks
 tool cannot be projected losslessly, select a simpler operation or place a deliberately shaped MCP

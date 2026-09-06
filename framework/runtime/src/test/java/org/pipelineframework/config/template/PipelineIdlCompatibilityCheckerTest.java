@@ -430,6 +430,38 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
+    void classifiesAllowedValueSetAndRepeatedCardinalityChanges() {
+        PipelineTemplateWrapperConstraints allowedBaseline = new PipelineTemplateWrapperConstraints(
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty(), List.of("Accrual", "Cash"));
+        PipelineTemplateWrapperConstraints allowedNarrower = new PipelineTemplateWrapperConstraints(
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty(), List.of("Cash"));
+        PipelineTemplateWrapperConstraints allowedWider = new PipelineTemplateWrapperConstraints(
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty(), List.of("Accrual", "Cash", "Hybrid"));
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.NARROWING,
+            allowedNarrower.classifyChangeFrom(allowedBaseline));
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.WIDENING,
+            allowedWider.classifyChangeFrom(allowedBaseline));
+
+        PipelineIdlSnapshot.TypeSnapshot baseline = repeatedRecord(
+            new PipelineTemplateRepeatedFieldConstraints(Optional.of(1), Optional.of(10)));
+        PipelineIdlSnapshot.TypeSnapshot narrower = repeatedRecord(
+            new PipelineTemplateRepeatedFieldConstraints(Optional.of(2), Optional.of(10)));
+        PipelineIdlSnapshot.TypeSnapshot wider = repeatedRecord(
+            new PipelineTemplateRepeatedFieldConstraints(Optional.empty(), Optional.of(12)));
+
+        assertTrue(new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baseline), v3Snapshot(narrower)).stream()
+            .anyMatch(error -> error.contains("collection constraints") && error.contains("NARROWING")));
+        PipelineIdlCompatibilityReport report = new PipelineIdlCompatibilityChecker().analyze(
+            v3Snapshot(baseline), v3Snapshot(wider));
+        assertTrue(report.findings().stream().anyMatch(finding ->
+            finding.subject().contains("collection constraints WIDENING")
+                && finding.impact() == PipelineCompatibilityImpact.WIDENING));
+    }
+
+    @Test
     void v3RejectsActiveFieldsAndVariantsThatReuseReservedWireIdentity() {
         PipelineIdlSnapshot.TypeSnapshot record = new PipelineIdlSnapshot.TypeSnapshot(
             "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid")),
@@ -479,6 +511,13 @@ class PipelineIdlCompatibilityCheckerTest {
 
     private PipelineIdlSnapshot.TypeSnapshot recordWith(PipelineIdlSnapshot.TypeFieldSnapshot... fields) {
         return new PipelineIdlSnapshot.TypeSnapshot("Payment", "record", List.of(fields), Optional.empty(), List.of());
+    }
+
+    private PipelineIdlSnapshot.TypeSnapshot repeatedRecord(PipelineTemplateRepeatedFieldConstraints constraints) {
+        PipelineIdlSnapshot.TypeFieldSnapshot field = new PipelineIdlSnapshot.TypeFieldSnapshot(
+            1, "lines", "lines", "string", true, PipelineFieldPresence.REQUIRED,
+            PipelineFieldNullability.NON_NULL, constraints, Optional.empty(), Optional.empty());
+        return new PipelineIdlSnapshot.TypeSnapshot("Payment", "record", List.of(field), Optional.empty(), List.of());
     }
 
     private PipelineIdlSnapshot.TypeFieldSnapshot field(

@@ -13,7 +13,9 @@ import java.util.Set;
 import org.pipelineframework.config.template.PipelineFieldNullability;
 import org.pipelineframework.config.template.PipelineFieldPresence;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateRepeatedFieldConstraints;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.config.template.PipelineTemplateWrapperConstraintValidator;
 import org.pipelineframework.config.template.PipelineTemplateWrapperConstraints;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.protocol.ProtocolTypeDescriptor;
@@ -23,8 +25,8 @@ import org.pipelineframework.protocol.ProtocolTypeIdentity;
 public final class McpSchemaNormalizer {
     private static final ConnectorProviderId NAMESPACE = ConnectorProviderId.of("mcp.client");
     private static final Set<String> UNSUPPORTED = Set.of(
-        "$ref", "$defs", "definitions", "oneOf", "anyOf", "allOf", "not", "enum", "const",
-        "multipleOf", "minItems", "maxItems", "uniqueItems", "contains", "minContains", "maxContains",
+        "$ref", "$defs", "definitions", "oneOf", "anyOf", "allOf", "not",
+        "multipleOf", "uniqueItems", "contains", "minContains", "maxContains",
         "prefixItems", "additionalItems", "unevaluatedItems", "minProperties", "maxProperties",
         "patternProperties", "propertyNames", "dependentRequired", "dependentSchemas", "unevaluatedProperties",
         "if", "then", "else", "contentEncoding", "contentMediaType", "contentSchema");
@@ -67,6 +69,9 @@ public final class McpSchemaNormalizer {
             if (!Boolean.FALSE.equals(schema.get("additionalProperties"))) {
                 throw failure(path + ".additionalProperties", "must be false for importer v1");
             }
+            if (schema.containsKey("enum") || schema.containsKey("const")) {
+                throw failure(path, "enum and const are supported only on JSON scalar schemas in importer v1");
+            }
             Map<String, Object> properties = schema.containsKey("properties")
                 ? map(schema.get("properties"), path + ".properties") : Map.of();
             Set<String> required = strings(schema.get("required"), path + ".required");
@@ -81,6 +86,9 @@ public final class McpSchemaNormalizer {
                 boolean isRequired = required.contains(entry.getKey());
                 if ("array".equals(fieldType.base())) {
                     rejectUnsupported(fieldSchema, fieldPath);
+                    if (fieldSchema.containsKey("enum") || fieldSchema.containsKey("const")) {
+                        throw failure(fieldPath, "enum and const are supported only on JSON scalar schemas in importer v1");
+                    }
                     if (!isRequired || fieldType.nullable()) {
                         throw failure(fieldPath, "arrays must be required and non-null in importer v1");
                     }
@@ -89,13 +97,22 @@ public final class McpSchemaNormalizer {
                     if (itemType.nullable() || "array".equals(itemType.base())) {
                         throw failure(fieldPath + ".items", "must be a non-null scalar or object");
                     }
+                    PipelineTemplateRepeatedFieldConstraints constraints;
+                    try {
+                        constraints = new PipelineTemplateRepeatedFieldConstraints(
+                            optionalInt(fieldSchema.get("minItems"), fieldPath + ".minItems"),
+                            optionalInt(fieldSchema.get("maxItems"), fieldPath + ".maxItems"));
+                    } catch (IllegalArgumentException failure) {
+                        throw failure(fieldPath, failure.getMessage());
+                    }
                     fields.add(new PipelineTemplateTypeDefinition.Field(
-                        entry.getKey(), reference(name, entry.getKey(), items, itemType, fieldPath + ".items"), true));
+                        entry.getKey(), reference(name, entry.getKey(), items, itemType, fieldPath + ".items"), true,
+                        PipelineFieldPresence.REQUIRED, PipelineFieldNullability.NON_NULL, constraints));
                 } else {
                     fields.add(new PipelineTemplateTypeDefinition.Field(
                         entry.getKey(), reference(name, entry.getKey(), fieldSchema, fieldType, fieldPath), false,
                         isRequired ? PipelineFieldPresence.REQUIRED : PipelineFieldPresence.OPTIONAL,
-                        fieldType.nullable() ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL));
+                        effectiveNullability(fieldSchema, fieldType)));
                 }
             });
             ProtocolTypeIdentity identity = new ProtocolTypeIdentity(NAMESPACE, name);
@@ -119,7 +136,7 @@ public final class McpSchemaNormalizer {
                 return object(owner + pascal(property), schema, path, false);
             }
             String scalar = scalar(schema, type.base(), path);
-            PipelineTemplateWrapperConstraints constraints = constraints(schema, scalar, path);
+            PipelineTemplateWrapperConstraints constraints = constraints(schema, scalar, type, path);
             if (constraints.isEmpty()) {
                 return new PipelineTemplateTypeReference.Scalar(scalar);
             }
@@ -162,17 +179,91 @@ public final class McpSchemaNormalizer {
             };
         }
 
-        private PipelineTemplateWrapperConstraints constraints(Map<String, Object> schema, String scalar, String path) {
+        private PipelineTemplateWrapperConstraints constraints(
+            Map<String, Object> schema,
+            String scalar,
+            JsonType type,
+            String path
+        ) {
             Optional<String> pattern = optionalString(schema.get("pattern"), path + ".pattern");
             Optional<PipelineTemplateWrapperConstraints.Format> format = "email".equals(schema.get("format"))
                 ? Optional.of(PipelineTemplateWrapperConstraints.Format.EMAIL) : Optional.empty();
-            return new PipelineTemplateWrapperConstraints(
+            PipelineTemplateWrapperConstraints constraints;
+            try {
+                constraints = new PipelineTemplateWrapperConstraints(
                 optionalInt(schema.get("minLength"), path + ".minLength"),
                 optionalInt(schema.get("maxLength"), path + ".maxLength"), pattern, format,
                 optionalDecimal(schema.get("minimum"), path + ".minimum"),
                 optionalDecimal(schema.get("exclusiveMinimum"), path + ".exclusiveMinimum"),
                 optionalDecimal(schema.get("maximum"), path + ".maximum"),
-                optionalDecimal(schema.get("exclusiveMaximum"), path + ".exclusiveMaximum"));
+                optionalDecimal(schema.get("exclusiveMaximum"), path + ".exclusiveMaximum"),
+                allowedValues(schema, type, path));
+            } catch (IllegalArgumentException failure) {
+                throw failure(path, failure.getMessage());
+            }
+            PipelineTemplateWrapperConstraintValidator.findViolation(scalar, constraints).ifPresent(violation -> {
+                throw failure(path, "declares incompatible scalar constraints: " + violation.kind());
+            });
+            return constraints;
+        }
+
+        private List<Object> allowedValues(Map<String, Object> schema, JsonType type, String path) {
+            boolean hasEnum = schema.containsKey("enum");
+            boolean hasConst = schema.containsKey("const");
+            if (!hasEnum && !hasConst) {
+                return List.of();
+            }
+            List<Object> values;
+            if (hasEnum) {
+                Object raw = schema.get("enum");
+                if (!(raw instanceof List<?> entries) || entries.isEmpty()) {
+                    throw failure(path + ".enum", "must be a non-empty array");
+                }
+                values = new ArrayList<>(entries);
+            } else {
+                values = new ArrayList<>();
+                values.add(schema.get("const"));
+            }
+            if (hasConst) {
+                Object constant = schema.get("const");
+                if (hasEnum && values.stream().noneMatch(value -> jsonValuesEqual(value, constant))) {
+                    throw failure(path, "declares contradictory enum and const constraints");
+                }
+                values = new ArrayList<>();
+                values.add(constant);
+            }
+            if (values.removeIf(java.util.Objects::isNull) && !type.nullable()) {
+                throw failure(path, "allows null without declaring a nullable type");
+            }
+            if (values.isEmpty()) {
+                throw failure(path, "cannot project a scalar allowed-value set containing only null");
+            }
+            return List.copyOf(values);
+        }
+
+        private PipelineFieldNullability effectiveNullability(Map<String, Object> schema, JsonType type) {
+            if (!type.nullable()) {
+                return PipelineFieldNullability.NON_NULL;
+            }
+            if (schema.containsKey("const")) {
+                return schema.get("const") == null
+                    ? PipelineFieldNullability.NULLABLE : PipelineFieldNullability.NON_NULL;
+            }
+            if (schema.get("enum") instanceof List<?> values && values.stream().noneMatch(java.util.Objects::isNull)) {
+                return PipelineFieldNullability.NON_NULL;
+            }
+            return PipelineFieldNullability.NULLABLE;
+        }
+
+        private boolean jsonValuesEqual(Object left, Object right) {
+            if (left instanceof Number leftNumber && right instanceof Number rightNumber) {
+                try {
+                    return new BigDecimal(leftNumber.toString()).compareTo(new BigDecimal(rightNumber.toString())) == 0;
+                } catch (NumberFormatException ignored) {
+                    return false;
+                }
+            }
+            return java.util.Objects.equals(left, right);
         }
 
         private void rejectUnsupported(Map<String, Object> schema, String path) {

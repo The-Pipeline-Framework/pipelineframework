@@ -136,6 +136,22 @@ public final class PipelineIdlCompatibilityChecker {
                     findings.add(finding(change, PipelineCompatibilityDimension.GENERATED_JAVA_SOURCE,
                         PipelineCompatibilityImpact.BREAKING, "the Java component changes between a value and List"));
                 }
+                if (old.repeated() && field.repeated()) {
+                    PipelineTemplateWrapperConstraints.Compatibility compatibility = field.constraints()
+                        .classifyChangeFrom(old.constraints());
+                    if (compatibility != PipelineTemplateWrapperConstraints.Compatibility.UNCHANGED) {
+                        String change = entry.getKey() + "." + name + " collection constraints " + compatibility;
+                        PipelineCompatibilityImpact impact = compatibility
+                            == PipelineTemplateWrapperConstraints.Compatibility.WIDENING
+                            ? PipelineCompatibilityImpact.WIDENING : PipelineCompatibilityImpact.BREAKING;
+                        findings.add(finding(change, PipelineCompatibilityDimension.NORMALIZED_IDL, impact,
+                            "the accepted repeated-field cardinality is " + compatibility.name().toLowerCase(Locale.ROOT)));
+                        findings.add(finding(change, PipelineCompatibilityDimension.CANONICAL_DATA, impact,
+                            "collection values accepted by the canonical contract change"));
+                        findings.add(finding(change, PipelineCompatibilityDimension.PROTOBUF_WIRE,
+                            PipelineCompatibilityImpact.COMPATIBLE, "protobuf collection encoding is unchanged"));
+                    }
+                }
             });
             before.forEach((name, field) -> {
                 if (!after.containsKey(name)) {
@@ -240,6 +256,13 @@ public final class PipelineIdlCompatibilityChecker {
                         || !Objects.equals(baselineField.nullMarkerProtoName(), currentField.nullMarkerProtoName())))) {
                 errors.add("Type '" + typeName + "' changed field '" + baselineField.name()
                     + "' protobuf identity or type");
+            }
+            PipelineTemplateWrapperConstraints.Compatibility collectionCompatibility = currentField.constraints()
+                .classifyChangeFrom(baselineField.constraints());
+            if (collectionCompatibility != PipelineTemplateWrapperConstraints.Compatibility.UNCHANGED) {
+                errors.add("Type '" + typeName + "' field '" + baselineField.name()
+                    + "' collection constraints changed with classification " + collectionCompatibility
+                    + "; this is a semantic compatibility change and is rejected by the current compiler policy");
             }
             if (baselineField.nullability() == PipelineFieldNullability.NULLABLE
                 && currentField.nullability() == PipelineFieldNullability.NON_NULL) {

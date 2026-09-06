@@ -321,6 +321,8 @@ class PipelineProtoGeneratorTest {
                 fields:
                   - name: lineItems
                     repeated: LineItem
+                    minItems: 1
+                    maxItems: 2
                   - name: labels
                     repeated: string
             steps:
@@ -345,6 +347,8 @@ class PipelineProtoGeneratorTest {
         assertFalse(proto.contains("optional LineItem line_items"));
         assertTrue(batchSource.contains("java.util.List<LineItem> lineItems"));
         assertTrue(batchSource.contains("lineItems == null ? java.util.List.of() : java.util.List.copyOf(lineItems)"));
+        assertTrue(batchSource.contains("lineItems.size() < 1"));
+        assertTrue(batchSource.contains("lineItems.size() > 2"));
 
         Path stub = outputDir.resolve("com/example/repeated/grpc/PipelineTypes.java");
         Files.createDirectories(stub.getParent());
@@ -409,6 +413,10 @@ class PipelineProtoGeneratorTest {
             List<?> storedItems = (List<?>) batch.getMethod("lineItems").invoke(input);
             assertEquals(List.of(item, item), storedItems, "Repeated values must preserve order and duplicates");
             assertThrows(UnsupportedOperationException.class, storedItems::clear);
+            assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> batch.getConstructor(List.class, List.class).newInstance(List.of(), List.of()));
+            assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> batch.getConstructor(List.class, List.class).newInstance(List.of(item, item, item), List.of()));
 
             Object encoded = adapters.getMethod("toProto", batch).invoke(null, input);
             Object roundTripped = adapters.getMethod("fromProto", encoded.getClass()).invoke(null, encoded);
@@ -607,6 +615,7 @@ class PipelineProtoGeneratorTest {
                 minLength: 3
                 maxLength: 3
                 pattern: "[A-Z]{3}"
+                allowedValues: [USD, EUR]
               ContactEmail:
                 wraps: string
                 format: email
@@ -635,6 +644,7 @@ class PipelineProtoGeneratorTest {
 
         assertTrue(currency.contains("if (value == null) { throw new IllegalArgumentException"));
         assertTrue(currency.contains("validateString(\"CurrencyCode\", value"));
+        assertTrue(currency.contains("must be one of its declared allowedValues"));
         assertTrue(ratio.contains("validateFloat64(\"PositiveRatio\", value"));
         assertTrue(validation.contains("codePointCount"));
         assertTrue(validation.contains("matcher(value).matches()"));
@@ -695,6 +705,7 @@ class PipelineProtoGeneratorTest {
             assertNotNull(email.getConstructor(String.class).newInstance("person@example.com"));
             assertNotNull(ratioClass.getConstructor(Double.class).newInstance(0.5d));
             assertWrapperConstructionFails(currencyClass, "usd");
+            assertWrapperConstructionFails(currencyClass, "GBP");
             assertWrapperConstructionFails(currencyClass, (Object) null);
             assertWrapperConstructionFails(email, "person@.example");
             assertWrapperConstructionFails(ratioClass, Double.NaN);
@@ -722,6 +733,7 @@ class PipelineProtoGeneratorTest {
             types:
               BinaryValue:
                 wraps: bytes
+                allowedValues: ["AQI="]
               BinaryRecord:
                 fields: [[rawContent, bytes], [value, BinaryValue]]
               BinaryOutcome:
@@ -749,11 +761,60 @@ class PipelineProtoGeneratorTest {
         String adapters = Files.readString(domain.resolve("PipelineDomainProtoAdapters.java"));
         assertTrue(record.contains("com.google.protobuf.ByteString rawContent"));
         assertTrue(wrapper.contains("com.google.protobuf.ByteString value"));
+        assertTrue(wrapper.contains("value.equals(com.google.protobuf.ByteString.copyFrom"));
         assertTrue(union.contains("record Accepted(BinaryValue value) implements BinaryOutcome"));
         assertTrue(adapters.contains("builder.setRawContent(value.rawContent());"));
         assertTrue(adapters.contains("requireProtoField(value.hasRawContent(), value.getRawContent(), \"BinaryRecord.rawContent\")"));
         assertFalse(adapters.contains("ByteString.copyFrom"));
         assertFalse(adapters.contains(".toByteArray()"));
+
+        Path classes = tempDir.resolve("generated-v3-bytes-classes");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+            "-classpath", System.getProperty("java.class.path"), "-d", classes.toString(),
+            domain.resolve("BinaryValue.java").toString()));
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> wrapperClass = loader.loadClass("com.example.binary.domain.BinaryValue");
+            assertNotNull(wrapperClass.getConstructor(com.google.protobuf.ByteString.class)
+                .newInstance(com.google.protobuf.ByteString.copyFrom(new byte[] {1, 2})));
+            assertWrapperConstructionFails(wrapperClass, com.google.protobuf.ByteString.copyFrom(new byte[] {2, 1}));
+        }
+    }
+
+    @Test
+    void generatedFloatingAllowedValuesUseCanonicalNumericEquality() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-signed-zero.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Signed Zero"
+            basePackage: "com.example.signedzero"
+            transport: "LOCAL"
+            types:
+              SignedZero:
+                wraps: float64
+                allowedValues: [0.0]
+            steps:
+              - name: Preserve Signed Zero
+                cardinality: ONE_TO_ONE
+                input: SignedZero
+                output: SignedZero
+            """);
+        var config = new org.pipelineframework.config.template.PipelineTemplateConfigLoader().load(configPath);
+        var plan = new PipelineGenerationPlan(config.basePackage(), config.typeModel(),
+            org.pipelineframework.config.template.PipelineIdlSnapshot.from(config));
+        PipelineJavaDomainRenderer.RenderedSource wrapper = new PipelineJavaDomainRenderer().render(plan).stream()
+            .filter(source -> source.relativePath().getFileName().toString().equals("SignedZero.java"))
+            .findFirst().orElseThrow();
+        Path source = tempDir.resolve(wrapper.relativePath());
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, wrapper.content());
+        Path classes = tempDir.resolve("signed-zero-classes");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+            "-d", classes.toString(), source.toString()));
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> wrapperClass = loader.loadClass("com.example.signedzero.domain.SignedZero");
+            assertNotNull(wrapperClass.getConstructor(Double.class).newInstance(-0.0d));
+            assertWrapperConstructionFails(wrapperClass, 1.0d);
+        }
     }
 
     @Test

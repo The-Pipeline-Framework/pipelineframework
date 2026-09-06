@@ -2065,6 +2065,103 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsDeterministicAllowedValuesAndRepeatedFieldBounds() throws Exception {
+        Path configPath = tempDir.resolve("v3-value-and-collection-constraints.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Value Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              AccountingMethod:
+                wraps: string
+                allowedValues: [Cash, Accrual, Cash]
+              RetryCount:
+                wraps: int32
+                minimum: 0
+                allowedValues: [2, 0, 1]
+              Invoice:
+                fields:
+                  - name: methods
+                    repeated: AccountingMethod
+                    minItems: 1
+                    maxItems: 2
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Invoice, output: Invoice }]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.WrapperType method = (PipelineTemplateTypeDefinition.WrapperType)
+            config.typeModel().definitions().get("AccountingMethod");
+        PipelineTemplateTypeDefinition.WrapperType retry = (PipelineTemplateTypeDefinition.WrapperType)
+            config.typeModel().definitions().get("RetryCount");
+        PipelineTemplateTypeDefinition.RecordType invoice = (PipelineTemplateTypeDefinition.RecordType)
+            config.typeModel().definitions().get("Invoice");
+
+        assertEquals(List.of("Accrual", "Cash"), method.constraints().allowedValues());
+        assertEquals(List.of(java.math.BigInteger.ZERO, java.math.BigInteger.ONE, java.math.BigInteger.TWO),
+            retry.constraints().allowedValues());
+        assertEquals(1, invoice.fields().getFirst().constraints().minItems().orElseThrow());
+        assertEquals(2, invoice.fields().getFirst().constraints().maxItems().orElseThrow());
+    }
+
+    @Test
+    void rejectsInvalidAllowedValuesAndRepeatedFieldBounds() throws Exception {
+        Path invalidAllowed = tempDir.resolve("v3-invalid-allowed-values.yaml");
+        Files.writeString(invalidAllowed, """
+            version: 3
+            appName: Invalid Allowed Values
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Method:
+                wraps: string
+                minLength: 4
+                allowedValues: ["No"]
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Method, output: Method }]
+            """);
+        IllegalStateException allowed = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invalidAllowed));
+        assertTrue(allowed.getMessage().contains("rejected by another declared constraint"), allowed.getMessage());
+
+        Path invalidBounds = tempDir.resolve("v3-invalid-repeated-bounds.yaml");
+        Files.writeString(invalidBounds, """
+            version: 3
+            appName: Invalid Collection Bounds
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Invoice:
+                fields:
+                  - name: lines
+                    repeated: string
+                    minItems: 2
+                    maxItems: 1
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Invoice, output: Invoice }]
+            """);
+        IllegalStateException bounds = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invalidBounds));
+        assertTrue(bounds.getMessage().contains("minItems must not exceed maxItems"), bounds.getMessage());
+
+        Path scalarBounds = tempDir.resolve("v3-scalar-bounds.yaml");
+        Files.writeString(scalarBounds, """
+            version: 3
+            appName: Scalar Collection Bounds
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Invoice:
+                fields:
+                  - name: note
+                    type: string
+                    minItems: 1
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Invoice, output: Invoice }]
+            """);
+        IllegalStateException scalar = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(scalarBounds));
+        assertTrue(scalar.getMessage().contains("only with 'repeated'"), scalar.getMessage());
+    }
+
+    @Test
     void rejectsInvalidV3WrapperConstraintPlacementApplicabilityAndIntervals() throws Exception {
         Path fieldConstraint = tempDir.resolve("v3-field-constraint.yaml");
         Files.writeString(fieldConstraint, """

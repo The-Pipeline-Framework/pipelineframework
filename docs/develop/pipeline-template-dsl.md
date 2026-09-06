@@ -148,6 +148,23 @@ Defaults are not part of this feature. In particular, an absent field is not sil
 as a default value. Repeated fields retain their existing missing-to-empty-list behavior and cannot
 currently declare presence or nullability modifiers.
 
+Verbose repeated fields may bound their finite collection size with inclusive `minItems` and
+`maxItems` constraints:
+
+```yaml
+- name: lines
+  repeated: InvoiceLine
+  minItems: 1
+  maxItems: 100
+```
+
+Both bounds are non-negative integers, `minItems` cannot exceed `maxItems`, and neither property is
+valid on a singular field. Bounds constrain the collection only; they do not alter element types or
+field-presence semantics. In the current required repeated-field model, a missing or null collection
+normalizes to an empty immutable list, so a positive `minItems` rejects it. Generated Java constructors,
+canonical JSON validation, model-facing JSON Schema, release metadata, and provider manifests enforce
+the same inclusive bounds.
+
 Compatibility diagnostics name their surface. For example, adding a required field is safe for the
 protobuf wire because it adds a tag, but it breaks canonical data produced by the previous contract
 because those payloads lack the new required key. Changing required to optional or non-null to
@@ -181,6 +198,8 @@ Other record evolution is classified separately:
 | add optional singular field | compatible | compatible | breaking constructor/component surface |
 | remove field with reserved tags/names | compatible for readers | breaking for closed record JSON | breaking |
 | singular ↔ repeated | lossy | breaking scalar/array shape | breaking `T`/`List<T>` shape |
+| tighten repeated-field bounds | unchanged | narrowing/breaking | constructor validation narrows |
+| loosen repeated-field bounds | unchanged | widening | constructor validation widens |
 | change type | depends on protobuf wire type; review required | breaking | breaking |
 
 `repeated` describes multiplicity inside one domain value. Generated Java records expose it as an immutable, non-null `List<T>`; generated protobuf uses a `repeated` field; and generated JSON Schema uses an array whose missing value normalizes to an empty array. Order and duplicates are preserved. Adding a repeated field is therefore compatible with an older pinned IDL snapshot and with protobuf/JSON readers: old payloads observe the field as empty. Changing an existing field between singular and repeated is incompatible.
@@ -285,11 +304,22 @@ types:
   PositiveAmount:
     wraps: decimal
     minimumExclusive: 0
+  AccountingMethod:
+    wraps: string
+    allowedValues: [Cash, Accrual]
 ```
 
 String wrappers support `minLength`, `maxLength`, `pattern`, and `format: email`. Length is measured in Unicode code points. A `pattern` requires the entire string value to match and must be paired with `maxLength`; generated Java validates that bound before attempting the match, limiting pattern processing for boundary data. The DSL does not define Java regular expressions as its permanent pattern language: the Java target currently compiles the declared pattern with Java regex support, and another target must either support the pattern or report a clear limitation until TPF defines a portable profile. `format: email` checks a practical mailbox shape—one non-edge `@`, no whitespace, a non-empty local part, and non-empty dot-separated domain labels. It does not establish ownership, DNS validity, or deliverability.
 
 Numeric wrappers (`int32`, `int64`, `float32`, `float64`, and `decimal`) support `minimum`, `minimumExclusive`, `maximum`, and `maximumExclusive`. Bounds are semantic decimal values.
+
+`allowedValues` defines a non-empty closed set for any scalar wrapper except `payload_ref`, whose
+canonical JSON representation is an object. Values must use the wrapper's canonical JSON scalar
+type: strings remain strings, booleans remain booleans, and numbers remain numbers. Values must also
+satisfy every other declared constraint. TPF canonicalizes numeric equality, removes duplicates, and
+sorts the set deterministically, so equivalent declarations produce identical release metadata and
+hashes regardless of author order. JSON Schema `enum` and `const` imported from MCP normalize to this
+same canonical constraint; they do not introduce MCP-specific type semantics.
 
 Changing wrapper constraints is a semantic compatibility change. TPF classifies it as unchanged, narrowing, widening, or incomparable; this release rejects every change other than unchanged even though protobuf wire tags and shapes stay the same.
 

@@ -6,7 +6,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -214,6 +214,8 @@ public final class CanonicalTypeCatalogue {
         ObjectNode array = JSON.createObjectNode();
         array.put("type", "array");
         array.set("items", element);
+        copyConstraint(field, array, "minItems");
+        copyConstraint(field, array, "maxItems");
         array.putArray("default");
         return array;
     }
@@ -229,6 +231,9 @@ public final class CanonicalTypeCatalogue {
             schema.set("exclusiveMinimum", definition.get("minimumExclusive"));
         }
         copyConstraint(definition, schema, "maximum");
+        if (definition.has("allowedValues")) {
+            schema.set("enum", definition.get("allowedValues"));
+        }
         if (definition.has("maximumExclusive")) {
             schema.set("exclusiveMaximum", definition.get("maximumExclusive"));
         }
@@ -316,7 +321,8 @@ public final class CanonicalTypeCatalogue {
             JsonNode field = value.get(name);
             if (!present) {
                 if (definitionField.path("repeated").asBoolean(false)) {
-                    ((ObjectNode) value).putArray(name);
+                    ArrayNode empty = ((ObjectNode) value).putArray(name);
+                    validateField(definitionField, empty, path + "." + name, stack);
                     return;
                 }
                 if ("OPTIONAL".equals(definitionField.path("presence").asText("REQUIRED"))) {
@@ -341,6 +347,12 @@ public final class CanonicalTypeCatalogue {
         }
         if (!value.isArray()) {
             throw invalid(path, "expected array");
+        }
+        if (definition.has("minItems") && value.size() < definition.path("minItems").intValue()) {
+            throw invalid(path, "array contains fewer items than minItems");
+        }
+        if (definition.has("maxItems") && value.size() > definition.path("maxItems").intValue()) {
+            throw invalid(path, "array contains more items than maxItems");
         }
         for (int index = 0; index < value.size(); index++) {
             validateReference(definition.path("type"), value.get(index), path + "[" + index + "]", stack);
@@ -396,7 +408,7 @@ public final class CanonicalTypeCatalogue {
             switch (scalar) {
                 case "uuid" -> UUID.fromString(text);
                 case "timestamp" -> Instant.parse(text);
-                case "datetime" -> OffsetDateTime.parse(text);
+                case "datetime" -> LocalDateTime.parse(text);
                 case "date" -> LocalDate.parse(text);
                 case "duration" -> Duration.parse(text);
                 case "uri" -> URI.create(text);
@@ -408,6 +420,20 @@ public final class CanonicalTypeCatalogue {
     }
 
     private void validateConstraints(JsonNode definition, JsonNode value, String path) {
+        if (definition.has("allowedValues")) {
+            boolean allowed = false;
+            for (JsonNode candidate : definition.path("allowedValues")) {
+                if (candidate.isNumber() && value.isNumber()
+                    ? candidate.decimalValue().compareTo(value.decimalValue()) == 0
+                    : candidate.equals(value)) {
+                    allowed = true;
+                    break;
+                }
+            }
+            if (!allowed) {
+                throw invalid(path, "value is not one of allowedValues");
+            }
+        }
         if (value.isTextual()) {
             String text = value.textValue();
             if (definition.has("minLength") && text.length() < definition.path("minLength").intValue()) {
