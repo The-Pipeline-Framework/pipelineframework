@@ -1,60 +1,80 @@
-/*
- * Copyright (c) 2023-2026 Mariano Barcia
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.pipelineframework.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.CommandRetryRuntimeAuthority;
+import org.pipelineframework.command.CommandReexecutionBoundary;
 import org.pipelineframework.command.CommandReexecutionScope;
+import org.pipelineframework.command.CommandRequest;
+import org.pipelineframework.command.CommandStepSupport;
+import org.pipelineframework.execution.PipelineExecutionContext;
 
 class CommandRetryAuthorityBoundaryTest {
 
-  @Test
-  void applicationCodeCannotConstructOrObtainRetryAuthority() {
-    assertEquals(0, CommandRetryRuntimeAuthority.class.getConstructors().length);
-    assertTrue(Arrays.stream(CommandRetryRuntimeAuthority.class.getMethods())
-        .filter(method -> method.getDeclaringClass() == CommandRetryRuntimeAuthority.class)
-        .noneMatch(method -> Modifier.isStatic(method.getModifiers())
-            && method.getReturnType() == CommandRetryRuntimeAuthority.class));
-  }
+    @Test
+    void applicationFacingExecutionTypesDoNotExposeRetryAuthority() {
+        assertNoRetryAuthorityComponents(PipelineExecutionContext.class.getRecordComponents());
+        assertNoRetryAuthorityComponents(CommandRequest.class.getRecordComponents());
 
-  @Test
-  void installingRetryAuthorityRequiresTheRuntimeCapability() {
-    Method installRetry = Arrays.stream(CommandReexecutionScope.class.getMethods())
-        .filter(method -> method.getName().equals("installRetry"))
-        .findFirst()
-        .orElseThrow();
+        boolean commandSupportExposesAuthority = Arrays.stream(CommandStepSupport.class.getMethods())
+            .filter(method -> method.getDeclaringClass() != Object.class)
+            .anyMatch(CommandRetryAuthorityBoundaryTest::mentionsRetryAuthority);
+        assertFalse(commandSupportExposesAuthority);
+    }
 
-    assertEquals(CommandRetryRuntimeAuthority.class, installRetry.getParameterTypes()[0]);
-  }
+    @Test
+    void retryScopeExposesOnlyOpaqueSnapshotPropagation() {
+        Set<String> publicMethods = Arrays.stream(CommandReexecutionScope.class.getDeclaredMethods())
+            .filter(method -> Modifier.isPublic(method.getModifiers()))
+            .map(Method::getName)
+            .collect(Collectors.toSet());
 
-  @Test
-  void aReflectivelyForgedCapabilityCannotInstallRetryAuthority() throws Exception {
-    var constructor = CommandRetryRuntimeAuthority.class.getDeclaredConstructor();
-    constructor.setAccessible(true);
-    CommandRetryRuntimeAuthority forged = constructor.newInstance();
+        assertEquals(Set.of("capture", "restore"), publicMethods);
+        assertFalse(Arrays.stream(CommandReexecutionScope.Snapshot.class.getDeclaredConstructors())
+            .map(Constructor::getModifiers)
+            .anyMatch(Modifier::isPublic));
+        assertFalse(Arrays.stream(CommandReexecutionScope.Snapshot.class.getDeclaredMethods())
+            .anyMatch(method -> Modifier.isPublic(method.getModifiers())));
+    }
 
-    assertThrows(SecurityException.class,
-        () -> CommandReexecutionScope.installRetry(forged, "command-1", "admission-1"));
-  }
+    @Test
+    void workerBoundaryPublishesNoAdmissionTypes() {
+        Set<String> publicMethods = Arrays.stream(CommandReexecutionBoundary.class.getDeclaredMethods())
+            .filter(method -> Modifier.isPublic(method.getModifiers()))
+            .map(Method::getName)
+            .collect(Collectors.toSet());
+        assertEquals(Set.of("invokeTransitionWorker"), publicMethods);
+        assertFalse(Arrays.stream(CommandReexecutionBoundary.class.getDeclaredMethods())
+            .filter(method -> Modifier.isPublic(method.getModifiers()))
+            .anyMatch(CommandRetryAuthorityBoundaryTest::mentionsRetryAuthority));
+        assertFalse(Arrays.stream(CommandReexecutionBoundary.class.getDeclaredConstructors())
+            .anyMatch(constructor -> Modifier.isPublic(constructor.getModifiers())));
+    }
+
+    private static void assertNoRetryAuthorityComponents(RecordComponent[] components) {
+        assertFalse(Arrays.stream(components).anyMatch(component -> {
+            String identity = component.getName() + " " + component.getType().getName();
+            return identity.toLowerCase().contains("retry") || identity.toLowerCase().contains("admission");
+        }));
+    }
+
+    private static boolean mentionsRetryAuthority(Method method) {
+        return mentionsRetryAuthority(method.getReturnType())
+            || Arrays.stream(method.getParameterTypes()).anyMatch(CommandRetryAuthorityBoundaryTest::mentionsRetryAuthority);
+    }
+
+    private static boolean mentionsRetryAuthority(Class<?> type) {
+        return type.getName().contains("CommandReexecutionScope")
+            || type.getName().contains("CommandReexecutionBoundary")
+            || type.getName().contains("CommandRetryAdmission");
+    }
 }

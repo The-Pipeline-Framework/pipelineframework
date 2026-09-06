@@ -2,8 +2,6 @@ package org.pipelineframework.command;
 
 import java.util.Optional;
 
-import org.pipelineframework.CommandRetryRuntimeTestAccess;
-
 /** Test-only access to package-private Command retry mechanics. */
 public final class CommandRetryTestAccess {
     private static final ThreadLocal<CommandReexecutionScope.AdmissionHandle> HANDLE = new ThreadLocal<>();
@@ -12,13 +10,11 @@ public final class CommandRetryTestAccess {
     }
 
     public static void install(String commandId, String admissionKey) {
-        HANDLE.set(CommandReexecutionScope.installRetry(
-            CommandRetryRuntimeTestAccess.authority(), commandId, admissionKey));
+        HANDLE.set(CommandReexecutionScope.installRetry(commandId, admissionKey));
     }
 
     public static void installReissue(String commandId, String admissionKey, String reason) {
-        HANDLE.set(CommandReexecutionScope.installReissue(
-            CommandRetryRuntimeTestAccess.authority(), commandId, admissionKey, reason));
+        HANDLE.set(CommandReexecutionScope.installReissue(commandId, admissionKey, reason));
     }
 
     public static Optional<String> claimAttempt(String commandId) {

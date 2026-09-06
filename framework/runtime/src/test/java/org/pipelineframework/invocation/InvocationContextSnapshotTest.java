@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.command.CommandRetryTestAccess;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.execution.PipelineExecutionContext;
@@ -31,6 +32,7 @@ class InvocationContextSnapshotTest {
         PipelineExecutionContextHolder.clear();
         PipelineRunContextHolder.clear();
         PipelineInvocationContextHolder.clear();
+        CommandRetryTestAccess.clear();
     }
 
     @AfterEach
@@ -41,6 +43,7 @@ class InvocationContextSnapshotTest {
         PipelineExecutionContextHolder.clear();
         PipelineRunContextHolder.clear();
         PipelineInvocationContextHolder.clear();
+        CommandRetryTestAccess.clear();
     }
 
     @Test
@@ -194,5 +197,20 @@ class InvocationContextSnapshotTest {
         snapshot.run(() -> assertEquals(scoped, PipelineInvocationContextHolder.get().orElseThrow()));
 
         assertEquals(previous, PipelineInvocationContextHolder.get().orElseThrow());
+    }
+
+    @Test
+    void propagatesOpaqueCommandRetryAdmissionAndRestoresPreviousAdmission() {
+        CommandRetryTestAccess.install("captured-effect", "captured-transition");
+        InvocationContextSnapshot snapshot = InvocationContextSnapshot.capture();
+
+        CommandRetryTestAccess.clear();
+        CommandRetryTestAccess.install("outer-effect", "outer-transition");
+        snapshot.run(() -> {
+            assertTrue(CommandRetryTestAccess.claimAttempt("captured-effect").isPresent());
+            assertTrue(CommandRetryTestAccess.claimAttempt("outer-effect").isEmpty());
+        });
+
+        assertTrue(CommandRetryTestAccess.claimAttempt("outer-effect").isPresent());
     }
 }

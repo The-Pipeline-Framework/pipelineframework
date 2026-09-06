@@ -6,7 +6,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.pipelineframework.CommandRetryRuntimeAuthority;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /** Internal invocation-scoped authority for one control-plane-admitted Command attempt. */
@@ -17,50 +16,36 @@ public final class CommandReexecutionScope {
     }
 
     public static Snapshot capture() {
-        return new Snapshot(RuntimeAdapters.executionContext(CONTEXT_KEY, Admission.class));
+        return new Snapshot(current());
     }
 
-    public static AdmissionHandle installRetry(
-        CommandRetryRuntimeAuthority runtimeAuthority,
-        String targetCommandId,
-        String admissionKey
-    ) {
-        return install(runtimeAuthority, targetCommandId, admissionKey, CommandAttemptAdmission.retry());
+    static AdmissionHandle installRetry(String targetCommandId, String admissionKey) {
+        return install(targetCommandId, admissionKey, CommandAttemptAdmission.retry());
     }
 
-    public static AdmissionHandle installReissue(
-        CommandRetryRuntimeAuthority runtimeAuthority,
-        String targetCommandId,
-        String admissionKey,
-        String reason
-    ) {
-        return install(runtimeAuthority, targetCommandId, admissionKey, CommandAttemptAdmission.reissue(reason));
+    static AdmissionHandle installReissue(String targetCommandId, String admissionKey, String reason) {
+        return install(targetCommandId, admissionKey, CommandAttemptAdmission.reissue(reason));
     }
 
     private static AdmissionHandle install(
-        CommandRetryRuntimeAuthority runtimeAuthority,
         String targetCommandId,
         String admissionKey,
         CommandAttemptAdmission attemptAdmission
     ) {
-        Objects.requireNonNull(runtimeAuthority, "runtimeAuthority must not be null")
-            .requireFrameworkAuthority();
         Admission admission = new Admission(targetCommandId, admissionKey, attemptAdmission);
         RuntimeAdapters.setExecutionContext(CONTEXT_KEY, admission);
         return new AdmissionHandle(admission);
     }
 
-    public static void clear() {
+    static void clear() {
         RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 
     public static void restore(Snapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
-        if (snapshot.admission == null) {
-            clear();
-        } else {
-            RuntimeAdapters.setExecutionContext(CONTEXT_KEY, snapshot.admission);
-        }
+        snapshot.admission.ifPresentOrElse(
+            admission -> RuntimeAdapters.setExecutionContext(CONTEXT_KEY, admission),
+            CommandReexecutionScope::clear);
     }
 
     static Optional<Claim> claimAttempt(String commandId, String currentOccurrenceId) {
@@ -83,21 +68,21 @@ public final class CommandReexecutionScope {
     }
 
     public static final class Snapshot {
-        private final Admission admission;
+        private final Optional<Admission> admission;
 
-        private Snapshot(Admission admission) {
-            this.admission = admission;
+        private Snapshot(Optional<Admission> admission) {
+            this.admission = Objects.requireNonNull(admission, "admission must not be null");
         }
     }
 
-    public static final class AdmissionHandle {
+    static final class AdmissionHandle {
         private final Admission admission;
 
         private AdmissionHandle(Admission admission) {
             this.admission = admission;
         }
 
-        public void requireConsumed() {
+        void requireConsumed() {
             admission.requireConsumed();
         }
     }
