@@ -23,6 +23,7 @@ public final class McpToolMapping {
     @Parameter(required = true)
     String inputType;
 
-    @Parameter(required = true)
+    /** Required for a declared outputSchema; otherwise the canonical JsonPayload result is selected. */
+    @Parameter
     String outputType;
 }

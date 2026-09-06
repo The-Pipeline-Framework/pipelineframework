@@ -26,7 +26,11 @@ the TPF operation ID, Query or Command kind, major version, and canonical input/
 MCP annotations are not authority.
 
 The refresh also writes a private execution pin from the imported TPF identity to the exact MCP
-tool name. Normal builds consume these committed resources and do not contact an MCP server.
+tool name, original schemas, and explicit projection/result selection. Deterministic hashes cover
+both the schema content and complete selection. Normal builds consume these committed resources
+and do not contact an MCP server. The adapter checks final outbound arguments against the pinned
+external schema before dispatch, supplementing ordinary canonical validation. Different pins for
+one operation identity are an error; discovery cannot replace a committed contract.
 The importer-v1 JSON Schema subset is deliberately lossless: unsupported schema forms fail refresh
 with path diagnostics. Those restrictions are importer limitations; they do not narrow or weaken
 canonical v3.
@@ -36,8 +40,17 @@ retain every external required field and their original constraints; only option
 omitted. The importer rejects unknown, overlapping or incomplete paths and records the sorted
 selection alongside the private execution mapping. Canonical contributed types expose only the
 selected graph, preserving its external names and nesting for ordinary typed serialization.
-This selection is a contract decision, not an additional callable grant. External schema pinning
-and runtime verification remain a separate import-contract concern.
+This selection is a contract decision, not an additional callable grant. The private pin hashes
+the full original schema and sorted selection. Import and runtime share the selection algorithm:
+validation enforces the selected closed graph, retaining parent constraints and required fields,
+without interpreting unsupported schemas in omitted optional subtrees.
+
+When a tool declares no output schema, its canonical result is the connector-owned
+`<tpf.connector.JsonPayload>`: content type, schema hint, and a JSON body, all strings. MCP content
+is preserved as data in that body and flows through ordinary Query capture and operation observation.
+The result mode is fixed at import time. A declared typed result that is missing or invalid remains
+a provider failure; it never silently changes mode. Runtime JSON trees and MCP SDK classes remain
+adapter details. Application-authored parsing or an explicit LLM Query may interpret the body later.
 
 At runtime, the existing named binding selects `mcp.client`. A host `ConnectionResolver` supplies
 an initialized `McpClientConnection`. The host owns credentials, sessions, transports, an STDIO

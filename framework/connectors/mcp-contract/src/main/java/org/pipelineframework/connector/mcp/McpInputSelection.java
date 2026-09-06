@@ -1,4 +1,4 @@
-package org.pipelineframework.connector.mcp.maven;
+package org.pipelineframework.connector.mcp;
 
 import java.util.LinkedHashMap;
 import java.util.List;

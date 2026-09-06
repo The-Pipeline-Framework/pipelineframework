@@ -15,6 +15,8 @@ public final class McpImportStdioServerMain {
     }
 
     public static void main(String[] arguments) throws InterruptedException {
+        // A test fixture must not outlive its Surefire host if the transport closes asynchronously.
+        ProcessHandle.current().parent().ifPresent(parent -> parent.onExit().thenRun(() -> System.exit(0)));
         var transport = new StdioServerTransportProvider(
             new JacksonMcpJsonMapper(new ObjectMapper()));
         McpServer.sync(transport)
