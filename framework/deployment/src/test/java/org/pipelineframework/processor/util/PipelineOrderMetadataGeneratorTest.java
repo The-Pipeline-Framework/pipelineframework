@@ -31,6 +31,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -92,6 +93,62 @@ class PipelineOrderMetadataGeneratorTest {
         assertEquals(List.of(
             "com.example.pipeline.ProcessLocalClientStep",
             "com.example.pipeline.PersistenceValueSideEffectLocalClientStep"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
+    void explicitRootOrderWeavesRootSideEffectsAroundLinkedNamedPipelineInvocations() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-explicit-composition");
+        Path moduleDir = tempDir.resolve("module-explicit-composition");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 3
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            steps:
+              - name: Prepare
+                service: com.example.PrepareService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+              - name: Persist
+                service: com.example.PersistService
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Output
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(true);
+        ctx.setModuleDir(moduleDir);
+        ctx.setGeneratedRootPipelineStepClasses(List.of(
+            "com.example.pipeline.PrepareLocalClientStep",
+            "com.example.pipeline.PipelineInvocation_deadbeef",
+            "com.example.pipeline.PersistLocalClientStep"));
+        ctx.setStepModels(List.of(
+            localModel("Prepare", "PrepareService", false),
+            localModel("Persist", "PersistService", false),
+            localModel("ObservePersisted", "PersistenceOutputSideEffectService", true,
+                AspectPosition.AFTER_STEP),
+            localModelBuilder("ObserveChild", "PersistenceChildSideEffectService", true)
+                .aspectPosition(AspectPosition.AFTER_STEP)
+                .definition(new PipelineReference("agent-loop"))
+                .build()));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+                "com.example.pipeline.PrepareLocalClientStep",
+                "com.example.pipeline.PipelineInvocation_deadbeef",
+                "com.example.pipeline.PersistLocalClientStep",
+                "com.example.pipeline.PersistenceOutputSideEffectLocalClientStep"),
             order.asList().stream().map(element -> element.getAsString()).toList());
     }
 
