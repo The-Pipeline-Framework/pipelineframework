@@ -73,6 +73,8 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <packaging>pom</packaging>
 
     <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <quarkus.platform.version>3.39.2</quarkus.platform.version>
         <tpf.version>26.5.2</tpf.version>
     </properties>
 
@@ -86,6 +88,20 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>io.quarkus.platform</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkus.platform</groupId>
+                <artifactId>quarkus-amazon-services-bom</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>com.example</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
@@ -97,6 +113,32 @@ The parent POM defines common properties and manages dependencies. The pipeline 
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>io.quarkus.platform</groupId>
+                    <artifactId>quarkus-maven-plugin</artifactId>
+                    <version>${quarkus.platform.version}</version>
+                    <extensions>true</extensions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>io.quarkus</groupId>
+                                <artifactId>quarkus-extension-processor</artifactId>
+                                <version>${quarkus.platform.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>
 ```
 

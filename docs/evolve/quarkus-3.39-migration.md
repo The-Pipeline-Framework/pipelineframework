@@ -73,10 +73,11 @@ for the repository's maintained mappings.
 Search validation passed 12 packaged HTTPS resource ITs across raw document,
 parsed document, token batch, and index acknowledgement boundaries. The pipeline
 and replay gates passed 13 tests in total, and the Lambda bootstrap smoke passed
-one test. The Azure package builds and the current Quarkus Azure bootstrap resource
-smoke passed one test without skips. A deployed Azure cloud E2E was not run: the
-repository has no `AzureFunctionsEndToEndIT` source, and the workflow requires
-external OIDC credentials and provisioned cloud resources.
+one test. The Azure package build passed locally. The credentialed Azure workflow
+now inspects the built Functions output for the Quarkus middleware and injector
+resources before deployment. A deployed Azure cloud E2E was not run: the repository
+has no `AzureFunctionsEndToEndIT` source, and the workflow requires external OIDC
+credentials and provisioned cloud resources.
 
 Validation also exposed pre-existing test gaps. Runtime's six LocalStack IT classes
 were not bound to `verify`; they now run through Failsafe. Restart fixtures now
@@ -93,8 +94,8 @@ the Azure Functions launcher for ordinary resource tests. The index acknowledgem
 fixture now supplies every field required by the generated semantic contract.
 
 The Azure bootstrap smoke previously checked a removed handler class and therefore
-skipped silently. It now checks the Quarkus 3.39 Azure middleware and injector
-resources. The query-capture reclaim fixture uses its existing mutable clock to
+skipped silently. It now checks the packaged Quarkus 3.39 Azure middleware and
+injector resources. The query-capture reclaim fixture uses its existing mutable clock to
 expire the lease deterministically instead of sleeping against a 120 ms wall-clock
 lease.
 

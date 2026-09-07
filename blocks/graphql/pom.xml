@@ -9,7 +9,7 @@
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
-        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
     </dependencies>
     <build>
         <resources><resource><directory>src/main/resources</directory><filtering>true</filtering></resource></resources>
