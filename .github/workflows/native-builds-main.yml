@@ -22,7 +22,7 @@ concurrency:
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
-  MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true
+  MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
 
 jobs:
   csv-native-builds:
@@ -48,12 +48,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@v1
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           java-version: 21
-          distribution: graalvm
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          distribution: temurin
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
@@ -71,7 +70,7 @@ jobs:
             -DskipTests \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \
-            -Pnative \
+            -Dquarkus.native.container-build=true \
             clean package
 
       - name: Upload native artifact
@@ -93,12 +92,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@v1
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           java-version: 21
-          distribution: graalvm
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          distribution: temurin
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
@@ -122,5 +120,5 @@ jobs:
             -Dquarkus.profile=lambda \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \
-            -Pnative \
-            package
+            -Dquarkus.native.container-build=true \
+            clean package

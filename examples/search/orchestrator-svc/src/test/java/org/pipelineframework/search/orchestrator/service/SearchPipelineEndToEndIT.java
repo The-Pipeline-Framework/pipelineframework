@@ -42,6 +42,7 @@ import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.search.common.domain.ParsedDocument;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.testcontainers.containers.*;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 
@@ -82,8 +83,8 @@ class SearchPipelineEndToEndIT {
     private static final String CACHE_INVALIDATION_IMAGE = System.getProperty(
         "search.image.cache-invalidation", "localhost/search-pipeline/cache-invalidation-svc:latest");
 
-    private static final PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:17")
+    private static final PostgreSQLContainer postgres =
+        new PostgreSQLContainer("postgres:17")
             .withDatabaseName("quarkus")
             .withUsername("quarkus")
             .withPassword("quarkus")

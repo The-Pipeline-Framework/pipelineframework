@@ -62,12 +62,9 @@
         <maven.compiler.target>21</maven.compiler.target>
         <mapstruct.version>1.6.3</mapstruct.version>
         <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.33.1</quarkus.platform.version>
-        <quarkus.amazon.services.bom.version>3.14.1</quarkus.amazon.services.bom.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <version.jandex>3.5.0</version.jandex>
-        <grpc.version>1.75.0</grpc.version>
         <langchain4j.version>1.19.0</langchain4j.version>
         <quarkus-langchain4j.version>1.13.1</quarkus-langchain4j.version>
         <google.gmail.api.version>v1-rev20260727-2.0.0</google.gmail.api.version>
@@ -111,9 +108,9 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>io.quarkiverse.amazonservices</groupId>
+                <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-amazon-services-bom</artifactId>
-                <version>${quarkus.amazon.services.bom.version}</version>
+                <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

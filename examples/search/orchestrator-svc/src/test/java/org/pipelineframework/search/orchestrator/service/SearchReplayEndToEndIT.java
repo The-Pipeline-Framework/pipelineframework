@@ -51,7 +51,7 @@ import org.pipelineframework.telemetry.PipelineReplayTopology;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 
@@ -101,8 +101,8 @@ class SearchReplayEndToEndIT {
     private static final String CACHE_INVALIDATION_IMAGE = System.getProperty(
         "search.image.cache-invalidation", "localhost/search-pipeline/cache-invalidation-svc:latest");
 
-    private static final PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:17")
+    private static final PostgreSQLContainer postgres =
+        new PostgreSQLContainer("postgres:17")
             .withDatabaseName("quarkus")
             .withUsername("quarkus")
             .withPassword("quarkus")

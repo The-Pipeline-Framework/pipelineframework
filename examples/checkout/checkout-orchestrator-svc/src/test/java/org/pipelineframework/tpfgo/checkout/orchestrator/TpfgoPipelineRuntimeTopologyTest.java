@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -116,39 +117,13 @@ class TpfgoPipelineRuntimeTopologyTest {
         Path createOrderPath = resolveCheckoutRoot().resolve("config").resolve("create-order-pipeline.yaml");
         assertTrue(Files.exists(createOrderPath), "Expected create-order pipeline config file");
 
-        String content = Files.readString(createOrderPath);
-        assertTrue(messageHasRequestId(content, "InitialOrder"),
-            "InitialOrder should include requestId in create-order contract");
-        assertTrue(messageHasRequestId(content, "ReadyOrder"),
-            "ReadyOrder should include requestId in create-order contract");
-    }
-
-    private static boolean messageHasRequestId(String content, String messageName) {
-        List<String> lines = List.of(content.split("\\R"));
-        String messageHeader = "  " + messageName + ":";
-
-        int messageStart = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).equals(messageHeader)) {
-                messageStart = i;
-                break;
-            }
+        var contract = new PipelineTemplateConfigLoader().load(createOrderPath);
+        for (String messageName : List.of("InitialOrder", "ReadyOrder")) {
+            var message = contract.messages().get(messageName);
+            assertNotNull(message, "Expected contract block for " + messageName);
+            assertTrue(message.fields().stream().anyMatch(field -> field.name().equals("requestId")),
+                messageName + " should include requestId in create-order contract");
         }
-        if (messageStart < 0) {
-            fail("Could not find contract block for message: " + messageName);
-        }
-
-        for (int i = messageStart + 1; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.startsWith("  ") && !line.startsWith("    ") && line.endsWith(":")) {
-                break;
-            }
-            if (line.strip().equals("name: requestId")) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static Path resolveCheckoutRoot() {

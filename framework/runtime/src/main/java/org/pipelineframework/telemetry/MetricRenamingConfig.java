@@ -44,7 +44,7 @@ public class MetricRenamingConfig {
      *
      * The filter only modifies Meter.Id objects whose name starts with "grpc.server." — other IDs are returned unchanged.
      * When applied, metric names are mapped to RPC equivalents and tags are rewritten (for example:
-     * "service" → "rpc.service", "method" → "rpc.method", "grpc.status" → "rpc.grpc.status_code").
+     * "service" → "rpc.service", "method" → "rpc.method", "statusCode"/"grpc.status" → "rpc.grpc.status_code").
      * If no "rpc.system" tag is present after rewriting, a tag "rpc.system" with value "grpc" is appended.
      *
      * @return a MeterFilter that renames matching gRPC server metric names to RPC names and rewrites/augments their tags; non-matching IDs are left unchanged.
@@ -89,7 +89,8 @@ public class MetricRenamingConfig {
     /**
      * Rename and normalise gRPC-related metric tags, and ensure an `rpc.system` tag is present.
      *
-     * <p>Renames keys: `service` → `rpc.service`, `method` → `rpc.method`, `grpc.status` → `rpc.grpc.status_code`.
+     * <p>Renames keys: `service` → `rpc.service`, `method` → `rpc.method`,
+     * `statusCode`/`grpc.status` → `rpc.grpc.status_code`.
      * Preserves existing `rpc.system` tags; if none exists, appends `rpc.system=grpc`.</p>
      *
      * @param tags the original list of metric tags to process
@@ -105,7 +106,7 @@ public class MetricRenamingConfig {
                 key = "rpc.service";
             } else if ("method".equals(key)) {
                 key = "rpc.method";
-            } else if ("grpc.status".equals(key)) {
+            } else if ("grpc.status".equals(key) || "statusCode".equals(key)) {
                 key = "rpc.grpc.status_code";
                 value = normalizeGrpcStatus(value);
             } else if ("rpc.system".equals(key)) {

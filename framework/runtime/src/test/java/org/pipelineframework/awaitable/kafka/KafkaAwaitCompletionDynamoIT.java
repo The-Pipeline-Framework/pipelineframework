@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +25,7 @@ import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -50,14 +49,14 @@ class KafkaAwaitCompletionDynamoIT {
 
   @Container
   static final LocalStackContainer LOCALSTACK = new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.8"))
-      .withServices(LocalStackContainer.Service.DYNAMODB);
+      .withServices("dynamodb");
 
   private DynamoDbClient dynamo;
 
   @BeforeAll
   void setUp() {
     dynamo = DynamoDbClient.builder()
-        .endpointOverride(URI.create(LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString()))
+        .endpointOverride(LOCALSTACK.getEndpoint())
         .region(Region.of(LOCALSTACK.getRegion()))
         .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
         .build();

@@ -65,6 +65,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         ClassName appClassName = ClassName.get(binding.basePackage() + ".orchestrator", APP_CLASS);
         ClassName meterRegistry = ClassName.get("io.micrometer.core.instrument", "MeterRegistry");
         ClassName tags = ClassName.get("io.micrometer.core.instrument", "Tags");
+        ClassName counter = ClassName.get("io.micrometer.core.instrument", "Counter");
         ClassName timer = ClassName.get("io.micrometer.core.instrument", "Timer");
         ClassName timerSample = timer.nestedClass("Sample");
         ClassName rpcMetrics = ClassName.get("org.pipelineframework.telemetry", "RpcMetrics");
@@ -212,7 +213,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
 
                 boolean hasRegistry = !meterRegistry.isUnsatisfied();
                 $T registry = hasRegistry ? meterRegistry.get() : null;
-                $T grpcTags = hasRegistry ? $T.of($S, $S, $S, $S) : null;
+                $T grpcTags = $T.of($S, $S, $S, $S, $S, $S);
                 $T sample = hasRegistry ? $T.start(registry) : null;
                 long startTime = System.nanoTime();
                 $T statusCode = $T.OK;
@@ -250,7 +251,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     $T.recordGrpcServer($S, $S, statusCode, System.nanoTime() - startTime);
                     if (hasRegistry) {
                         $T allTags = grpcTags.and($S, grpcStatus);
-                        registry.counter($S, allTags).increment();
+                        $T.builder($S).baseUnit($S).tags(grpcTags).register(registry).increment();
                         sample.stop(registry.timer($S, allTags));
                     }
                     $T.flush();
@@ -278,6 +279,8 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 "OrchestratorService",
                 "method",
                 "Run",
+                "methodType",
+                "CLI",
                 timerSample,
                 timer,
                 grpcStatusCode,
@@ -295,8 +298,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 "OrchestratorService",
                 "Run",
                 tags,
-                "grpc.status",
+                "statusCode",
+                counter,
                 "grpc.server.requests.received",
+                "messages",
                 "grpc.server.processing.duration",
                 telemetryFlush)
             .build();

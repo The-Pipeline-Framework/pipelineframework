@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +24,7 @@ import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.execution.PipelineExecutionContext;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -46,7 +45,7 @@ class DynamoCommandEffectStoreIT {
     @Container
     static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
         DockerImageName.parse("localstack/localstack:3.8"))
-        .withServices(LocalStackContainer.Service.DYNAMODB);
+        .withServices("dynamodb");
 
     private static DynamoDbClient dynamo;
     private String tableName;
@@ -55,8 +54,7 @@ class DynamoCommandEffectStoreIT {
     @BeforeAll
     static void startClient() {
         dynamo = DynamoDbClient.builder()
-            .endpointOverride(URI.create(
-                LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString()))
+            .endpointOverride(LOCALSTACK.getEndpoint())
             .region(Region.of(LOCALSTACK.getRegion()))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
                 LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))

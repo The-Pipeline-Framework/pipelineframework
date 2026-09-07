@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.Clock;
@@ -32,7 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -55,7 +54,7 @@ class DynamoQueryCaptureStoreIT {
     @Container
     static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
         DockerImageName.parse("localstack/localstack:3.8"))
-        .withServices(LocalStackContainer.Service.DYNAMODB);
+        .withServices("dynamodb");
 
     private static DynamoDbClient dynamo;
     private String tableName;
@@ -64,8 +63,7 @@ class DynamoQueryCaptureStoreIT {
     @BeforeAll
     static void startClient() {
         dynamo = DynamoDbClient.builder()
-            .endpointOverride(URI.create(
-                LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString()))
+            .endpointOverride(LOCALSTACK.getEndpoint())
             .region(Region.of(LOCALSTACK.getRegion()))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
                 LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
@@ -229,17 +227,21 @@ class DynamoQueryCaptureStoreIT {
     @Test
     void expiredWriterIsReclaimedAndItsPartialRowsAreIgnored() throws Exception {
         StreamingQueryCaptureRequest request = request("reclaim-key");
+        MutableClock clock = new MutableClock(Instant.ofEpochMilli(1_000L));
+        Duration lease = Duration.ofSeconds(30);
         DynamoQueryCaptureStore crashed = new DynamoQueryCaptureStore(
-            dynamo, tableName, Duration.ofMillis(120), Duration.ofMillis(10));
+            dynamo, tableName, lease, Duration.ofMillis(10), new QueryCaptureEventCodec(), clock,
+            ForkJoinPool.commonPool());
         StreamingQueryCaptureWriter stale = assertInstanceOf(
             StreamingQueryCaptureOpen.Write.class,
             crashed.openStreaming(request).toCompletableFuture().join()).writer();
         stale.append(item(0, "partial")).toCompletableFuture().join();
         crashed.close();
-        Thread.sleep(180L);
+        clock.advance(lease.plusSeconds(1));
 
         DynamoQueryCaptureStore restarted = new DynamoQueryCaptureStore(
-            dynamo, tableName, Duration.ofMillis(120), Duration.ofMillis(10));
+            dynamo, tableName, lease, Duration.ofMillis(10), new QueryCaptureEventCodec(), clock,
+            ForkJoinPool.commonPool());
         StreamingQueryCaptureWriter recovered = assertInstanceOf(
             StreamingQueryCaptureOpen.Write.class,
             restarted.openStreaming(request).toCompletableFuture().join()).writer();
@@ -253,6 +255,7 @@ class DynamoQueryCaptureStoreIT {
         CompletionException staleFailure = assertThrows(CompletionException.class,
             () -> stale.append(item(1, "stale")).toCompletableFuture().join());
         assertInstanceOf(QueryCaptureStoreException.class, staleFailure.getCause());
+        restarted.close();
     }
 
     @Test

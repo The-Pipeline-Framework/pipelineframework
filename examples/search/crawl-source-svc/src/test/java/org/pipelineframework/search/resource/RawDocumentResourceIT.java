@@ -19,6 +19,8 @@ package org.pipelineframework.search.resource;
 import java.util.UUID;
 
 import io.quarkus.test.junit.QuarkusIntegrationTest;
+import io.quarkus.test.common.QuarkusTestResource;
+import org.pipelineframework.search.testing.PackagedSearchApplication;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -30,6 +32,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusIntegrationTest
+@QuarkusTestResource(value = PackagedSearchApplication.class, restrictToAnnotatedClass = true)
 class RawDocumentResourceIT {
 
     @BeforeAll

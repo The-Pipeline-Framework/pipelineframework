@@ -63,7 +63,7 @@ import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.kafka.KafkaContainer;
@@ -167,7 +167,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             "(?:Status\\{code=|StatusRuntimeException:\\s*)(UNIMPLEMENTED|NOT_FOUND|INVALID_ARGUMENT|PERMISSION_DENIED|UNAUTHENTICATED)");
 
     // Containers are lazily created so monolith mode does not require service cert binds.
-    static PostgreSQLContainer<?> postgresContainer;
+    static PostgreSQLContainer postgresContainer;
     static GenericContainer<?> persistenceService;
     static GenericContainer<?> inputCsvService;
     static GenericContainer<?> paymentsProcessingService;
@@ -317,10 +317,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * @return the configured {@code PostgreSQLContainer} (database name "quarkus", username/password "quarkus",
      *         attached to the test network, alias "postgres", with a 60-second startup wait)
      */
-    private static PostgreSQLContainer<?> getPostgresContainer() {
+    private static PostgreSQLContainer getPostgresContainer() {
         if (postgresContainer == null) {
             postgresContainer =
-                    new PostgreSQLContainer<>("postgres:17")
+                    new PostgreSQLContainer("postgres:17")
                             .withDatabaseName("quarkus")
                             .withUsername("quarkus")
                             .withPassword("quarkus")
@@ -1007,13 +1007,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "-Dquarkus.container-image.build=true",
                 "-Dquarkus.container-image.push=false",
                 "-Dquarkus.container-image.tag=" + MODULAR_IMAGE_TAG));
-        command.add("-Dquarkus.container-image.labels.tpf_framework_version="
+        command.add("-Dquarkus.container-image.labels.\"tpf_framework_version\"="
                 + frameworkProvenance("framework.version"));
-        command.add("-Dquarkus.container-image.labels.tpf_framework_commit="
+        command.add("-Dquarkus.container-image.labels.\"tpf_framework_commit\"="
                 + frameworkProvenance("framework.commit"));
-        command.add("-Dquarkus.container-image.labels.tpf_framework_source_fingerprint="
+        command.add("-Dquarkus.container-image.labels.\"tpf_framework_source_fingerprint\"="
                 + frameworkProvenance("framework.source.fingerprint"));
-        command.add("-Dquarkus.container-image.labels.tpf_framework_runtime_sha256="
+        command.add("-Dquarkus.container-image.labels.\"tpf_framework_runtime_sha256\"="
                 + frameworkProvenance("framework.runtime.sha256"));
         if (!mavenRepoLocal.isBlank()) {
             command.add("-Dmaven.repo.local=" + mavenRepoLocal);
@@ -1560,7 +1560,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * @param pb the ProcessBuilder whose environment will be modified for monolith execution
      */
     private static void configureMonolithEnv(ProcessBuilder pb) {
-        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        PostgreSQLContainer postgres = getPostgresContainer();
         pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
         pb.environment()
                 .put(
@@ -2788,7 +2788,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.info("Verifying database persistence...");
 
         // Connect to the database using the test container's connection details
-        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        PostgreSQLContainer postgres = getPostgresContainer();
         String jdbcUrl = postgres.getJdbcUrl();
         String username = postgres.getUsername();
         String password = postgres.getPassword();
@@ -2834,7 +2834,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     ) throws Exception {
         LOG.info("Verifying database persistence for reject scenario...");
 
-        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        PostgreSQLContainer postgres = getPostgresContainer();
         String jdbcUrl = postgres.getJdbcUrl();
         String username = postgres.getUsername();
         String password = postgres.getPassword();
@@ -2871,7 +2871,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void resetDatabasePersistence() throws Exception {
-        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        PostgreSQLContainer postgres = getPostgresContainer();
         String jdbcUrl = postgres.getJdbcUrl();
         String username = postgres.getUsername();
         String password = postgres.getPassword();

@@ -7,7 +7,7 @@ reject_pom_matches() {
   local matches
   matches=$(find . \
     \( -name .git -o -name .m2 -o -name target \) -prune -o \
-    -type f -name pom.xml -exec grep -nE "$expression" {} + || true)
+    -type f -name pom.xml -exec grep -nE -- "$expression" {} + || true)
   if [[ -n $matches ]]; then
     printf '%s\n' "$matches"
     echo "$message" >&2
@@ -22,7 +22,7 @@ reject_source_argument_matches() {
   matches=$(find . \
     \( -name .git -o -name .m2 -o -name target -o -name node_modules -o -name .repowise \) -prune -o \
     -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.sh' -o -name '*.java' -o -name '*.xml' -o -name '*.md' -o -name '*.properties' \) \
-    -exec grep -nE "$expression" {} + || true)
+    -exec grep -nE -- "$expression" {} + || true)
   if [[ -n $matches ]]; then
     printf '%s\n' "$matches"
     echo "$message" >&2
