@@ -172,154 +172,195 @@ transport, session, and lifecycle, including creation and shutdown of any STDIO 
 connector never persists or closes that handle. See
 [Import MCP tools as Connector operations](./mcp-connector-import.md).
 
-## Durable Gmail host connections
+## Durable connections through Quarkus OIDC
 
-The optional `org.pipelineframework:host-gmail` artifact provides a bounded read-only Gmail host
-integration. It uses Google's Java OAuth library, verified Google subject identity, a dedicated JDBC
-store, and authenticated Gmail clients. It does not install a resolver, REST resource, security realm,
-database or encryption key automatically.
+The optional `host-oidc-quarkus` module integrates Quarkus authorization with durable logical
+connections. Quarkus owns redirects, OAuth state, PKCE, code exchange, identity verification and
+token-endpoint requests. The host owns application authorization, external account policy,
+credentials at rest, database provisioning and client lifetime.
 
-Add `host-gmail` at the same version as the framework. The host also needs Quarkus REST Jackson, a
-JDBC data source, application authentication and a blocking executor. Apply the packaged
-`META-INF/tpf-gmail-connections.sql` migration explicitly to a dedicated security schema. The SQL is
-PostgreSQL/H2 compatible; the automated proof uses H2, including a running Quarkus REST application.
-Use the authoritative database for every host, never a lagging read replica.
+`host-gmail` now supplies only `GmailClients`, an initialized Gmail SDK client factory.
+The previous Gmail authorization helper and schema have been removed. Existing installations must
+reconnect using the new flow; there is no legacy credential migration or parallel renewal path.
 
-### Construct the host service
+### Configure a dedicated connection flow
 
-The following assembly runs in host infrastructure, outside authored pipeline services:
+Use a named Quarkus OIDC tenant distinct from the application's sign-in tenant. For Gmail:
 
-```java
-ConnectionEncryption encryption = new ConnectionEncryption(activeKeyId, hostEncryptionKeys);
-JdbcGmailConnectionStore store = new JdbcGmailConnectionStore(dataSource, encryption, googleClientId);
-GoogleGmailAuthorization google = new GoogleGmailAuthorization(
-    googleClientId, googleClientSecret, URI.create("https://app.example/connections/gmail/callback"),
-    GoogleNetHttpTransport.newTrustedTransport(), GsonFactory.getDefaultInstance(), Clock.systemUTC());
-GmailConnections connections = new GmailConnections(store, google, hostBlockingExecutor, Clock.systemUTC());
+```properties
+quarkus.oidc.gmail.provider=google
+quarkus.oidc.gmail.client-id=${GOOGLE_CLIENT_ID}
+quarkus.oidc.gmail.credentials.secret=${GOOGLE_CLIENT_SECRET}
+quarkus.oidc.gmail.tenant-paths=/connections/gmail/authorize
+quarkus.oidc.gmail.authentication.scopes=openid,https://www.googleapis.com/auth/gmail.readonly
+quarkus.oidc.gmail.authentication.extra-params.access_type=offline
+quarkus.oidc.gmail.authentication.extra-params.prompt=consent
+quarkus.oidc.gmail.authentication.pkce-required=true
+quarkus.oidc.gmail.authentication.state-secret=${OIDC_STATE_SECRET}
+quarkus.oidc.gmail.token-state-manager.strategy=id-token
+quarkus.oidc.gmail.token.refresh-expired=false
+
+quarkus.oidc-client.gmail.auth-server-url=https://accounts.google.com
+quarkus.oidc-client.gmail.client-id=${GOOGLE_CLIENT_ID}
+quarkus.oidc-client.gmail.credentials.secret=${GOOGLE_CLIENT_SECRET}
+quarkus.oidc-client.gmail.grant.type=refresh
 ```
 
-`hostEncryptionKeys` is a host-supplied `Map<String, SecretKey>` of AES keys. Use a managed key/secret
-facility; do not store keys beside database ciphertext. The active key ID is written into encrypted
-envelopes, allowing old keys to remain available while transitions rewrite current payloads with a
-new key. Keep old keys until every retained current payload has migrated. Database backups need their
-own credential retention and key retirement policy.
+Register the exact HTTPS `/connections/gmail/authorize` URI with the provider. Do not enable
+proactive session refresh (`token.refresh-token-time-skew`) for this tenant. Its session retains
+only the ID token; durable connection management owns the refresh credentials after handoff.
+The completion endpoint removes the temporary connection session through `OidcSession.logout()`.
+A stale connection session is cleared before a fresh flow is attempted.
+Use the same configuration name for the OIDC tenant and its `OidcClient`, and pass that named
+client to the manager. The hooks also guard managed token requests against automatic socket-failure
+redispatch: a lost response may already have consumed a code or rotated a refresh token. Quarkus
+3.33.1 rejects `connection-retry-count=0` with `maxAttempts must be greater than zero`; the bridge
+uses its public request-filter API to reject a retry subscription before it sends another request.
+Discovery and application sign-in requests are unaffected. Uncertain renewals require reconnection.
 
-The registration ID is the actual OAuth client ID and must match the Google adapter. Configure the
-same registration and shared database on all instances. The callback must be an exact registered
-HTTPS URI. The library requests `openid` and Gmail read-only access with offline consent and S256
-PKCE; callback success requires a verified ID token and the actual Gmail read scope. Client secrets,
-OAuth settings, keys and database configuration belong to host deployment configuration.
+For Microsoft, use `provider=microsoft`, a tenant-specific
+`https://login.microsoftonline.com/<tenant-id>/v2.0` authorization server, explicit
+`token.issuer` for that tenant, and `openid,offline_access,https://graph.microsoft.com/User.Read` for a read-only Graph proof.
+Use the same tenant-specific server for its named `OidcClient`. The Microsoft preset otherwise
+allows multiple issuers; the host registration must pin the approved issuer and account policy.
+Application tenant, external account and Entra tenant are separate identities.
+See the [Quarkus provider guide](https://quarkus.io/guides/security-openid-connect-providers/).
 
-### Mount authenticated management endpoints
+### Assemble host infrastructure
 
-Subclass `GmailConnectionResource` in the application and mount it explicitly:
+Apply `META-INF/tpf-oidc-connections.sql` explicitly to a dedicated security schema. The SQL is
+PostgreSQL/H2 compatible; use the authoritative database on every host, never a lagging replica.
+Use a host-managed AES keyring outside the database and a blocking executor.
 
 ```java
-@Path("/connections/gmail")
-public class ApplicationGmailResource extends GmailConnectionResource {
-    @Inject
-    public ApplicationGmailResource(GmailConnections connections, ApplicationConnectionAccess access) {
-        super(connections, access, URI.create("https://app.example"));
-    }
+var registration = new ConnectionRegistration<>(
+    "gmail", googleClientId, URI.create("https://accounts.google.com"),
+    URI.create("https://app.example/connections/gmail/authorize"),
+    Set.of(GmailQueryConnector.REQUIRED_OAUTH_SCOPE),
+    AuthenticatedGmailConnection.class,
+    verifiedIdentity -> applicationAccountPolicy.permits(verifiedIdentity),
+    new GmailClients(hostGoogleTransport, GsonFactory.getDefaultInstance()));
+
+var encryption = new ConnectionEncryption(activeKeyId, hostEncryptionKeys);
+var store = new JdbcConnectionStore(dataSource, encryption, registration.storageId());
+var connections = new QuarkusConnections(
+    store, registration, oidcClients.getClient("gmail"), hostBlockingExecutor, Clock.systemUTC());
+```
+
+These types belong to `org.pipelineframework.host.oidc`; `GmailClients` belongs to
+`org.pipelineframework.host.gmail`. Publish the manager explicitly through host CDI wiring.
+
+Implement `ConnectionAccess` to authorize Connect, Status and Disconnect against the application's
+own identity, returning the permitted `ConnectionKey` and stable actor ID.
+Its `authorizeCompletion(RoutingContext)` method must reauthorize the **original application
+session**, not the external identity being connected. The completion hook runs before the REST
+request scope is active: use its supplied routing context and host session service, not a
+request-scoped identity proxy. Never trust an actor header supplied by a browser.
+These authorization callbacks run on the request thread and must be nonblocking; use already
+validated host session authority there. The bridge offloads its JDBC work separately.
+
+Publish exactly **one** `ConnectionOidcHooks` CDI bean. For one registration construct it with the
+manager and access policy. For several registrations pass a list of `ConnectionOidcHooks.Binding`.
+Quarkus 3.33.1 skips completion actions when multiple beans make that lookup ambiguous; the bridge
+rejects this wiring at startup. Applications with other completion work must compose it through a
+single completion action rather than registering competing beans.
+
+Also publish the early token-request filter with the same configuration names:
+
+```java
+@Produces
+@Singleton
+static ConnectionTokenRequests connectionTokenRequests() {
+    return new ConnectionTokenRequests(Set.of("gmail"));
 }
 ```
 
-`ApplicationConnectionAccess` implements `GmailConnectionResource.Access`. For each action it must
-authorize the authenticated principal to manage a specific tenant's configured logical connection,
-then return `Authority(new ConnectionKey(trustedTenant, configuredReference), stableActorId)`.
-This is intentionally application policy. Do not derive the tenant or reference from Google's
-callback, a submitted account field, or an unverified HTTP header. Callback requests must resume
-the same authenticated actor/session and intended logical connection as the connect request.
+Include every managed name when configuring several registrations. Keep this producer independent
+of `OidcClients` and connection managers: Quarkus discovers request filters while constructing those
+clients. A static producer, as above, avoids initializing a host bean that injects `OidcClients`.
+Startup validation rejects a missing filter or missing managed names.
+
+Subclass `ConnectionResource`, annotate the subclass with the application `@Path`, and inject the
+manager and access policy into its constructor. Its protected `authorize` path must match the
+registered flow URI and named OIDC tenant. No resource, resolver, security realm, database, key or
+SDK transport is installed automatically.
 
 | Endpoint suffix | Behavior |
 | --- | --- |
-| `POST connect` | Checks the exact browser `Origin`, creates a ten-minute single-use authorization transaction, and redirects to Google. |
-| `GET callback` | Checks authenticated actor, state, browser cookie and expiry before claiming the code exchange. |
-| `GET status` | Returns only lifecycle phase and revision after host permission checks. |
-| `POST disconnect` | Checks `Origin`, removes usable credentials, invalidates cached access and supersedes outstanding work. |
+| `POST connect` | Authorizes the host actor, checks browser Origin and starts a ten-minute, one-use connection attempt. |
+| `GET authorize` | Quarkus performs code flow; the completion hook commits the verified connection before success. |
+| `GET status` | Returns only phase and revision after application authorization. |
+| `POST disconnect` | Authorizes the actor, checks Origin and supersedes connection authority. |
 
-Serve these endpoints through HTTPS. The browser cookie is Secure, HttpOnly, SameSite=Lax and
-host-only. The resource rejects insecure requests and does not enable CORS. If TLS terminates at a
-proxy, configure Quarkus to trust forwarded information only from that proxy. Preserve host login
-across the Google redirect, and exclude callback query strings and response `Location`/`Set-Cookie`
-headers from access logs, tracing exports and reverse-proxy diagnostics. SDK credential request
-logging is disabled. Responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+A protected HttpOnly connection-attempt cookie binds host authority to Quarkus-generated state.
+It does not replace Quarkus's state or PKCE validation. Only one outstanding browser attempt per
+registration is supported; a new attempt supersedes the previous attempt and disables its old client
+generation. A failed, expired or consumed code flow requires a new Connect action.
 
-Only one outstanding browser authorization is supported by the mounted resource's cookie. Starting
-another authorization replaces the pending transaction for that logical connection. An invalid
-callback does not consume a valid pending transaction. A failed/uncertain code exchange requires a
-new connect operation. Expired authorization or exchange/refresh claims are cleared on the next
-status or resolution read. No background renewal, cleanup daemon or administrative UI is installed.
+Serve management endpoints over HTTPS; HTTP loopback is accepted only for local tests/development.
+Configure trusted proxy handling explicitly when TLS terminates upstream. Exclude callback query
+strings, Location/Set-Cookie headers and token-endpoint bodies from access logs and tracing.
+Management responses are no-store; do not enable cross-origin management access.
 
-### Resolve an authenticated capability
+### Resolve initialized clients
 
-Route Gmail requests through the application's single existing `ConnectionResolver`:
+The application's single `ConnectionResolver` validates the invocation target and reference, then
+delegates to the appropriate manager's `resolve(request)`. The manager additionally requires trusted
+tenant context and the registered capability type. Pipeline bindings still contain only the logical
+connection name.
 
-```java
-@ApplicationScoped
-public class ApplicationConnectionResolver implements ConnectionResolver {
-    private final GmailConnections connections;
-    private final ApplicationInvocationPolicy policy;
+A client factory receives host-only `RequestAccess`. It must check `accessToken()` immediately before
+**every** outgoing request, including previously prepared requests, and must not expose that accessor
+through its Connector capability. It must not independently renew credentials or follow untrusted
+redirects. `GmailClients` implements these rules through its SDK request interceptor, with retries,
+redirects and credential logging disabled.
 
-    @Inject
-    public ApplicationConnectionResolver(GmailConnections connections, ApplicationInvocationPolicy policy) {
-        this.connections = connections;
-        this.policy = policy;
-    }
+Resolution and request access consult durable state. Clients are cached by connection generation,
+bounded to 128 entries per manager. Refresh revisions do not change the generation; disconnect and
+reconnect do. Drain invocations before closing the manager, SDK transports and host executor.
+Quarkus owns the named `OidcClient` lifetime. Already-dispatched requests cannot be recalled.
+Recorded Query and Command replay continue to bypass live connection resolution.
 
-    @Override
-    public <C extends ResolvedConnection> CompletionStage<C> resolve(ConnectionResolutionRequest<C> request) {
-        policy.requireAllowed(request);
-        return connections.resolve(request);
-    }
-}
-```
+### Renewal and operational status
 
-The application policy validates the invocation target and configured reference against host
-authority. The helper additionally requires tenant context and the `AuthenticatedGmailConnection`
-type. Multiple providers still compose behind one resolver. A binding selects only the logical name:
+The host can schedule `renew(key)` for its authorized connection keys; live resolution uses the same
+renewal path. Both offload storage and token requests to the host's blocking executor.
+The manager claims renewal through an immutable conditional revision before calling
+`OidcClient.refreshTokens`. Concurrent workers wait briefly or receive a temporary-unavailable result.
+A missing replacement refresh token preserves the previous token; returned scopes must still satisfy
+the registration's required permissions.
 
-```yaml
-connectors:
-  mailbox:
-    provider: google.gmail
-    version: 1
-    config:
-      connection: gmail-main
-```
+- `READY`: locally usable, subject to provider acceptance.
+- `CONNECTING`: awaiting completion of a host-authorized connection attempt.
+- `REFRESHING`: another worker owns renewal.
+- `RENEWAL_UNCERTAIN`: a response or durable update was lost; credentials are unavailable.
+- `REQUIRES_REAUTHORIZATION`: interaction/consent is required or the attempt expired.
+- `DISCONNECTED`: local authority has been removed.
 
-Live resolution reads authoritative state every time. Usable clients are cached by tenant, logical
-connection and revision, with a maximum of 128 entries per manager. SDK requests check that their
-borrowed revision is still usable; they do not perform hidden refresh. Cached Gmail wrappers share
-the host transport. Drain invocations before closing `GmailConnections` during application shutdown,
-then shut down the host executor. A previously dispatched external request cannot be recalled by
-disconnect. Query capture/replay remains unchanged and needs no live connection.
+Explicit temporary token-service errors permit a later retry. Interaction-required errors disable
+resolution. Unknown outcomes are not silently retried: they remain distinct from revoked consent.
+An abandoned renewal claim becomes uncertain after one minute on the next read. The first bridge
+recovers uncertain outcomes through a new authorized Connect action; it does not claim exactly-once
+refresh or implement provider-specific recovery policies.
 
-### Renewal, storage and ownership
+Client factories report resource authentication challenges through `requiresInteraction()`.
+The Microsoft fixture proves a bounded Graph read and transition to reauthorization on a claims
+challenge, without automatic retries. This is not a claim of full Conditional Access challenge
+recovery: forwarding protected claims into a subsequent authorization request is not implemented.
 
-The manager claims refresh durably before calling Google. Concurrent host instances wait briefly
-for the winner or return a bounded temporary-unavailable failure. Missing refresh-token replacements
-preserve the current refresh token. Required-scope loss or `invalid_grant` requires reauthorization.
-A definite rate limit/temporary rejection permits a later retry. A lost response or otherwise
-uncertain refresh is not automatically sent again: the claim remains pending, and after one minute
-the next resolution marks the connection as requiring reauthorization. This deliberately conservative
-first proof does not implement provider-specific lost-response recovery.
+Encrypted payloads are authenticated against connection identity and revision. Successful
+transitions delete superseded ciphertext; non-secret revision/time/phase metadata remains for audit.
+Keys are host-owned and versioned. Retain old keys until current payloads and retained backups no
+longer require them. Hosts own actor-level audit records and credential-retention policy.
 
-Lifecycle metadata is append-only. Each encrypted payload is bound to connection identity and
-revision using AES-GCM. Successful transitions remove older encrypted payloads transactionally;
-disconnect retains no grant or pending verifier. Non-secret phase/revision/time metadata remains
-for audit. Actor-level access auditing remains part of the host authorization policy.
+Within one registration, verified issuer and subject have one logical owner in the shared store.
+Ownership reservations survive disconnect. Transfers require explicit administration; do not create
+independent refresh authorities through aliases or another token manager. Connection state is
+security infrastructure, separate from authored persistence, Query capture and Command effects.
 
-Within one OAuth registration and shared store, a verified Google account has one logical owner.
-Another tenant or alias cannot create an independent renewal loop for the same grant. Ownership
-reservations survive disconnect; transferring an account requires explicit host administration.
-Do not manage the same grant concurrently in another broker, SDK refresh loop, database, or process.
-
-Disconnect is local. Google grant revocation can affect other scopes and clients in the same project,
-so the helper does not call it automatically. Applications requiring remote revocation must expose a
-separately authorized operation with appropriate disclosure, tracking and recovery. This release
-does not provide a remote revocation queue, Microsoft token-cache adapter, Shopify adapter or
-QuickBooks process manager. See [ADR-0030](/decisions/0030-optional-host-connection-lifecycle).
+Disconnect is local. Remote consent revocation can have broader effects and requires a separately
+authorized host operation. This integration targets Quarkus 3.33.1; Spring integration and platform
+upgrades are separate work. See [ADR-0030](/decisions/0030-optional-host-connection-lifecycle).
 
 ## Security boundary
 

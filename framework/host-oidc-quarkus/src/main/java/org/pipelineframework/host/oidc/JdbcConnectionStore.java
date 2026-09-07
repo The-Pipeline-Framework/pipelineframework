@@ -1,4 +1,4 @@
-package org.pipelineframework.host.gmail;
+package org.pipelineframework.host.oidc;
 
 import java.sql.SQLException;
 import java.util.Objects;
@@ -8,15 +8,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 
 /** Provisional host storage implementation; SQL runs only on the host's blocking executor. */
-public final class JdbcGmailConnectionStore {
+public final class JdbcConnectionStore {
     private final DataSource dataSource;
     private final ConnectionEncryption encryption;
     private final String registration;
     private final ObjectMapper json = new ObjectMapper().registerModule(new Jdk8Module());
     private record Stored(int schemaVersion, ConnectionState state) { }
 
-    /** registration must identify the actual Google OAuth client ID, consistently across all hosts. */
-    public JdbcGmailConnectionStore(DataSource dataSource, ConnectionEncryption encryption, String registration) {
+    /** registration must identify the actual OAuth client ID and issuer, consistently across all hosts. */
+    public JdbcConnectionStore(DataSource dataSource, ConnectionEncryption encryption, String registration) {
         this.dataSource = Objects.requireNonNull(dataSource);
         this.encryption = Objects.requireNonNull(encryption);
         this.registration = Objects.requireNonNull(registration);
@@ -35,9 +35,9 @@ public final class JdbcGmailConnectionStore {
     Optional<ConnectionState> read(ConnectionKey key) {
         String id = identity(key);
         try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(
-            "SELECT r.revision, p.encrypted_state FROM tpf_gmail_revisions r LEFT JOIN tpf_gmail_payloads p "
+            "SELECT r.revision, p.encrypted_state FROM tpf_oidc_revisions r LEFT JOIN tpf_oidc_payloads p "
                 + "ON r.connection_id=p.connection_id AND r.revision=p.revision WHERE r.connection_id=? "
-                + "AND r.revision=(SELECT MAX(v.revision) FROM tpf_gmail_revisions v WHERE v.connection_id=?)")) {
+                + "AND r.revision=(SELECT MAX(v.revision) FROM tpf_oidc_revisions v WHERE v.connection_id=?)")) {
             statement.setString(1, id);
             statement.setString(2, id);
             try (var result = statement.executeQuery()) {
@@ -64,7 +64,7 @@ public final class JdbcGmailConnectionStore {
             connection.setAutoCommit(false);
             try {
                 try (var insert = connection.prepareStatement(
-                    "INSERT INTO tpf_gmail_revisions(connection_id,revision,phase,changed_at) VALUES(?,?,?,?)")) {
+                    "INSERT INTO tpf_oidc_revisions(connection_id,revision,phase,changed_at) VALUES(?,?,?,?)")) {
                     insert.setString(1, id);
                     insert.setLong(2, state.revision());
                     insert.setString(3, state.phase().name());
@@ -73,14 +73,14 @@ public final class JdbcGmailConnectionStore {
                 }
                 String payload = encryption.encrypt(id + ":" + state.revision(), json.writeValueAsBytes(new Stored(1, state)));
                 try (var insert = connection.prepareStatement(
-                    "INSERT INTO tpf_gmail_payloads(connection_id,revision,encrypted_state) VALUES(?,?,?)")) {
+                    "INSERT INTO tpf_oidc_payloads(connection_id,revision,encrypted_state) VALUES(?,?,?)")) {
                     insert.setString(1, id);
                     insert.setLong(2, state.revision());
                     insert.setString(3, payload);
                     insert.executeUpdate();
                 }
                 try (var delete = connection.prepareStatement(
-                    "DELETE FROM tpf_gmail_payloads WHERE connection_id=? AND revision<?")) {
+                    "DELETE FROM tpf_oidc_payloads WHERE connection_id=? AND revision<?")) {
                     delete.setString(1, id);
                     delete.setLong(2, state.revision());
                     delete.executeUpdate();
@@ -111,7 +111,7 @@ public final class JdbcGmailConnectionStore {
             connection.setAutoCommit(false);
             try {
                 try (var insert = connection.prepareStatement(
-                    "INSERT INTO tpf_gmail_accounts(account_id,connection_id) VALUES(?,?)")) {
+                    "INSERT INTO tpf_oidc_accounts(account_id,connection_id) VALUES(?,?)")) {
                     insert.setString(1, account);
                     insert.setString(2, id);
                     insert.executeUpdate();
@@ -119,7 +119,7 @@ public final class JdbcGmailConnectionStore {
                     connection.rollback();
                     if (!"23505".equals(duplicate.getSQLState())) { throw duplicate; }
                     try (var select = connection.prepareStatement(
-                        "SELECT connection_id FROM tpf_gmail_accounts WHERE account_id=?")) {
+                        "SELECT connection_id FROM tpf_oidc_accounts WHERE account_id=?")) {
                         select.setString(1, account);
                         try (var result = select.executeQuery()) {
                             if (!result.next() || !id.equals(result.getString(1))) {
