@@ -875,6 +875,87 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void validatesCanonicalContributedOperationTypesIndependentlyOfJavaBindings() throws IOException {
+        Path metadataRoot = tempDir.resolve("canonical-operation-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":6,"providers":[{"id":"mcp.client","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"mcp.client.provider","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},
+            "operations":[{"id":"customer.lookup","kind":"tpf:query","majorVersion":1,
+            "typeContract":{"input":"<mcp.client.ImportedRequest>","output":"ImportedResult"},
+            "queryCardinality":"ONE_TO_ONE"}],
+            "protocolTypes":[
+            {"name":"ImportedRequest","fields":[{"name":"id","type":"string"}]},
+            {"name":"ImportedResult","fields":[{"name":"value","type":"string"}]}]},
+            {"id":"other.client","version":{"major":1,"minor":0},"operations":[],
+            "protocolTypes":[{"name":"ImportedRequest","fields":[{"name":"id","type":"string"}]}]}]}
+            """);
+        Path pipeline = tempDir.resolve("canonical-operation.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            basePackage: com.example
+            contract: { input: <mcp.client.ImportedRequest>, output: <mcp.client.ImportedResult> }
+            connectors:
+              customers:
+                provider: mcp.client
+                version: 1
+                config: { connection: sandbox }
+            steps:
+              - name: Look up customer
+                kind: query
+                cardinality: ONE_TO_ONE
+                input: <mcp.client.ImportedRequest>
+                output: <mcp.client.ImportedResult>
+                java:
+                  input: com.example.domain.ImportedRequest
+                  output: com.example.domain.ImportedResult
+                using: customers
+                operation: customer.lookup
+                operationVersion: 1
+            """);
+        List<String> diagnostics = new ArrayList<>();
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(1, steps.size(), diagnostics.toString());
+            assertEquals("com.example.domain.ImportedRequest", steps.getFirst().inputType().canonicalName());
+            assertEquals("com.example.domain.ImportedResult", steps.getFirst().outputType().canonicalName());
+            assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
+
+            String validPipeline = Files.readString(pipeline);
+            Files.writeString(pipeline, validPipeline
+                .replace("<mcp.client.ImportedRequest>", "<other.client.ImportedRequest>"));
+            List<String> mismatchedDiagnostics = new ArrayList<>();
+            List<StepDefinition> mismatched = new StepDefinitionParser(
+                (kind, message) -> mismatchedDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(mismatched.isEmpty(), mismatchedDiagnostics.toString());
+            assertTrue(mismatchedDiagnostics.stream().anyMatch(message -> message.contains(
+                "do not match provider operation types")), mismatchedDiagnostics.toString());
+
+            Files.writeString(pipeline, validPipeline
+                .replace("<mcp.client.ImportedResult>", "<other.client.ImportedResult>"));
+            List<String> unqualifiedOutputDiagnostics = new ArrayList<>();
+            List<StepDefinition> unqualifiedOutputMismatch = new StepDefinitionParser(
+                (kind, message) -> unqualifiedOutputDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(unqualifiedOutputMismatch.isEmpty(), unqualifiedOutputDiagnostics.toString());
+            assertTrue(unqualifiedOutputDiagnostics.stream().anyMatch(message -> message.contains(
+                "do not match provider operation types")), unqualifiedOutputDiagnostics.toString());
+        }
+    }
+
+    @Test
     void rejectsNullCommandAndQueryOperationConfigurationValues() throws IOException {
         Path metadataRoot = tempDir.resolve("null-operation-config-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
