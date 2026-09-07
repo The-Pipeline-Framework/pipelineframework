@@ -15,7 +15,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <tpf.version>26.9.2-SNAPSHOT</tpf.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <quarkus.version>3.31.3</quarkus.version>
+        <quarkus.version>3.39.2</quarkus.version>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>${quarkus.version}</quarkus.platform.version>

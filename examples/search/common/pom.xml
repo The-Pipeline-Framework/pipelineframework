@@ -82,7 +82,6 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
         </dependency>
         <dependency>
             <groupId>jakarta.annotation</groupId>
@@ -143,7 +142,6 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-sender-grpc-managed-channel</artifactId>
-            <version>1.54.0</version>
         </dependency>
     </dependencies>
 
@@ -263,6 +261,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>package-test-support</id>
+                        <goals><goal>test-jar</goal></goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>io.smallrye</groupId>

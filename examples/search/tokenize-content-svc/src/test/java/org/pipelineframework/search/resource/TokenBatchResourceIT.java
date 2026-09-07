@@ -17,7 +17,10 @@
 package org.pipelineframework.search.resource;
 
 import io.quarkus.test.junit.QuarkusIntegrationTest;
+import io.quarkus.test.common.QuarkusTestResource;
+import org.pipelineframework.search.testing.PackagedSearchApplication;
 
 @QuarkusIntegrationTest
+@QuarkusTestResource(value = PackagedSearchApplication.class, restrictToAnnotatedClass = true)
 class TokenBatchResourceIT extends AbstractTokenBatchResourceTest {
 }

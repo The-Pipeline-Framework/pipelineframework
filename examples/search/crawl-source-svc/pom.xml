@@ -23,6 +23,13 @@
             <groupId>org.pipelineframework.search</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework.search</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -175,6 +182,18 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <!-- Select the externally launched REST JAR before Quarkus chooses a cloud launcher. -->
+                    <systemPropertyVariables>
+                        <quarkus.http.test-host>localhost</quarkus.http.test-host>
+                        <quarkus.http.test-ssl-enabled>true</quarkus.http.test-ssl-enabled>
+                        <quarkus.http.test-ssl-port>8444</quarkus.http.test-ssl-port>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>io.quarkus</groupId>

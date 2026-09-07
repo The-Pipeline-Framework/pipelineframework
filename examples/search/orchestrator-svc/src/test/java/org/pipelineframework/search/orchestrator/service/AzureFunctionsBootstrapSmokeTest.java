@@ -16,51 +16,63 @@
 
 package org.pipelineframework.search.orchestrator.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Smoke test verifying Azure Functions runtime wiring compiles and initializes correctly.
  * Unlike AWS Lambda mock event server, Azure Functions testing relies on Core Tools local runtime.
  * This test validates basic Quarkus Azure Functions extension bootstrap.
  */
+@EnabledIfSystemProperty(named = "azure.functions.artifact.required", matches = "true")
 class AzureFunctionsBootstrapSmokeTest {
 
+    private static final Path AZURE_FUNCTIONS_OUTPUT = Path.of("target", "azure-functions");
+    private static final List<String> REQUIRED_ENTRIES =
+            List.of(
+                    "io/quarkus/azure/functions/runtime/QuarkusAzureFunctionsMiddleware.class",
+                    "io/quarkus/azure/functions/runtime/QuarkusAzureFunctionsInjector.class");
+
     @Test
-    void azureFunctionsExtensionLoads() {
-        // Verify that Azure Functions extension classes are resolvable at runtime
-        // This is a basic smoke test; full integration testing requires Azure Functions Core Tools
-        String extensionClass = "io.quarkus.azure.functions.runtime.AzureFunctionsHandler";
-        
-        // First check if Azure Functions extension is on classpath at all
-        // by checking for a core Azure SDK class that's always present with the extension
-        boolean azureExtensionPresent = isClassAvailable("com.microsoft.azure.functions.ExecutionContext");
-        
-        if (!azureExtensionPresent) {
-            // Azure Functions extension not on classpath - skip the test
-            org.junit.jupiter.api.Assumptions.assumeTrue(false,
-                "Azure Functions extension not on classpath - expected when not building with azure profile");
-            return;
-        }
-        
-        // Azure Functions extension IS on classpath - the handler class must be loadable
-        try {
-            Class<?> clazz = Class.forName(extensionClass);
-            assertNotNull(clazz, "Azure Functions handler class should be loadable when azure profile is active");
-        } catch (ClassNotFoundException e) {
-            fail("Azure Functions extension is on classpath but handler class '" + extensionClass + 
-                 "' is not found. This indicates a broken azure profile build.");
+    void azureFunctionsExtensionIsPackaged() throws IOException {
+        assertTrue(
+                Files.isDirectory(AZURE_FUNCTIONS_OUTPUT),
+                () -> "Azure Functions package directory should exist: " + AZURE_FUNCTIONS_OUTPUT);
+
+        for (String entry : REQUIRED_ENTRIES) {
+            assertTrue(
+                    packagedOutputContains(entry),
+                    () -> "Azure Functions package should contain " + entry);
         }
     }
-    
-    private static boolean isClassAvailable(String className) {
-        try {
-            Class.forName(className);
-            return true;
-        } catch (ClassNotFoundException e) {
-            return false;
+
+    private boolean packagedOutputContains(String entry) throws IOException {
+        try (var paths = Files.walk(AZURE_FUNCTIONS_OUTPUT)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String relativePath = AZURE_FUNCTIONS_OUTPUT.relativize(path).toString().replace('\\', '/');
+                if (relativePath.endsWith(entry) || isArchive(path) && archiveContains(path, entry)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isArchive(Path path) {
+        String filename = path.getFileName().toString();
+        return filename.endsWith(".jar") || filename.endsWith(".zip");
+    }
+
+    private boolean archiveContains(Path archive, String entry) throws IOException {
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            return zip.getEntry(entry) != null;
         }
     }
 }

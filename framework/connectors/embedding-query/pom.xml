@@ -7,8 +7,8 @@
     <description>Provider-neutral embedding Query contract and portable vector vocabulary.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
-        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><scope>test</scope></dependency>
     </dependencies>
     <build><plugins><plugin><groupId>com.diffplug.spotless</groupId><artifactId>spotless-maven-plugin</artifactId></plugin></plugins></build>
 </project>

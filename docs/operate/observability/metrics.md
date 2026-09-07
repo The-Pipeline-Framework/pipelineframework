@@ -31,6 +31,23 @@ OTLP, New Relic, or another backend then decides where those metrics go; exporte
 not an instrumentation switch. See [Observability Overview](/operate/observability/) for the full
 capability, policy, and exporter model.
 
+### gRPC and CLI meter compatibility
+
+Micrometer gRPC meters and generated CLI meters share one tag schema per metric
+name. CLI series have `methodType=CLI`; network gRPC series retain their RPC method
+type. Request counters use the `messages` unit and have no status tag. Completion
+timers carry `rpc.grpc.status_code`, normalized to a numeric gRPC status code.
+
+When upgrading to Quarkus 3.39.2, update any direct Micrometer CLI queries to use
+`rpc_server_requests_messages_total`. Use the duration timer's count series for
+status-specific CLI totals. The gRPC renaming filter accepts both Micrometer's
+`statusCode` and the legacy `grpc.status` input tag. These meter changes do not
+change the framework's OpenTelemetry instrumentation contract.
+
+For application meters, use consistent tag keys for every registration of a given
+name. Different tag values are valid; different tag-key sets can cause registration
+failures or missing Prometheus series.
+
 ## Dashboards
 
 Pair metrics with Grafana dashboards that show:

@@ -168,7 +168,6 @@
                                 <artifactItem>
                                     <groupId>com.google.protobuf</groupId>
                                     <artifactId>protobuf-java</artifactId>
-                                    <version>${protobuf.version}</version>
                                     <includes>google/protobuf/empty.proto</includes>
                                     <outputDirectory>${generated.proto.dir}</outputDirectory>
                                 </artifactItem>

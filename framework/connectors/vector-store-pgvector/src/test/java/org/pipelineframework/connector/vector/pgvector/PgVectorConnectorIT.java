@@ -25,11 +25,11 @@ import org.pipelineframework.connector.vector.VectorSearchRequest;
 import org.pipelineframework.connector.vector.VectorSearchResult;
 import org.pipelineframework.connector.vector.VectorUpsertCommandOperation;
 import org.pipelineframework.connector.vector.VectorUpsertRequest;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 class PgVectorConnectorIT {
-    private static final PostgreSQLContainer<?> POSTGRES =
-        new PostgreSQLContainer<>("pgvector/pgvector:pg17");
+    private static final PostgreSQLContainer POSTGRES =
+        new PostgreSQLContainer("pgvector/pgvector:pg17");
     private static PgPool pool;
 
     @BeforeAll static void startDatabase() throws Exception {

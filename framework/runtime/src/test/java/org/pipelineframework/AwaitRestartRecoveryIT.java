@@ -10,7 +10,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -58,9 +57,11 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJournal;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -92,7 +93,7 @@ class AwaitRestartRecoveryIT {
   @Container
   static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
       DockerImageName.parse("localstack/localstack:3.8"))
-      .withServices(LocalStackContainer.Service.DYNAMODB);
+      .withServices("dynamodb");
 
   private DynamoDbClient dynamo;
   private ScheduledExecutorService scheduler;
@@ -100,7 +101,7 @@ class AwaitRestartRecoveryIT {
   @BeforeAll
   void createTables() {
     dynamo = DynamoDbClient.builder()
-        .endpointOverride(URI.create(LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString()))
+        .endpointOverride(LOCALSTACK.getEndpoint())
         .region(Region.of(LOCALSTACK.getRegion()))
         .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
             LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
@@ -555,6 +556,7 @@ class AwaitRestartRecoveryIT {
     ExecutionRecord<Object, Object> waitingParent = workerAStore.getExecution("tenant-empty", parent.record().executionId())
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord emptyUnit = emptyUnit(waitingParent.executionId(), ttl);
+    persistUnit(emptyUnit);
 
     replaceScheduler();
     ExecutionStateStore workerBStore = DynamoAwaitLifecycleTestStores.executionStoreForPayloadMutation(dynamo, TABLE_PREFIX);
@@ -579,7 +581,7 @@ class AwaitRestartRecoveryIT {
     ExecutionRecord<Object, Object> replayed = workerCStore.getExecution("tenant-empty", released.executionId())
         .await().indefinitely().orElseThrow();
     assertEquals(ExecutionStatus.SUCCEEDED, replayed.status());
-    assertEquals(List.of("published"), replayed.resultPayload());
+    assertPublishedResult(replayed);
   }
 
   private void terminalCleanupLeavesNoDurableAwaitWork() {
@@ -628,8 +630,16 @@ class AwaitRestartRecoveryIT {
         .await().indefinitely().orElseThrow().status());
     assertFalse(hasInteractionForUnit(tenantId, completedUnit.unitId()),
         "empty itemized completion must leave no pending interactions");
-    assertEquals(List.of("published"), freshExecutionStore
-        .getExecution(tenantId, terminal.executionId()).await().indefinitely().orElseThrow().resultPayload());
+    assertPublishedResult(freshExecutionStore
+        .getExecution(tenantId, terminal.executionId()).await().indefinitely().orElseThrow());
+  }
+
+  private void assertPublishedResult(ExecutionRecord<Object, Object> record) {
+    List<?> stored = assertInstanceOf(List.class, record.resultPayload());
+    var codec = new JsonTransitionPayloadCodec();
+    assertEquals(List.of("published"), stored.stream()
+        .map(item -> codec.decode(assertInstanceOf(SerializedTransitionPayload.class, item)))
+        .toList());
   }
 
   private boolean hasInteractionForUnit(String tenantId, String unitId) {
@@ -676,6 +686,7 @@ class AwaitRestartRecoveryIT {
     ExecutionRecord<Object, Object> waitingParent = workerAStore.getExecution("tenant-restart", parent.record().executionId())
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord unit = unit(waitingParent.executionId(), ttl);
+    persistUnit(unit);
 
     CreateExecutionResult firstChild = workerAStore.createOrGetExecution(new ExecutionCreateCommand(
             "tenant-restart",
@@ -697,7 +708,7 @@ class AwaitRestartRecoveryIT {
     ItemizedAwaitContinuationFlow workerB = new ItemizedAwaitContinuationFlow(
         workerBStore,
         dispatcher,
-        mock(AwaitCoordinator.class),
+        durableCoordinator(),
         new TransitionWorkerExecutor(null, new PipelineInvocationRuntime()),
         scheduler,
         () -> Duration.ofMillis(10),
@@ -846,6 +857,7 @@ class AwaitRestartRecoveryIT {
     ExecutionRecord<Object, Object> waitingParent = store.getExecution("tenant-premature", parent.record().executionId())
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord unit = unit(waitingParent.executionId(), ttl, "tenant-premature");
+    persistUnit(unit);
 
     replaceScheduler();
     ItemizedAwaitContinuationFlow flow = flow(store, dispatcher);
@@ -887,7 +899,31 @@ class AwaitRestartRecoveryIT {
   }
 
   private ItemizedAwaitContinuationFlow flow(ExecutionStateStore store, WorkDispatcher dispatcher) {
-    return flow(store, dispatcher, mock(AwaitCoordinator.class));
+    return flow(store, dispatcher, durableCoordinator());
+  }
+
+  private void persistUnit(AwaitUnitRecord unit) {
+    org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores.unitStore(dynamo, TABLE_PREFIX)
+        .importRecord(unit).await().indefinitely();
+  }
+
+  private AwaitCoordinator durableCoordinator() {
+    AwaitUnitStore units = org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
+        .unitStore(dynamo, TABLE_PREFIX);
+    return new AwaitCoordinator() {
+      @Override
+      public Uni<AwaitUnitRecord> getUnit(String tenantId, String unitId) {
+        return units.get(tenantId, unitId).map(record -> record.orElseThrow());
+      }
+
+      @Override
+      public Uni<AwaitUnitRecord> recordItemContinuationCompleted(
+          String tenantId, String unitId, int itemIndex, long nowEpochMs) {
+        return units.recordItemContinuationCompleted(
+                tenantId, unitId, AwaitUnitRecord.continuationCompletionKey(itemIndex), nowEpochMs)
+            .map(record -> record.orElseThrow());
+      }
+    };
   }
 
   private ItemizedAwaitContinuationFlow flow(ExecutionStateStore store, WorkDispatcher dispatcher, AwaitCoordinator coordinator) {

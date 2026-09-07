@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +24,7 @@ import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -51,11 +50,11 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SqsAwaitCompletionDynamoIT {
   private static final String PREFIX = "sqs_anchor";
-  @Container static final LocalStackContainer LOCALSTACK = new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.8")).withServices(LocalStackContainer.Service.DYNAMODB);
+  @Container static final LocalStackContainer LOCALSTACK = new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.8")).withServices("dynamodb");
   private DynamoDbClient dynamo;
 
   @BeforeAll void setUp() {
-    dynamo = DynamoDbClient.builder().endpointOverride(URI.create(LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString())).region(Region.of(LOCALSTACK.getRegion())).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey()))).build();
+    dynamo = DynamoDbClient.builder().endpointOverride(LOCALSTACK.getEndpoint()).region(Region.of(LOCALSTACK.getRegion())).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey()))).build();
     table(PREFIX + "_interaction", "tenant_id", "interaction_id"); table(PREFIX + "_interaction_key", "lookup_key", null);
   }
 

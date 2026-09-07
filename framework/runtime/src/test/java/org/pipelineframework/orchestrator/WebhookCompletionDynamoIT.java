@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import io.smallrye.mutiny.Uni;
 import jakarta.ws.rs.core.Response;
-import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeAll;
@@ -25,7 +24,7 @@ import org.pipelineframework.orchestrator.dto.HostedAwaitCompletionRequest;
 import org.pipelineframework.orchestrator.release.InMemoryPipelineReleaseRegistry;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRegistrar;
 import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
-import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -53,14 +52,14 @@ class WebhookCompletionDynamoIT {
   @Container
   static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
       DockerImageName.parse("localstack/localstack:3.8"))
-      .withServices(LocalStackContainer.Service.DYNAMODB);
+      .withServices("dynamodb");
 
   private DynamoDbClient dynamo;
 
   @BeforeAll
   void setUp() {
     dynamo = DynamoDbClient.builder()
-        .endpointOverride(URI.create(LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString()))
+        .endpointOverride(LOCALSTACK.getEndpoint())
         .region(Region.of(LOCALSTACK.getRegion()))
         .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
             LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))

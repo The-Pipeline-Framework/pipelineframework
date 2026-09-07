@@ -93,7 +93,7 @@ jobs:
         run: |
           LATEST_RELEASE_TAG="$(
             gh api --paginate 'repos/${{ github.repository }}/releases?per_page=100' \
-              --jq '.[].tag_name' \
+              --jq '.[] | select(.draft | not) | .tag_name' \
               | sort -V \
               | tail -1
           )"

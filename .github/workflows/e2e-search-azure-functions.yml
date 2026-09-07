@@ -162,6 +162,20 @@ jobs:
             -Dquarkus.container-image.build=false \
             clean package
 
+      - name: Verify Azure Functions bootstrap resources are packaged
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml -pl orchestrator-svc -am \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.azure.scope=compile \
+            -Dquarkus.profile=azure-functions \
+            -Dazure.functions.artifact.required=true \
+            -Dtest=AzureFunctionsBootstrapSmokeTest \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+
       - name: Deploy to Azure Functions
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
