@@ -32,6 +32,7 @@ public class OidcFixture implements QuarkusTestResourceLifecycleManager {
     static final java.util.concurrent.atomic.AtomicReference<String> tokenIssuer = new java.util.concurrent.atomic.AtomicReference<>("");
     static final java.util.concurrent.atomic.AtomicReference<String> refreshError = new java.util.concurrent.atomic.AtomicReference<>("");
     static final java.util.concurrent.atomic.AtomicBoolean rotate = new java.util.concurrent.atomic.AtomicBoolean();
+    static final java.util.concurrent.atomic.AtomicBoolean omitScope = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicBoolean loseRefreshResponse = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicBoolean claimsChallenge = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicReference<Optional<java.util.concurrent.CountDownLatch>> refreshEntered = new java.util.concurrent.atomic.AtomicReference<>(Optional.empty());
@@ -109,6 +110,7 @@ public class OidcFixture implements QuarkusTestResourceLifecycleManager {
                         if (!refreshError.get().isEmpty()) { reply(request, 400, Map.of("error", refreshError.get())); break; }
                         var renewed = new HashMap<String, Object>(Map.of("access_token", "renewed-access", "expires_in", 3600,
                             "token_type", "Bearer", "scope", scope.get()));
+                        if (omitScope.get()) { renewed.remove("scope"); }
                         if (rotate.get()) { renewed.put("refresh_token", "rotated-refresh"); }
                         reply(request, 200, renewed);
                         break;
@@ -122,8 +124,10 @@ public class OidcFixture implements QuarkusTestResourceLifecycleManager {
                     var claims = new HashMap<String, Object>(Map.of("iss", tokenIssuer.get().isEmpty() ? issuer : tokenIssuer.get(), "sub", subject.get(), "name", "Fixture User",
                         "aud", "test-client", "iat", Instant.now().getEpochSecond(), "exp", Instant.now().plusSeconds(3600).getEpochSecond()));
                     Optional.ofNullable(authorization.orElseThrow().get("nonce")).ifPresent(nonce -> claims.put("nonce", nonce));
-                    reply(request, 200, Map.of("id_token", jwt(claims), "access_token", "initial-access",
+                    var issued = new HashMap<String, Object>(Map.of("id_token", jwt(claims), "access_token", "initial-access",
                         "refresh_token", "fixture-refresh", "expires_in", 3600, "token_type", "Bearer", "scope", scope.get()));
+                    if (omitScope.get()) { issued.remove("scope"); }
+                    reply(request, 200, issued);
                 }
                 case "/v1.0/me" -> {
                     graphCalls.incrementAndGet();

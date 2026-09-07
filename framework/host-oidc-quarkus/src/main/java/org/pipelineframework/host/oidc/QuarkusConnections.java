@@ -110,8 +110,10 @@ public final class QuarkusConnections implements AutoCloseable {
             String subject = Optional.ofNullable(identity.getSubject()).filter(value -> !value.isBlank())
                 .orElseThrow(() -> failure(ConnectionFailure.Reason.FORBIDDEN));
             String account = identity.getIssuer().length() + ":" + identity.getIssuer() + subject;
+            var grantedScopes = Optional.ofNullable(tokens.getAccessTokenScope()).filter(value -> !value.isBlank())
+                .map(this::scopes).orElseGet(registration::requiredScopes);
             var grant = new ConnectionState.Grant(account, required(tokens.getAccessToken()), required(tokens.getRefreshToken()),
-                expires(tokens.getAccessTokenExpiresIn()), scopes(Optional.ofNullable(tokens.getAccessTokenScope()).orElse("")));
+                expires(tokens.getAccessTokenExpiresIn()), grantedScopes);
             requireScopes(grant.scopes());
             store.claimAccount(attempt.key(), account);
             var ready = pending.next(Phase.READY, now(), Optional.of(grant), Optional.empty());

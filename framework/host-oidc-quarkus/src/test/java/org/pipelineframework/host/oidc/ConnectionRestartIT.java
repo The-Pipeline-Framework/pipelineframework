@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -20,8 +21,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 @QuarkusTestResource(OidcFixture.class)
 class ConnectionRestartIT {
     private static final String database = Path.of("target", "restart-" + UUID.randomUUID()).toAbsolutePath().toString();
-    private static final int port = port();
-    private static final URI base = URI.create("http://localhost:" + port + "/");
+    private static int port;
+    private static URI base;
 
     @RegisterExtension static final QuarkusProdModeTest application = new QuarkusProdModeTest()
         .withApplicationRoot(archive -> {
@@ -37,10 +38,26 @@ class ConnectionRestartIT {
         .overrideConfigKey("test.restart-host", "true")
         .setForcedDependencies(java.util.List.of(io.quarkus.maven.dependency.Dependency.of("com.h2database", "h2", org.h2.engine.Constants.VERSION)))
         .overrideConfigKey("quarkus.keycloak.devservices.enabled", "false")
-        .setRuntimeProperties(Map.of("quarkus.http.port", Integer.toString(port),
-            "test.jdbc.url", "jdbc:h2:file:" + database,
-            "test.flow.uri", base.resolve("connections/proof/authorize").toString()))
-        .setRun(true);
+        .setRun(false);
+
+    @BeforeAll static void startApplication() {
+        Throwable lastFailure = new IllegalStateException("No startup attempt");
+        for (int attempt = 0; attempt < 3; attempt++) {
+            port = port();
+            base = URI.create("http://localhost:" + port + "/");
+            application.setRuntimeProperties(Map.of("quarkus.http.port", Integer.toString(port),
+                "test.jdbc.url", "jdbc:h2:file:" + database,
+                "test.flow.uri", base.resolve("connections/proof/authorize").toString()));
+            try {
+                application.start();
+                return;
+            } catch (RuntimeException | AssertionError failure) {
+                lastFailure = failure;
+                application.stop();
+            }
+        }
+        throw new IllegalStateException("Unable to start restart proof after three port allocations", lastFailure);
+    }
 
     @Test void sessionlessResolutionAndQuarkusRenewalSurviveProcessRestart() throws Exception {
         var cookies = new CookieManager();

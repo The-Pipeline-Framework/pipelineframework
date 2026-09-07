@@ -90,6 +90,7 @@ public class ConnectionResource {
         return response(status).build();
     }
     private void requireOrigin(String supplied) {
+        if (supplied == null) { throw new ConnectionFailure(ConnectionFailure.Reason.FORBIDDEN); }
         try {
             URI candidate = URI.create(supplied);
             if (candidate.getRawUserInfo() != null || candidate.getRawQuery() != null || candidate.getRawFragment() != null

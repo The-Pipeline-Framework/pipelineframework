@@ -47,6 +47,7 @@ class ConnectionBridgeTest {
         OidcFixture.tokenIssuer.set("");
         OidcFixture.refreshError.set("");
         OidcFixture.rotate.set(false);
+        OidcFixture.omitScope.set(false);
         OidcFixture.loseRefreshResponse.set(false);
         OidcFixture.claimsChallenge.set(false);
         OidcFixture.refreshEntered.set(Optional.empty());
@@ -101,6 +102,9 @@ class ConnectionBridgeTest {
                 .header("Origin", "https://evil.invalid").header("X-Test-Actor", "alice")
                 .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(403, crossOrigin.statusCode());
+            var missingOrigin = browser.send(HttpRequest.newBuilder(base.resolve("connections/proof/connect"))
+                .header("X-Test-Actor", "alice").POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(403, missingOrigin.statusCode());
         }
     }
 
@@ -147,6 +151,15 @@ class ConnectionBridgeTest {
         }
     }
 
+    @Test void omittedTokenScopePreservesApprovedRegistrationScopes() throws Exception {
+        OidcFixture.omitScope.set(true);
+        authorize();
+        assertEquals(host.registration().requiredScopes(), host.store().read(key()).orElseThrow().grant().orElseThrow().scopes());
+        expire();
+        assertEquals("fixture-user", connections.resolve(request()).toCompletableFuture().join().me());
+        assertEquals(host.registration().requiredScopes(), host.store().read(key()).orElseThrow().grant().orElseThrow().scopes());
+    }
+
     @Test void callbackReplayAndCrossTenantResolutionAreRejected() throws Exception {
         try (var browser = browser(false)) {
             URI callback = callback(browser);
@@ -166,10 +179,28 @@ class ConnectionBridgeTest {
     @Test void concurrentWorkersRefreshOnceAndPersistRotation() throws Exception {
         authorize(); expire();
         OidcFixture.rotate.set(true);
+        var refreshEntered = new java.util.concurrent.CountDownLatch(1);
+        var refreshRelease = new java.util.concurrent.CountDownLatch(1);
+        var secondObservedRefresh = new java.util.concurrent.CountDownLatch(1);
+        OidcFixture.refreshEntered.set(Optional.of(refreshEntered));
+        OidcFixture.refreshRelease.set(Optional.of(refreshRelease));
         int before = OidcFixture.refreshes.get();
-        try (var another = host.newManager()) {
+        var observedClock = new Clock() {
+            private final Clock delegate = Clock.systemUTC();
+            @Override public java.time.ZoneId getZone() { return delegate.getZone(); }
+            @Override public Clock withZone(java.time.ZoneId zone) { return delegate.withZone(zone); }
+            @Override public java.time.Instant instant() { return delegate.instant(); }
+            @Override public long millis() { secondObservedRefresh.countDown(); return delegate.millis(); }
+        };
+        try (var another = host.newManager(observedClock)) {
             var first = connections.renew(key()).toCompletableFuture();
+            assertTrue(refreshEntered.await(5, java.util.concurrent.TimeUnit.SECONDS));
             var second = another.resolve(request()).toCompletableFuture();
+            try {
+                assertTrue(secondObservedRefresh.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                assertFalse(first.isDone());
+                assertFalse(second.isDone());
+            } finally { refreshRelease.countDown(); }
             assertEquals(QuarkusConnections.Phase.READY, first.join().phase());
             assertEquals("fixture-user", second.join().me());
         }
@@ -367,9 +398,13 @@ class ConnectionBridgeTest {
             return instance;
         }
         QuarkusConnections newManager() {
-            return new QuarkusConnections(store, registration, clients.getClient("connection"), executor, Clock.systemUTC());
+            return newManager(Clock.systemUTC());
+        }
+        QuarkusConnections newManager(Clock clock) {
+            return new QuarkusConnections(store, registration, clients.getClient("connection"), executor, clock);
         }
         JdbcConnectionStore store() { return store; }
+        ConnectionRegistration<Capability> registration() { return registration; }
         void sql(String sql) throws Exception {
             try (var connection = database.getConnection(); var statement = connection.createStatement()) { statement.execute(sql); }
         }
