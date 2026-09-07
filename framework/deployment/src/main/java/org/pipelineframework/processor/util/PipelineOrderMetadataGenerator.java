@@ -119,6 +119,7 @@ public class PipelineOrderMetadataGenerator {
             PipelineCompilationContext ctx, List<String> orderedFunctionalSteps) {
         List<PipelineStepModel> clientModels = ctx.getStepModels().stream()
             .filter(model -> model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT)
+            .filter(model -> "$root".equals(model.definition().logicalId()))
             .toList();
         if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)) {
             return List.of();
@@ -145,24 +146,28 @@ public class PipelineOrderMetadataGenerator {
             }
         }
         if (!pendingBefore.isEmpty()) {
-            throw new IllegalStateException("Generated aspect order ends with before-step side effects without a functional step");
+            // A side-effect-only context has no functional model to weave around. Preserve the
+            // existing YAML expansion fallback used by explicit root orders in that case.
+            if (groupsByFunctionalStep.isEmpty()) {
+                return List.of();
+            }
+            throw new IllegalStateException(
+                "Generated aspect order ends with before-step side effects without a functional step");
         }
 
         List<String> expanded = new ArrayList<>();
         for (String functionalStep : orderedFunctionalSteps) {
             Deque<GeneratedStepGroup> groups = groupsByFunctionalStep.get(functionalStep);
             if (groups == null || groups.isEmpty()) {
-                throw new IllegalStateException(
-                    "Generated aspect order has no functional model for authored step " + functionalStep);
+                // Statically linked named-pipeline invocation beans are root steps but do not have
+                // their own PipelineStepModel. They are already complete ordered child definitions.
+                expanded.add(functionalStep);
+                continue;
             }
             GeneratedStepGroup group = groups.removeFirst();
             expanded.addAll(group.before());
             expanded.add(group.functional());
             expanded.addAll(group.after());
-        }
-        if (groupsByFunctionalStep.values().stream().anyMatch(groups -> !groups.isEmpty())) {
-            throw new IllegalStateException(
-                "Generated aspect order contains more functional models than the authored pipeline order");
         }
         return List.copyOf(new LinkedHashSet<>(expanded));
     }
@@ -178,7 +183,10 @@ public class PipelineOrderMetadataGenerator {
         if (processingEnv == null) {
             return;
         }
-        List<String> expanded = List.copyOf(rootSteps);
+        List<String> expanded = weaveGeneratedSideEffects(ctx, List.copyOf(rootSteps));
+        if (expanded.isEmpty()) {
+            expanded = List.copyOf(rootSteps);
+        }
         PipelineYamlConfig config = loadPipelineConfig(ctx);
         if (config != null) {
             expanded = List.copyOf(PipelineOrderExpander.expand(
@@ -205,6 +213,8 @@ public class PipelineOrderMetadataGenerator {
             return Set.of();
         }
         return ctx.getStepModels().stream()
+            .filter(model -> model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT)
+            .filter(model -> "$root".equals(model.definition().logicalId()))
             .filter(PipelineStepModel::sideEffect)
             .map(model -> ClientStepClassNames.className(model, ctx.getTransportMode()))
             .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
