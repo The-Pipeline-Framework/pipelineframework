@@ -32,6 +32,38 @@ The annotation processor runs during the `compile` phase:
 [INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated step implementations and service adapters
 ```
 
+Configure TPF-specific annotation processors on Maven's `default-compile` execution, not on the
+compiler plugin as a whole. Plugin-level processor paths are inherited by `default-testCompile`,
+which can run pipeline generation a second time against the incomplete test-compilation model.
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <executions>
+        <execution>
+            <id>default-compile</id>
+            <configuration>
+                <annotationProcessorPaths>
+                    <path>
+                        <groupId>org.pipelineframework</groupId>
+                        <artifactId>pipelineframework-deployment</artifactId>
+                        <version>${pipelineframework.version}</version>
+                    </path>
+                    <!-- Add connector/provider processors used by this application here. -->
+                </annotationProcessorPaths>
+                <compilerArgs>
+                    <arg>-Apipeline.config=${project.basedir}/src/main/resources/pipeline.yaml</arg>
+                </compilerArgs>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+Test-only annotation processors can still be configured separately. TPF pipeline compilation is a
+main-source build step and should not be repeated during `testCompile`.
+
 ### Required gRPC Descriptor Set Generation
 
 The annotation processor resolves gRPC bindings from a protobuf descriptor set. Configure your build to emit a
