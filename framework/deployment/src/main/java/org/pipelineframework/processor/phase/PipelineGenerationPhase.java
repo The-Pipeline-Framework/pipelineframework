@@ -343,10 +343,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     new ConnectorBindingMetadataGenerator(ctx.getProcessingEnv());
                 connectorBindingMetadataGenerator.writeMetadata(ctx);
             }
-            if (ctx.isOrchestratorGenerated()) {
+            if (ctx.getProcessingEnv() != null) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
                 telemetryMetadataGenerator.writeTelemetryMetadata(ctx);
+            }
+            if (ctx.isOrchestratorGenerated()) {
                 CheckpointHandoffMetadataGenerator handoffMetadataGenerator =
                     new CheckpointHandoffMetadataGenerator(ctx.getProcessingEnv());
                 handoffMetadataGenerator.writeHandoffMetadata(ctx);

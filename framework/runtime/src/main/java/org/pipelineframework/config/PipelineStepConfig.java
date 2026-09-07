@@ -336,6 +336,14 @@ public interface PipelineStepConfig {
         Optional<String> itemOutputType();
 
         /**
+         * Stable logical name written into generated replay metadata.
+         *
+         * @return configured pipeline name, if any
+         */
+        @WithName("pipeline-name")
+        Optional<String> pipelineName();
+
+        /**
          * Tracing configuration for pipeline spans.
          *
          * @return tracing configuration

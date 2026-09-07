@@ -534,6 +534,11 @@ class PipelineTelemetryTest {
         }
 
         @Override
+        public Optional<String> pipelineName() {
+            return Optional.empty();
+        }
+
+        @Override
         public PipelineStepConfig.TracingConfig tracing() {
             return new TestTracingConfig();
         }

@@ -52,6 +52,11 @@ class PipelineStepConfigTest {
     }
 
     @Test
+    void acceptsConfiguredTelemetryPipelineName() {
+        assertEquals("runtime-test-pipeline", pipelineStepConfig.telemetry().pipelineName().orElseThrow());
+    }
+
+    @Test
     void testDefaultsHaveCorrectDefaultValues() {
         // Given
         PipelineStepConfig.StepConfig defaults = pipelineStepConfig.defaults();
