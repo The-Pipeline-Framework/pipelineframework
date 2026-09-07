@@ -62,9 +62,6 @@ public class PipelineTelemetryMetadataGenerator {
      * @throws IOException if creating or writing the resource fails
      */
     public void writeTelemetryMetadata(PipelineCompilationContext ctx) throws IOException {
-        if (!ctx.isOrchestratorGenerated()) {
-            return;
-        }
         List<PipelineStepModel> models = filterClientModels(ctx);
         if (models.isEmpty()) {
             return;
@@ -612,6 +609,10 @@ public class PipelineTelemetryMetadataGenerator {
             }
         } catch (IOException ignored) {
             // Fall back to structural inference.
+        }
+        if (ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig templateConfig
+            && templateConfig.appName() != null && !templateConfig.appName().isBlank()) {
+            return templateConfig.appName().trim();
         }
         Optional<Path> pipelineConfig = resolvePipelineConfigPath(ctx);
         if (pipelineConfig.isPresent()) {

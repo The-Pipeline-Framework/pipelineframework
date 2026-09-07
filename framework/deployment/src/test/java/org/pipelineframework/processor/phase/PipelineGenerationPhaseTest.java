@@ -42,6 +42,7 @@ import org.mockito.quality.Strictness;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -71,7 +72,8 @@ class PipelineGenerationPhaseTest {
             when(fileObject.openWriter()).thenReturn(new java.io.StringWriter());
             when(sourceFileObject.openWriter()).thenReturn(new java.io.StringWriter());
             when(filer.createResource(
-                any(StandardLocation.class), anyString(), anyString(), any(javax.lang.model.element.Element[].class)))
+                any(StandardLocation.class), anyString(), anyString(),
+                nullable(javax.lang.model.element.Element[].class)))
                 .thenReturn(fileObject);
             when(filer.createResource(any(StandardLocation.class), anyString(), anyString()))
                 .thenReturn(fileObject);

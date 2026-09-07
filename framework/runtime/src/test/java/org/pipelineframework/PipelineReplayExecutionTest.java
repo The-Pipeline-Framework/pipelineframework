@@ -1076,6 +1076,11 @@ class PipelineReplayExecutionTest {
                 }
 
                 @Override
+                public Optional<String> pipelineName() {
+                    return Optional.empty();
+                }
+
+                @Override
                 public TracingConfig tracing() {
                     return new TracingConfig() {
                         @Override
@@ -1208,6 +1213,11 @@ class PipelineReplayExecutionTest {
                 }
 
                 @Override
+                public Optional<String> pipelineName() {
+                    return delegate.pipelineName();
+                }
+
+                @Override
                 public TracingConfig tracing() {
                     return delegate.tracing();
                 }
@@ -1262,6 +1272,11 @@ class PipelineReplayExecutionTest {
                 @Override
                 public Optional<String> itemOutputType() {
                     return delegate.itemOutputType();
+                }
+
+                @Override
+                public Optional<String> pipelineName() {
+                    return delegate.pipelineName();
                 }
 
                 @Override

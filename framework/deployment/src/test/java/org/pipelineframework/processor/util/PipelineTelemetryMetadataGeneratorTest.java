@@ -45,6 +45,38 @@ class PipelineTelemetryMetadataGeneratorTest {
     Path tempDir;
 
     @Test
+    void writesReplayTopologyForLocalPipelineWithoutOrchestratorGeneration() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        ctx.setOrchestratorGenerated(false);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setPipelineTemplateConfig(templateConfig("local-replay", "LOCAL"));
+        writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");
+        ctx.setStepModels(List.of(localStep(
+            "ProcessItemService", "com.example", type("ItemIn"), type("ItemOut"))));
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        JsonObject topology = readReplayTopologyJson();
+        assertEquals("local-replay", topology.get("pipeline").getAsString());
+        assertEquals(
+            "com.example.pipeline.ProcessItemLocalClientStep",
+            topology.getAsJsonArray("steps").get(0).getAsJsonObject().get("runtimeStepClass").getAsString());
+    }
+
+    @Test
+    void configuredPipelineNameOverridesTemplateApplicationName() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        ctx.setPipelineTemplateConfig(templateConfig("template-name", "GRPC"));
+        writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut", "configured-name");
+        ctx.setStepModels(List.of(
+            step("ProcessItemService", "com.example", type("ItemIn"), type("ItemOut"), false)));
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        assertEquals("configured-name", readReplayTopologyJson().get("pipeline").getAsString());
+    }
+
+    @Test
     void writesTelemetryMetadataWithFirstConsumerAndLastProducer() throws IOException {
         PipelineCompilationContext ctx = buildContext();
         writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");
@@ -395,12 +427,21 @@ class PipelineTelemetryMetadataGeneratorTest {
     }
 
     private void writeApplicationProperties(String inputType, String outputType) throws IOException {
+        writeApplicationProperties(inputType, outputType, null);
+    }
+
+    private void writeApplicationProperties(String inputType, String outputType, String pipelineName)
+            throws IOException {
         Path resourcesDir = tempDir.resolve("src/main/resources");
         Files.createDirectories(resourcesDir);
+        String nameProperty = pipelineName == null
+            ? ""
+            : "pipeline.telemetry.pipeline-name=" + pipelineName + System.lineSeparator();
         Files.writeString(
             resourcesDir.resolve("application.properties"),
             "pipeline.telemetry.item-input-type=" + inputType + System.lineSeparator()
-                + "pipeline.telemetry.item-output-type=" + outputType + System.lineSeparator());
+                + "pipeline.telemetry.item-output-type=" + outputType + System.lineSeparator()
+                + nameProperty);
     }
 
     private void writePipelineYaml(String yaml) throws IOException {
@@ -525,6 +566,47 @@ class PipelineTelemetryMetadataGeneratorTest {
             .sideEffect(sideEffect)
             .cacheKeyGenerator(null)
             .build();
+    }
+
+    private PipelineStepModel localStep(
+        String generatedName,
+        String servicePackage,
+        TypeName inputType,
+        TypeName outputType) {
+        return new PipelineStepModel.Builder()
+            .serviceName(generatedName)
+            .generatedName(generatedName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get(servicePackage, generatedName))
+            .inputMapping(new TypeMapping(inputType, null, false))
+            .outputMapping(new TypeMapping(outputType, null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .build();
+    }
+
+    private PipelineTemplateConfig templateConfig(String appName, String transport) {
+        return new PipelineTemplateConfig(
+            3,
+            appName,
+            "com.example",
+            transport,
+            PipelinePlatform.COMPUTE,
+            java.util.Map.of(),
+            java.util.Map.of(),
+            java.util.Map.of(),
+            java.util.Map.of(),
+            java.util.List.of(),
+            java.util.Map.of(),
+            null,
+            null,
+            null,
+            null,
+            null);
     }
 
     private TypeName type(String simpleName) {
