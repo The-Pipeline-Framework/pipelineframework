@@ -38,7 +38,7 @@ authoritative for exact syntax and release support.
 | [0027](./0027-mcp-imports-pinned-connector-operations.md) | Import selected MCP tools as pinned Connector operations without making MCP an Agent authority or runtime. |
 | [0028](./0028-block-connector-capabilities-are-application-bound.md) | Bind imported Block Query and Command requirements to application-owned connector authority at compilation. |
 | [0029](./0029-graphql-operations-are-application-pinned.md) | Execute only application-pinned GraphQL operations through ordinary Query and Command authority. |
-| [0030](./0030-optional-host-connection-lifecycle.md) | Keep optional authorized-connection lifecycle machinery behind the existing host resolver. |
+| [0030](./0030-optional-host-connection-lifecycle.md) | Reuse host-platform authorization and bridge durable connection lifetime behind the existing host resolver. |
 | [0031](./0031-canonical-constraints-own-value-and-collection-semantics.md) | Make canonical v3 own allowed scalar sets and repeated-field cardinality constraints. |
 
 ## Maintenance

@@ -1,4 +1,4 @@
-package org.pipelineframework.host.gmail;
+package org.pipelineframework.host.oidc;
 
 import java.util.Objects;
 import org.pipelineframework.connector.ConnectionRef;

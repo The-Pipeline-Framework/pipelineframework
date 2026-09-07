@@ -4,11 +4,11 @@
     <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>26.9.2-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
     <artifactId>host-gmail</artifactId>
     <name>The Pipeline Framework - Optional Gmail Host Connections</name>
-    <description>Host-owned Gmail authorization lifecycle proof, separate from Connector runtime contracts.</description>
+    <description>Thin Gmail SDK client factory for Quarkus-managed host connections.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>gmail-query-connector</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jdk8</artifactId></dependency>
-        <dependency><groupId>jakarta.ws.rs</groupId><artifactId>jakarta.ws.rs-api</artifactId></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>host-oidc-quarkus</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>host-oidc-quarkus</artifactId><version>${project.version}</version><type>test-jar</type><scope>test</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.jupiter.version}</version><scope>test</scope></dependency>
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest-jackson</artifactId><scope>test</scope></dependency>

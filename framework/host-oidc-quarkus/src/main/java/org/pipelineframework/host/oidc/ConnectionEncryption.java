@@ -1,4 +1,4 @@
-package org.pipelineframework.host.gmail;
+package org.pipelineframework.host.oidc;
 
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
