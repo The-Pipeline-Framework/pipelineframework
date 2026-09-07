@@ -928,7 +928,8 @@ class StepDefinitionParserTest {
             assertEquals("com.example.domain.ImportedResult", steps.getFirst().outputType().canonicalName());
             assertTrue(diagnostics.stream().noneMatch(message -> message.startsWith("ERROR")), diagnostics.toString());
 
-            Files.writeString(pipeline, Files.readString(pipeline)
+            String validPipeline = Files.readString(pipeline);
+            Files.writeString(pipeline, validPipeline
                 .replace("<mcp.client.ImportedRequest>", "<other.client.ImportedRequest>"));
             List<String> mismatchedDiagnostics = new ArrayList<>();
             List<StepDefinition> mismatched = new StepDefinitionParser(
@@ -939,6 +940,18 @@ class StepDefinitionParserTest {
             assertTrue(mismatched.isEmpty(), mismatchedDiagnostics.toString());
             assertTrue(mismatchedDiagnostics.stream().anyMatch(message -> message.contains(
                 "do not match provider operation types")), mismatchedDiagnostics.toString());
+
+            Files.writeString(pipeline, validPipeline
+                .replace("<mcp.client.ImportedResult>", "<other.client.ImportedResult>"));
+            List<String> unqualifiedOutputDiagnostics = new ArrayList<>();
+            List<StepDefinition> unqualifiedOutputMismatch = new StepDefinitionParser(
+                (kind, message) -> unqualifiedOutputDiagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(unqualifiedOutputMismatch.isEmpty(), unqualifiedOutputDiagnostics.toString());
+            assertTrue(unqualifiedOutputDiagnostics.stream().anyMatch(message -> message.contains(
+                "do not match provider operation types")), unqualifiedOutputDiagnostics.toString());
         }
     }
 

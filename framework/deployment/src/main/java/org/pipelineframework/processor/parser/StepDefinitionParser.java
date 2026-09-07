@@ -1321,7 +1321,7 @@ public class StepDefinitionParser {
             ConnectorOperationDescriptor descriptor = catalog.requireOperation(
                 identity.providerId(), binding.providerVersion(), operation,
                 ConnectorOperationKind.COMMAND, operationVersion);
-            validateOperationTypeContract(stepName, descriptor, inputType, outputType,
+            validateOperationTypeContract(stepName, identity.providerId(), descriptor, inputType, outputType,
                 logicalInputType, logicalOutputType, requireExactOperationTypes);
             catalog.validateOperationConfiguration(
                 identity.providerId(),
@@ -1394,7 +1394,7 @@ public class StepDefinitionParser {
             ConnectorOperationDescriptor descriptor = catalog.requireOperation(
                 identity.providerId(), binding.providerVersion(), operation,
                 ConnectorOperationKind.QUERY, identity.majorVersion());
-            validateOperationTypeContract(stepName, descriptor, inputType, outputType,
+            validateOperationTypeContract(stepName, identity.providerId(), descriptor, inputType, outputType,
                 logicalInputType, logicalOutputType, requireExactOperationTypes);
             catalog.validateOperationConfiguration(
                 identity.providerId(),
@@ -1436,6 +1436,7 @@ public class StepDefinitionParser {
 
     private static void validateOperationTypeContract(
         String stepName,
+        ConnectorProviderId providerId,
         ConnectorOperationDescriptor operation,
         ClassName inputType,
         ClassName outputType,
@@ -1452,8 +1453,8 @@ public class StepDefinitionParser {
             && "java.lang.Object".equals(publishedOutput)) {
             return;
         }
-        if (!operationTypeMatches(contract.inputType(), logicalInputType, inputType)
-            || !operationTypeMatches(publishedOutput, logicalOutputType, outputType)) {
+        if (!operationTypeMatches(providerId, contract.inputType(), logicalInputType, inputType)
+            || !operationTypeMatches(providerId, publishedOutput, logicalOutputType, outputType)) {
             throw new IllegalArgumentException("step '" + stepName + "' types ["
                 + inputType.canonicalName() + " -> " + outputType.canonicalName()
                 + "] do not match provider operation types [" + contract.inputType()
@@ -1461,7 +1462,12 @@ public class StepDefinitionParser {
         }
     }
 
-    private static boolean operationTypeMatches(String published, String logical, ClassName javaType) {
+    private static boolean operationTypeMatches(
+        ConnectorProviderId providerId,
+        String published,
+        String logical,
+        ClassName javaType
+    ) {
         if (published.equals(javaType.canonicalName())) {
             return true;
         }
@@ -1473,7 +1479,11 @@ public class StepDefinitionParser {
         if (publishedContribution.isPresent()) {
             return publishedContribution.equals(logicalContribution);
         }
-        return published.equals(logicalContribution.map(StepDefinitionParser::contributedTypeName).orElse(logical));
+        return logicalContribution
+            .filter(identity -> contributedTypeProvider(identity).equals(providerId.value()))
+            .map(StepDefinitionParser::contributedTypeName)
+            .map(published::equals)
+            .orElseGet(() -> published.equals(logical));
     }
 
     private static Optional<String> contributedTypeIdentity(String type) {
@@ -1487,6 +1497,11 @@ public class StepDefinitionParser {
     private static String contributedTypeName(String qualifiedName) {
         int namespace = qualifiedName.lastIndexOf('.');
         return namespace < 0 ? qualifiedName : qualifiedName.substring(namespace + 1);
+    }
+
+    private static String contributedTypeProvider(String qualifiedName) {
+        int namespace = qualifiedName.lastIndexOf('.');
+        return namespace < 0 ? "" : qualifiedName.substring(0, namespace);
     }
 
     private static void validateNegativeCacheTtl(
