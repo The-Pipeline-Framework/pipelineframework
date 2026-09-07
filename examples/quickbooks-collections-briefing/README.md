@@ -78,7 +78,7 @@ export QUICKBOOKS_MCP_WORKING_DIRECTORY=/absolute/path/to/quickbooks-online-mcp-
 ./mvnw -pl examples/quickbooks-collections-briefing -am verify \
   -Dmaven.repo.local="$PWD/.m2/repository"
 
-./mvnw -pl examples/quickbooks-collections-briefing/app quarkus:run \
+./mvnw -pl examples/quickbooks-collections-briefing/app -am quarkus:run \
   -Dquarkus.args="2026-09-07" \
   -Dmaven.repo.local="$PWD/.m2/repository"
 ```

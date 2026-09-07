@@ -1,6 +1,7 @@
 package org.pipelineframework.examples.quickbooks;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 import io.quarkus.runtime.QuarkusApplication;
@@ -38,7 +39,13 @@ public class QuickBooksCollectionsDemo implements QuarkusApplication {
 
     @Override
     public int run(String... args) {
-        String reportDate = args.length == 0 ? LocalDate.now().toString() : args[0];
+        final String reportDate;
+        try {
+            reportDate = (args.length == 0 ? LocalDate.now() : LocalDate.parse(args[0])).toString();
+        } catch (DateTimeParseException invalidDate) {
+            System.err.println("report date must use YYYY-MM-DD");
+            return 2;
+        }
         var request = new QuickBooksAgedReceivablesRequest(new QuickBooksAgedReceivablesRequestParams(
             CanonicalFieldValue.of(new QuickBooksAgedReceivablesRequestParamsAgingMethodValue("Report_Date")),
             CanonicalFieldValue.absent(), CanonicalFieldValue.absent(), CanonicalFieldValue.of(reportDate)));
