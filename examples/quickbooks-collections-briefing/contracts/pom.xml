@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.pipelineframework</groupId>
+        <artifactId>pipeline-framework-root</artifactId>
+        <version>26.9.2-SNAPSHOT</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+    <artifactId>quickbooks-collections-contracts</artifactId>
+    <name>QuickBooks Collections Imported Contracts</name>
+    <description>Reviewed, immutable MCP import artifacts for the QuickBooks collections example.</description>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>connector-mcp-maven-plugin</artifactId>
+                <version>${project.version}</version>
+                <configuration>
+                    <transport>stdio</transport>
+                    <command>node</command>
+                    <arguments><argument>${quickbooks.mcp.server}</argument></arguments>
+                    <environment>
+                        <QUICKBOOKS_CLIENT_ID>QUICKBOOKS_CLIENT_ID</QUICKBOOKS_CLIENT_ID>
+                        <QUICKBOOKS_CLIENT_SECRET>QUICKBOOKS_CLIENT_SECRET</QUICKBOOKS_CLIENT_SECRET>
+                        <QUICKBOOKS_REFRESH_TOKEN>QUICKBOOKS_REFRESH_TOKEN</QUICKBOOKS_REFRESH_TOKEN>
+                        <QUICKBOOKS_REALM_ID>QUICKBOOKS_REALM_ID</QUICKBOOKS_REALM_ID>
+                        <QUICKBOOKS_ENVIRONMENT>QUICKBOOKS_ENVIRONMENT</QUICKBOOKS_ENVIRONMENT>
+                    </environment>
+                    <tools>
+                        <tool>
+                            <mcpName>get_aged_receivables</mcpName>
+                            <operation>quickbooks.receivables.aged</operation>
+                            <kind>query</kind>
+                            <majorVersion>1</majorVersion>
+                            <inputType>QuickBooksAgedReceivablesRequest</inputType>
+                            <includeFields>
+                                <field>params.report_date</field>
+                                <field>params.aging_method</field>
+                                <field>params.days_per_aging_period</field>
+                                <field>params.num_periods</field>
+                            </includeFields>
+                        </tool>
+                    </tools>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

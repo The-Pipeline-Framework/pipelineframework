@@ -1,0 +1,58 @@
+version: 3
+appName: QuickBooks Collections Briefing
+basePackage: org.pipelineframework.examples.quickbooks
+transport: LOCAL
+platform: COMPUTE
+contract:
+  input: <mcp.client.QuickBooksAgedReceivablesRequest>
+  output: CollectionsBriefing
+
+connectors:
+  quickbooks:
+    provider: mcp.client
+    version: 1
+    config:
+      # Defined by quickbooks.connection.reference in application.properties.
+      connection: quickbooks-sandbox
+
+types:
+  CollectionAccount:
+    fields:
+      - [customer, string]
+      - [current, decimal]
+      - [days1To30, decimal]
+      - [days31To60, decimal]
+      - [days61To90, decimal]
+      - [over90, decimal]
+      - [total, decimal]
+  CollectionsBriefing:
+    fields:
+      - [reportDate, string]
+      - [currency, string]
+      - [totalOutstanding, decimal]
+      - [overdueOutstanding, decimal]
+      - [headline, string]
+      - name: accounts
+        repeated: CollectionAccount
+
+steps:
+  - name: Read aged receivables
+    kind: query
+    cardinality: ONE_TO_ONE
+    input: <mcp.client.QuickBooksAgedReceivablesRequest>
+    output: <tpf.connector.JsonPayload>
+    using: quickbooks
+    operation: quickbooks.receivables.aged
+    operationVersion: 1
+    java:
+      input: org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequest
+      output: org.pipelineframework.connector.JsonPayload
+  - name: Prepare collections briefing
+    service: org.pipelineframework.examples.quickbooks.AgedReceivablesInterpreterService
+    cardinality: ONE_TO_ONE
+    input: <tpf.connector.JsonPayload>
+    output: CollectionsBriefing
+    terminal: true
+    java:
+      input: org.pipelineframework.connector.JsonPayload
+      output: org.pipelineframework.examples.quickbooks.domain.CollectionsBriefing

@@ -275,13 +275,8 @@ jobs:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
-  e2e-csv-tempo-verification:
-    name: CSV Tempo Verification E2E
-    needs: bootstrap
-    uses: ./.github/workflows/e2e-csv-tempo-verification.yml
-    with:
-      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
-    secrets: inherit
+  # Tempo verification runs after merge from ci-e2e-matrix.yml so its
+  # registry-heavy image build does not gate pull requests.
 
   e2e-search-lambda:
     name: Search Lambda Smoke
