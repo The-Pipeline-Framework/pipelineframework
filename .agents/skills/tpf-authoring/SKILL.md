@@ -7,7 +7,7 @@ description: Design, author, or migrate applications built with The Pipeline Fra
 
 Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation, a support matrix, or guidance for maintaining TPF itself.
 
-> This Skill defines architectural priors. Version-matched framework source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing an application workaround.
+This Skill defines architectural priors. Framework source, compiler behavior, focused tests, and documentation must match the application's exact pinned TPF release before they are used as evidence of syntax or capability. Do not infer support from newer `main`-branch material; verify release alignment before inventing an application workaround.
 
 ## The TPF shape
 
@@ -99,13 +99,20 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 
 Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
 
-Use the TPF Author MCP tools `tpf_versions` to confirm that the
-application's exact pinned TPF release is supported, then use version-exact
-`tpf_search`, `tpf_context`, and `tpf_source` evidence. Never substitute `latest`, a
-different patch, or a different minor line. If the tools or pinned release are not
-available, search the matching tagged documentation, source, examples, and tests
-directly. The Skill remains the architectural prior; MCP results supply release-exact
-evidence rather than replacing that model.
+## Repository reconnaissance
+
+Use GitNexus as the first-pass structural index of canonical TPF `main` when repository evidence is needed.
+
+- Use natural-language `query` to locate candidate symbols or implementations.
+- Once candidates are known, prefer structural operations such as symbol context, implementations, callers/callees, imports, impact analysis, or targeted graph traversal.
+- Do not repeatedly reformulate abstract natural-language searches when results are noisy; narrow to concrete symbols and traverse from them.
+- For new functionality, search for the closest existing TPF precedent before designing a new pattern.
+- Treat GitNexus relationships as structural evidence, not as authority for TPF semantics. DI, interfaces, generated code, reflection, and other dynamic boundaries may make graph results incomplete.
+- GitNexus represents indexed canonical `main`; inspect the current worktree directly for unmerged or uncommitted changes.
+
+The Skill remains the architectural prior.
+
+Confirm the application's exact pinned TPF release before relying on a capability. Use framework source, compiler behavior, focused tests, and documentation from that same release; never substitute `main`, a different patch, or a different minor line. If matching released material is unavailable, report the evidence gap rather than inventing application infrastructure.
 
 Implementation classes prove capability; they do not define application architecture. Prefer canonical authoring docs/ADRs/DSL examples for design.
 
@@ -114,7 +121,7 @@ Implementation classes prove capability; they do not define application architec
 1. Identify the data, effect, observation, and suspension involved.
 2. Classify each dependency using the TPF shape above.
 3. Inspect `pipeline.yaml` and the current typed state first.
-4. Load only the relevant reference; establish the application's pinned TPF version, then search matching-version MCP evidence when available and matching-version docs/source/examples/tests for the primitive.
+4. Load only the relevant reference; establish the application's pinned TPF release, then verify the primitive against matching-release framework source, compiler behavior, documentation, and focused tests.
 5. Draft or update `pipeline.yaml` and canonical types before inventing infrastructure.
 6. Compile and inspect generated diagnostics and artifacts.
 7. Only then write the smallest authored Java needed.

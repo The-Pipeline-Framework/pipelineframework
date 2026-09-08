@@ -4,6 +4,21 @@ Read this reference only for external observations/effects/suspension, connector
 aspects, persistence/replay authorities, resilience, retry/DLQ, or checkpoint handoff.
 Verify exact configuration and release support in current docs/source/tests.
 
+## Execution boundary
+
+`PipelineExecutionService` is an external application-entry boundary, not an orchestration primitive.
+
+- Call it only to start or resume a root TPF execution from an external application boundary.
+- Code already participating in a TPF execution must not call `PipelineExecutionService` to continue, decompose, dispatch, persist, or otherwise re-enter TPF.
+- Express internal work through pipeline composition: steps, Query, Command, Await, Expansion, nested pipelines, bounded recursion, and configured aspects as appropriate.
+- Do not introduce application services, repositories, providers, or generic executors merely to orchestrate work that belongs in `pipeline.yaml`.
+
+When reviewing an authored design, ask:
+- What is the external stimulus that starts each root execution?
+- Which work is nested/composed inside that execution?
+- Is anything internally re-entering `PipelineExecutionService`?
+- Is persistence being implemented through the intended TPF mechanism rather than application orchestration?
+
 ## Query, Command, and Await
 
 Use Query for a genuinely new, current, or historical external observation: a database

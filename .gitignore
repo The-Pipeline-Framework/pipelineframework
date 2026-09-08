@@ -1,6 +1,3 @@
-### Repowise
-.repowise/
-
 ### IntelliJ IDEA ###
 out/
 *.iml
@@ -89,3 +86,9 @@ __pycache__/
 
 # Codex
 .codex/
+
+### Repowise
+.repowise/
+
+### Gitnexus
+.gitnexus/
