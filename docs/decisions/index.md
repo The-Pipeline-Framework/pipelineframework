@@ -43,7 +43,7 @@ authoritative for exact syntax and release support.
 
 ## Maintenance
 
-These files use the Nygard/MADR sections understood by Repowise: `Context`,
+These files use the Nygard/MADR sections understood by GitNexus: `Context`,
 `Decision`, `Rationale`, and `Consequences`, with an explicit status. Keep one semantic
 choice per file and name the affected repository areas concretely.
 
@@ -51,11 +51,12 @@ choice per file and name the affected repository areas concretely.
   `deprecated` means it must not guide new work.
 - Clarify an accepted decision in place when its meaning is unchanged.
 - When direction changes, add a successor ADR, deprecate the old record, and record the
-  supersession in Repowise rather than erasing the history.
+  supersession in GitNexus rather than erasing the history.
 - Update the relevant design/develop/deploy page and focused tests when exact behaviour
   changes. Do not put transient support matrices into these ADRs.
-- Run `repowise update`, then inspect `repowise decision list --status all` and
-  `repowise decision health` after meaningful decision changes.
+- Refresh GitNexus with `node .gitnexus/run.cjs analyze --index-only`, then run
+  `node .gitnexus/run.cjs detect-changes --scope compare --base-ref main --repo .`
+  after meaningful decision changes.
 
-Repowise is a decision index, not architectural authority. Confirm extracted or
+GitNexus is a decision index, not architectural authority. Confirm extracted or
 historical records against current repository reality before relying on them.

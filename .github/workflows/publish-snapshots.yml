@@ -64,15 +64,3 @@ jobs:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Publish exact-version snapshot author MCP knowledge
-        env:
-          GH_TOKEN: ${{ secrets.TPF_MCP_DISPATCH_TOKEN }}
-          VERSION: ${{ steps.snapshot.outputs.version }}
-          SNAPSHOT_COMMIT: ${{ steps.snapshot.outputs.commit }}
-        run: |
-          jq -n \
-            --arg version "$VERSION" \
-            --arg framework_commit "$SNAPSHOT_COMMIT" \
-            '{ref:"main",inputs:{kind:"snapshot",version:$version,framework_commit:$framework_commit}}' \
-            | gh api --method POST repos/The-Pipeline-Framework/tpf-mcp-bridge/actions/workflows/publish-knowledge.yml/dispatches --input -
