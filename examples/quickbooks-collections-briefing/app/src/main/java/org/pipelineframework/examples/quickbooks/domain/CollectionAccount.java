@@ -5,6 +5,10 @@ import java.util.Objects;
 
 /** One customer row from the canonical collections briefing. */
 public record CollectionAccount(
+    String reportDate,
+    String currency,
+    boolean accountPresent,
+    String customerId,
     String customer,
     BigDecimal current,
     BigDecimal days1To30,
@@ -14,6 +18,9 @@ public record CollectionAccount(
     BigDecimal total
 ) {
     public CollectionAccount {
+        Objects.requireNonNull(reportDate, "reportDate");
+        Objects.requireNonNull(currency, "currency");
+        Objects.requireNonNull(customerId, "customerId");
         Objects.requireNonNull(customer, "customer");
         Objects.requireNonNull(current, "current");
         Objects.requireNonNull(days1To30, "days1To30");

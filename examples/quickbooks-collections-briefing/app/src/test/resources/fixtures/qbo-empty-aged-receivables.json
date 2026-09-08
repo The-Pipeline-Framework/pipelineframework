@@ -1,0 +1,32 @@
+{
+  "Header": {
+    "ReportName": "AgedReceivables",
+    "EndPeriod": "2026-09-08",
+    "SummarizeColumnsBy": "Total",
+    "Currency": "GBP",
+    "Option": [
+      {
+        "Name": "report_date",
+        "Value": "2026-09-08"
+      },
+      {
+        "Name": "NoReportData",
+        "Value": "true"
+      }
+    ]
+  },
+  "Columns": {
+    "Column": [
+      { "ColTitle": "Customer" },
+      { "ColTitle": "Current" },
+      { "ColTitle": "1 - 30" },
+      { "ColTitle": "31 - 60" },
+      { "ColTitle": "61 - 90" },
+      { "ColTitle": "91 and over" },
+      { "ColTitle": "Total" }
+    ]
+  },
+  "Rows": {
+    "Row": []
+  }
+}

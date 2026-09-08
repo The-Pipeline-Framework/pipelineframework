@@ -6,33 +6,23 @@ import java.util.UUID;
 
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
-import jakarta.enterprise.inject.Any;
-import jakarta.enterprise.inject.Instance;
+import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 
-import org.pipelineframework.connector.JsonPayload;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.examples.quickbooks.domain.CollectionsBriefing;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequest;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequestParams;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequestParamsAgingMethodValue;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
-import org.pipelineframework.invocation.PipelineInvocationRuntime;
-import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.type.CanonicalFieldValue;
 
 /** Small command-mode shell for presenting the example against a QuickBooks sandbox. */
 @QuarkusMain
 public class QuickBooksCollectionsDemo implements QuarkusApplication {
     @Inject
-    @Any
-    Instance<StepOneToOne<QuickBooksAgedReceivablesRequest, JsonPayload>> querySteps;
-
-    @Inject
-    PipelineInvocationRuntime invocationRuntime;
-
-    @Inject
-    AgedReceivablesInterpreterService interpreter;
+    PipelineExecutionService executionService;
 
     @Inject
     QuickBooksMcpConnectionResolver connectionResolver;
@@ -55,10 +45,10 @@ public class QuickBooksCollectionsDemo implements QuarkusApplication {
             CollectionsBriefing briefing = invoke(request);
             System.out.println();
             System.out.println(briefing.headline());
-            briefing.accounts().forEach(account -> System.out.printf(
-                "  %-32s total %s %s, overdue %s %s%n",
-                account.customer(), briefing.currency(), account.total(), briefing.currency(),
-                account.total().subtract(account.current())));
+            briefing.actions().forEach(action -> System.out.printf(
+                "  %-8s %-32s overdue %s %s%n           %s%n",
+                action.priority(), action.account().customer(), briefing.currency(), action.overdue(),
+                action.recommendedAction()));
             return 0;
         } finally {
             PipelineExecutionContextHolder.clear();
@@ -66,10 +56,7 @@ public class QuickBooksCollectionsDemo implements QuarkusApplication {
     }
 
     private CollectionsBriefing invoke(QuickBooksAgedReceivablesRequest request) {
-        StepOneToOne<QuickBooksAgedReceivablesRequest, JsonPayload> query = querySteps.stream()
-            .findFirst().orElseThrow(() -> new IllegalStateException("generated QuickBooks Query step is unavailable"));
-        JsonPayload payload = invocationRuntime.invokeStepUni(null, null, () -> query.applyOneToOne(request))
+        return executionService.<CollectionsBriefing>executePipelineUnary(Uni.createFrom().item(request))
             .await().indefinitely();
-        return interpreter.process(payload).await().indefinitely();
     }
 }

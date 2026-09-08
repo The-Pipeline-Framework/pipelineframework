@@ -10,7 +10,9 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -18,8 +20,6 @@ import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.enterprise.inject.Any;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,17 +27,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
 
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.connector.mcp.McpClientConnection;
-import org.pipelineframework.connector.JsonPayload;
 import org.pipelineframework.examples.quickbooks.domain.CollectionsBriefing;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequest;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequestParams;
 import org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequestParamsAgingMethodValue;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
-import org.pipelineframework.invocation.PipelineInvocationRuntime;
-import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.type.CanonicalFieldValue;
+import io.smallrye.mutiny.Uni;
 
 @QuarkusTest
 class QuickBooksCollectionsBriefingIT {
@@ -45,14 +44,7 @@ class QuickBooksCollectionsBriefingIT {
     QuickBooksMcpConnectionResolver connectionResolver;
 
     @Inject
-    @Any
-    Instance<StepOneToOne<QuickBooksAgedReceivablesRequest, JsonPayload>> querySteps;
-
-    @Inject
-    PipelineInvocationRuntime invocationRuntime;
-
-    @Inject
-    AgedReceivablesInterpreterService interpreter;
+    PipelineExecutionService executionService;
 
     private McpAsyncClient client;
     private String executionId;
@@ -91,8 +83,11 @@ class QuickBooksCollectionsBriefingIT {
         CollectionsBriefing replay = invoke(request);
 
         assertEquals(first, replay);
-        assertEquals("Cafe One", first.accounts().getFirst().customer());
-        assertTrue(first.headline().contains("First call: Cafe One"), first.headline());
+        assertEquals(4, first.actions().size());
+        assertEquals("Abercrombie International Group", first.actions().getFirst().account().customer());
+        assertEquals("CRITICAL", first.actions().getFirst().priority());
+        assertEquals(2, first.priorityAccounts());
+        assertTrue(first.headline().contains("2 need priority contact"), first.headline());
         ArgumentCaptor<McpSchema.CallToolRequest> dispatched = ArgumentCaptor.forClass(McpSchema.CallToolRequest.class);
         verify(client, times(1)).callTool(dispatched.capture());
         assertEquals(Map.of("params", Map.of("aging_method", "Report_Date")), dispatched.getValue().arguments());
@@ -116,21 +111,17 @@ class QuickBooksCollectionsBriefingIT {
     }
 
     private CollectionsBriefing invoke(QuickBooksAgedReceivablesRequest request) {
-        StepOneToOne<QuickBooksAgedReceivablesRequest, JsonPayload> query = querySteps.stream()
-            .findFirst().orElseThrow(() -> new AssertionError("generated QuickBooks Query step bean not found"));
-        JsonPayload payload = invocationRuntime.invokeStepUni(null, null, () -> query.applyOneToOne(request))
+        return executionService.<CollectionsBriefing>executePipelineUnary(Uni.createFrom().item(request))
             .await().indefinitely();
-        return interpreter.process(payload).await().indefinitely();
     }
 
-    private static String reportJson() {
-        return """
-            {"Header":{"EndPeriod":"2026-09-07","Currency":"USD"},
-             "Columns":{"Column":[{"ColTitle":""},{"ColTitle":"Current"},{"ColTitle":"1 - 30"},
-               {"ColTitle":"31 - 60"},{"ColTitle":"61 - 90"},{"ColTitle":"91 and over"},{"ColTitle":"Total"}]},
-             "Rows":{"Row":[{"ColData":[{"value":"Cafe One"},{"value":"10"},{"value":"20"},
-               {"value":"30"},{"value":"40"},{"value":"50"},{"value":"150"}]}]}}
-            """;
+    static String reportJson() {
+        try (var input = Objects.requireNonNull(QuickBooksCollectionsBriefingIT.class.getResourceAsStream(
+            "/fixtures/qbo-sandbox-aged-receivables-2026-09-08.json"))) {
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("sandbox receivables fixture is not readable", failure);
+        }
     }
 
     private static String metadata(String name) throws Exception {
