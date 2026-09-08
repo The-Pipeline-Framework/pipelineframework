@@ -589,11 +589,63 @@ runtime configuration. Query mappings contain only `using`. Command mappings mus
 authority choices. The selected provider operation must match the Block step's kind, provider and
 operation major versions, cardinality, and canonical input/output Java contracts exactly.
 
+An imported operation-first Query may also expose a finite callable catalogue through requirements
+declared by the same Block definition:
+
+```yaml
+- name: Decide
+  kind: query
+  using: decision.model
+  operation: decide
+  operationVersion: 1
+  input: DecisionState
+  output: Decision
+  config:
+    instructions: Select one declared callable or complete.
+    modelInputExcludes:
+      - state.effectScope
+      - nextEffectKey
+    callContext:
+      state: state
+  callables:
+    lookup:
+      using: domain.read
+      operation: lookup
+      operationVersion: 1
+      kind: query
+      input: LookupRequest
+    update:
+      using: domain.write
+      operation: update
+      operationVersion: 1
+      kind: command
+      input: UpdateRequest
+      trustedArguments:
+        effectKey: nextEffectKey
+
+- name: Invoke proposal
+  input: <tpf.llm.AgentCall>
+  output: <tpf.connector.OperationObservation>
+  operation: { mode: dynamic, from: Decide }
+```
+
+`modelInputExcludes`, `callContext`, and `trustedArguments` are independent projections from the
+original typed Query input. Paths traverse record fields only. Excluded values remain available to
+context and trusted-argument extraction. Trusted targets must be top-level fields of the callable
+input, are removed from the model tool schema, and cause rejection if the model nevertheless returns
+them. TPF merges trusted values before validating and materializing the complete canonical callable
+input.
+
+The dynamic step may reference only a catalogue source in the same definition. The linker resolves
+every alias and rewrites every requirement to the application's binding. Generated adapters embed
+native dynamic descriptors and execute through ordinary Query/Command support; neither the runtime
+nor the model discovers or reinterprets authority.
+
 Blocks still cannot package connector bindings, legacy `query:` or `command:` declarations, inline
-connectors, Await, checkpoint handoff, remote Operators/delegates, callables, or dynamic-operation
-steps. Application bindings retain endpoint, credentials, tenant/account selection, authorization,
-and Command policy. Imported Query and Command steps normalize to the same descriptors and runtime
-support used by local steps; there is no Block execution subsystem.
+connectors, Await, checkpoint handoff, remote Operators/delegates, or runtime/dynamic catalogue
+discovery. Application bindings retain endpoint, credentials, tenant/account selection,
+authorization, and Command policy. Imported Query, Command, and dynamic operation steps normalize to
+the same descriptors and runtime support used by local steps; there is no Block execution subsystem.
 
 The [GraphQL Connector and Blocks](./extension/graphql-connector.md) proof applies this split to a
 persisted Query and Mutation catalogue while leaving documents, connections, tenant selection, and

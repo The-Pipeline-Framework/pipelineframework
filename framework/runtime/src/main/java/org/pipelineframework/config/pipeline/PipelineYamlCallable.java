@@ -16,6 +16,7 @@ public record PipelineYamlCallable(
     ConnectorOperationKind kind,
     int operationVersion,
     String input,
+    Map<String, String> trustedArguments,
     Optional<String> commandIdGenerator,
     String duplicatePolicy,
     Map<String, Object> config,
@@ -33,6 +34,12 @@ public record PipelineYamlCallable(
         if (input.isEmpty()) {
             throw new IllegalArgumentException("callable input contract must not be blank");
         }
+        trustedArguments = Map.copyOf(Objects.requireNonNull(
+            trustedArguments, "callable trusted arguments must not be null"));
+        trustedArguments.forEach((target, source) -> {
+            requireFieldName(target, "trusted argument target");
+            requireFieldPath(source, "trusted argument source");
+        });
         commandIdGenerator = Objects.requireNonNull(
             commandIdGenerator, "callable command ID generator must not be null").map(String::trim)
             .filter(value -> !value.isEmpty());
@@ -55,7 +62,8 @@ public record PipelineYamlCallable(
         int operationVersion,
         String input
     ) {
-        this(alias, using, operation, kind, operationVersion, input, Optional.empty(), "RETURN_RECORDED", Map.of(), Map.of());
+        this(alias, using, operation, kind, operationVersion, input, Map.of(), Optional.empty(),
+            "RETURN_RECORDED", Map.of(), Map.of());
     }
 
     public static ConnectorOperationKind parseKind(String value) {
@@ -85,6 +93,22 @@ public record PipelineYamlCallable(
         String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
         if (!normalized.matches("[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*")) {
             throw new IllegalArgumentException(label + " must be a lowercase dotted name: " + normalized);
+        }
+        return normalized;
+    }
+
+    private static String requireFieldName(String value, String label) {
+        String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
+        if (!normalized.matches("[A-Za-z][A-Za-z0-9]*")) {
+            throw new IllegalArgumentException(label + " must be a top-level record field: " + normalized);
+        }
+        return normalized;
+    }
+
+    private static String requireFieldPath(String value, String label) {
+        String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
+        if (!normalized.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
+            throw new IllegalArgumentException(label + " must be a dotted record field path: " + normalized);
         }
         return normalized;
     }

@@ -31,6 +31,19 @@ final class LlmModelInput {
         return json.writeValueAsString(root);
     }
 
+    String selectedFieldsJson(Object input, Map<String, String> selectedPaths) throws Exception {
+        JsonNode root = json.valueToTree(input);
+        ObjectNode selected = json.createObjectNode();
+        new java.util.TreeMap<>(selectedPaths).forEach((target, source) -> {
+            JsonNode value = readJsonPath(root, source);
+            if (value.isMissingNode()) {
+                throw new IllegalArgumentException("typed input path is absent at runtime: " + source);
+            }
+            selected.set(target, value.deepCopy());
+        });
+        return json.writeValueAsString(selected);
+    }
+
     List<PayloadReference> payloadReferences(Object input, List<String> excludedPaths) {
         LinkedHashSet<PayloadReference> references = new LinkedHashSet<>();
         collectPayloadReferences(input, "", Set.copyOf(excludedPaths), references,
@@ -50,6 +63,17 @@ final class LlmModelInput {
         if (parent instanceof ObjectNode object) {
             object.remove(components[components.length - 1]);
         }
+    }
+
+    private static JsonNode readJsonPath(JsonNode root, String path) {
+        JsonNode value = root;
+        for (String component : path.split("\\.")) {
+            value = value.path(component);
+            if (value.isMissingNode()) {
+                return value;
+            }
+        }
+        return value;
     }
 
     private static void collectPayloadReferences(

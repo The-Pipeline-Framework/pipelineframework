@@ -1,0 +1,113 @@
+version: 3
+
+types:
+  AgentState:
+    java: org.pipelineframework.examples.agentproof.domain.AgentState
+    fields:
+      - [effectScope, string]
+      - [nextEffectKey, string]
+      - [evidence, string]
+      - [phase, string]
+  ApplicationResult:
+    java: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+    fields:
+      - [summary, string]
+      - [turns, int32]
+  LookupArguments:
+    java: org.pipelineframework.examples.agentproof.domain.LookupArguments
+    fields:
+      - [subject, string]
+  LookupResult:
+    java: org.pipelineframework.examples.agentproof.domain.LookupResult
+    fields:
+      - [evidence, string]
+  RecordArguments:
+    java: org.pipelineframework.examples.agentproof.domain.RecordArguments
+    fields:
+      - [action, string]
+      - [effectKey, string]
+  RecordResult:
+    java: org.pipelineframework.examples.agentproof.domain.RecordResult
+    fields:
+      - [confirmation, string]
+  AgentDecision:
+    java: org.pipelineframework.examples.agentproof.domain.AgentDecision
+    variants:
+      call: <tpf.llm.AgentCall>
+      complete: ApplicationResult
+
+pipelines:
+  callable-loop-proof:
+    input: AgentState
+    output: ApplicationResult
+    steps:
+      - name: Decide
+        kind: query
+        cardinality: ONE_TO_ONE
+        input: AgentState
+        output: AgentDecision
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentState
+          output: org.pipelineframework.examples.agentproof.domain.AgentDecision
+        using: decision.model
+        operation: decide
+        operationVersion: 1
+        config:
+          instructions: Select exactly one release-pinned alternative from the supplied AgentState.
+          modelInputExcludes:
+            - effectScope
+            - nextEffectKey
+          callContext:
+            state: effectScope
+            evidence: evidence
+            phase: phase
+            nextEffectKey: nextEffectKey
+        callables:
+          lookup:
+            using: proof.read
+            operation: evidence.lookup
+            operationVersion: 1
+            kind: query
+            input: LookupArguments
+          record:
+            using: proof.write
+            operation: evidence.record
+            operationVersion: 1
+            kind: command
+            input: RecordArguments
+            trustedArguments:
+              effectKey: nextEffectKey
+            config: { label: proof }
+      - name: Invoke proposal
+        cardinality: ONE_TO_ONE
+        input: <tpf.llm.AgentCall>
+        output: <tpf.connector.OperationObservation>
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentCall
+          output: org.pipelineframework.examples.agentproof.domain.OperationObservation
+        operation: { mode: dynamic, from: Decide }
+      - name: Reduce observation
+        service: org.pipelineframework.examples.agentproof.ObservationReducerService
+        cardinality: ONE_TO_ONE
+        input: <tpf.connector.OperationObservation>
+        output: AgentState
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.OperationObservation
+          output: org.pipelineframework.examples.agentproof.domain.AgentState
+      - name: Recur
+        pipeline: callable-loop-proof
+        cardinality: ONE_TO_ONE
+        input: AgentState
+        output: ApplicationResult
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.AgentState
+          output: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+      - name: Finish
+        service: org.pipelineframework.examples.agentproof.FinishService
+        cardinality: ONE_TO_ONE
+        input: ApplicationResult
+        output: ApplicationResult
+        terminal: true
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.ApplicationResult
+          output: org.pipelineframework.examples.agentproof.domain.ApplicationResult

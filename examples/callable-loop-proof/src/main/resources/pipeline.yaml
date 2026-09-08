@@ -1,0 +1,39 @@
+version: 3
+appName: Callable Loop Proof
+basePackage: org.pipelineframework.examples.agentproof
+transport: LOCAL
+platform: COMPUTE
+contract: { input: AgentState, output: ApplicationResult }
+
+connectors:
+  model:
+    provider: proof.llm
+    version: 1
+    config: { model: deterministic-proof }
+  capabilities:
+    provider: proof.capabilities
+    version: 1
+    config: { fixture: offline }
+
+blockBindings:
+  org.pipelineframework.examples.callable/callable-loop-proof:
+    decision.model:
+      using: model
+    proof.read:
+      using: capabilities
+    proof.write:
+      using: capabilities
+      commandIdGenerator: org.pipelineframework.examples.agentproof.RecordCommandIdGenerator
+      duplicatePolicy: RETURN_RECORDED
+      policy: {}
+
+steps:
+  - name: Call callable loop proof
+    pipeline: callable-loop-proof
+    cardinality: ONE_TO_ONE
+    input: AgentState
+    output: ApplicationResult
+    terminal: true
+    java:
+      input: org.pipelineframework.examples.agentproof.domain.AgentState
+      output: org.pipelineframework.examples.agentproof.domain.ApplicationResult

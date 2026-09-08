@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.LinkedHashMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assumptions;
@@ -125,6 +126,125 @@ class BlockDefinitionImporterTest {
             assertEquals("primary", requirement.binding());
             assertEquals("acme.operations", requirement.provider());
             assertEquals(64, requirement.connectorConfigurationDigest().length());
+        }
+    }
+
+    @Test void linksImportedCallableCatalogueAndInjectsOnlyApplicationOwnedCommandAuthority() throws Exception {
+        Path dependency = callableBlockDependency();
+
+        try (URLClassLoader loader = loader(dependency);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader)
+                 .importInto(application(callableBlockApplication()))) {
+            var yaml = new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader().load(imported.configPath());
+            var steps = yaml.localPipelines().get("org.example.callable/callable-loop");
+            var decide = steps.stream().filter(step -> step.name().equals("Decide")).findFirst().orElseThrow();
+            var dispatch = steps.stream().filter(step -> step.name().equals("Dispatch")).findFirst().orElseThrow();
+
+            assertEquals("primary", decide.operationSelection().orElseThrow().using());
+            assertEquals("Decide", dispatch.dynamicOperation().orElseThrow().from());
+            assertEquals("primary", decide.callables().get("lookup").using());
+            var update = decide.callables().get("update");
+            assertEquals("primary", update.using());
+            assertEquals(Map.of("effectKey", "nextEffectKey"), update.trustedArguments());
+            assertEquals("com.example.EffectKeyCommandId", update.commandIdGenerator().orElseThrow());
+            assertEquals("RETURN_RECORDED", update.duplicatePolicy());
+            assertEquals("AUTOMATED", update.policy().get("requiredExecutionPosture"));
+
+            var provenance = imported.definitions().getFirst();
+            assertEquals(2, provenance.resolvedCallables().size());
+            assertEquals(java.util.List.of("lookup", "update"), provenance.resolvedCallables().stream()
+                .map(ImportedPipelineDefinition.ResolvedBlockCallable::alias).toList());
+            assertEquals("domain.write", provenance.resolvedCallables().getLast().requirement());
+            assertEquals(64, provenance.resolvedCallables().getLast().connectorConfigurationDigest().length());
+        }
+    }
+
+    @Test void rejectsPackageOwnedCallableCommandAuthority() throws Exception {
+        Path dependency = callableBlockDependency();
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition).replace(
+            "trustedArguments: { effectKey: nextEffectKey }",
+            "trustedArguments: { effectKey: nextEffectKey }\n"
+                + "            duplicatePolicy: FAIL"));
+
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class, () -> new BlockDefinitionImporter(loader)
+                .importInto(application(callableBlockApplication())));
+            assertTrue(failure.getMessage().contains("must not declare application-owned Command field"),
+                failure.getMessage());
+        }
+    }
+
+    @Test void rejectsCallableTargetsThatBypassBlockRequirements() throws Exception {
+        Path dependency = callableBlockDependency();
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition).replace(
+            "using: domain.read",
+            "using: primary"));
+
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class, () -> new BlockDefinitionImporter(loader)
+                .importInto(application(callableBlockApplication())));
+            assertTrue(failure.getMessage().contains("undeclared requirement 'primary'"), failure.getMessage());
+        }
+    }
+
+    @Test void rejectsDuplicateCallableRequirementAndOperationTargets() throws Exception {
+        Path dependency = callableBlockDependency();
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition)
+            .replace("using: domain.write", "using: domain.read")
+            .replace("operation: update", "operation: lookup")
+            .replace("kind: command", "kind: query"));
+
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class, () -> new BlockDefinitionImporter(loader)
+                .importInto(application(callableBlockApplication())));
+            assertTrue(failure.getMessage().contains("duplicate requirement/operation target"), failure.getMessage());
+        }
+    }
+
+    @Test void rejectsDistinctRequirementsThatResolveToTheSameBindingAndOperation() throws Exception {
+        Path dependency = callableBlockDependency();
+        Path manifest = dependency.resolve("META-INF/pipeline/blocks.json");
+        Files.writeString(manifest, Files.readString(manifest)
+            .replace("\"domain.write\":{\"kind\":\"COMMAND\"}",
+                "\"domain.write\":{\"kind\":\"QUERY\"}"));
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition)
+            .replace("operation: update", "operation: lookup")
+            .replace("kind: command", "kind: query"));
+        String application = callableBlockApplication().replace("""
+                domain.write:
+                  using: primary
+                  commandIdGenerator: com.example.EffectKeyCommandId
+                  duplicatePolicy: RETURN_RECORDED
+                  policy:
+                    requiredExecutionPosture: AUTOMATED
+                    minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+            """, """
+                domain.write: { using: primary }
+            """);
+
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class, () -> new BlockDefinitionImporter(loader)
+                .importInto(application(application)));
+            assertTrue(failure.getMessage().contains("duplicate binding/operation target 'primary/lookup'"),
+                failure.getMessage());
+        }
+    }
+
+    @Test void rejectsDynamicOperationSourcesOutsideTheImportedDefinition() throws Exception {
+        Path dependency = callableBlockDependency();
+        Path definition = dependency.resolve("META-INF/pipeline/definition.yaml");
+        Files.writeString(definition, Files.readString(definition).replace(
+            "operation: { mode: dynamic, from: Decide }",
+            "operation: { mode: dynamic, from: OtherBlock.Decide }"));
+
+        try (URLClassLoader loader = loader(dependency)) {
+            var failure = assertThrows(IllegalStateException.class, () -> new BlockDefinitionImporter(loader)
+                .importInto(application(callableBlockApplication())));
+            assertTrue(failure.getMessage().contains("same definition"), failure.getMessage());
         }
     }
 
@@ -530,6 +650,83 @@ class BlockDefinitionImporterTest {
         return root;
     }
 
+    private Path callableBlockDependency() throws Exception {
+        Path root = directory.resolve("callable-block");
+        Path metadata = root.resolve("META-INF/pipeline");
+        Files.createDirectories(metadata);
+        Files.writeString(metadata.resolve("blocks.json"), """
+            {"schemaVersion":1,"namespace":"org.example.callable",
+             "artifact":{"groupId":"org.example","artifactId":"callable-block","version":"1.0.0"},
+             "definitions":[{"name":"callable-loop","resource":"META-INF/pipeline/definition.yaml",
+               "requires":{"decision.model":{"kind":"QUERY"},"domain.read":{"kind":"QUERY"},
+                 "domain.write":{"kind":"COMMAND"}}}]}
+            """);
+        Files.writeString(metadata.resolve("definition.yaml"), """
+            version: 3
+            types:
+              AgentState: { java: com.example.AgentState, fields: [[effectScope, string], [nextEffectKey, string]] }
+              Decision: { java: com.example.Decision, fields: [[kind, string]] }
+              AgentCall: { java: com.example.AgentCall, fields: [[binding, string], [operation, string], [argumentsJson, string], [contextJson, string]] }
+              Observation: { java: com.example.Observation, fields: [[status, string]] }
+              LookupRequest: { java: com.example.LookupRequest, fields: [[key, string]] }
+              LookupResult: { java: com.example.LookupResult, fields: [[value, string]] }
+              UpdateRequest: { java: com.example.UpdateRequest, fields: [[effectKey, string]] }
+              UpdateResult: { java: com.example.UpdateResult, fields: [[accepted, boolean]] }
+            pipelines:
+              callable-loop:
+                input: AgentState
+                output: Observation
+                steps:
+                  - name: Decide
+                    kind: query
+                    using: decision.model
+                    operation: decide
+                    operationVersion: 1
+                    input: AgentState
+                    output: Decision
+                    java: { input: com.example.AgentState, output: com.example.Decision }
+                    config:
+                      modelInputExcludes: [effectScope, nextEffectKey]
+                      callContext: { state: effectScope }
+                    callables:
+                      lookup:
+                        using: domain.read
+                        operation: lookup
+                        operationVersion: 1
+                        kind: query
+                        input: LookupRequest
+                      update:
+                        using: domain.write
+                        operation: update
+                        operationVersion: 1
+                        kind: command
+                        input: UpdateRequest
+                        trustedArguments: { effectKey: nextEffectKey }
+                  - name: Dispatch
+                    operation: { mode: dynamic, from: Decide }
+                    input: AgentCall
+                    output: Observation
+                    java: { input: com.example.AgentCall, output: com.example.Observation }
+            """);
+        Files.writeString(metadata.resolve("connector-providers.json"), """
+            {"schemaVersion":4,"providers":[{"id":"acme.operations","version":{"major":1,"minor":0},
+            "configurationSchema":{"id":"acme.operations.binding","version":1,"fields":[
+            {"name":"connection","type":"CONNECTION_REF","required":true}]},
+            "operations":[
+            {"id":"decide","kind":"tpf:query","majorVersion":1,"queryCardinality":"ONE_TO_ONE",
+            "typeContract":{"input":"com.example.AgentState","output":"com.example.Decision"}},
+            {"id":"lookup","kind":"tpf:query","majorVersion":1,"queryCardinality":"ONE_TO_ONE",
+            "typeContract":{"input":"com.example.LookupRequest","output":"com.example.LookupResult"}},
+            {"id":"update","kind":"tpf:command","majorVersion":1,
+            "typeContract":{"input":"com.example.UpdateRequest","output":"com.example.UpdateResult"},
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":false,
+            "reconciliationSupported":false,"executionPosture":"AUTOMATED",
+            "maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED","userConfirmationSupported":false,
+            "durableReferenceKinds":[]}}]}]}
+            """);
+        return root;
+    }
+
     private static String operationBlockApplication(String binding) {
         return """
             version: 3
@@ -563,6 +760,40 @@ class BlockDefinitionImporterTest {
                 output: LookupResult
                 java: { input: com.example.LookupRequest, output: com.example.LookupResult }
             """.formatted(binding, binding);
+    }
+
+    private static String callableBlockApplication() {
+        return """
+            version: 3
+            appName: Callable Consumer
+            basePackage: com.example
+            transport: LOCAL
+            platform: COMPUTE
+            contract: { input: AgentState, output: Observation }
+            connectors:
+              primary:
+                provider: acme.operations
+                version: 1
+                config: { connection: primary-connection }
+            blockBindings:
+              org.example.callable/callable-loop:
+                decision.model: { using: primary }
+                domain.read: { using: primary }
+                domain.write:
+                  using: primary
+                  commandIdGenerator: com.example.EffectKeyCommandId
+                  duplicatePolicy: RETURN_RECORDED
+                  policy:
+                    requiredExecutionPosture: AUTOMATED
+                    minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+            steps:
+              - name: Run callable loop
+                pipeline: callable-loop
+                cardinality: ONE_TO_ONE
+                input: AgentState
+                output: Observation
+                java: { input: com.example.AgentState, output: com.example.Observation }
+            """;
     }
 
     private Path application(String yaml) throws Exception {

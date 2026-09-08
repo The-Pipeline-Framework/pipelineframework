@@ -226,12 +226,18 @@ public record PipelineYamlStep(
         }
         java.util.Map<String, Object> result = new java.util.LinkedHashMap<>(commandConfig);
         java.util.Map<String, Object> callableConfig = new java.util.LinkedHashMap<>();
-        callables.forEach((alias, callable) -> callableConfig.put(alias, java.util.Map.of(
-            "using", callable.using(),
-            "operation", callable.operation(),
-            "kind", callable.kindToken(),
-            "operationVersion", callable.operationVersion(),
-            "input", callable.input())));
+        callables.forEach((alias, callable) -> {
+            java.util.Map<String, Object> descriptor = new java.util.LinkedHashMap<>();
+            descriptor.put("using", callable.using());
+            descriptor.put("operation", callable.operation());
+            descriptor.put("kind", callable.kindToken());
+            descriptor.put("operationVersion", callable.operationVersion());
+            descriptor.put("input", callable.input());
+            if (!callable.trustedArguments().isEmpty()) {
+                descriptor.put("trustedArguments", callable.trustedArguments());
+            }
+            callableConfig.put(alias, java.util.Map.copyOf(descriptor));
+        });
         result.put("callables", java.util.Map.copyOf(callableConfig));
         return java.util.Map.copyOf(result);
     }

@@ -71,6 +71,7 @@ public final class OperationDispatchSupport {
         String binding,
         String operation,
         String argumentsJson,
+        String contextJson,
         Class<O> observationType
     ) {
         Objects.requireNonNull(descriptor, "dispatch descriptor must not be null");
@@ -78,24 +79,30 @@ public final class OperationDispatchSupport {
         DispatchCapability capability = descriptor.require(binding, operation);
         CanonicalTypeCatalogue catalogue = catalogues.apply(observationType);
         final String canonicalArguments;
+        final String canonicalContext;
         final Object input;
         try {
             canonicalArguments = catalogue.validateAndCanonicalize(capability.inputType(), argumentsJson);
+            canonicalContext = canonicalObjectJson(contextJson, "operation call context");
             input = json.readValue(canonicalArguments, capability.inputClass());
         } catch (Exception failure) {
             return Uni.createFrom().failure(new IllegalArgumentException(
                 "invalid arguments for exposed operation " + binding + "/" + operation, failure));
         }
         if (ConnectorOperationKind.QUERY.equals(capability.identity().kind())) {
-            return dispatchQuery(descriptor, capability, input, catalogue, observationType);
+            return dispatchQuery(descriptor, capability, input, canonicalArguments, canonicalContext,
+                catalogue, observationType);
         }
-        return dispatchCommand(descriptor, capability, input, catalogue, observationType);
+        return dispatchCommand(descriptor, capability, input, canonicalArguments, canonicalContext,
+            catalogue, observationType);
     }
 
     private <O> Uni<O> dispatchQuery(
         OperationDispatchDescriptor dispatch,
         DispatchCapability capability,
         Object input,
+        String argumentsJson,
+        String contextJson,
         CanonicalTypeCatalogue catalogue,
         Class<O> observationType
     ) {
@@ -109,21 +116,26 @@ public final class OperationDispatchSupport {
             capability.queryCapabilities().orElseThrow(),
             Optional.empty());
         return queries.queryOutcomeOneToOne(descriptor, input, capability.outputClass())
-            .onItem().transformToUni(outcome -> queryObservation(capability, outcome, catalogue, observationType));
+            .onItem().transformToUni(outcome -> queryObservation(
+                capability, outcome, argumentsJson, contextJson, catalogue, observationType));
     }
 
     private <O> Uni<O> queryObservation(
         DispatchCapability capability,
         QueryOutcome<?> outcome,
+        String argumentsJson,
+        String contextJson,
         CanonicalTypeCatalogue catalogue,
         Class<O> observationType
     ) {
         if (outcome instanceof QueryOutcome.Found<?> found) {
             return Uni.createFrom().item(resultObservation(
-                capability, "found", outcome.code(), found.output(), catalogue, observationType));
+                capability, "found", outcome.code(), argumentsJson, contextJson,
+                found.output(), catalogue, observationType));
         }
         if (outcome instanceof QueryOutcome.NotFound<?>) {
-            return Uni.createFrom().item(emptyObservation(capability, "not-found", outcome.code(), observationType));
+            return Uni.createFrom().item(emptyObservation(
+                capability, "not-found", outcome.code(), argumentsJson, contextJson, observationType));
         }
         if (outcome instanceof QueryOutcome.TemporarilyUnavailable<?>) {
             return Uni.createFrom().failure(new QueryTemporarilyUnavailableException(outcome.code()));
@@ -142,6 +154,8 @@ public final class OperationDispatchSupport {
         OperationDispatchDescriptor dispatch,
         DispatchCapability capability,
         Object input,
+        String argumentsJson,
+        String contextJson,
         CanonicalTypeCatalogue catalogue,
         Class<O> observationType
     ) {
@@ -159,13 +173,16 @@ public final class OperationDispatchSupport {
             capability.configuration());
         return commands.execute(descriptor, generator, input)
             .onItem().transform(output -> resultObservation(
-                capability, "succeeded", "succeeded", output, catalogue, observationType));
+                capability, "succeeded", "succeeded", argumentsJson, contextJson,
+                output, catalogue, observationType));
     }
 
     private <O> O resultObservation(
         DispatchCapability capability,
         String outcome,
         String code,
+        String argumentsJson,
+        String contextJson,
         Object result,
         CanonicalTypeCatalogue catalogue,
         Class<O> observationType
@@ -175,7 +192,8 @@ public final class OperationDispatchSupport {
                 capability.outputType(), json.writeValueAsString(result));
             Object payload = instantiatePayload(observationType, "OperationResultObservation", new Object[] {
                 capability.reference().binding().value(), capability.reference().operation(), capability.identity().kind().value(),
-                capability.identity().majorVersion(), outcome, code, capability.outputType(), resultJson});
+                capability.identity().majorVersion(), outcome, code, argumentsJson, contextJson,
+                capability.outputType(), resultJson});
             return instantiateVariant(observationType, "Result", payload);
         } catch (RuntimeException failure) {
             throw failure;
@@ -188,12 +206,14 @@ public final class OperationDispatchSupport {
         DispatchCapability capability,
         String outcome,
         String code,
+        String argumentsJson,
+        String contextJson,
         Class<O> observationType
     ) {
         try {
             Object payload = instantiatePayload(observationType, "OperationEmptyObservation", new Object[] {
                 capability.reference().binding().value(), capability.reference().operation(), capability.identity().kind().value(),
-                capability.identity().majorVersion(), outcome, code});
+                capability.identity().majorVersion(), outcome, code, argumentsJson, contextJson});
             return instantiateVariant(observationType, "Empty", payload);
         } catch (RuntimeException failure) {
             throw failure;
@@ -223,6 +243,14 @@ public final class OperationDispatchSupport {
     private static ClassLoader classLoader(Class<?> type) {
         ClassLoader loader = type.getClassLoader();
         return loader == null ? OperationDispatchSupport.class.getClassLoader() : loader;
+    }
+
+    private String canonicalObjectJson(String value, String label) throws Exception {
+        var node = json.readTree(Objects.requireNonNull(value, label + " must not be null"));
+        if (!node.isObject()) {
+            throw new IllegalArgumentException(label + " must be a JSON object");
+        }
+        return json.writeValueAsString(node);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

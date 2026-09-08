@@ -2,6 +2,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.lang.model.element.Modifier;
@@ -37,6 +38,7 @@ import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.representation.PersistenceRepresentationMappingResolver;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.ConnectorOperationSelection;
+import org.pipelineframework.processor.ir.DynamicOperationSelection;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
@@ -198,16 +200,20 @@ public class QueryClientStepRenderer {
         FieldSpec support = FieldSpec.builder(
                 ClassName.get("org.pipelineframework.dispatch", "OperationDispatchSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build();
-        FieldSpec descriptorFactory = FieldSpec.builder(
-                ClassName.get("org.pipelineframework.dispatch", "OperationDispatchDescriptorFactory"), "descriptorFactory")
-            .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build();
+        DynamicOperationSelection selection = model.dynamicOperationSelection().orElseThrow(() ->
+            new IllegalArgumentException("Dynamic operation model requires compiler-owned selection IR"));
+        FieldSpec descriptor = FieldSpec.builder(
+                ClassName.get("org.pipelineframework.dispatch", "OperationDispatchDescriptor"), "descriptor",
+                Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer("$L", dynamicDescriptor(selection))
+            .build();
         MethodSpec apply = MethodSpec.methodBuilder("applyOneToOne")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(inputType, "input")
-            .addStatement("return support.dispatch(descriptorFactory.descriptor($S), input.binding(), input.operation(), input.argumentsJson(), $T.class)",
-                model.serviceName(), outputType)
+            .addStatement("return support.dispatch(descriptor, input.binding(), input.operation(), "
+                    + "input.argumentsJson(), input.contextJson(), $T.class)", outputType)
             .build();
         TypeSpec type = TypeSpec.classBuilder(className)
             .addModifiers(Modifier.PUBLIC)
@@ -222,12 +228,84 @@ public class QueryClientStepRenderer {
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
             .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
             .addField(support)
-            .addField(descriptorFactory)
+            .addField(descriptor)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(apply)
             .build();
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
             .build().writeTo(ctx.outputDir());
+    }
+
+    private CodeBlock dynamicDescriptor(DynamicOperationSelection selection) {
+        CodeBlock.Builder capabilities = CodeBlock.builder().add("$T.of(", List.class);
+        for (int index = 0; index < selection.callables().size(); index++) {
+            if (index > 0) {
+                capabilities.add(", ");
+            }
+            capabilities.add("$L", dispatchCapability(selection.callables().get(index)));
+        }
+        capabilities.add(")");
+        return CodeBlock.of("$T.of($S, $L)",
+            ClassName.get("org.pipelineframework.dispatch", "OperationDispatchDescriptor"),
+            selection.runtimeStepId(), capabilities.build());
+    }
+
+    private CodeBlock dispatchCapability(DynamicOperationSelection.CallableSelection callable) {
+        ConnectorOperationSelection selection = callable.operation();
+        CodeBlock query = selection.query()
+            .map(value -> CodeBlock.of("$T.of($L)", Optional.class, queryCapabilities(value.capabilities())))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
+        CodeBlock command = selection.command()
+            .map(value -> CodeBlock.of(
+                "$T.of(new $T($S, $T.$L, $L))",
+                Optional.class,
+                ClassName.get("org.pipelineframework.dispatch", "DispatchCapability", "CommandConfiguration"),
+                value.commandIdGenerator().canonicalName(),
+                org.pipelineframework.command.CommandDuplicatePolicy.class,
+                value.duplicatePolicy().name(),
+                commandPolicy(value.policy())))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
+        return CodeBlock.of(
+            "new $T(new $T($T.of($S), $S), new $T($T.of($S), $S, $T.$L, $L), "
+                + "$L, $S, $T.class, $S, $T.class, $L, $L, $L)",
+            ClassName.get("org.pipelineframework.dispatch", "DispatchCapability"),
+            ClassName.get("org.pipelineframework.dispatch", "BoundOperationReference"),
+            org.pipelineframework.connector.ConnectorBindingName.class,
+            selection.binding().value(),
+            selection.operation().operationId(),
+            ConnectorOperationIdentity.class,
+            ConnectorProviderId.class,
+            selection.operation().providerId().value(),
+            selection.operation().operationId(),
+            ConnectorOperationKind.class,
+            ConnectorOperationKind.QUERY.equals(selection.operation().kind()) ? "QUERY" : "COMMAND",
+            selection.operation().majorVersion(),
+            selection.providerMajorVersion(),
+            callable.inputType(),
+            callable.inputClass(),
+            callable.outputType(),
+            callable.outputClass(),
+            JavaPoetLiteral.value(selection.operationConfiguration()),
+            query,
+            command);
+    }
+
+    private static CodeBlock commandPolicy(org.pipelineframework.connector.CommandPolicy policy) {
+        return CodeBlock.of(
+            "new $T($L, $L, $L, $L, $L, $L)",
+            org.pipelineframework.connector.CommandPolicy.class,
+            policy.requireRetryRedrive(),
+            policy.requireIdempotency(),
+            policy.requireReconciliation(),
+            optionalEnum(policy.requiredExecutionPosture(), org.pipelineframework.connector.CommandExecutionPosture.class),
+            optionalEnum(policy.minimumMachineConfirmation(), org.pipelineframework.connector.CommandMachineConfirmation.class),
+            policy.requireUserConfirmation());
+    }
+
+    private static <T extends Enum<T>> CodeBlock optionalEnum(Optional<T> value, Class<T> type) {
+        return value
+            .map(entry -> CodeBlock.of("$T.of($T.$L)", Optional.class, type, entry.name()))
+            .orElseGet(() -> CodeBlock.of("$T.empty()", Optional.class));
     }
 
     private CodeBlock nativeDescriptor(

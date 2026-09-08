@@ -507,6 +507,12 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     private static String stepTokenFromModel(PipelineStepModel model) {
+        Optional<String> authored = model.connectorOperationSelection()
+            .map(selection -> selection.authoredStepName())
+            .or(() -> model.dynamicOperationSelection().map(selection -> selection.authoredStepName()));
+        if (authored.isPresent()) {
+            return authored.orElseThrow();
+        }
         String token = stripTrailingService(model.generatedName());
         return token.startsWith("Process") && token.length() > "Process".length()
             ? token.substring("Process".length())

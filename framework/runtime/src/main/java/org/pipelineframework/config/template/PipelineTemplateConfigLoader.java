@@ -865,8 +865,10 @@ public class PipelineTemplateConfigLoader {
                     throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
                         + "' input '" + callable.input() + "' must resolve to a v3 record for model tool arguments.");
                 }
+                validateTrustedArguments(typeModel, step, callable);
             }
             if (!step.callables().isEmpty()) {
+                validateDecisionInputProjections(typeModel, step);
                 validateLlmDecisionContract(typeModel, step);
             }
         }
@@ -899,6 +901,105 @@ public class PipelineTemplateConfigLoader {
         PipelineTemplateTypeReference resolved = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(contract));
         return resolved instanceof PipelineTemplateTypeReference.Named named
             && typeModel.definition(named.name()).orElseThrow() instanceof PipelineTemplateTypeDefinition.RecordType;
+    }
+
+    private void validateDecisionInputProjections(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateStep step
+    ) {
+        Set<String> exclusions = new LinkedHashSet<>();
+        for (String path : step.modelInputExcludes()) {
+            if (!exclusions.add(path)) {
+                throw new IllegalStateException("Step '" + step.name()
+                    + "' config.modelInputExcludes repeats typed path '" + path + "'.");
+            }
+            resolveTypedPath(typeModel, step.inputTypeName(), path,
+                "Step '" + step.name() + "' model input exclusion");
+        }
+        for (Map.Entry<String, String> context : step.callContext().entrySet()) {
+            resolveTypedPath(typeModel, step.inputTypeName(), context.getValue(),
+                "Step '" + step.name() + "' call context '" + context.getKey() + "'");
+        }
+    }
+
+    private void validateTrustedArguments(
+        PipelineTemplateTypeModel typeModel,
+        PipelineTemplateStep step,
+        org.pipelineframework.config.pipeline.PipelineYamlCallable callable
+    ) {
+        PipelineTemplateTypeDefinition.RecordType callableInput = recordType(
+            typeModel, callable.input(), "callable '" + callable.alias() + "' input");
+        Map<String, PipelineTemplateTypeDefinition.Field> targets = callableInput.fields().stream()
+            .collect(Collectors.toMap(PipelineTemplateTypeDefinition.Field::name, Function.identity()));
+        for (Map.Entry<String, String> mapping : callable.trustedArguments().entrySet()) {
+            PipelineTemplateTypeDefinition.Field target = targets.get(mapping.getKey());
+            if (target == null) {
+                throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                    + "' trusted target '" + mapping.getKey()
+                    + "' is not a top-level field of canonical input '" + callable.input() + "'.");
+            }
+            PipelineTemplateTypeDefinition.Field source = resolveTypedPath(
+                typeModel, step.inputTypeName(), mapping.getValue(),
+                "Step '" + step.name() + "' callable '" + callable.alias()
+                    + "' trusted argument '" + mapping.getKey() + "'");
+            if (source.repeated() != target.repeated()
+                || !typeModel.resolveAliases(source.type()).equals(typeModel.resolveAliases(target.type()))
+                || source.presence() != target.presence()
+                || source.nullability() != target.nullability()) {
+                throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
+                    + "' trusted source path '" + mapping.getValue() + "' is not canonically compatible with target '"
+                    + mapping.getKey() + "'.");
+            }
+        }
+    }
+
+    private PipelineTemplateTypeDefinition.Field resolveTypedPath(
+        PipelineTemplateTypeModel typeModel,
+        String rootType,
+        String path,
+        String owner
+    ) {
+        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
+            throw new IllegalStateException(owner + " must be a dotted record-field path: " + path);
+        }
+        PipelineTemplateTypeDefinition.RecordType current = recordType(typeModel, rootType, owner);
+        String[] components = path.split("\\.");
+        PipelineTemplateTypeDefinition.Field field = null;
+        for (int index = 0; index < components.length; index++) {
+            String component = components[index];
+            field = current.fields().stream().filter(candidate -> candidate.name().equals(component)).findFirst()
+                .orElseThrow(() -> new IllegalStateException(owner + " references unknown field path '" + path + "'."));
+            if (index == components.length - 1) {
+                return field;
+            }
+            if (field.repeated()) {
+                throw new IllegalStateException(owner + " cannot traverse collection field '" + component
+                    + "' in path '" + path + "'.");
+            }
+            PipelineTemplateTypeReference resolved = typeModel.resolveAliases(field.type());
+            if (!(resolved instanceof PipelineTemplateTypeReference.Named named)) {
+                throw new IllegalStateException(owner + " cannot traverse non-record field '" + component
+                    + "' in path '" + path + "'.");
+            }
+            current = recordType(typeModel, named.name(), owner);
+        }
+        throw new IllegalStateException(owner + " contains an empty typed path");
+    }
+
+    private PipelineTemplateTypeDefinition.RecordType recordType(
+        PipelineTemplateTypeModel typeModel,
+        String type,
+        String owner
+    ) {
+        PipelineTemplateTypeReference resolved = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(type));
+        if (!(resolved instanceof PipelineTemplateTypeReference.Named named)) {
+            throw new IllegalStateException(owner + " requires a canonical record type, but resolved '" + type + "'.");
+        }
+        return typeModel.definition(named.name())
+            .filter(PipelineTemplateTypeDefinition.RecordType.class::isInstance)
+            .map(PipelineTemplateTypeDefinition.RecordType.class::cast)
+            .orElseThrow(() -> new IllegalStateException(
+                owner + " requires a canonical record type, but resolved '" + type + "'."));
     }
 
     private void validateLlmDecisionContract(PipelineTemplateTypeModel typeModel, PipelineTemplateStep step) {
@@ -1447,6 +1548,8 @@ public class PipelineTemplateConfigLoader {
                 .filter(reference -> !reference.isEmpty());
             Map<String, org.pipelineframework.config.pipeline.PipelineYamlCallable> callables =
                 readTemplateCallables(stepMap, name, version);
+            List<String> modelInputExcludes = readModelInputExcludes(stepMap, name);
+            Map<String, String> callContext = readCallContext(stepMap, name);
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
@@ -1464,7 +1567,9 @@ public class PipelineTemplateConfigLoader {
                 accepts,
                 terminal,
                 pipelineReference,
-                callables));
+                callables,
+                modelInputExcludes,
+                callContext));
         }
         return stepInfos;
     }
@@ -1500,6 +1605,7 @@ public class PipelineTemplateConfigLoader {
                         org.pipelineframework.config.pipeline.PipelineYamlCallable.parseKind(readString(descriptor, "kind")),
                         authoredVersion == null ? 1 : authoredVersion,
                         readString(descriptor, "input"),
+                        callableStringMap(descriptor.get("trustedArguments"), stepName, alias, "trustedArguments"),
                         Optional.ofNullable(readString(descriptor, "commandIdGenerator")),
                         readString(descriptor, "duplicatePolicy"),
                         callableMap(descriptor.get("config"), stepName, alias, "config"),
@@ -1515,6 +1621,60 @@ public class PipelineTemplateConfigLoader {
         return Map.copyOf(result);
     }
 
+    private List<String> readModelInputExcludes(Map<?, ?> stepMap, String stepName) {
+        Map<?, ?> config = stepConfig(stepMap, stepName);
+        Object raw = config.get("modelInputExcludes");
+        if (raw == null) {
+            return List.of();
+        }
+        if (!(raw instanceof List<?> paths)) {
+            throw new IllegalStateException("Step '" + stepName
+                + "' config.modelInputExcludes must be a list of typed field paths");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object path : paths) {
+            if (!(path instanceof String value) || value.isBlank()) {
+                throw new IllegalStateException("Step '" + stepName
+                    + "' config.modelInputExcludes must contain non-blank typed field paths");
+            }
+            result.add(value.trim());
+        }
+        return List.copyOf(result);
+    }
+
+    private Map<String, String> readCallContext(Map<?, ?> stepMap, String stepName) {
+        Map<?, ?> config = stepConfig(stepMap, stepName);
+        Object raw = config.get("callContext");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (!(raw instanceof Map<?, ?> values)) {
+            throw new IllegalStateException("Step '" + stepName
+                + "' config.callContext must map context keys to typed field paths");
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        values.forEach((key, path) -> {
+            if (!(key instanceof String target) || !(path instanceof String source)
+                || target.isBlank() || source.isBlank()) {
+                throw new IllegalStateException("Step '" + stepName
+                    + "' config.callContext must map context keys to typed field paths");
+            }
+            result.put(target.trim(), source.trim());
+        });
+        return Map.copyOf(result);
+    }
+
+    private Map<?, ?> stepConfig(Map<?, ?> stepMap, String stepName) {
+        Object raw = stepMap.get("config");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (!(raw instanceof Map<?, ?> config)) {
+            throw new IllegalStateException("Step '" + stepName + "' config must be a map");
+        }
+        return config;
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> callableMap(Object value, String stepName, String alias, String field) {
         if (value == null) {
@@ -1525,6 +1685,25 @@ public class PipelineTemplateConfigLoader {
                 + " must be a map");
         }
         return (Map<String, Object>) normalizeConfigValue(values);
+    }
+
+    private Map<String, String> callableStringMap(Object value, String stepName, String alias, String field) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> values)) {
+            throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "' " + field
+                + " must be a map");
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        values.forEach((key, path) -> {
+            if (!(key instanceof String target) || !(path instanceof String source)) {
+                throw new IllegalStateException("Step '" + stepName + "' callable '" + alias + "' " + field
+                    + " must map field names to typed source paths");
+            }
+            result.put(target, source);
+        });
+        return Map.copyOf(result);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

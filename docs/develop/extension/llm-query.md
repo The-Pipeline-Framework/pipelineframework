@@ -29,11 +29,14 @@ types:
     fields:
       - [invoiceId, string]
       - [amount, decimal]
+      - [effectScope, string]
+      - [nextEffectKey, string]
 
   ChargeArguments:
     fields:
       - [invoiceId, string]
       - [amount, decimal]
+      - [effectKey, string]
 
   InvoiceResult:
     fields:
@@ -46,7 +49,10 @@ types:
       complete: InvoiceResult
 ```
 
-`AgentCall` contains only `binding`, `operation`, and canonical `argumentsJson`. It has no provider identity, credentials, runtime handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
+`AgentCall` contains `binding`, `operation`, canonical `argumentsJson`, and canonical `contextJson`.
+The context is inert trusted data selected from the original typed Query input for a later reducer;
+it is never sent to the chosen connector. `AgentCall` has no provider identity, credentials, runtime
+handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
 
 `AskUser` is an inert clarification request with two fields:
 
@@ -77,8 +83,8 @@ record envelope and `config.completion` may name the model-authored field plus i
     output: ReviewReady
     config:
       modelInputExcludes:
-        documentId: documentId
-        invoice: invoice
+        - documentId
+        - invoice
       completion:
         field: review
         documentId: documentId
@@ -87,8 +93,8 @@ record envelope and `config.completion` may name the model-authored field plus i
 ```
 
 Here the model schema is only `ReviewReady.review`; `documentId` and `invoice` are copied from the
-typed Query input after schema validation. `modelInputExcludes` also keeps those paths out of the
-model-state JSON and prevents excluded `payload_ref` values from being materialized as media. Every
+typed Query input after schema validation. The `modelInputExcludes` list also keeps those paths out
+of the model-state JSON and prevents excluded `payload_ref` values from being materialized as media. Every
 other envelope field must have an explicit mapping, and dotted paths address nested record fields.
 This projection does not perform another inference or allow model output to overwrite trusted
 application context.
@@ -124,6 +130,11 @@ steps:
     config:
       instructions: Decide whether to propose the charge or complete the invoice.
       structuredOutputSchema: REQUIRED
+      modelInputExcludes:
+        - effectScope
+        - nextEffectKey
+      callContext:
+        invoiceId: invoiceId
     callables:
       charge:
         using: payments
@@ -132,9 +143,22 @@ steps:
         kind: command
         input: ChargeArguments
         commandIdGenerator: example.invoice.ChargeCommandIdGenerator
+        trustedArguments:
+          effectKey: nextEffectKey
 ```
 
-`using` and `operation` select the configured capability. The compiler verifies `kind`, `operationVersion`, and `input` against the selected operation's normalized type contract from Connector metadata; they are never trusted model output. Command callables that can be invoked also declare their ordinary command ID generator and may declare the existing duplicate and command policies.
+`using` and `operation` select the configured capability. The compiler verifies `kind`,
+`operationVersion`, and `input` against the selected operation's normalized type contract from
+Connector metadata; they are never trusted model output. Command callables that can be invoked also
+declare their ordinary command ID generator and may declare the existing duplicate and command
+policies. Inside an imported Block those Command choices are forbidden in the package and are
+injected from the application's `blockBindings` mapping instead.
+
+`modelInputExcludes`, `callContext`, and each callable's `trustedArguments` resolve typed record paths
+against the original decision input independently. Trusted targets are top-level callable-input
+fields omitted from the model tool schema. A model response containing a trusted target is rejected;
+TPF does not silently overwrite it. Trusted values are merged before the complete callable input is
+canonically validated.
 
 The compiler emits the canonical v3 catalogue into the release contract. At runtime the connector projects the selected input types and only their transitively reachable definitions into model-safe JSON Schema, then validates returned arguments against the same canonical metadata. Unrelated pipeline types are not exposed to the model. The schema is a projection for the model, not an alternative application schema language. Unknown aliases, missing or extra fields, malformed JSON, and type mismatches become `TerminalFailure("invalid-model-decision")`.
 
@@ -162,8 +186,10 @@ The generated invocation adapter revalidates the proposed `binding + operation` 
 
 `OperationObservation` is a discriminated union:
 
-- `result` carries the bound operation identity, normalized outcome/code, canonical result type, and canonical `resultJson`;
-- `empty` carries the same identity and outcome/code without inventing a result payload.
+- `result` carries the bound operation identity, normalized outcome/code, final canonical
+  `argumentsJson`, canonical `contextJson`, canonical result type, and canonical `resultJson`;
+- `empty` carries the same identity, outcome/code, final canonical arguments, and context without
+  inventing a result payload.
 
 `QueryOutcome.NotFound` becomes an `empty` observation with outcome `not-found`, because absence is normally information the next application decision may need. `Found` and successful Commands become `result` observations. `TemporarilyUnavailable`, authentication/authority failures, terminal failures, Command ambiguity, confirmation barriers, and user-action requirements retain their existing Query/Command failure or effect-state semantics; they are not flattened into successful observations.
 
@@ -195,9 +221,11 @@ most one release-pinned capability and never chooses whether another turn is nee
 alone interprets the observation and advances application state; the existing recursive pipeline
 depth limit provides the framework-owned safety bound.
 
-The offline [Agent Composition Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/agent-composition-proof) exercises
-the complete path with a Query `NotFound` observation, a durable Command, typed completion, generated
-metadata, and a stateless adapter whose response depends only on canonical `AgentState.phase`.
+The offline [Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/callable-loop-proof)
+packages the complete topology in a fixture Block. The consuming application supplies only bindings
+and Command authority. It exercises a Query `NotFound` observation, a durable Command with a trusted
+model-invisible argument, typed completion, generated metadata, and a stateless adapter whose
+response depends only on model-visible `AgentState.phase`.
 
 After compilation, inspect `META-INF/pipeline/pipeline-contract.json` for contributed protocol types,
 the dynamic operation descriptor, and the named recursive binding; `order.json` for the finite root

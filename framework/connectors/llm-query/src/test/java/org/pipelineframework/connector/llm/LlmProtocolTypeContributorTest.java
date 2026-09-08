@@ -20,7 +20,7 @@ class LlmProtocolTypeContributorTest {
             .orElseThrow();
         var record = (org.pipelineframework.config.template.PipelineTemplateTypeDefinition.RecordType)
             agentCall.definition();
-        assertEquals(java.util.List.of("binding", "operation", "argumentsJson"),
+        assertEquals(java.util.List.of("binding", "operation", "argumentsJson", "contextJson"),
             record.fields().stream().map(org.pipelineframework.config.template.PipelineTemplateTypeDefinition.Field::name).toList());
 
         var askUser = contributions.stream()

@@ -185,9 +185,10 @@ M1 does **not** define:
 
 The current LLM Query connector contributes portable, inert `AgentCall` and `AskUser` data types for
 application-authored decision unions. Neither proposal payload is an `AgentOperation`: `AgentCall` does
-not execute anything, while `AskUser` does not own conversation, authorization, correlation, or durable
-suspension state. They do not change this SPI's decision to keep Agent execution semantics out of the
-universal provider mechanics.
+not execute anything, and its canonical `contextJson` is inert reducer data that is never supplied to
+the selected connector. `AskUser` does not own conversation, authorization, correlation, or durable
+suspension state. These protocol values do not change this SPI's decision to keep Agent execution
+semantics out of the universal provider mechanics.
 
 No generated Agent step or runtime execution path is added in M1/M2 unless a later pinned design explicitly introduces one.
 

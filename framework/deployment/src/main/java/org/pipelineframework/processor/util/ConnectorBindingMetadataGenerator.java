@@ -118,7 +118,8 @@ public final class ConnectorBindingMetadataGenerator {
         return new CallableReference(
             step, callable.alias(), operation.kind().value(), operation.id(), operation.majorVersion(),
             callable.input(), contract.outputType().orElseThrow(() -> new IllegalArgumentException(
-                "callable operation has no output contract: " + callable.using() + "/" + callable.operation())));
+                "callable operation has no output contract: " + callable.using() + "/" + callable.operation())),
+            callable.trustedArguments());
     }
 
     private static Map<String, Object> sanitizedConfiguration(
@@ -192,7 +193,8 @@ public final class ConnectorBindingMetadataGenerator {
         String operation,
         int operationVersion,
         String input,
-        String output
+        String output,
+        Map<String, String> trustedArguments
     ) {
     }
 }

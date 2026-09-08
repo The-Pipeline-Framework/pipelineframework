@@ -23,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ConnectorOperationSelection;
+import org.pipelineframework.processor.ir.DynamicOperationSelection;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -35,6 +36,7 @@ import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryOperationCardinality;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 class QueryClientStepRendererTest {
 
@@ -50,16 +52,53 @@ class QueryClientStepRendererTest {
     void rendersOneShotDynamicOperationAdapter() throws IOException {
         PipelineStepModel model = model(
             ClassName.get("com.example.common.domain", "AgentCall"),
-            ClassName.get("com.example.common.domain", "OperationObservation"));
+            ClassName.get("com.example.common.domain", "OperationObservation"))
+            .toBuilder().dynamicOperationSelection(dynamicSelection()).build();
 
         new QueryClientStepRenderer().renderDynamicOperation(model, generationContext("LOCAL"));
 
         String source = Files.readString(tempDir.resolve(
             "com/example/risk/pipeline/LoadCustomerRiskDynamicOperationClientStep.java"));
         assertTrue(source.contains("OperationDispatchSupport support"));
-        assertTrue(source.contains("OperationDispatchDescriptorFactory descriptorFactory"));
-        assertTrue(source.contains("support.dispatch(descriptorFactory.descriptor(\"LoadCustomerRisk\"), "
-            + "input.binding(), input.operation(), input.argumentsJson(), OperationObservation.class)"));
+        assertTrue(source.contains("private static final OperationDispatchDescriptor descriptor"));
+        assertTrue(source.contains("ConnectorBindingName.of(\"primary-lookup\")"));
+        assertTrue(source.contains("ConnectorProviderId.of(\"proof.lookup\")"));
+        assertTrue(source.contains("support.dispatch(descriptor, input.binding(), input.operation(), "
+            + "input.argumentsJson(), input.contextJson(), OperationObservation.class)"));
+        assertTrue(!source.contains("OperationDispatchDescriptorFactory"));
+    }
+
+    @Test
+    void keepsIdenticallyNamedImportedDynamicStepsDistinctByQualifiedDefinition() throws IOException {
+        PipelineStepModel first = model(
+            ClassName.get("com.example.common.domain", "AgentCall"),
+            ClassName.get("com.example.common.domain", "OperationObservation"))
+            .toBuilder()
+            .serviceName("DispatchBlock1111111111111111")
+            .generatedName("DispatchBlock1111111111111111Service")
+            .dynamicOperationSelection(dynamicSelection(
+                "org.example.first/callable-loop", "org.example.first/callable-loop#Dispatch"))
+            .build();
+        PipelineStepModel second = model(
+            ClassName.get("com.example.common.domain", "AgentCall"),
+            ClassName.get("com.example.common.domain", "OperationObservation"))
+            .toBuilder()
+            .serviceName("DispatchBlock2222222222222222")
+            .generatedName("DispatchBlock2222222222222222Service")
+            .dynamicOperationSelection(dynamicSelection(
+                "org.example.second/callable-loop", "org.example.second/callable-loop#Dispatch"))
+            .build();
+
+        QueryClientStepRenderer renderer = new QueryClientStepRenderer();
+        renderer.renderDynamicOperation(first, generationContext("LOCAL"));
+        renderer.renderDynamicOperation(second, generationContext("LOCAL"));
+
+        String firstSource = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/DispatchBlock1111111111111111DynamicOperationClientStep.java"));
+        String secondSource = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/DispatchBlock2222222222222222DynamicOperationClientStep.java"));
+        assertTrue(firstSource.contains("org.example.first/callable-loop#Dispatch"));
+        assertTrue(secondSource.contains("org.example.second/callable-loop#Dispatch"));
     }
 
     @ParameterizedTest
@@ -308,6 +347,42 @@ class QueryClientStepRendererTest {
 
     private PipelineStepModel model(ClassName inputType, ClassName outputType) {
         return model(inputType, outputType, StreamingShape.UNARY_UNARY);
+    }
+
+    private DynamicOperationSelection dynamicSelection() {
+        return dynamicSelection(
+            "org.pipelineframework.proof/callable-loop-proof",
+            "org.pipelineframework.proof/callable-loop-proof#Dispatch");
+    }
+
+    private DynamicOperationSelection dynamicSelection(String definition, String runtimeStepId) {
+        ConnectorOperationSelection operation = ConnectorOperationSelection.query(
+            "Decide:lookup",
+            ConnectorBindingName.of("primary-lookup"),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("proof.lookup"), "lookup", ConnectorOperationKind.QUERY, 1),
+            1,
+            Map.of("mode", "exact"),
+            new ConnectorOperationSelection.QuerySelection(
+                QueryOperationCardinality.ONE_TO_ONE,
+                QueryCapabilities.conservative(),
+                Optional.empty(),
+                Map.of(),
+                java.util.List.of()));
+        return new DynamicOperationSelection(
+            new PipelineReference(definition),
+            "Dispatch",
+            "Decide",
+            runtimeStepId,
+            java.util.List.of(new DynamicOperationSelection.CallableSelection(
+                "lookup",
+                operation,
+                "LookupRequest",
+                ClassName.get("com.example.common.domain", "LookupRequest"),
+                "LookupResult",
+                ClassName.get("com.example.common.domain", "LookupResult"),
+                Map.of(),
+                "sha256:catalogue")));
     }
 
     private PipelineStepModel model(

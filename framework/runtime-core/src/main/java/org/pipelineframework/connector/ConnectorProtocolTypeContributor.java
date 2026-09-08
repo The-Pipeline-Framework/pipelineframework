@@ -31,7 +31,9 @@ public final class ConnectorProtocolTypeContributor implements ProtocolTypeContr
             new PipelineTemplateTypeDefinition.Field("kind", string),
             new PipelineTemplateTypeDefinition.Field("operationVersion", int32),
             new PipelineTemplateTypeDefinition.Field("outcome", string),
-            new PipelineTemplateTypeDefinition.Field("code", string));
+            new PipelineTemplateTypeDefinition.Field("code", string),
+            new PipelineTemplateTypeDefinition.Field("argumentsJson", string),
+            new PipelineTemplateTypeDefinition.Field("contextJson", string));
         List<PipelineTemplateTypeDefinition.Field> result = new java.util.ArrayList<>(identity);
         result.add(new PipelineTemplateTypeDefinition.Field("resultType", string));
         result.add(new PipelineTemplateTypeDefinition.Field("resultJson", string));

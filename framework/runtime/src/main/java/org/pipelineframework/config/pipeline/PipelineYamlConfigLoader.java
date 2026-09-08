@@ -415,6 +415,7 @@ public class PipelineYamlConfigLoader {
                     ? readPositiveInteger(descriptor, "operationVersion", "step '" + stepName + "' callable '" + alias + "'")
                     : 1,
                 readString(descriptor, "input"),
+                callableStringMap(descriptor.get("trustedArguments"), stepName, alias, "trustedArguments"),
                 Optional.ofNullable(trimToNull(readString(descriptor, "commandIdGenerator"))),
                 readString(descriptor, "duplicatePolicy"),
                 callableMap(descriptor.get("config"), stepName, alias, "config"),
@@ -436,6 +437,25 @@ public class PipelineYamlConfigLoader {
                 + " must be a map");
         }
         return (Map<String, Object>) normalizeConfigValue(values);
+    }
+
+    private Map<String, String> callableStringMap(Object value, String stepName, String alias, String field) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("step '" + stepName + "' callable '" + alias + "' " + field
+                + " must be a map");
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        values.forEach((key, path) -> {
+            if (!(key instanceof String target) || !(path instanceof String source)) {
+                throw new IllegalArgumentException("step '" + stepName + "' callable '" + alias + "' " + field
+                    + " must map field names to typed source paths");
+            }
+            result.put(target, source);
+        });
+        return Map.copyOf(result);
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {

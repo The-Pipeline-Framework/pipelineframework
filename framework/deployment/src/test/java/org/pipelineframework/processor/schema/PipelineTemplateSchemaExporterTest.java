@@ -316,6 +316,14 @@ class PipelineTemplateSchemaExporterTest {
         assertContains(selections.get(0).getAsJsonObject().getAsJsonArray("required"), "query");
         assertContains(selections.get(1).getAsJsonObject().getAsJsonArray("required"), "operation");
         assertContains(selections.get(1).getAsJsonObject().getAsJsonArray("required"), "using");
+        JsonObject callable = definitions.getAsJsonObject("llmCallable");
+        JsonObject callableProperties = callable.getAsJsonObject("properties");
+        assertTrue(callableProperties.has("operationVersion"));
+        assertTrue(callableProperties.has("kind"));
+        assertTrue(callableProperties.has("input"));
+        assertTrue(callableProperties.has("trustedArguments"));
+        assertContains(callable.getAsJsonArray("required"), "kind");
+        assertContains(callable.getAsJsonArray("required"), "input");
         assertEquals("#/$defs/pipelineConnectorBindings",
             schema.getAsJsonObject("properties").getAsJsonObject("connectors").get("$ref").getAsString());
     }

@@ -92,10 +92,10 @@ class McpConnectorTest {
         var catalogue = OperationDispatchDescriptor.of("Read notes", List.of(callable));
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "notes-capture", 0));
         assertThrows(IllegalArgumentException.class, () -> dispatch.dispatch(catalogue, "mcp", "customer.notes",
-            "{\"id\":42}", OperationObservation.class).await().atMost(Duration.ofSeconds(2)));
+            "{\"id\":42}", "{}", OperationObservation.class).await().atMost(Duration.ofSeconds(2)));
         verify(client, never()).callTool(any());
         var first = assertInstanceOf(OperationObservation.Result.class, dispatch.dispatch(catalogue,
-            "mcp", "customer.notes", "{\"id\":\"42\"}", OperationObservation.class)
+            "mcp", "customer.notes", "{\"id\":\"42\"}", "{}", OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
         var payload = new ObjectMapper().readValue(first.value().resultJson(), JsonPayload.class);
         assertEquals("JsonPayload", first.value().resultType());
@@ -108,7 +108,7 @@ class McpConnectorTest {
         var replay = new OperationDispatchSupport(new QueryStepSupport(List.of(), List.of(store)),
             new CommandStepSupport(), ignored -> { throw new AssertionError("not a command"); });
         var second = assertInstanceOf(OperationObservation.Result.class, replay.dispatch(catalogue,
-            "mcp", "customer.notes", "{\"id\":\"42\"}", OperationObservation.class)
+            "mcp", "customer.notes", "{\"id\":\"42\"}", "{}", OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
         assertEquals(first.value().resultJson(), second.value().resultJson());
         verify(client).callTool(any());
@@ -195,19 +195,20 @@ class McpConnectorTest {
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "mcp-dispatch", 0));
 
         assertThrows(IllegalArgumentException.class, () -> dispatch.dispatch(
-                catalogue, "mcp", "customer.write", "{\"id\":\"42\"}", OperationObservation.class)
+                catalogue, "mcp", "customer.write", "{\"id\":\"42\"}", "{}", OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
         verify(client, never()).callTool(any());
 
         // The canonical input exposes only id, even if the external tool has optional fields.
         assertThrows(IllegalArgumentException.class, () -> dispatch.dispatch(
-                catalogue, "mcp", "customer.lookup", "{\"id\":\"42\",\"linked_txn\":[]}", OperationObservation.class)
+                catalogue, "mcp", "customer.lookup", "{\"id\":\"42\",\"linked_txn\":[]}", "{}",
+                OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
         verify(client, never()).callTool(any());
 
         OperationObservation.Result observation = assertInstanceOf(OperationObservation.Result.class,
             dispatch.dispatch(catalogue, "mcp", "customer.lookup", "{\"id\":\"42\"}",
-                    OperationObservation.class)
+                    "{}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
 
         assertEquals("mcp", observation.value().binding());
@@ -226,7 +227,7 @@ class McpConnectorTest {
             when(client.callTool(any())).thenReturn(Mono.just(invalid));
             PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "typed-failure-" + failureIndex++, 0));
             assertThrows(org.pipelineframework.query.QueryTerminalFailureException.class, () -> dispatch.dispatch(
-                catalogue, "mcp", "customer.lookup", "{\"id\":\"42\"}", OperationObservation.class)
+                catalogue, "mcp", "customer.lookup", "{\"id\":\"42\"}", "{}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
         }
     }

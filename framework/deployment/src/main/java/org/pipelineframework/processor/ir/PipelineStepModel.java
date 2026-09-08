@@ -62,14 +62,16 @@ public record PipelineStepModel(
         ReactiveReturnKind reactiveReturnKind,
         Optional<AspectPosition> aspectPosition,
         PipelineReference definition,
-        Optional<ConnectorOperationSelection> connectorOperationSelection
+        Optional<ConnectorOperationSelection> connectorOperationSelection,
+        Optional<DynamicOperationSelection> dynamicOperationSelection
 ) {
     /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
     public PipelineStepModel withServiceClassName(ClassName replacement) {
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition, definition, connectorOperationSelection);
+            remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition, definition, connectorOperationSelection,
+            dynamicOperationSelection);
     }
 
     /** Returns this model with the implementation contract exposed by a provider-generated facade. */
@@ -83,7 +85,8 @@ public record PipelineStepModel(
         return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
             facadeStreamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
-            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition, definition, connectorOperationSelection);
+            remoteExecution, facadeApiKind, facadeReturnKind, aspectPosition, definition, connectorOperationSelection,
+            dynamicOperationSelection);
     }
 
     /**
@@ -238,7 +241,7 @@ public record PipelineStepModel(
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
             mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition,
-            new PipelineReference("$root"), Optional.empty());
+            new PipelineReference("$root"), Optional.empty(), Optional.empty());
     }
 
     /** Backward-compatible canonical constructor shape before connector selections were promoted into the IR. */
@@ -269,7 +272,7 @@ public record PipelineStepModel(
             streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
             orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper,
             mapperFallbackMode, remoteExecution, serviceApiKind, reactiveReturnKind, aspectPosition,
-            definition, Optional.empty());
+            definition, Optional.empty(), Optional.empty());
     }
 
     public PipelineStepModel(String serviceName,
@@ -295,7 +298,8 @@ public record PipelineStepModel(
             ReactiveReturnKind reactiveReturnKind,
             Optional<AspectPosition> aspectPosition,
             PipelineReference definition,
-            Optional<ConnectorOperationSelection> connectorOperationSelection) {
+            Optional<ConnectorOperationSelection> connectorOperationSelection,
+            Optional<DynamicOperationSelection> dynamicOperationSelection) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -339,6 +343,8 @@ public record PipelineStepModel(
         this.definition = java.util.Objects.requireNonNull(definition, "definition cannot be null");
         this.connectorOperationSelection = connectorOperationSelection == null
             ? Optional.empty() : connectorOperationSelection;
+        this.dynamicOperationSelection = java.util.Objects.requireNonNull(
+            dynamicOperationSelection, "dynamicOperationSelection cannot be null");
     }
 
     /**
@@ -590,6 +596,7 @@ public record PipelineStepModel(
         private Optional<AspectPosition> aspectPosition = Optional.empty();
         private PipelineReference definition = new PipelineReference("$root");
         private Optional<ConnectorOperationSelection> connectorOperationSelection = Optional.empty();
+        private Optional<DynamicOperationSelection> dynamicOperationSelection = Optional.empty();
 
         /**
          * Sets the service name.
@@ -867,6 +874,19 @@ public record PipelineStepModel(
             return connectorOperationSelection(Optional.ofNullable(selection));
         }
 
+        /** Sets the compiler-resolved catalogue for a dynamic operation step. */
+        public Builder dynamicOperationSelection(Optional<DynamicOperationSelection> selection) {
+            this.dynamicOperationSelection = java.util.Objects.requireNonNull(
+                selection, "dynamicOperationSelection cannot be null");
+            return this;
+        }
+
+        /** Sets the compiler-resolved catalogue for a dynamic operation step. */
+        public Builder dynamicOperationSelection(DynamicOperationSelection selection) {
+            return dynamicOperationSelection(Optional.of(
+                java.util.Objects.requireNonNull(selection, "dynamicOperationSelection cannot be null")));
+        }
+
         /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
@@ -916,7 +936,8 @@ public record PipelineStepModel(
                 reactiveReturnKind,
                 aspectPosition,
                 definition,
-                connectorOperationSelection);
+                connectorOperationSelection,
+                dynamicOperationSelection);
         }
     }
     
@@ -951,7 +972,8 @@ public record PipelineStepModel(
             reactiveReturnKind,
             aspectPosition,
             definition,
-            connectorOperationSelection
+            connectorOperationSelection,
+            dynamicOperationSelection
         );
     }
 
@@ -992,6 +1014,7 @@ public record PipelineStepModel(
             .serviceApiKind(serviceApiKind)
             .reactiveReturnKind(reactiveReturnKind)
             .definition(definition)
-            .connectorOperationSelection(connectorOperationSelection);
+            .connectorOperationSelection(connectorOperationSelection)
+            .dynamicOperationSelection(dynamicOperationSelection);
     }
 }

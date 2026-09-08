@@ -300,8 +300,8 @@ class PipelineTemplateConfigLoaderTest {
             basePackage: com.example.llm
             transport: LOCAL
             types:
-              State: { fields: [[id, string]] }
-              ChargeArguments: { fields: [[id, string]] }
+              State: { fields: [[id, string], [effectScope, string], [nextEffectKey, string]] }
+              ChargeArguments: { fields: [[id, string], [effectKey, string]] }
               Complete: { fields: [[status, string]] }
               Decision:
                 variants:
@@ -314,6 +314,9 @@ class PipelineTemplateConfigLoaderTest {
                 cardinality: ONE_TO_ONE
                 input: State
                 output: Decision
+                config:
+                  modelInputExcludes: [effectScope, nextEffectKey]
+                  callContext: { state: effectScope }
                 callables:
                   charge:
                     using: payments
@@ -321,13 +324,15 @@ class PipelineTemplateConfigLoaderTest {
                     operationVersion: 2
                     kind: command
                     input: ChargeArguments
+                    trustedArguments: { effectKey: nextEffectKey }
             """);
         ProtocolTypeDescriptor agentCall = new ProtocolTypeDescriptor(
             new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AgentCall"),
             new PipelineTemplateTypeDefinition.RecordType("AgentCall", List.of(
                 new PipelineTemplateTypeDefinition.Field("binding", new PipelineTemplateTypeReference.Scalar("string")),
                 new PipelineTemplateTypeDefinition.Field("operation", new PipelineTemplateTypeReference.Scalar("string")),
-                new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")))));
+                new PipelineTemplateTypeDefinition.Field("argumentsJson", new PipelineTemplateTypeReference.Scalar("string")),
+                new PipelineTemplateTypeDefinition.Field("contextJson", new PipelineTemplateTypeReference.Scalar("string")))));
         ProtocolTypeDescriptor askUser = new ProtocolTypeDescriptor(
             new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AskUser"),
             new PipelineTemplateTypeDefinition.RecordType("AskUser", List.of(
@@ -343,6 +348,9 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("charge.create", callable.operation());
         assertEquals(2, callable.operationVersion());
         assertEquals("ChargeArguments", callable.input());
+        assertEquals(Map.of("effectKey", "nextEffectKey"), callable.trustedArguments());
+        assertEquals(List.of("effectScope", "nextEffectKey"), step.modelInputExcludes());
+        assertEquals(Map.of("state", "effectScope"), step.callContext());
         PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
             config.typeModel().definition("Decision").orElseThrow();
         assertEquals("AskUser", decision.variants().get("askUser").payload().name());
@@ -373,6 +381,62 @@ class PipelineTemplateConfigLoaderTest {
             () -> loader().load(configPath));
 
         assertTrue(failure.getMessage().contains("unknown input type 'MissingArguments'"), failure.getMessage());
+    }
+
+    @Test
+    void rejectsLegacyMapShapedModelInputExcludes() throws Exception {
+        Path configPath = write("legacy-model-input-excludes.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[effectScope, string]] }
+            steps:
+              - name: Decide
+                kind: query
+                input: State
+                output: State
+                config:
+                  modelInputExcludes: { effectScope: true }
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> loader().load(configPath));
+
+        assertTrue(failure.getMessage().contains("must be a list of typed field paths"), failure.getMessage());
+    }
+
+    @Test
+    void rejectsTrustedArgumentTypeMismatchAtTheTypedDecisionBoundary() throws Exception {
+        Path configPath = write("trusted-argument-type-mismatch.yaml", """
+            version: 3
+            appName: LLM Query
+            basePackage: com.example.llm
+            transport: LOCAL
+            types:
+              State: { fields: [[nextEffectKey, int64]] }
+              ChargeArguments: { fields: [[effectKey, string]] }
+            steps:
+              - name: Decide
+                kind: query
+                input: State
+                output: State
+                callables:
+                  charge:
+                    using: payments
+                    operation: charge.create
+                    kind: command
+                    input: ChargeArguments
+                    trustedArguments: { effectKey: nextEffectKey }
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> loader().load(configPath));
+
+        assertTrue(failure.getMessage().contains("callable 'charge' trusted source path 'nextEffectKey'"),
+            failure.getMessage());
+        assertTrue(failure.getMessage().contains("not canonically compatible"), failure.getMessage());
     }
 
     private Path write(String name, String content) throws Exception {

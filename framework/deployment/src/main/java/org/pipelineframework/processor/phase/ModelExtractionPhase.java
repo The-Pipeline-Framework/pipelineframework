@@ -21,6 +21,7 @@ import org.pipelineframework.processor.awaitable.AwaitStepTypeBindingResolver;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.composition.PipelineReference;
+import org.pipelineframework.processor.routing.DynamicOperationSelectionResolver;
 
 /**
  * Extracts semantic models from YAML step definitions and legacy {@code @PipelineStep} annotations.
@@ -265,7 +266,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         PipelineStepModel model;
         if (stepDef.dynamicOperationSource().isPresent()) {
-            model = createDynamicOperationStepModel(ctx, stepDef, ctxWarningLogger);
+            model = createDynamicOperationStepModel(ctx, definition, stepDef, ctxWarningLogger);
         } else {
             // Determine if this is an internal or delegated step using switch for exhaustiveness
             model = switch (stepDef.kind()) {
@@ -401,6 +402,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
     private PipelineStepModel createDynamicOperationStepModel(
             PipelineCompilationContext ctx,
+            PipelineReference definition,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
@@ -413,7 +415,24 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? config.basePackage() : null;
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
-        String serviceName = toYamlServiceName(stepDef.name());
+        String serviceName = operationServiceName(ctx, definition, stepDef.name());
+        String runtimeStepId = isImportedDefinition(ctx, definition)
+            ? definition.logicalId() + "#" + stepDef.name()
+            : serviceName;
+        if (!(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig template)) {
+            throw new IllegalStateException(
+                "Dynamic operation step '" + stepDef.name() + "' requires a normalized v3 type model");
+        }
+        DynamicOperationSelection selection;
+        try {
+            selection = new DynamicOperationSelectionResolver().resolve(
+                ctx.getEffectivePipelineConfig(), template, definition, stepDef.name(),
+                stepDef.dynamicOperationSource().orElseThrow(), runtimeStepId);
+        } catch (IllegalArgumentException | IllegalStateException failure) {
+            throw new IllegalStateException(
+                "Dynamic operation step '" + stepDef.name() + "' could not be linked: "
+                    + failure.getMessage(), failure);
+        }
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
@@ -427,9 +446,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .sideEffect(false)
-            .cacheKeyGenerator(null)
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
+            .dynamicOperationSelection(selection)
             .build();
     }
 

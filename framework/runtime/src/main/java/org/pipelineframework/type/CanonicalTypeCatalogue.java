@@ -78,9 +78,34 @@ public final class CanonicalTypeCatalogue {
     }
 
     public String schema(String typeName) {
+        return schema(typeName, Set.of());
+    }
+
+    /** Projects a record contract for model-authored fields while retaining the canonical type as authority. */
+    public String schema(String typeName, Set<String> excludedTopLevelFields) {
         ObjectNode root = rootSchema(requireType(typeName), new ArrayList<>());
         if (!"object".equals(root.path("type").asText())) {
             throw new IllegalStateException("LLM tool argument contract must project as a JSON object: " + typeName);
+        }
+        Set<String> excluded = Set.copyOf(Objects.requireNonNull(
+            excludedTopLevelFields, "excluded schema fields must not be null"));
+        ObjectNode properties = (ObjectNode) root.path("properties");
+        for (String field : excluded) {
+            if (!properties.has(field)) {
+                throw new IllegalStateException("Canonical record '" + typeName
+                    + "' has no trusted argument field '" + field + "'");
+            }
+            properties.remove(field);
+        }
+        if (!excluded.isEmpty() && root.path("required") instanceof ArrayNode required) {
+            List<String> visibleRequired = new ArrayList<>();
+            required.forEach(field -> {
+                if (!excluded.contains(field.asText())) {
+                    visibleRequired.add(field.asText());
+                }
+            });
+            required.removeAll();
+            visibleRequired.forEach(required::add);
         }
         ObjectNode definitions = root.putObject("$defs");
         reachableDefinitions(root).forEach(name -> definitions.set(name, schemaDefinition(requireType(name))));
