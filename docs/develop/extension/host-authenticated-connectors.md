@@ -19,8 +19,9 @@ connector -> external system
 
 The Connector runtime does not authenticate application users, run OAuth/OIDC flows, handle callbacks,
 store or refresh tokens, or replace Spring Security, Quarkus security, Keycloak, Auth0, IAM, or a
-connection broker. The optional [Gmail host connection library](#durable-gmail-host-connections) assembles
-Google's OAuth client and dedicated encrypted storage behind this same runtime boundary.
+connection broker. The optional [Quarkus OIDC connection support](#durable-connections-through-quarkus-oidc)
+assembles platform authorization, dedicated encrypted storage and bounded provider client factories
+behind this same runtime boundary.
 
 > **Do not use `SecretRef` or `SecretResolver` for connector authentication.** Those legacy,
 > context-free APIs are deprecated for removal. They receive no tenant, execution, connector, or
@@ -179,9 +180,11 @@ connections. Quarkus owns redirects, OAuth state, PKCE, code exchange, identity 
 token-endpoint requests. The host owns application authorization, external account policy,
 credentials at rest, database provisioning and client lifetime.
 
-`host-gmail` now supplies only `GmailClients`, an initialized Gmail SDK client factory.
-The previous Gmail authorization helper and schema have been removed. Existing installations must
-reconnect using the new flow; there is no legacy credential migration or parallel renewal path.
+`host-gmail` supplies only `GmailClients`, an initialized Gmail SDK client factory.
+`host-microsoft-graph` supplies a bounded `GET /v1.0/me` capability over a host-owned JDK HTTP
+client. The previous Gmail authorization helper and schema have been removed. Existing Gmail
+installations must reconnect using the new flow; there is no legacy credential migration or
+parallel renewal path.
 
 ### Configure a dedicated connection flow
 
@@ -213,9 +216,10 @@ The completion endpoint removes the temporary connection session through `OidcSe
 A stale connection session is cleared before a fresh flow is attempted.
 Use the same configuration name for the OIDC tenant and its `OidcClient`, and pass that named
 client to the manager. The hooks also guard managed token requests against automatic socket-failure
-redispatch: a lost response may already have consumed a code or rotated a refresh token. Quarkus
-3.33.1 rejects `connection-retry-count=0` with `maxAttempts must be greater than zero`; the bridge
-uses its public request-filter API to reject a retry subscription before it sends another request.
+redispatch: a lost response may already have consumed a code or rotated a refresh token. The original
+Quarkus 3.33.1 proof rejected `connection-retry-count=0` with `maxAttempts must be greater than zero`;
+the bridge therefore uses Quarkus's public request-filter API to reject a retry subscription before
+it sends another request. The same guard and lost-response test remain active on Quarkus 3.39.2.
 Discovery and application sign-in requests are unaffected. Uncertain renewals require reconnection.
 
 For Microsoft, use `provider=microsoft`, a tenant-specific
@@ -225,6 +229,26 @@ Use the same tenant-specific server for its named `OidcClient`. The Microsoft pr
 allows multiple issuers; the host registration must pin the approved issuer and account policy.
 Application tenant, external account and Entra tenant are separate identities.
 See the [Quarkus provider guide](https://quarkus.io/guides/security-openid-connect-providers/).
+
+```properties
+quarkus.oidc.microsoft.provider=microsoft
+quarkus.oidc.microsoft.auth-server-url=https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0
+quarkus.oidc.microsoft.application-type=web-app
+quarkus.oidc.microsoft.client-id=${MICROSOFT_CLIENT_ID}
+quarkus.oidc.microsoft.credentials.secret=${MICROSOFT_CLIENT_SECRET}
+quarkus.oidc.microsoft.tenant-paths=/connections/microsoft/authorize
+quarkus.oidc.microsoft.token.issuer=https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0
+quarkus.oidc.microsoft.authentication.scopes=openid,offline_access,https://graph.microsoft.com/User.Read
+quarkus.oidc.microsoft.authentication.pkce-required=true
+quarkus.oidc.microsoft.authentication.state-secret=${OIDC_STATE_SECRET}
+quarkus.oidc.microsoft.token-state-manager.strategy=id-token
+quarkus.oidc.microsoft.token.refresh-expired=false
+
+quarkus.oidc-client.microsoft.auth-server-url=https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0
+quarkus.oidc-client.microsoft.client-id=${MICROSOFT_CLIENT_ID}
+quarkus.oidc-client.microsoft.credentials.secret=${MICROSOFT_CLIENT_SECRET}
+quarkus.oidc-client.microsoft.grant.type=refresh
+```
 
 ### Assemble host infrastructure
 
@@ -250,6 +274,26 @@ var connections = new QuarkusConnections(
 These types belong to `org.pipelineframework.host.oidc`; `GmailClients` belongs to
 `org.pipelineframework.host.gmail`. Publish the manager explicitly through host CDI wiring.
 
+The Microsoft public-cloud proof uses the same manager with a provider-specific bounded client
+factory and no MSAL token cache:
+
+```java
+var registration = new ConnectionRegistration<>(
+    "microsoft", entraClientId,
+    URI.create("https://login.microsoftonline.com/" + approvedEntraTenant + "/v2.0"),
+    URI.create("https://app.example/connections/microsoft/authorize"),
+    Set.of(MicrosoftGraphClients.USER_READ_SCOPE),
+    AuthenticatedMicrosoftGraphConnection.class,
+    verifiedIdentity -> applicationAccountPolicy.permits(verifiedIdentity),
+    new MicrosoftGraphClients(hostHttpClient, objectMapper));
+```
+
+`hostHttpClient` must use `HttpClient.Redirect.NEVER`; the factory rejects redirecting clients.
+The host owns that client's shutdown. `MicrosoftGraphClients` also accepts a host-selected Graph
+origin for sovereign clouds, but fixes the operation path to `GET /v1.0/me`. Its returned profile is
+application data and never selects or rebinds the durable connection account. The verified ID-token
+identity and application policy remain the connection authority.
+
 Implement `ConnectionAccess` to authorize Connect, Status and Disconnect against the application's
 own identity, returning the permitted `ConnectionKey` and stable actor ID.
 Its `authorizeCompletion(RoutingContext)` method must reauthorize the **original application
@@ -261,7 +305,7 @@ validated host session authority there. The bridge offloads its JDBC work separa
 
 Publish exactly **one** `ConnectionOidcHooks` CDI bean. For one registration construct it with the
 manager and access policy. For several registrations pass a list of `ConnectionOidcHooks.Binding`.
-Quarkus 3.33.1 skips completion actions when multiple beans make that lookup ambiguous; the bridge
+Quarkus skips completion actions when multiple beans make that lookup ambiguous; the bridge
 rejects this wiring at startup. Applications with other completion work must compose it through a
 single completion action rather than registering competing beans.
 
@@ -313,7 +357,9 @@ A client factory receives host-only `RequestAccess`. It must check `accessToken(
 **every** outgoing request, including previously prepared requests, and must not expose that accessor
 through its Connector capability. It must not independently renew credentials or follow untrusted
 redirects. `GmailClients` implements these rules through its SDK request interceptor, with retries,
-redirects and credential logging disabled.
+redirects and credential logging disabled. `MicrosoftGraphClients` implements the same rules for the
+single blocking `me()` operation using the host's JDK HTTP client. It returns only typed profile
+fields and never includes a provider error body in its exception.
 
 Resolution and request access consult durable state. Clients are cached by connection generation,
 bounded to 128 entries per manager. Refresh revisions do not change the generation; disconnect and
@@ -344,7 +390,7 @@ recovers uncertain outcomes through a new authorized Connect action; it does not
 refresh or implement provider-specific recovery policies.
 
 Client factories report resource authentication challenges through `requiresInteraction()`.
-The Microsoft fixture proves a bounded Graph read and transition to reauthorization on a claims
+The Microsoft factory proves a bounded Graph read and transition to reauthorization on a claims
 challenge, without automatic retries. This is not a claim of full Conditional Access challenge
 recovery: forwarding protected claims into a subsequent authorization request is not implemented.
 
@@ -359,8 +405,8 @@ independent refresh authorities through aliases or another token manager. Connec
 security infrastructure, separate from authored persistence, Query capture and Command effects.
 
 Disconnect is local. Remote consent revocation can have broader effects and requires a separately
-authorized host operation. This integration targets Quarkus 3.33.1; Spring integration and platform
-upgrades are separate work. See [ADR-0030](/decisions/0030-optional-host-connection-lifecycle).
+authorized host operation. This integration is verified on Quarkus 3.39.2; Spring integration remains
+separate work. See [ADR-0030](/decisions/0030-optional-host-connection-lifecycle).
 
 ## Security boundary
 

@@ -92,6 +92,7 @@
         <module>connectors</module>
         <module>host-oidc-quarkus</module>
         <module>host-gmail</module>
+        <module>host-microsoft-graph</module>
         <module>host-quickbooks-mcp</module>
         <module>transport-completeness-tests</module>
         <module>plugins</module>

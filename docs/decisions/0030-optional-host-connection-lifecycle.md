@@ -34,7 +34,8 @@ No portable OAuth provider SPI or scope model is added to `runtime-core`.
 Connection management is a separate security-state authority. Application hosts own tenant and actor
 authorization, OAuth registration, encryption keys, database provisioning and operational policy.
 `host-oidc-quarkus` bridges durable connection lifetime, while `host-gmail` contains only the
-authenticated Gmail SDK factory. These remain provisional host APIs.
+authenticated Gmail SDK factory and `host-microsoft-graph` contains a bounded Microsoft Graph
+client factory. These remain provisional host APIs.
 
 The connection-authentication tenant is distinct from application sign-in. Quarkus's completion
 action hands verified identity and tokens to the bridge. A one-use host attempt binds the original
@@ -56,17 +57,17 @@ additional alias or tenant cannot create another refresh authority for the same 
 transfer is explicit administrative work. Existing brokers and external process-owned token stores
 remain valid alternatives; they must not independently refresh a grant also managed by this library.
 
-Quarkus 3.33.1 requires a single resolvable `AuthenticationCompletionAction` bean. One bridge hook
-dispatches all registered flows, and ambiguous bridge wiring fails startup. This constraint does not
-require a platform upgrade or a replacement OAuth implementation.
+The bridge requires a single resolvable `AuthenticationCompletionAction` bean. One bridge hook
+dispatches all registered flows, and ambiguous bridge wiring fails startup.
 
-On 3.33.1, setting token-client `connection-retry-count=0` throws `maxAttempts must be greater than
-zero` before exchange. The default retries socket failures, which can redispatch a refresh after an
-unknown remote outcome. A separately installed public `OidcRequestFilter` guards managed token
-requests against retry subscriptions before Quarkus sends them. It is initialized without the
-connection manager or `OidcClients` to avoid a client/filter creation cycle. The lost-response proof
-checks exactly one provider request and uncertain durable state. The guard replaces no request
-encoding, token parsing, provider endpoint or protocol flow.
+The original Quarkus 3.33.1 proof found that setting token-client `connection-retry-count=0` threw
+`maxAttempts must be greater than zero` before exchange. The default retries socket failures, which
+can redispatch a refresh after an unknown remote outcome. A separately installed public
+`OidcRequestFilter` therefore guards managed token requests against retry subscriptions before
+Quarkus sends them. It is initialized without the connection manager or `OidcClients` to avoid a
+client/filter creation cycle. The lost-response proof checks exactly one provider request and
+uncertain durable state. This guard and proof remain active on the Quarkus 3.39.2 baseline; the guard
+replaces no request encoding, token parsing, provider endpoint or protocol flow.
 
 ## Rationale
 
@@ -97,14 +98,15 @@ is not designed or implemented by this local-development adapter.
 - Query replay and recorded Command replay still bypass live connection resolution.
 - Gmail keeps only authenticated SDK construction. Existing users reconnect; there is no parallel
   legacy authority or migration of the provisional Gmail grants.
-- Microsoft delegated access is proved through Quarkus provider configuration and a bounded Graph
-  client fixture. No MSAL path or general Microsoft Connector catalogue is added.
+- Microsoft delegated access is supplied through Quarkus provider configuration and the bounded
+  `host-microsoft-graph` `GET /v1.0/me` client factory. No MSAL path, token cache or general Microsoft
+  Connector catalogue is added.
 - Claims challenges require interaction; full protected-claims forwarding is not implied.
 - A dedicated security database may share physical infrastructure with other stores but not their
   schemas, authorization or retention semantics; see [ADR-0008](./0008-separate-state-and-replay-authorities.md).
 - Full provider catalogues, Spring execution parity, multi-alias grants and general connection UI are
   not implied by the first proof.
-- The runtime remains on Quarkus 3.33.1. Maintenance updates and 3.40 compatibility are separate.
+- The integration is verified on the framework's Quarkus 3.39.2 baseline.
 
 The discarded provider-library-first Gmail proof and the earlier MSAL-first Microsoft reconnaissance
 are retained here as rejected implementation directions. The host runtime boundary from ADR-0021 and

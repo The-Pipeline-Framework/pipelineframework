@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class OidcFixture implements QuarkusTestResourceLifecycleManager {
     static final AtomicInteger exchanges = new AtomicInteger();
     static final AtomicInteger refreshes = new AtomicInteger();
-    static final AtomicInteger graphCalls = new AtomicInteger();
+    protected static final AtomicInteger graphCalls = new AtomicInteger();
     static final java.util.concurrent.atomic.AtomicReference<String> subject = new java.util.concurrent.atomic.AtomicReference<>("external-account");
     protected static final java.util.concurrent.atomic.AtomicReference<String> scope = new java.util.concurrent.atomic.AtomicReference<>("https://graph.microsoft.com/User.Read");
     static final java.util.concurrent.atomic.AtomicReference<String> tokenIssuer = new java.util.concurrent.atomic.AtomicReference<>("");
@@ -34,7 +34,7 @@ public class OidcFixture implements QuarkusTestResourceLifecycleManager {
     static final java.util.concurrent.atomic.AtomicBoolean rotate = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicBoolean omitScope = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicBoolean loseRefreshResponse = new java.util.concurrent.atomic.AtomicBoolean();
-    static final java.util.concurrent.atomic.AtomicBoolean claimsChallenge = new java.util.concurrent.atomic.AtomicBoolean();
+    protected static final java.util.concurrent.atomic.AtomicBoolean claimsChallenge = new java.util.concurrent.atomic.AtomicBoolean();
     static final java.util.concurrent.atomic.AtomicReference<Optional<java.util.concurrent.CountDownLatch>> refreshEntered = new java.util.concurrent.atomic.AtomicReference<>(Optional.empty());
     static final java.util.concurrent.atomic.AtomicReference<Optional<java.util.concurrent.CountDownLatch>> refreshRelease = new java.util.concurrent.atomic.AtomicReference<>(Optional.empty());
     private final ObjectMapper json = new ObjectMapper();
