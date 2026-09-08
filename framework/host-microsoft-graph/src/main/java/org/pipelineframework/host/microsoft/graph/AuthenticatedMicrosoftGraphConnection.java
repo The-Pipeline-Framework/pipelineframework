@@ -15,6 +15,7 @@ import org.pipelineframework.host.oidc.ConnectionRegistration;
 
 /** Runtime-only, host-authenticated Microsoft Graph capability with a bounded {@code /me} operation. */
 public final class AuthenticatedMicrosoftGraphConnection implements ResolvedConnection {
+    private static final int MAX_PROFILE_BYTES = 64 * 1024;
     private final ConnectionRegistration.RequestAccess access;
     private final HttpClient http;
     private final URI meEndpoint;
@@ -38,27 +39,33 @@ public final class AuthenticatedMicrosoftGraphConnection implements ResolvedConn
             .timeout(timeout)
             .GET()
             .build();
-        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() == 401) {
-            access.requiresInteraction();
-            throw new ConnectionFailure(ConnectionFailure.Reason.REAUTHORIZE);
+        var response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try (var body = response.body()) {
+            if (response.statusCode() == 401) {
+                access.requiresInteraction();
+                throw new ConnectionFailure(ConnectionFailure.Reason.REAUTHORIZE);
+            }
+            if (response.statusCode() != 200) {
+                throw new MicrosoftGraphRequestException(response.statusCode(), "Microsoft Graph profile request failed");
+            }
+            byte[] payload = body.readNBytes(MAX_PROFILE_BYTES + 1);
+            if (payload.length > MAX_PROFILE_BYTES) {
+                throw new MicrosoftGraphRequestException(200, "Microsoft Graph profile exceeded the response limit");
+            }
+            JsonNode profile;
+            try {
+                profile = json.readTree(payload);
+            } catch (IOException problem) {
+                throw new MicrosoftGraphRequestException(200, "Microsoft Graph returned an invalid profile");
+            }
+            if (profile == null || !profile.isObject()) {
+                throw new MicrosoftGraphRequestException(200, "Microsoft Graph returned an invalid profile");
+            }
+            var id = text(profile, "id").orElseThrow(
+                () -> new MicrosoftGraphRequestException(200, "Microsoft Graph returned a profile without an id"));
+            return new MicrosoftGraphProfile(id, text(profile, "displayName"),
+                text(profile, "userPrincipalName"), text(profile, "mail"));
         }
-        if (response.statusCode() != 200) {
-            throw new MicrosoftGraphRequestException(response.statusCode(), "Microsoft Graph profile request failed");
-        }
-        JsonNode profile;
-        try {
-            profile = json.readTree(response.body());
-        } catch (IOException problem) {
-            throw new MicrosoftGraphRequestException(200, "Microsoft Graph returned an invalid profile");
-        }
-        if (profile == null || !profile.isObject()) {
-            throw new MicrosoftGraphRequestException(200, "Microsoft Graph returned an invalid profile");
-        }
-        var id = text(profile, "id").orElseThrow(
-            () -> new MicrosoftGraphRequestException(200, "Microsoft Graph returned a profile without an id"));
-        return new MicrosoftGraphProfile(id, text(profile, "displayName"),
-            text(profile, "userPrincipalName"), text(profile, "mail"));
     }
 
     private static Optional<String> text(JsonNode source, String field) {

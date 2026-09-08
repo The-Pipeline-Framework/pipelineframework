@@ -22,6 +22,7 @@ class MicrosoftGraphClientsTest {
     private HttpServer graph;
     private final AtomicInteger calls = new AtomicInteger();
     private final AtomicInteger status = new AtomicInteger(200);
+    private final AtomicBoolean chunked = new AtomicBoolean(false);
     private final AtomicReference<String> body = new AtomicReference<>(
         "{\"id\":\"account-1\",\"displayName\":\"Ada Lovelace\",\"userPrincipalName\":\"ada@example.test\"}");
     private final AtomicReference<String> authorization = new AtomicReference<>("");
@@ -33,7 +34,7 @@ class MicrosoftGraphClientsTest {
             authorization.set(request.getRequestHeaders().getFirst("Authorization"));
             byte[] response = body.get().getBytes(StandardCharsets.UTF_8);
             request.getResponseHeaders().set("Content-Type", "application/json");
-            request.sendResponseHeaders(status.get(), response.length);
+            request.sendResponseHeaders(status.get(), chunked.get() ? 0 : response.length);
             request.getResponseBody().write(response);
             request.close();
         });
@@ -87,6 +88,17 @@ class MicrosoftGraphClientsTest {
         body.set("{\"displayName\":\"Missing identity\"}");
         var invalid = assertThrows(MicrosoftGraphRequestException.class, capability::me);
         assertEquals(200, invalid.statusCode());
+    }
+
+    @Test void rejectsAnOversizedChunkedProfileBeforeJsonDecoding() {
+        var capability = clients().create(access(new AtomicReference<>("current"), new AtomicBoolean(true)));
+        chunked.set(true);
+        body.set("{\"id\":\"" + "x".repeat(70_000) + "\"}");
+
+        var failure = assertThrows(MicrosoftGraphRequestException.class, capability::me);
+        assertEquals(200, failure.statusCode());
+        assertTrue(failure.getMessage().contains("response limit"));
+        assertEquals(1, calls.get());
     }
 
     @Test void rejectsRedirectingClientsAndNonOriginEndpoints() {
