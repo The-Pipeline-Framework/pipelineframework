@@ -7,7 +7,7 @@ description: Design, author, or migrate applications built with The Pipeline Fra
 
 Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation, a support matrix, or guidance for maintaining TPF itself.
 
-This Skill defines architectural priors. Framework source, compiler behavior, tests and current docs are authoritative for exact syntax and available capabilities. Search them before inventing an application workaround.
+This Skill defines architectural priors. Framework source, compiler behavior, focused tests, and documentation must match the application's exact pinned TPF release before they are used as evidence of syntax or capability. Do not infer support from newer `main`-branch material; verify release alignment before inventing an application workaround.
 
 ## The TPF shape
 
@@ -110,7 +110,9 @@ Use GitNexus as the first-pass structural index of canonical TPF `main` when rep
 - Treat GitNexus relationships as structural evidence, not as authority for TPF semantics. DI, interfaces, generated code, reflection, and other dynamic boundaries may make graph results incomplete.
 - GitNexus represents indexed canonical `main`; inspect the current worktree directly for unmerged or uncommitted changes.
 
-The Skill remains the architectural prior.     
+The Skill remains the architectural prior.
+
+Confirm the application's exact pinned TPF release before relying on a capability. Use framework source, compiler behavior, focused tests, and documentation from that same release; never substitute `main`, a different patch, or a different minor line. If matching released material is unavailable, report the evidence gap rather than inventing application infrastructure.
 
 Implementation classes prove capability; they do not define application architecture. Prefer canonical authoring docs/ADRs/DSL examples for design.
 
@@ -119,6 +121,7 @@ Implementation classes prove capability; they do not define application architec
 1. Identify the data, effect, observation, and suspension involved.
 2. Classify each dependency using the TPF shape above.
 3. Inspect `pipeline.yaml` and the current typed state first.
+4. Load only the relevant reference; establish the application's pinned TPF release, then verify the primitive against matching-release framework source, compiler behavior, documentation, and focused tests.
 5. Draft or update `pipeline.yaml` and canonical types before inventing infrastructure.
 6. Compile and inspect generated diagnostics and artifacts.
 7. Only then write the smallest authored Java needed.

@@ -16,10 +16,6 @@
 /design/pipeline-studio/ /develop/pipeline-compilation 301
 /design/pipeline-studio/canvas-guide /develop/pipeline-compilation 301
 /design/pipeline-studio/canvas-guide/ /develop/pipeline-compilation 301
-/develop/mcp-template-generation /evolve/template-generator 301
-/develop/mcp-template-generation/ /evolve/template-generator 301
-/evolve/bridge-release-coordination /evolve/publishing 301
-/evolve/bridge-release-coordination/ /evolve/publishing 301
 /guide /design 301
 /guide/ /design 301
 /guide/application /develop/configuration 301

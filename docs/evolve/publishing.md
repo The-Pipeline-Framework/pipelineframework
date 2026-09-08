@@ -50,17 +50,6 @@ The Cloudflare project must keep `main` as its production branch and continue bu
 branches. Its proxied DNS record for `pipelineframework.org` must target
 `release-docs.pipelineframework.pages.dev`, not `pipelineframework.pages.dev`.
 
-## Docs and version artifacts
-
-Publishing workflows focus on Maven artifacts and docs promotion. The knowledge sync is managed
-outside the Maven publish workflows and described in the operations page.
-
-This applies equally to nightly snapshots and `v*` tag releases. If the release publishes
-Maven and GitHub artifacts successfully but a knowledge-sync path fails, repair that path
-without republishing Maven artifacts. See
-[TPF knowledge sync operations](/evolve/author-mcp-operations) for end-to-end ownership,
-hook, verification, and recovery guidance.
-
 ## Guardrails
 
 - Do not push release commits or tags until local validation passes.

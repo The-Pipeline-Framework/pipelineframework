@@ -208,7 +208,7 @@ the snapshot workflow. Publication depends on a successful workflow run and may 
 The workflow can also be dispatched manually, but its publish job runs only
 from `main`. It verifies the same framework reactor that the release workflow deploys, then
 publishes the existing `-SNAPSHOT` version with the `central-publishing` profile. It does not
-create a tag or GitHub release. Knowledge synchronization is handled separately.
+create a tag or GitHub release.
 
 Sonatype Central snapshots are mutable development artifacts and are currently cleaned up after 90 days.
 Before the first snapshot deployment, enable SNAPSHOT publishing for the project namespace in

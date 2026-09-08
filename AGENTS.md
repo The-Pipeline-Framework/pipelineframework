@@ -25,8 +25,6 @@ Supporting repo surfaces:
 - `docs`: VitePress documentation site
 - `web-ui`: SvelteKit Canvas/web UI (unmaintained)
 
-tpf-mcp-bridge lives in a separate repo now. It holds the MCP bridge and the template generator.
-
 For planning, PR slicing, architecture tradeoffs, roadmap shaping, or docs IA strategy, read `AGENTS.planning.md`. For ordinary implementation work, use this file plus the smallest relevant local context.
 
 Before making or reviewing an architectural change, read `docs/decisions/`. It is the
