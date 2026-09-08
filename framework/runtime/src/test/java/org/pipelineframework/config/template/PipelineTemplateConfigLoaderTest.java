@@ -300,8 +300,8 @@ class PipelineTemplateConfigLoaderTest {
             basePackage: com.example.llm
             transport: LOCAL
             types:
-              State: { fields: [[id, string], [effectScope, string], [nextEffectKey, string]] }
-              ChargeArguments: { fields: [[id, string], [effectKey, string]] }
+              State: { fields: [[id, string], [effect_scope, string], [next_effect_key, string]] }
+              ChargeArguments: { fields: [[id, string], [effect_key, string]] }
               Complete: { fields: [[status, string]] }
               Decision:
                 variants:
@@ -315,8 +315,8 @@ class PipelineTemplateConfigLoaderTest {
                 input: State
                 output: Decision
                 config:
-                  modelInputExcludes: [effectScope, nextEffectKey]
-                  callContext: { state: effectScope }
+                  modelInputExcludes: [effect_scope, next_effect_key]
+                  callContext: { effect_scope: effect_scope }
                 callables:
                   charge:
                     using: payments
@@ -324,7 +324,7 @@ class PipelineTemplateConfigLoaderTest {
                     operationVersion: 2
                     kind: command
                     input: ChargeArguments
-                    trustedArguments: { effectKey: nextEffectKey }
+                    trustedArguments: { effect_key: next_effect_key }
             """);
         ProtocolTypeDescriptor agentCall = new ProtocolTypeDescriptor(
             new ProtocolTypeIdentity(ConnectorProviderId.of("tpf.llm"), "AgentCall"),
@@ -348,9 +348,9 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("charge.create", callable.operation());
         assertEquals(2, callable.operationVersion());
         assertEquals("ChargeArguments", callable.input());
-        assertEquals(Map.of("effectKey", "nextEffectKey"), callable.trustedArguments());
-        assertEquals(List.of("effectScope", "nextEffectKey"), step.modelInputExcludes());
-        assertEquals(Map.of("state", "effectScope"), step.callContext());
+        assertEquals(Map.of("effect_key", "next_effect_key"), callable.trustedArguments());
+        assertEquals(List.of("effect_scope", "next_effect_key"), step.modelInputExcludes());
+        assertEquals(Map.of("effect_scope", "effect_scope"), step.callContext());
         PipelineTemplateTypeDefinition.UnionType decision = (PipelineTemplateTypeDefinition.UnionType)
             config.typeModel().definition("Decision").orElseThrow();
         assertEquals("AskUser", decision.variants().get("askUser").payload().name());

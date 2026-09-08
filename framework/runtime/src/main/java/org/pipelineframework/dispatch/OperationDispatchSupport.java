@@ -1,10 +1,12 @@
 package org.pipelineframework.dispatch;
 
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -250,7 +252,23 @@ public final class OperationDispatchSupport {
         if (!node.isObject()) {
             throw new IllegalArgumentException(label + " must be a JSON object");
         }
-        return json.writeValueAsString(node);
+        return json.writeValueAsString(sorted(node));
+    }
+
+    private JsonNode sorted(JsonNode value) {
+        if (value.isObject()) {
+            var result = json.createObjectNode();
+            var names = new ArrayList<String>();
+            value.fieldNames().forEachRemaining(names::add);
+            names.stream().sorted().forEach(name -> result.set(name, sorted(value.get(name))));
+            return result;
+        }
+        if (value.isArray()) {
+            var result = json.createArrayNode();
+            value.forEach(item -> result.add(sorted(item)));
+            return result;
+        }
+        return value;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

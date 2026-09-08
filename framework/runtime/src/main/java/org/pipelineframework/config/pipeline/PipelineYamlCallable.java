@@ -1,5 +1,6 @@
 package org.pipelineframework.config.pipeline;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -34,12 +35,17 @@ public record PipelineYamlCallable(
         if (input.isEmpty()) {
             throw new IllegalArgumentException("callable input contract must not be blank");
         }
-        trustedArguments = Map.copyOf(Objects.requireNonNull(
-            trustedArguments, "callable trusted arguments must not be null"));
-        trustedArguments.forEach((target, source) -> {
-            requireFieldName(target, "trusted argument target");
-            requireFieldPath(source, "trusted argument source");
-        });
+        Map<String, String> normalizedTrustedArguments = new LinkedHashMap<>();
+        Objects.requireNonNull(trustedArguments, "callable trusted arguments must not be null")
+            .forEach((target, source) -> {
+                String normalizedTarget = requireFieldName(target, "trusted argument target");
+                String normalizedSource = requireFieldPath(source, "trusted argument source");
+                if (normalizedTrustedArguments.putIfAbsent(normalizedTarget, normalizedSource) != null) {
+                    throw new IllegalArgumentException(
+                        "callable trusted argument target is duplicated after normalization: " + normalizedTarget);
+                }
+            });
+        trustedArguments = Map.copyOf(normalizedTrustedArguments);
         commandIdGenerator = Objects.requireNonNull(
             commandIdGenerator, "callable command ID generator must not be null").map(String::trim)
             .filter(value -> !value.isEmpty());
@@ -99,7 +105,7 @@ public record PipelineYamlCallable(
 
     private static String requireFieldName(String value, String label) {
         String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
-        if (!normalized.matches("[A-Za-z][A-Za-z0-9]*")) {
+        if (!normalized.matches("[A-Za-z][A-Za-z0-9_]*")) {
             throw new IllegalArgumentException(label + " must be a top-level record field: " + normalized);
         }
         return normalized;
@@ -107,7 +113,7 @@ public record PipelineYamlCallable(
 
     private static String requireFieldPath(String value, String label) {
         String normalized = Objects.requireNonNull(value, label + " must not be null").trim();
-        if (!normalized.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
+        if (!normalized.matches("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)*")) {
             throw new IllegalArgumentException(label + " must be a dotted record field path: " + normalized);
         }
         return normalized;

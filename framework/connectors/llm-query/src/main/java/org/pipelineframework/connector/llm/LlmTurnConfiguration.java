@@ -30,7 +30,7 @@ public record LlmTurnConfiguration(
         callContext = Objects.requireNonNull(callContext, "LLM call context must not be null").map(Map::copyOf);
         modelInputExcludes.orElseGet(List::of).forEach(path -> requirePath(path, "LLM model input exclusion"));
         callContext.orElseGet(Map::of).forEach((target, path) -> {
-            if (target == null || !target.matches("[A-Za-z][A-Za-z0-9]*")) {
+            if (target == null || !target.matches("[A-Za-z][A-Za-z0-9_]*")) {
                 throw new IllegalArgumentException("LLM call context key must be a field token: " + target);
             }
             requirePath(path, "LLM call context source");
@@ -114,7 +114,7 @@ public record LlmTurnConfiguration(
     }
 
     private static void requirePath(String path, String label) {
-        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
+        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)*")) {
             throw new IllegalArgumentException(label + " must be a dotted field path: " + path);
         }
     }

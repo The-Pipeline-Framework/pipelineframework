@@ -46,14 +46,15 @@ class OperationDispatchSupportTest {
 
         OperationObservation.Result result = assertInstanceOf(OperationObservation.Result.class,
             support.dispatch(descriptor(), "payments", "charge.lookup",
-                    "{\"note\":\"invoice\",\"amount\":42}", "{\"state\":\"turn-1\"}", OperationObservation.class)
+                    "{\"note\":\"invoice\",\"amount\":42}",
+                    "{\"turn\":1,\"state\":{\"z\":2,\"a\":1}}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
 
         assertEquals("found", result.value().outcome());
         assertEquals("found", result.value().code());
         assertEquals("ToolResult", result.value().resultType());
         assertEquals("{\"amount\":42,\"note\":\"invoice\"}", result.value().argumentsJson());
-        assertEquals("{\"state\":\"turn-1\"}", result.value().contextJson());
+        assertEquals("{\"state\":{\"a\":1,\"z\":2},\"turn\":1}", result.value().contextJson());
         assertEquals("{\"acceptedAmount\":42,\"receipt\":\"r-1\"}", result.value().resultJson());
     }
 

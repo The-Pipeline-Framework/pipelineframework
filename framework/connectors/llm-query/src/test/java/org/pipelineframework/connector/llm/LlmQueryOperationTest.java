@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -26,6 +27,16 @@ import org.pipelineframework.repository.PayloadReference;
 import org.pipelineframework.type.CanonicalTypeCatalogue;
 
 class LlmQueryOperationTest {
+
+    @Test
+    void acceptsUnderscoresInTypedProjectionPaths() {
+        LlmTurnConfiguration configuration = new LlmTurnConfiguration(
+            "Choose one alternative.", Optional.empty(), Optional.empty(), Optional.empty(),
+            List.of("state.effect_scope"), Map.of("effect_scope", "state.effect_scope"));
+
+        assertEquals(List.of("state.effect_scope"), configuration.excludedModelInputPaths());
+        assertEquals(Map.of("effect_scope", "state.effect_scope"), configuration.callContextMappings());
+    }
 
     @Test
     void declaresPipelineResultCachingSupport() {

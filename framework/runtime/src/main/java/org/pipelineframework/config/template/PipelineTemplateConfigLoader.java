@@ -959,7 +959,7 @@ public class PipelineTemplateConfigLoader {
         String path,
         String owner
     ) {
-        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
+        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)*")) {
             throw new IllegalStateException(owner + " must be a dotted record-field path: " + path);
         }
         PipelineTemplateTypeDefinition.RecordType current = recordType(typeModel, rootType, owner);
