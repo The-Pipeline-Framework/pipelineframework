@@ -10,8 +10,9 @@ public record CollectionsBriefing(
     String currency,
     BigDecimal totalOutstanding,
     BigDecimal overdueOutstanding,
+    long priorityAccounts,
     String headline,
-    List<CollectionAccount> accounts
+    List<CollectionAction> actions
 ) {
     public CollectionsBriefing {
         Objects.requireNonNull(reportDate, "reportDate");
@@ -19,6 +20,6 @@ public record CollectionsBriefing(
         Objects.requireNonNull(totalOutstanding, "totalOutstanding");
         Objects.requireNonNull(overdueOutstanding, "overdueOutstanding");
         Objects.requireNonNull(headline, "headline");
-        accounts = List.copyOf(accounts);
+        actions = List.copyOf(actions);
     }
 }

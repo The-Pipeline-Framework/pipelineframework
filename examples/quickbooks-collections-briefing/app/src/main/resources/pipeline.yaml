@@ -18,6 +18,10 @@ connectors:
 types:
   CollectionAccount:
     fields:
+      - [reportDate, string]
+      - [currency, string]
+      - [accountPresent, bool]
+      - [customerId, string]
       - [customer, string]
       - [current, decimal]
       - [days1To30, decimal]
@@ -25,15 +29,23 @@ types:
       - [days61To90, decimal]
       - [over90, decimal]
       - [total, decimal]
+  CollectionAction:
+    fields:
+      - [account, CollectionAccount]
+      - [overdue, decimal]
+      - [priority, string]
+      - [rationale, string]
+      - [recommendedAction, string]
   CollectionsBriefing:
     fields:
       - [reportDate, string]
       - [currency, string]
       - [totalOutstanding, decimal]
       - [overdueOutstanding, decimal]
+      - [priorityAccounts, int64]
       - [headline, string]
-      - name: accounts
-        repeated: CollectionAccount
+      - name: actions
+        repeated: CollectionAction
 
 steps:
   - name: Read aged receivables
@@ -47,12 +59,27 @@ steps:
     java:
       input: org.pipelineframework.examples.quickbooks.domain.QuickBooksAgedReceivablesRequest
       output: org.pipelineframework.connector.JsonPayload
-  - name: Prepare collections briefing
+  - name: Extract receivables accounts
     service: org.pipelineframework.examples.quickbooks.AgedReceivablesInterpreterService
-    cardinality: ONE_TO_ONE
+    cardinality: ONE_TO_MANY
     input: <tpf.connector.JsonPayload>
-    output: CollectionsBriefing
-    terminal: true
+    output: CollectionAccount
     java:
       input: org.pipelineframework.connector.JsonPayload
+      output: org.pipelineframework.examples.quickbooks.domain.CollectionAccount
+  - name: Apply collections policy
+    service: org.pipelineframework.examples.quickbooks.CollectionPolicyService
+    cardinality: ONE_TO_ONE
+    input: CollectionAccount
+    output: CollectionAction
+    java:
+      input: org.pipelineframework.examples.quickbooks.domain.CollectionAccount
+      output: org.pipelineframework.examples.quickbooks.domain.CollectionAction
+  - name: Prepare collections briefing
+    service: org.pipelineframework.examples.quickbooks.CollectionsBriefingService
+    cardinality: MANY_TO_ONE
+    input: CollectionAction
+    output: CollectionsBriefing
+    java:
+      input: org.pipelineframework.examples.quickbooks.domain.CollectionAction
       output: org.pipelineframework.examples.quickbooks.domain.CollectionsBriefing

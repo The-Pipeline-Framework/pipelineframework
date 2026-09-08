@@ -1,0 +1,223 @@
+{
+  "Header": {
+    "ReportName": "AgedReceivables",
+    "EndPeriod": "2026-09-08",
+    "SummarizeColumnsBy": "Total",
+    "Currency": "GBP",
+    "Option": [
+      {
+        "Name": "report_date",
+        "Value": "2026-09-08"
+      },
+      {
+        "Name": "NoReportData",
+        "Value": "false"
+      }
+    ]
+  },
+  "Columns": {
+    "Column": [
+      {
+        "ColTitle": "",
+        "ColType": "Customer"
+      },
+      {
+        "ColTitle": "Current",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "current"
+          }
+        ]
+      },
+      {
+        "ColTitle": "1 - 30",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "0"
+          }
+        ]
+      },
+      {
+        "ColTitle": "31 - 60",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "1"
+          }
+        ]
+      },
+      {
+        "ColTitle": "61 - 90",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "2"
+          }
+        ]
+      },
+      {
+        "ColTitle": "91 and over",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "3"
+          }
+        ]
+      },
+      {
+        "ColTitle": "Total",
+        "ColType": "Money",
+        "MetaData": [
+          {
+            "Name": "ColKey",
+            "Value": "total"
+          }
+        ]
+      }
+    ]
+  },
+  "Rows": {
+    "Row": [
+      {
+        "ColData": [
+          {
+            "value": "Abercrombie International Group",
+            "id": "67"
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": "30620.82"
+          },
+          {
+            "value": "30620.82"
+          }
+        ]
+      },
+      {
+        "ColData": [
+          {
+            "value": "Adwin Ko",
+            "id": "1"
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": "1800.00"
+          },
+          {
+            "value": "1800.00"
+          }
+        ]
+      },
+      {
+        "ColData": [
+          {
+            "value": "Benjamin Yeung",
+            "id": "3"
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": "960.00"
+          },
+          {
+            "value": "960.00"
+          }
+        ]
+      },
+      {
+        "ColData": [
+          {
+            "value": "Jordan Burgess",
+            "id": "16"
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": ""
+          },
+          {
+            "value": "480.00"
+          },
+          {
+            "value": "480.00"
+          }
+        ]
+      },
+      {
+        "Summary": {
+          "ColData": [
+            {
+              "value": "TOTAL"
+            },
+            {
+              "value": "0.00"
+            },
+            {
+              "value": "0.00"
+            },
+            {
+              "value": "0.00"
+            },
+            {
+              "value": "0.00"
+            },
+            {
+              "value": "33860.82"
+            },
+            {
+              "value": "33860.82"
+            }
+          ]
+        },
+        "type": "Section",
+        "group": "GrandTotal"
+      }
+    ]
+  }
+}

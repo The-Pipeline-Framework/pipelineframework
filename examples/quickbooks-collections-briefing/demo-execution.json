@@ -1,0 +1,70 @@
+{
+  "scenario": "sandbox-aged-receivables-to-collections-intervention-plan",
+  "source": {
+    "kind": "quickbooks-online-sandbox-fixture",
+    "fixture": "app/src/test/resources/fixtures/qbo-sandbox-aged-receivables-2026-09-08.json",
+    "volatileFieldsRemoved": [
+      "Header.Time"
+    ]
+  },
+  "executionTopology": {
+    "externalStimuli": 1,
+    "rootExecutions": 1,
+    "mcpQueries": 1,
+    "commands": 0,
+    "awaits": 0,
+    "nestedPipelines": 0,
+    "steps": [
+      "Read aged receivables",
+      "Extract receivables accounts",
+      "Apply collections policy",
+      "Prepare collections briefing"
+    ]
+  },
+  "request": {
+    "params": {
+      "aging_method": "Report_Date",
+      "days_per_aging_period": 30,
+      "num_periods": 4,
+      "report_date": "2026-09-08"
+    }
+  },
+  "expected": {
+    "currency": "GBP",
+    "customerCount": 4,
+    "totalOutstanding": 33860.82,
+    "overdueOutstanding": 33860.82,
+    "priorityAccounts": 2,
+    "orderedActions": [
+      {
+        "customerId": "67",
+        "customer": "Abercrombie International Group",
+        "priority": "CRITICAL",
+        "overdue": 30620.82
+      },
+      {
+        "customerId": "1",
+        "customer": "Adwin Ko",
+        "priority": "HIGH",
+        "overdue": 1800.00
+      },
+      {
+        "customerId": "3",
+        "customer": "Benjamin Yeung",
+        "priority": "STANDARD",
+        "overdue": 960.00
+      },
+      {
+        "customerId": "16",
+        "customer": "Jordan Burgess",
+        "priority": "STANDARD",
+        "overdue": 480.00
+      }
+    ]
+  },
+  "evidence": {
+    "fixtureBackedVerify": "passes",
+    "rootReplayFiles": 1,
+    "liveSandboxRun": "passes"
+  }
+}

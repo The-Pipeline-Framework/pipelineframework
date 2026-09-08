@@ -1,7 +1,6 @@
 package org.pipelineframework.examples.quickbooks;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,18 +9,17 @@ import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.pipelineframework.connector.JsonPayload;
 import org.pipelineframework.examples.quickbooks.domain.CollectionAccount;
-import org.pipelineframework.examples.quickbooks.domain.CollectionsBriefing;
-import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingService;
 
-/** Deterministic, application-owned interpretation of QuickBooks' unstructured MCP result. */
+/** Deterministically projects one unstructured QuickBooks report into typed customer rows. */
 @ApplicationScoped
-public class AgedReceivablesInterpreterService implements ReactiveService<JsonPayload, CollectionsBriefing> {
+public class AgedReceivablesInterpreterService implements ReactiveStreamingService<JsonPayload, CollectionAccount> {
     static final String MCP_RESULT_SCHEMA = "urn:tpf:mcp:call-tool-result:v1";
 
     private final ObjectMapper json;
@@ -32,11 +30,11 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
     }
 
     @Override
-    public Uni<CollectionsBriefing> process(JsonPayload payload) {
-        return Uni.createFrom().item(() -> interpret(payload));
+    public Multi<CollectionAccount> process(JsonPayload payload) {
+        return Multi.createFrom().iterable(interpret(payload));
     }
 
-    CollectionsBriefing interpret(JsonPayload payload) {
+    List<CollectionAccount> interpret(JsonPayload payload) {
         if (!"application/json".equals(payload.contentType()) || !MCP_RESULT_SCHEMA.equals(payload.schemaHint())) {
             throw new IllegalArgumentException("Expected an MCP CallToolResult JSON payload");
         }
@@ -46,7 +44,7 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
                 throw new IllegalArgumentException("QuickBooks returned an MCP error result");
             }
             JsonNode report = reportFrom(envelope.path("content"));
-            return briefingFrom(report);
+            return accountsFrom(report);
         } catch (IllegalArgumentException failure) {
             throw failure;
         } catch (Exception failure) {
@@ -75,9 +73,11 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
         throw new IllegalArgumentException("MCP result does not contain a QuickBooks report");
     }
 
-    private CollectionsBriefing briefingFrom(JsonNode report) {
+    private List<CollectionAccount> accountsFrom(JsonNode report) {
         Map<String, Integer> columns = columnIndexes(report.path("Columns").path("Column"));
         int customerIndex = columns.getOrDefault("customer", 0);
+        String currency = report.path("Header").path("Currency").asText("unknown");
+        String reportDate = report.path("Header").path("EndPeriod").asText("unknown");
         List<CollectionAccount> accounts = new ArrayList<>();
         for (JsonNode row : report.path("Rows").path("Row")) {
             JsonNode cells = row.path("ColData");
@@ -86,6 +86,10 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
                 continue;
             }
             accounts.add(new CollectionAccount(
+                reportDate,
+                currency,
+                true,
+                cells.path(customerIndex).path("id").asText(""),
                 customer,
                 amount(cells, requiredIndex(columns, "current")),
                 amount(cells, requiredIndex(columns, "1 - 30")),
@@ -94,19 +98,11 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
                 amount(cells, requiredIndex(columns, "91 and over")),
                 amount(cells, requiredIndex(columns, "total"))));
         }
-        accounts.sort((left, right) -> overdue(right).compareTo(overdue(left)));
-        BigDecimal total = accounts.stream().map(CollectionAccount::total)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal overdue = accounts.stream().map(AgedReceivablesInterpreterService::overdue)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        String currency = report.path("Header").path("Currency").asText("unknown");
-        String reportDate = report.path("Header").path("EndPeriod").asText("unknown");
-        String headline = accounts.isEmpty()
-            ? "No open receivables were returned for " + reportDate + "."
-            : "%d customers owe %s %s; %s %s is overdue. First call: %s (%s %s overdue).".formatted(
-                accounts.size(), currency, money(total), currency, money(overdue), accounts.getFirst().customer(),
-                currency, money(overdue(accounts.getFirst())));
-        return new CollectionsBriefing(reportDate, currency, total, overdue, headline, accounts);
+        if (accounts.isEmpty()) {
+            accounts.add(new CollectionAccount(reportDate, currency, false, "", "", BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+        }
+        return List.copyOf(accounts);
     }
 
     private static Map<String, Integer> columnIndexes(JsonNode columns) {
@@ -138,11 +134,4 @@ public class AgedReceivablesInterpreterService implements ReactiveService<JsonPa
         return value.isBlank() ? BigDecimal.ZERO : new BigDecimal(value);
     }
 
-    private static BigDecimal overdue(CollectionAccount account) {
-        return account.days1To30().add(account.days31To60()).add(account.days61To90()).add(account.over90());
-    }
-
-    private static String money(BigDecimal amount) {
-        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
-    }
 }
