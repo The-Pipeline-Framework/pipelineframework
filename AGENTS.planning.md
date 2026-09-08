@@ -15,18 +15,6 @@ When planning, separate:
 - validation gates,
 - follow-up slices.
 
-## Repowise Use
-
-Use Repowise as an index, not authority:
-
-1. `get_overview()` only when the task is unfamiliar.
-2. `get_answer()` for focused architecture or location questions.
-3. `get_why()` for rationale before changing established patterns.
-4. `get_risk()` before modifying public APIs, shared runtime/compiler utilities, hotspots, high-coupling modules, or broad PR file sets.
-5. Verify conclusions against active worktree files before editing.
-
-Do not refresh or rebuild Repowise unless the user asks or refreshed indexed context is genuinely needed after meaningful edits.
-
 ## PR Slicing
 
 Optimize for cohesive, independently mergeable PRs:
@@ -57,7 +45,6 @@ Use this when a semantic change touches compiler/runtime behavior:
 - telemetry/replay metadata,
 - replay viewer node rendering or legend,
 - docs under the right top-level route,
-- `tpf-mcp-bridge` when schema export, template generation, scaffold generation, or generated project behavior changes.
 
 For `examples/csv-payments` runtime-layout work, keep all of these aligned:
 

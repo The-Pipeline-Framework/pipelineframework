@@ -31,10 +31,9 @@ including repeated success and failure recordings.
 
 ## Bridge coordination
 
-The separate `tpf-mcp-bridge` checkout still pins Quarkus 3.31.3 in
+A separate maintainer scaffold checkout still pins Quarkus 3.31.3 in
 `mock-scaffold/pom.xml`. Align that scaffold and run its generated-project checks
-before claiming generator compatibility with this release. This TPF worktree does
-not modify or publish the bridge repository.
+before claiming generator compatibility with this release.
 
 ## Validation record
 
