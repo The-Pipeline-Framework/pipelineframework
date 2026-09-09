@@ -73,5 +73,5 @@ same callable, projection, dispatch, and authority model without GraphQL changes
 - Pagination follows the framework's paging work. Subscriptions/Await, schema introspection, raw
   GraphQL, runtime catalogue changes, and a production generic-agent Block remain out of scope.
 
-This decision succeeds ADR-0029 for packaged agentic GraphQL composition. ADR-0029's persisted
-operation authority and native Query/Command mapping remain in force.
+This decision builds on ADR-0029 for packaged agentic GraphQL composition. ADR-0029 remains
+authoritative for persisted-operation mapping, operation authority, and native Query/Command mapping.

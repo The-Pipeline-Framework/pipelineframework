@@ -21,6 +21,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding;
 import org.pipelineframework.config.pipeline.PipelineYamlOperationSelection;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.connector.ConnectorConfigSchemaDescriptor;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorConfigurationSnapshot;
@@ -119,6 +120,7 @@ public final class ConnectorBindingMetadataGenerator {
             "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
         String canonicalInput = basePackage + ".domain." + callable.input();
         boolean javaBindingMatches = template
+            .filter(value -> value.dialect() == PipelineTemplateDialect.V3)
             .map(V3JavaTypeResolver::new)
             .flatMap(resolver -> resolver.resolve(callable.input()))
             .map(javaType -> contract.inputType().equals(javaType.canonicalName()))

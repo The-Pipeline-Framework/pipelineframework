@@ -71,11 +71,13 @@ class GraphQlBlockProofIT {
 
     private DynamicGraphQLClient client;
     private String executionId;
+    private int previousMaxRecursiveDepth;
 
     @BeforeEach
     @SuppressWarnings({ "rawtypes", "unchecked" })
     void configureApplicationConnections() {
         recorder.reset();
+        previousMaxRecursiveDepth = config.maxRecursiveDepth();
         config.maxRecursiveDepth(8);
         client = mock(DynamicGraphQLClient.class);
         var connection = new AuthenticatedGraphQlConnection(client);
@@ -87,6 +89,7 @@ class GraphQlBlockProofIT {
 
     @AfterEach
     void clearContext() {
+        config.maxRecursiveDepth(previousMaxRecursiveDepth);
         PipelineExecutionContextHolder.clear();
     }
 

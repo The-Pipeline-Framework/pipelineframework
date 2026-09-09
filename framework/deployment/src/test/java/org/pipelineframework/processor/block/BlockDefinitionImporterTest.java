@@ -96,6 +96,18 @@ class BlockDefinitionImporterTest {
              ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
             assertEquals(1, imported.definitions().size());
             assertEquals("org.example.shared/reusable", imported.definitions().getFirst().qualifiedId());
+            assertEquals("1.0.0", imported.definitions().getFirst().version());
+        }
+
+        Path unresolvedFirst = dependency(
+            "a-copy", "org.example.shared", "shared", "${project.version}", "reusable", yaml);
+        Path resolvedSecond = dependency(
+            "b-copy", "org.example.shared", "shared", "1.0.0", "reusable", yaml);
+        try (URLClassLoader loader = loader(unresolvedFirst, resolvedSecond);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
+            assertEquals(1, imported.definitions().size());
+            assertEquals("org.example.shared/reusable", imported.definitions().getFirst().qualifiedId());
+            assertEquals("1.0.0", imported.definitions().getFirst().version());
         }
     }
 
