@@ -92,6 +92,45 @@ class PipelineBranchRoutingPlannerTest {
         assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
+    @Test
+    void resolvesV3UnionPayloadsThroughPackageOwnedJavaBindings() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        definitions.put("State", new PipelineTemplateTypeDefinition.RecordType("State", List.of()));
+        definitions.put("Observation", new PipelineTemplateTypeDefinition.RecordType("Observation", List.of()));
+        definitions.put("Completion", new PipelineTemplateTypeDefinition.RecordType("Completion", List.of()));
+        definitions.put("Decision", new PipelineTemplateTypeDefinition.UnionType("Decision", Map.of(
+            "observe", new PipelineTemplateTypeDefinition.Variant(
+                "observe", new PipelineTemplateTypeReference.Named("Observation")),
+            "complete", new PipelineTemplateTypeDefinition.Variant(
+                "complete", new PipelineTemplateTypeReference.Named("Completion")))));
+        Map<String, String> bindings = Map.of(
+            "State", "org.example.block.State",
+            "Completion", "org.example.block.Completion",
+            "Decision", "org.example.block.Decision");
+        PipelineTemplateTypeModel model = new PipelineTemplateTypeModel(
+            definitions, Map.of(), Map.of(), Map.of(), bindings);
+        ctx.setPipelineTemplateConfig(v3Config(
+            "Package bindings", "com.example.consumer",
+            List.of(
+                step("decide", "State", "Decision", List.of(), false),
+                step("observe", "Decision", "Completion", List.of("Observation"), false),
+                step("finish", "Completion", "Completion", List.of(), true)),
+            model));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("decide", "org.example.block", "org.example.block.State", "org.example.block.Decision"),
+            stepDefinition("observe", "org.example.block", "org.example.block.Decision", "org.example.block.Completion"),
+            stepDefinition("finish", "org.example.block", "org.example.block.Completion", "org.example.block.Completion")));
+
+        Optional<PipelineBranchingPlan> plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertEquals(List.of(ClassName.get("org.example.block", "Observation")),
+            plan.orElseThrow().steps().get(1).acceptedDomainTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
     private final PipelineBranchRoutingPlanner planner = new PipelineBranchRoutingPlanner();
 
     @Test

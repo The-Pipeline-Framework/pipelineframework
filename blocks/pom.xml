@@ -17,6 +17,7 @@
     <modules>
         <module>document-text-extraction</module>
         <module>graphql</module>
+        <module>graphql-agent</module>
     </modules>
     <dependencyManagement>
         <dependencies>

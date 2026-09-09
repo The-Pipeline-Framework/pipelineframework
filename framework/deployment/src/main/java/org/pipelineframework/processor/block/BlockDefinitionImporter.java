@@ -78,9 +78,10 @@ public final class BlockDefinitionImporter {
         Map<String, Object> applicationRepresentations = map(application, "representations", true);
         Map<String, Object> applicationConnectors = map(application, "connectors", true);
 
-        List<PackageSource> packages = manifests.stream().map(this::loadPackage).toList();
+        List<PackageSource> packages = deduplicatePackages(manifests);
         Map<String, List<String>> importedByShortName = new LinkedHashMap<>();
         Map<String, PackageDefinition> definitionsByQualifiedId = new LinkedHashMap<>();
+        Map<String, PackageSource> sourcesByQualifiedId = new LinkedHashMap<>();
         for (PackageSource source : packages) {
             for (PackageDefinition definition : source.definitions()) {
                 if (applicationPipelines.containsKey(definition.name())) {
@@ -93,9 +94,13 @@ public final class BlockDefinitionImporter {
                 }
                 PackageDefinition previous = definitionsByQualifiedId.putIfAbsent(definition.qualifiedId(), definition);
                 if (previous != null) {
+                    PackageSource previousSource = sourcesByQualifiedId.get(definition.qualifiedId());
                     throw new IllegalStateException("Multiple block artifacts contribute qualified definition '"
-                        + definition.qualifiedId() + "'.");
+                        + definition.qualifiedId() + "': " + coordinate(previousSource.manifest()) + " at "
+                        + previousSource.resource() + " and " + coordinate(source.manifest()) + " at "
+                        + source.resource() + ".");
                 }
+                sourcesByQualifiedId.put(definition.qualifiedId(), source);
                 importedByShortName.computeIfAbsent(definition.name(), ignored -> new ArrayList<>())
                     .add(definition.qualifiedId());
             }
@@ -158,6 +163,58 @@ public final class BlockDefinitionImporter {
         }
     }
 
+    private List<PackageSource> deduplicatePackages(List<ManifestResource> manifests) {
+        List<PackageSource> packages = new ArrayList<>();
+        for (ManifestResource manifest : manifests) {
+            PackageSource source = loadPackage(manifest);
+            int duplicate = duplicatePackage(packages, source);
+            if (duplicate < 0) {
+                packages.add(source);
+            } else if (unresolvedVersion(packages.get(duplicate).manifest().artifact().version())
+                && !unresolvedVersion(source.manifest().artifact().version())) {
+                packages.set(duplicate, source);
+            }
+        }
+        return List.copyOf(packages);
+    }
+
+    private static int duplicatePackage(List<PackageSource> packages, PackageSource candidate) {
+        String content = packageContentIdentity(candidate);
+        for (int index = 0; index < packages.size(); index++) {
+            PackageSource existing = packages.get(index);
+            if (packageContentIdentity(existing).equals(content)
+                && compatibleVersions(existing.manifest().artifact().version(), candidate.manifest().artifact().version())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static String packageContentIdentity(PackageSource source) {
+        String definitions = source.definitions().stream()
+            .sorted(Comparator.comparing(PackageDefinition::qualifiedId))
+            .map(definition -> definition.qualifiedId() + "\n" + definition.resource() + "\n"
+                + definition.definitionFingerprint() + "\n" + definition.requirements().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> entry.getKey() + ":" + entry.getValue().kind())
+                    .collect(java.util.stream.Collectors.joining(",")))
+            .collect(java.util.stream.Collectors.joining("\n"));
+        String documents = source.documents().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(entry -> entry.getKey() + ":" + fingerprint(entry.getValue()))
+            .collect(java.util.stream.Collectors.joining("\n"));
+        return source.manifest().artifact().groupId() + ":" + source.manifest().artifact().artifactId()
+            + "\n" + source.manifest().namespace() + "\n" + definitions + "\n" + documents;
+    }
+
+    private static boolean compatibleVersions(String first, String second) {
+        return first.equals(second) || unresolvedVersion(first) || unresolvedVersion(second);
+    }
+
+    private static boolean unresolvedVersion(String version) {
+        return version.contains("${");
+    }
+
     private static String diagnosticMessage(RuntimeException exception) {
         Throwable cause = exception;
         String message = exception.getClass().getSimpleName();
@@ -194,7 +251,7 @@ public final class BlockDefinitionImporter {
             definitions.add(new PackageDefinition(declaration.name(), qualifiedId, declaration.resource(),
                 mutableMap(definition), declaration.requires(), fingerprint(mutableMap(definition))));
         }
-        return new PackageSource(manifest, List.copyOf(definitions), Map.copyOf(documents));
+        return new PackageSource(resource.resource(), manifest, List.copyOf(definitions), Map.copyOf(documents));
     }
 
     private Map<String, Object> packageDocument(
@@ -907,6 +964,7 @@ public final class BlockDefinitionImporter {
     }
 
     private record PackageSource(
+        URL resource,
         BlockPackageManifest manifest,
         List<PackageDefinition> definitions,
         Map<String, Map<String, Object>> documents

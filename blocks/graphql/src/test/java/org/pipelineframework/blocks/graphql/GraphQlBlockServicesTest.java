@@ -1,6 +1,7 @@
 package org.pipelineframework.blocks.graphql;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.command.CommandDescriptor;
 import org.pipelineframework.command.CommandDuplicatePolicy;
 import org.pipelineframework.connector.graphql.GraphQlDataJson;
+import org.pipelineframework.connector.graphql.GraphQlEffectKeyCommandIdGenerator;
 import org.pipelineframework.connector.graphql.GraphQlError;
 import org.pipelineframework.connector.graphql.GraphQlMutationRequest;
 import org.pipelineframework.connector.graphql.GraphQlQueryRequest;
@@ -41,5 +43,20 @@ class GraphQlBlockServicesTest {
         String commandId = new GraphQlEffectKeyCommandIdGenerator().commandId(descriptor, request);
 
         assertEquals("graphql:customer.update:tenant-a/customer-7/v2", commandId);
+    }
+
+    @Test void commandIdentityEscapesComponentsWithoutChangingOrdinaryKeys() {
+        var generator = new GraphQlEffectKeyCommandIdGenerator();
+        var descriptor = new CommandDescriptor("graphql-mutation", "execute.mutation", "input", "output",
+            GraphQlEffectKeyCommandIdGenerator.class.getName(), CommandDuplicatePolicy.RETURN_RECORDED,
+            java.util.Map.of());
+
+        String operationDelimiter = generator.commandId(descriptor, new GraphQlMutationRequest(
+            "customer:update", "scope", GraphQlVariablesJson.empty()));
+        String effectDelimiter = generator.commandId(descriptor, new GraphQlMutationRequest(
+            "customer", "update:scope", GraphQlVariablesJson.empty()));
+
+        assertEquals("graphql:customer%3Aupdate:scope", operationDelimiter);
+        assertNotEquals(operationDelimiter, effectDelimiter);
     }
 }

@@ -41,6 +41,7 @@ authoritative for exact syntax and release support.
 | [0030](./0030-optional-host-connection-lifecycle.md) | Reuse host-platform authorization and bridge durable connection lifetime behind the existing host resolver. |
 | [0031](./0031-canonical-constraints-own-value-and-collection-semantics.md) | Make canonical v3 own allowed scalar sets and repeated-field cardinality constraints. |
 | [0032](./0032-application-bound-callable-capabilities-in-packaged-blocks.md) | Link packaged callable catalogues, trusted projections, and dynamic Query/Command dispatch without transferring application authority. |
+| [0033](./0033-graphql-agent-packages-semantics-not-authority.md) | Package a bounded GraphQL-aware agent loop while leaving persisted operations and Command authority with the application. |
 
 ## Maintenance
 

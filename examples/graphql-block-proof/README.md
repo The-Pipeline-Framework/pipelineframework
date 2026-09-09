@@ -1,13 +1,16 @@
 # GraphQL Block proof
 
-This Quarkus application proves that an installed Block can contribute ordinary GraphQL Query and
-Command computation while the application retains external authority.
+This Quarkus application proves that the production `graphql-agent` Block can package a bounded,
+GraphQL-aware callable loop while the application retains external authority.
 
-The application owns the `graphql.smallrye` binding, digest-pinned Query and Mutation documents,
-host `ConnectionResolver`, mutation effect key, and `blockBindings` Command policy. It invokes only
-the imported `graphql-query` and `graphql-mutation` definitions through ordinary `pipeline:` steps.
-It contains no GraphQL parsing, request transport, routing, or response-normalization implementation.
+The Block owns turn preparation, model tools, trusted effect-key derivation, Query/Mutation routing,
+observation normalization, reduction, bounded recursion, and typed completion. The application owns
+the LLM and `graphql.smallrye` bindings, digest-pinned Query and Mutation documents, host
+`ConnectionResolver`, effect scope, and explicit Command identity/duplicate/policy choices. Its root
+pipeline contains only `pipeline: graphql-agent`.
 
-The integration test uses an application-supplied `DynamicGraphQLClient` and verifies Query capture
-replay plus Command duplicate replay without a second external dispatch. Generated contract checks
-verify qualified Block provenance and sanitized connector configuration identity.
+The deterministic integration proof performs persisted Query → partial-error Mutation → typed
+completion. It verifies LLM and GraphQL Query capture replay, Command duplicate replay without live
+redispatch, model-input exclusion of effect authority, trusted Mutation argument injection, turn
+exhaustion before another external call, and sanitized generated provenance. The consumer contains
+no GraphQL routing, reducer, recursion, transport, or normalization implementation.

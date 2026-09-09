@@ -65,8 +65,10 @@ retry, and ambiguity behavior without a GraphQL or Block runtime.
 - The portable contract is runtime-neutral, while the first provider implementation and proof are
   Quarkus/SmallRye only. No Spring parity is claimed.
 - Pagination, subscriptions/Await, schema introspection or generation, runtime catalogue mutation,
-  raw-document execution, provider-specific business semantics, and packaged agentic GraphQL remain
-  outside this decision.
+  raw-document execution, and provider-specific business semantics remain outside this decision.
 - A consumer-local agent pipeline may compose the same Blocks with existing one-turn Query,
   operation observation, authored reduction, and bounded recursion without gaining new runtime
   semantics.
+
+ADR-0033 succeeds this decision for packaged agentic GraphQL composition while preserving the
+persisted-operation authority defined here.

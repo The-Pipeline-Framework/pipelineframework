@@ -97,7 +97,7 @@ blockBindings:
   org.pipelineframework.graphql/graphql-mutation:
     graphql.write:
       using: primary-graphql
-      commandIdGenerator: org.pipelineframework.blocks.graphql.GraphQlEffectKeyCommandIdGenerator
+      commandIdGenerator: org.pipelineframework.connector.graphql.GraphQlEffectKeyCommandIdGenerator
       duplicatePolicy: RETURN_RECORDED
       policy:
         requiredExecutionPosture: AUTOMATED
@@ -122,6 +122,73 @@ The reusable effect-key generator derives a stable Command ID from `operationKey
 The application remains responsible for choosing a semantic effect key and deliberately granting
 the generator, duplicate policy, and Command policy. The Block packages none of those authority
 choices.
+
+## Add the packaged GraphQL agent
+
+Use the separate production Block when an application needs a bounded GraphQL-aware callable loop:
+
+```xml
+<dependency>
+  <groupId>org.pipelineframework.blocks</groupId>
+  <artifactId>graphql-agent</artifactId>
+  <version>${pipelineframework.version}</version>
+</dependency>
+```
+
+It exports `org.pipelineframework.graphql/graphql-agent` and adds one LLM Query requirement without
+changing the standalone `graphql-query` or `graphql-mutation` Blocks.
+
+```mermaid
+flowchart LR
+    S[GraphQlAgentState] --> B[derive turn bound and trusted effect key]
+    B --> L[one-turn LLM Query]
+    L --> D{decision}
+    D -->|graphql_query| Q[native GraphQL Query]
+    D -->|graphql_mutation| C[native GraphQL Command]
+    D -->|complete| R[GraphQlAgentCompletion]
+    Q --> O[OperationObservation]
+    C --> O
+    O --> N[normalize and reduce]
+    N -->|turn available| S
+    N -->|turn exhausted| R
+```
+
+Map all three requirements on the qualified definition:
+
+```yaml
+blockBindings:
+  org.pipelineframework.graphql/graphql-agent:
+    llm.decide:
+      using: decision-model
+    graphql.read:
+      using: primary-graphql
+    graphql.write:
+      using: primary-graphql
+      commandIdGenerator: org.pipelineframework.connector.graphql.GraphQlEffectKeyCommandIdGenerator
+      duplicatePolicy: RETURN_RECORDED
+      policy:
+        requiredExecutionPosture: AUTOMATED
+        minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+```
+
+Then invoke it through ordinary composition:
+
+```yaml
+- name: Resolve objective through persisted GraphQL operations
+  pipeline: graphql-agent
+  input: GraphQlAgentState
+  output: GraphQlAgentCompletion
+```
+
+`GraphQlAgentState.start(...)` takes the objective, a typed operation guide, an application effect
+scope, and `maxTurns` from 1 through 16. The guide helps the model choose, but the connector's
+digest-pinned operation catalogue remains authoritative.
+
+The model-facing Query and Mutation tools accept only `operationKey` and validated `variablesJson`.
+The Mutation's `effectKey` is deterministically derived from application effect scope and logical
+turn, excluded from model input, and injected as a trusted argument. Command identity also includes
+the application-pinned operation key. A model cannot submit raw GraphQL, replace the effect key, or
+select endpoint, credentials, tenant, account, duplicate policy, or Command policy.
 
 ## Supply the host-owned connection
 
@@ -150,12 +217,10 @@ application reconciliation policy.
 
 ## Scope
 
-The first contract deliberately excludes pagination, subscriptions/Await, schema introspection,
-schema or client generation, runtime catalogue updates, arbitrary raw GraphQL, endpoint selection
-from request data, and provider-specific Shopify or QuickBooks semantics. A consumer-local agent
-pipeline may compose these Blocks using existing one-turn Query, operation observation, authored
-reduction, and bounded recursion. Packaging dynamic operation selection inside a Block remains a
-separate future decision.
+The contract deliberately excludes pagination, subscriptions/Await, schema introspection, schema or
+client generation, runtime catalogue updates, arbitrary raw GraphQL, endpoint selection from request
+data, and provider-specific Shopify or QuickBooks semantics. Pagination follows TPF's paging work;
+it is not implemented by the GraphQL Blocks.
 
-See `examples/graphql-block-proof` for one captured persisted query and one duplicate-safe persisted
-mutation using application-owned documents and connection resolution.
+See `examples/graphql-block-proof` for a packaged Query → Mutation → typed completion loop using
+application-owned documents, connection resolution, LLM binding, and Command authority.

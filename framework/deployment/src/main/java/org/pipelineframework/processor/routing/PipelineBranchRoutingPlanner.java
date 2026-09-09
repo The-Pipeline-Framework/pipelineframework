@@ -381,11 +381,19 @@ public final class PipelineBranchRoutingPlanner {
             if (payload.isEmpty()) {
                 continue;
             }
-            ClassName payloadRuntimeType = ClassName.get(
-                templateConfig.basePackage() + ".domain",
-                payload.orElseThrow());
+            String payloadContract = payload.orElseThrow();
+            ClassName payloadRuntimeType = templateConfig.typeModel().javaTypeBinding(payloadContract)
+                .map(ClassName::bestGuess)
+                .orElseGet(() -> {
+                    ClassName alongsideUnion = ClassName.get(runtimeType.packageName(), payloadContract);
+                    return !runtimeType.packageName().isBlank() && isResolvable(ctx, alongsideUnion)
+                        ? alongsideUnion
+                        : new V3JavaTypeResolver(templateConfig).resolve(payloadContract)
+                            .orElseThrow(() -> new IllegalStateException("V3 union payload '"
+                                + payloadContract + "' has no canonical Java runtime type"));
+                });
             if (isResolvable(ctx, payloadRuntimeType)) {
-                contractRuntimeTypes.putIfAbsent(payload.orElseThrow(), payloadRuntimeType);
+                contractRuntimeTypes.putIfAbsent(payloadContract, payloadRuntimeType);
             } else {
                 report(ctx, Diagnostic.Kind.WARNING, "V3 union contract '" + contractTypeName
                     + "' variant '" + variant.discriminator() + "' maps to unresolved canonical runtime type '"
