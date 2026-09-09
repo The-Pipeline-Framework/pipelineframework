@@ -22,7 +22,24 @@ public interface RepresentationProvider {
         return Optional.empty();
     }
 
+    /** Declares whether this provider owns representation mapping for a Connector provider family. */
+    default boolean supportsOperationProvider(String connectorProviderId, int connectorProviderMajorVersion) {
+        return false;
+    }
+
+    default Optional<OperationBoundaryClaim> claimOperation(OperationBoundaryRequest boundary) {
+        return Optional.empty();
+    }
+
+    default Optional<ResolvedOperationRepresentation> resolveOperation(OperationRepresentationRequest request) {
+        return Optional.empty();
+    }
+
     default List<ArtifactDescription> describeArtifacts(ProviderGenerationRequest request) {
+        return List.of();
+    }
+
+    default List<ArtifactDescription> describeOperationArtifacts(OperationProviderGenerationRequest request) {
         return List.of();
     }
 

@@ -4,7 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.io.StringWriter;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -15,6 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import javax.annotation.processing.Filer;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,6 +33,8 @@ import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
 import org.pipelineframework.representation.spi.CanonicalType;
 import org.pipelineframework.representation.spi.CanonicalTypeShape;
+import org.pipelineframework.representation.spi.OperationBoundaryClaim;
+import org.pipelineframework.representation.spi.OperationBoundaryRequest;
 import org.pipelineframework.representation.spi.ProviderMetadata;
 import org.pipelineframework.representation.spi.ProviderConfiguration;
 import org.pipelineframework.representation.spi.ProviderExecutionStyle;
@@ -152,6 +161,24 @@ class RepresentationProviderRegistryTest {
     }
 
     @Test
+    void resolvesOperationClaimsWithoutIntroducingAProviderSpecificRegistry() {
+        OperationBoundaryRequest request = new OperationBoundaryRequest("proof:lookup", "http.client", 1,
+            "evidence.lookup", "tpf:query", 1, PAYMENT, PAYMENT);
+
+        RepresentationProviderRegistry none = RepresentationProviderRegistry.of(List.of(provider("none", Set.of())));
+        assertFalse(none.supportsOperationProvider("http.client", 1));
+        assertTrue(none.resolveOperationClaim(request).isEmpty());
+        RepresentationProviderRegistry http = RepresentationProviderRegistry.of(List.of(operationProvider("http")));
+        assertTrue(http.supportsOperationProvider("http.client", 1));
+        assertFalse(http.supportsOperationProvider("http.client", 2));
+        assertEquals(Optional.of("http"), http.resolveOperationClaim(request).map(OperationBoundaryClaim::providerKey));
+        assertEquals("Connector operation boundary 'proof:lookup' has multiple representation provider claimants: "
+                + "[alpha, zeta]",
+            assertThrows(IllegalStateException.class, () -> RepresentationProviderRegistry.of(List.of(
+                operationProvider("zeta"), operationProvider("alpha"))).resolveOperationClaim(request)).getMessage());
+    }
+
+    @Test
     void hostOrdersAndWritesProviderArtifactsAndRejectsConflicts(@TempDir Path root) throws Exception {
         ProviderArtifactWriter writer = new ProviderArtifactWriter();
         List<Path> written = writer.write(root, List.of(
@@ -164,6 +191,23 @@ class RepresentationProviderRegistryTest {
             artifact("alpha", ArtifactPhase.SOURCE, "same.java", "A"),
             artifact("zeta", ArtifactPhase.SOURCE, "same.java", "Z")))).getMessage()
             .contains("Representation artifact conflict at 'same.java'"));
+    }
+
+    @Test
+    void compilerHostWritesProviderResourcesToClassOutput() throws Exception {
+        ProviderArtifactWriter writer = new ProviderArtifactWriter();
+        Filer filer = mock(Filer.class);
+        FileObject resource = mock(FileObject.class);
+        StringWriter contents = new StringWriter();
+        when(filer.createResource(StandardLocation.CLASS_OUTPUT, "", "META-INF/pipeline/generated.json"))
+            .thenReturn(resource);
+        when(resource.openWriter()).thenReturn(contents);
+
+        writer.write(filer, List.of(new ArtifactDescription("provider", ArtifactPhase.RESOURCE,
+            ArtifactKind.RESOURCE, "META-INF/pipeline/generated.json", "{}", 0)));
+
+        verify(filer).createResource(StandardLocation.CLASS_OUTPUT, "", "META-INF/pipeline/generated.json");
+        assertEquals("{}", contents.toString());
     }
 
     private static ArtifactDescription artifact(String provider, ArtifactPhase phase, String path, String content) {
@@ -180,6 +224,19 @@ class RepresentationProviderRegistryTest {
             @Override public Optional<BoundaryClaim> claim(BoundaryRequest request) {
                 return Optional.of(new BoundaryClaim(key, request.stepName(), "example." + key,
                     Optional.of(new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR, "UNARY_STREAMING"))));
+            }
+        };
+    }
+
+    private static RepresentationProvider operationProvider(String key) {
+        return new RepresentationProvider() {
+            @Override public ProviderMetadata metadata() { return new ProviderMetadata(key, Set.of(), Set.of()); }
+            @Override public boolean supportsOperationProvider(String providerId, int providerMajorVersion) {
+                return "http.client".equals(providerId) && providerMajorVersion == 1;
+            }
+            @Override public Optional<OperationBoundaryClaim> claimOperation(OperationBoundaryRequest request) {
+                var wire = new OperationBoundaryClaim.WireBoundary("mapping", "{}", "1".repeat(64));
+                return Optional.of(new OperationBoundaryClaim(key, wire, List.of(wire)));
             }
         };
     }

@@ -15,8 +15,12 @@ import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
 import org.pipelineframework.representation.spi.ProviderConfiguration;
 import org.pipelineframework.representation.spi.ProviderDiagnostic;
+import org.pipelineframework.representation.spi.OperationBoundaryClaim;
+import org.pipelineframework.representation.spi.OperationBoundaryRequest;
+import org.pipelineframework.representation.spi.OperationRepresentationRequest;
 import org.pipelineframework.representation.spi.RepresentationMappingRequest;
 import org.pipelineframework.representation.spi.RepresentationProvider;
+import org.pipelineframework.representation.spi.ResolvedOperationRepresentation;
 import org.pipelineframework.representation.spi.ResolvedRepresentation;
 
 /**
@@ -96,6 +100,32 @@ public final class RepresentationProviderRegistry {
     public Optional<ResolvedRepresentation> resolve(RepresentationMappingRequest mapping) {
         RepresentationProvider provider = byKey.get(mapping.key());
         return provider == null ? Optional.empty() : provider.resolve(mapping);
+    }
+
+    /** Avoids requiring operation-boundary canonical metadata when no provider owns that Connector family. */
+    public boolean supportsOperationProvider(String connectorProviderId, int connectorProviderMajorVersion) {
+        return ordered.stream().anyMatch(provider ->
+            provider.supportsOperationProvider(connectorProviderId, connectorProviderMajorVersion));
+    }
+
+    /** Resolves one Connector-operation claimant without coupling core to a provider's source format. */
+    public Optional<OperationBoundaryClaim> resolveOperationClaim(OperationBoundaryRequest request) {
+        List<OperationBoundaryClaim> claims = ordered.stream()
+            .map(provider -> provider.claimOperation(request))
+            .flatMap(Optional::stream)
+            .sorted(Comparator.comparing(OperationBoundaryClaim::providerKey))
+            .toList();
+        if (claims.size() > 1) {
+            throw new IllegalStateException("Connector operation boundary '" + request.boundaryIdentity()
+                + "' has multiple representation provider claimants: "
+                + claims.stream().map(OperationBoundaryClaim::providerKey).toList());
+        }
+        return claims.stream().findFirst();
+    }
+
+    public Optional<ResolvedOperationRepresentation> resolveOperation(OperationRepresentationRequest request) {
+        RepresentationProvider provider = byKey.get(request.claim().providerKey());
+        return provider == null ? Optional.empty() : provider.resolveOperation(request);
     }
 
     /** Collect every claimant before core classification so ambiguity is deterministic and renderer-independent. */
