@@ -6,6 +6,13 @@ title: All Settings Reference
 
 This page lists every supported configuration option, grouped by build-time and runtime usage.
 
+```mermaid
+flowchart LR
+    B[Build-time settings] --> G[Generated code and contracts]
+    R[Runtime settings] --> E[Execution behaviour]
+    D[Deployment settings] --> I[Infrastructure integration]
+```
+
 ::: tip Canonical Settings Reference
 This is the long-form configuration reference. Use this page when you need the supported knobs and defaults in one place. The split pages under this guide call out task-specific slices, but they do not replace this reference.
 :::
@@ -150,7 +157,35 @@ REST client steps use Quarkus REST client configuration:
 |-----------------------------------------|--------|---------|----------------------------------|
 | `quarkus.rest-client.<client-name>.url` | string | none    | Base URL for a REST client step. |
 
+### Public OpenAPI Contract
+
+These runtime properties opt an application into the focused public-contract filter. The application
+must include SmallRye OpenAPI.
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mp.openapi.filter` | class name | none | Set to `org.pipelineframework.openapi.PublicApiContractFilter` to activate TPF's filter. |
+| `pipeline.openapi.public-path-prefixes` | comma-separated paths | none | Application-owned path roots retained in the public contract. An activated filter with no valid root fails closed. |
+
+The filter also retains the transitive component closure required by those operations. See
+[Publish a Public OpenAPI Contract](/develop/openapi-contract) for setup, schema behaviour, and verification.
+
 `client-name` is derived from the service class name in kebab-case with a trailing `Service` removed (for example `ProcessPaymentService` → `process-payment`).
+
+### LLM Query Connectors
+
+LangChain4j-backed LLM Query adapters expose the following runtime-owned settings:
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pipeline.llm.langchain4j.ollama.base-url` | URL | `http://localhost:11434` | Ollama endpoint used when a legacy Connector binding does not declare `baseUrl`. |
+| `pipeline.llm.langchain4j.ollama.request-timeout` | duration | `PT30S` | Positive wall-clock limit for one Ollama request. |
+| `pipeline.llm.langchain4j.ollama.thinking` | boolean | `true` | Enables Ollama thinking/reasoning output. |
+| `pipeline.llm.langchain4j.openai-compatible.request-timeout` | duration | `PT60S` | Positive wall-clock limit for one OpenAI-compatible provider request. |
+| `pipeline.llm.langchain4j.openai-compatible.client-implementation` | enum | `reactive` | Host client implementation: `reactive` or `blocking`. |
+
+Model identity, a binding-specific `baseUrl`, and an optional logical `connection` belong in the
+Connector binding rather than these runtime properties. See [One-turn LLM Query](/develop/extension/llm-query).
 
 ### Cache Configuration
 
@@ -186,7 +221,7 @@ Repository materialization stores selected large fields out of line and keeps an
 | `pipeline.repository.s3.endpoint-override`    | string  | none                    | S3-compatible endpoint override, useful for LocalStack/MinIO.                        |
 | `pipeline.repository.s3.path-style`           | boolean | `false`                 | Enable path-style addressing for S3-compatible stores that require it.               |
 
-See [Field Materialization](/design/materialization) for the YAML surface.
+See [Field Materialization](/architecture/materialization) for the YAML surface.
 
 ### Persistence Configuration
 
@@ -383,6 +418,16 @@ Prefix: `pipeline.telemetry`
 | `pipeline.telemetry.replay.file.path` | path | none | Absolute output path used by the file replay exporter. |
 | `pipeline.telemetry.slo.rpc-latency-ms` | number | `1000` | RPC latency threshold (ms) used to emit SLO counters. |
 | `pipeline.telemetry.slo.item-throughput-per-min` | number | `1000` | Item throughput threshold (items/min) used to emit SLO counters. |
+
+#### LLM Query token telemetry
+
+There is no per-metric token-usage switch. Provider-reported live input and output counts emit the
+`gen_ai.client.token.usage` histogram when both `pipeline.telemetry.enabled` and
+`pipeline.telemetry.metrics.enabled` are true. Query observation spans (`tpf.query.observation`) require
+`pipeline.telemetry.enabled` and `pipeline.telemetry.tracing.enabled`; they can retain provider-reported
+input, output, and total counts and mark captured observations with `tpf.query.replayed=true`.
+Replay never emits a new usage metric. See [LLM Query token usage](/operate/observability/metrics#llm-query-token-usage)
+for the complete metric and span attribute contract.
 
 Item boundary types are compiled into telemetry metadata; runtime changes do not apply unless you rebuild the project.
 TPF policy cannot add a telemetry signal that the deployable application did not include and enable

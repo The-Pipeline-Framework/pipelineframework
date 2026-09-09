@@ -22,7 +22,7 @@ Keep the pipeline contract in YAML and Java types. Let TPF validate the boundary
 - cardinality compatibility,
 - transport compatibility.
 
-If the delegated code performs I/O, retries, or correlation internally, make that behavior visible in the pipeline design. Prefer [Await Boundaries](/design/await-boundaries), [Object Ingest](/design/object-ingest), or [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) when TPF owns the shell better than application code.
+If the delegated code performs I/O, retries, or correlation internally, make that behavior visible in the pipeline design. Prefer [Await Boundaries](/architecture/await-boundaries), [Object Ingest](/architecture/object-ingest), or [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) when TPF owns the shell better than application code.
 
 ## Reference
 

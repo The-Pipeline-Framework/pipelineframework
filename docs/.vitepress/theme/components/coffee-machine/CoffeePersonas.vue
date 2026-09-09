@@ -1,5 +1,5 @@
 <script setup>
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 </script>
 
 <template>

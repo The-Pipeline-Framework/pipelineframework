@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/design/persistence
+      content: 0;url=/architecture/persistence
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/design/persistence'))
+    window.location.replace(withBase('/architecture/persistence'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/design/persistence](/design/persistence).
+This page moved to [/architecture/persistence](/architecture/persistence).

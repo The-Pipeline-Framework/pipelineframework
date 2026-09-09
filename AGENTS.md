@@ -4,19 +4,27 @@ The Pipeline Framework (TPF) is a Java framework for strongly typed application 
 Keep the core pure, connect to reality.
 
 Core modules:
-- `framework/pom.xml`: Parent POM of the mult-module Maven project
+- `framework/pom.xml`: Parent POM of the multi-module Maven project
 - `framework/deployment`: compiler and code generation phases (Quarkus/canonical)
 - `framework/runtime-core`: framework-neutral TPF abstractions
 - `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
-- `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Springboot))
+- `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Spring Boot)
 - `framework/api`: framework-neutral API contracts for generated pipeline applications
 
 Plugins:
 - `framework/plugins`: cross-cutting side-effect capabilities (persistence, caching, materialisation)
 
 Connectors:
-- `framework/connectors`: Admit files, object-store entries, or external payloads (Object ingest/publish). Or record 
-  and replay-safe external effects such as indexing, tickets, emails, or provisioning (Query JPA).
+- `framework/connectors`: Admit or publish files, object-store entries, and external payloads, or provide
+  replay-safe Query and Command boundaries for external observations and effects.
+
+Blocks:
+- `blocks`: Reusable, compile-time pipeline definitions distributed as ordinary dependencies. Applications own
+  connector bindings and Command authority for any capabilities a Block requires.
+
+Expansions:
+- Versioned distribution packages that can group related Blocks, Connectors, types, configuration, examples,
+  operational assets, and documentation. An Expansion does not create a new runtime step kind.
 
 Supporting repo surfaces:
 
@@ -46,6 +54,8 @@ Always keep these distinctions active:
 - **Transport mode**: only `GRPC`, `REST`, and `LOCAL` as `pipeline.transport` values. `FUNCTION`, `HTTP_LAMBDA`, `PROTOBUF_HTTP_V1`, and `ENVELOPE_HTTP_V1` are separate platform/deployment/wire-protocol concepts.
 - **Runtime layout vs build topology**: runtime layout is the logical runtime shape; build topology is the Maven/JAR/container structure that physically builds deployables.
 - **Connector vs plugin**: connectors model typed I/O boundaries; plugins provide cross-cutting framework extensions such as persistence, caching, telemetry, or logging.
+- **Block vs Expansion**: a Block is reusable compile-time pipeline composition. An Expansion is a
+  versioned package of related Blocks, Connectors, and supporting assets; it is not `ONE_TO_MANY` cardinality.
 
 ## Runtime and Build Commands
 
@@ -147,7 +157,7 @@ Unit tests use `*Test` with Surefire. Integration tests use `*IT` with Failsafe.
 Canonical docs live under top-level route directories:
 
 - Architectural decisions and rationale: `docs/decisions/`
-- Architecture and concepts: `docs/design/`
+- Architecture and concepts: `docs/architecture/`
 - Implementation and usage: `docs/develop/`
 - Runtime topology and deployment mechanics: `docs/deploy/`
 - Observability and operations: `docs/operate/`
@@ -205,7 +215,7 @@ TPF-specific scoping rules:
 - `app-generator` is separate; only involve it when template generation, schema export, scaffold generation, or
   generated project behavior changes.
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
-- Keep user-facing docs (`design`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
+- Keep user-facing docs (`architecture`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
 - Prefer enriching existing canonical docs pages over introducing standalone “feature islands” that duplicate navigation.
 - Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right canonical docs area:
   - `design`: architecture, concepts, and user-facing design rationale

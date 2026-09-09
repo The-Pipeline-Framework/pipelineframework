@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 import { normalizeSearch, searchableFaqText } from '../../coffee-machine/public-utils.js'
 
 const query = ref('')
@@ -58,6 +58,6 @@ onMounted(() => {
     </section>
 
     <section v-if="quotes.length" class="coffee-section"><h2>Quotes <small>{{ quotes.length }}</small></h2><div class="coffee-quote-list"><blockquote v-for="quote in quotes" :key="quote.faqId"><p>“{{ quote.quote }}”</p><a :href="quote.route">{{ quote.title }}</a></blockquote></div></section>
-    <section v-if="personas.length" class="coffee-section"><h2>Personas <small>{{ personas.length }}</small></h2><div class="coffee-faq-grid"><a v-for="entry in personas" :key="entry.id" class="coffee-faq-card" :href="`/value/coffee-machine/personas#${entry.id}`"><span aria-hidden="true">{{ entry.icon }}</span><strong>{{ entry.name }}</strong><small>{{ entry.description }}</small></a></div></section>
+    <section v-if="personas.length" class="coffee-section"><h2>Personas <small>{{ personas.length }}</small></h2><div class="coffee-faq-grid"><a v-for="entry in personas" :key="entry.id" class="coffee-faq-card" :href="`/architecture/coffee-machine/personas#${entry.id}`"><span aria-hidden="true">{{ entry.icon }}</span><strong>{{ entry.name }}</strong><small>{{ entry.description }}</small></a></div></section>
   </main>
 </template>

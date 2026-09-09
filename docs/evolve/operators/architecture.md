@@ -44,6 +44,6 @@ The key rule is transport orthogonality: operator category affects invocation ad
 
 ## Related
 
-- [Operators](/design/operators)
-- [Operator Reuse Strategy](/design/operator-reuse-strategy)
+- [Operators](/architecture/operators)
+- [Operator Reuse Strategy](/architecture/operator-reuse-strategy)
 - [Runtime Layouts](/deploy/runtime-layouts/)

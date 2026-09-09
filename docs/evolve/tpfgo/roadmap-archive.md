@@ -5,7 +5,7 @@ This is the original long-form pessimist notebook. Use [TPFGo Roadmap](/evolve/t
 :::
 
 ::: warning Strategy Notebook
-This is a design notebook, not product documentation. Keep application-facing FCIS and checkpoint guidance in [Functional Core, Imperative Shell](/design/fcis), [State Model](/design/state-model), and [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff).
+This is a design notebook, not product documentation. Keep application-facing FCIS and checkpoint guidance in [Functional Core, Imperative Shell](/architecture/fcis), [State Model](/architecture/state-model), and [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff).
 :::
 
 This guide captures the ongoing architectural exploration of checkpoint-style pipelines as an alternative to FTGO's saga-first model. It is written for the engineer who just entered the meeting room: quick context, core principles, and the risks we are explicitly tracking. The goal is to be intentionally pessimistic: list what can go wrong, what we believe is already covered, and what still needs design work.

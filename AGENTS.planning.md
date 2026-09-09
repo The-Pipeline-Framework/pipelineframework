@@ -59,7 +59,7 @@ For `examples/csv-payments` runtime-layout work, keep all of these aligned:
 
 Canonical docs live under:
 
-- `docs/design/`: architecture, concepts, and user-facing design rationale;
+- `docs/architecture/`: architecture, concepts, and user-facing design rationale;
 - `docs/develop/`: implementation and usage;
 - `docs/deploy/`: runtime topology and deployment mechanics;
 - `docs/operate/`: observability, runtime response, and playbooks;

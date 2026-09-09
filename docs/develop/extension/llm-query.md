@@ -51,7 +51,7 @@ types:
 
 `AgentCall` contains `binding`, `operation`, canonical `argumentsJson`, and canonical `contextJson`.
 The context is inert trusted data selected from the original typed Query input for a later reducer;
-it is never sent to the chosen connector. `AgentCall` has no provider identity, credentials, runtime
+it is never sent to the chosen Connector. `AgentCall` has no provider identity, credentials, runtime
 handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
 
 `AskUser` is an inert clarification request with two fields:
@@ -349,6 +349,10 @@ Captured replay retains historical values on a `tpf.query.observation` span mark
 `tpf.query.replayed=true`, but emits no new usage metric because replay consumes no provider tokens.
 Telemetry excludes prompts, completions, application payloads, catalogue entries, credentials,
 execution IDs, and provider response IDs.
+
+See [LLM Query token usage](/operate/observability/metrics#llm-query-token-usage) for the metric and
+span contract, and [All Settings](/develop/configuration/all-settings#llm-query-connectors) for the
+runtime adapter and telemetry switches.
 
 ## Deliberate limits
 

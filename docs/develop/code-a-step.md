@@ -116,14 +116,14 @@ steps:
 Quarkus generated REST/gRPC entrypoints for virtual-thread steps also receive `@RunOnVirtualThread`.
 Spring generated unary steps adapt `processBlocking(In): Out` through `RuntimeAdapters.executeBlocking(..., true)`.
 
-`BlockingStreamingService`, `BlockingStreamingClientService`, `BlockingBidirectionalStreamingService`, `StepOneToManyBlocking`, `StepManyToOneBlocking`, and `StepManyToManyBlocking` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` and `StepOneToManyBlockingIterator` reduce those materialisation costs: TPF pulls their iterator output according to downstream demand, but cannot prevent eager reads, buffering, or hidden I/O inside the synchronous implementation. `BlockingIteratorPacer` is an optional blocking rate limiter, not reactive backpressure. See [Execution Safety](/design/execution-safety) for the boundary guarantees.
+`BlockingStreamingService`, `BlockingStreamingClientService`, `BlockingBidirectionalStreamingService`, `StepOneToManyBlocking`, `StepManyToOneBlocking`, and `StepManyToManyBlocking` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` and `StepOneToManyBlockingIterator` reduce those materialisation costs: TPF pulls their iterator output according to downstream demand, but cannot prevent eager reads, buffering, or hidden I/O inside the synchronous implementation. `BlockingIteratorPacer` is an optional blocking rate limiter, not reactive backpressure. See [Execution Safety](/architecture/execution-safety) for the boundary guarantees.
 
 ## 4) Add Mappers
 
 Create pair-based MapStruct mappers using TPF's `Mapper<Domain, External>` interface.
 Use one mapper per boundary.
 
-The logical type names in pipeline YAML drive the generated contract. Java bindings and application-owned mappers connect that contract to DTO and domain types. See the [Pipeline Template DSL](/develop/pipeline-template-dsl) for the type model and defaults.
+The logical type names in pipeline YAML drive the generated contract. Java bindings and application-owned mappers connect that contract to DTO and domain types. See [Canonical Types](/develop/pipeline-template/types) for the model and defaults.
 
 ```java
 @Mapper(

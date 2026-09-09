@@ -1,0 +1,31 @@
+/*
+ * The upstream component defaults to white-space: nowrap, which turns longer
+ * TPF definitions into viewport-wide tooltips. Keep the package component and
+ * constrain its presentation at the site theme boundary.
+ */
+.glossary-term .glossary-tooltip {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 2rem)) !important;
+  white-space: normal !important;
+  overflow-wrap: break-word;
+  text-align: left;
+  text-wrap: pretty;
+}
+
+@media (max-width: 640px) {
+  .glossary-term .glossary-tooltip {
+    position: fixed;
+    inset-inline: 0.5rem;
+    top: auto;
+    bottom: 0.75rem;
+    left: 0.5rem;
+    width: auto;
+    max-width: none !important;
+    transform: none !important;
+  }
+
+  .glossary-term .glossary-tooltip::after {
+    display: none;
+  }
+}

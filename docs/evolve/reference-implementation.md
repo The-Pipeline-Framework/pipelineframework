@@ -15,8 +15,8 @@ TPF reference material now lives in concrete examples and focused guides rather 
 
 | Need | Start here |
 | --- | --- |
-| Design the application flow | [Functional Core, Imperative Shell](/design/fcis) |
-| Understand state surfaces | [State Model](/design/state-model) |
+| Design the application flow | [Functional Core, Imperative Shell](/architecture/fcis) |
+| Understand state surfaces | [State Model](/architecture/state-model) |
 | Understand generated artifacts | [Pipeline Compilation](/develop/pipeline-compilation/) |
 | Configure a generated app | [Configuration](/develop/configuration/) |
 

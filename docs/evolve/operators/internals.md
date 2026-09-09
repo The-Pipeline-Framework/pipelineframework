@@ -90,5 +90,5 @@ public class ScorePaymentOperatorInvoker implements ReactiveService<PaymentIn, P
 
 ## Related
 
-- [Operators](/design/operators)
+- [Operators](/architecture/operators)
 - [Compiler Pipeline Architecture](/evolve/compiler-pipeline-architecture)

@@ -43,4 +43,4 @@ Use these metrics with dependency latency, timeout, and availability signals:
 
 If a circuit remains open, first inspect the dependency’s availability and recent timeout/unavailable/remote-server failures. Do not lower thresholds merely to make traffic resume. Confirm that the configured scope matches the topology, that a shared Dynamo table is reachable when required, and that half-open probe lease duration covers the invocation timeout.
 
-Tune threshold and timing from observed dependency behavior and recovery objectives; TPF provides guardrails, not named resilience strategies. See [Execution Safety](/design/execution-safety) and [All Settings](/develop/configuration/all-settings#circuit-protection).
+Tune threshold and timing from observed dependency behavior and recovery objectives; TPF provides guardrails, not named resilience strategies. See [Execution Safety](/architecture/execution-safety) and [All Settings](/develop/configuration/all-settings#circuit-protection).

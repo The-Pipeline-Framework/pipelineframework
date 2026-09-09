@@ -18,8 +18,8 @@ Await, command, and checkpoint configuration belongs to the runtime shell. It ke
 
 ## Related Guides
 
-- [Await Boundaries](/design/await-boundaries)
+- [Await Boundaries](/architecture/await-boundaries)
 - [Await Runtime Setup](/deploy/orchestrator-runtime/await)
 - [Command Steps](/deploy/orchestrator-runtime/command)
 - [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff)
-- [State Model](/design/state-model)
+- [State Model](/architecture/state-model)

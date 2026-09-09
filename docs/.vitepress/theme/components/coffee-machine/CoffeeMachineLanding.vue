@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 import CoffeeFortune from './CoffeeFortune.vue'
 
 const selectedPersona = ref('')
@@ -27,13 +27,13 @@ onMounted(() => {
       <p class="coffee-eyebrow">The conference break that keeps going</p>
       <h1>The Coffee Machine</h1>
       <p>Real architecture questions, recognizable engineering instincts, and answers that admit the trade-offs.</p>
-      <a class="coffee-button" href="/value/coffee-machine/search">Search the conversations</a>
+      <a class="coffee-button" href="/architecture/coffee-machine/search">Search the conversations</a>
     </header>
 
     <section class="coffee-section" aria-labelledby="coffee-topics">
       <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Browse</p><h2 id="coffee-topics">By topic</h2></div></div>
       <div class="coffee-topic-grid">
-        <a v-for="topic in data.topics" :key="topic.id" class="coffee-topic-card" :href="`/value/coffee-machine/search?topic=${topic.id}`">
+        <a v-for="topic in data.topics" :key="topic.id" class="coffee-topic-card" :href="`/architecture/coffee-machine/search?topic=${topic.id}`">
           <span class="coffee-topic-card-icon" aria-hidden="true">{{ topic.icon }}</span>
           <strong>{{ topic.name }}</strong>
           <span>{{ topic.description }}</span>
@@ -56,14 +56,14 @@ onMounted(() => {
     </section>
 
     <section class="coffee-section">
-      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Fresh pot</p><h2>Recently added FAQs</h2></div><a href="/value/coffee-machine/search">Browse all</a></div>
+      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Fresh pot</p><h2>Recently added FAQs</h2></div><a href="/architecture/coffee-machine/search">Browse all</a></div>
       <div class="coffee-faq-grid">
         <a v-for="faq in recentFaqs" :key="faq.id" class="coffee-faq-card" :href="faq.route"><span>{{ data.topics.find((topic) => topic.id === faq.track)?.name }}</span><strong>{{ faq.question }}</strong></a>
       </div>
     </section>
 
     <section class="coffee-section" aria-labelledby="coffee-personas">
-      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Choose a chair</p><h2 id="coffee-personas">Browse by persona</h2></div><a href="/value/coffee-machine/personas">Meet everyone</a></div>
+      <div class="coffee-section-heading"><div><p class="coffee-eyebrow">Choose a chair</p><h2 id="coffee-personas">Browse by persona</h2></div><a href="/architecture/coffee-machine/personas">Meet everyone</a></div>
       <div class="coffee-persona-picker">
         <button
           v-for="persona in data.personas"

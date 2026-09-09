@@ -24,6 +24,7 @@ const activeTitle = ref('Diagram')
 let mutationObserver
 let enhanceTimer
 let lastFocusedElement
+let lightboxSequence = 0
 
 function diagramTitleFor(stage) {
   let cursor = stage.previousElementSibling
@@ -36,6 +37,50 @@ function diagramTitleFor(stage) {
   return 'Diagram'
 }
 
+function lightboxSvgMarkup(svg) {
+  const clone = svg.cloneNode(true)
+  const prefix = `tpf-mermaid-lightbox-${++lightboxSequence}`
+  const idMappings = []
+  const identifiedElements = [clone, ...clone.querySelectorAll('[id]')]
+
+  identifiedElements.forEach((element, index) => {
+    if (!element.id) {
+      return
+    }
+    const replacement = `${prefix}-${index}`
+    idMappings.push([element.id, replacement])
+    element.id = replacement
+  })
+
+  // Mermaid references marker, clip-path, label, and root IDs from attributes and
+  // from the SVG's embedded stylesheet. Scope every reference to this clone so
+  // inserting it cannot make Mermaid mutate the in-page diagram.
+  const replacements = new Map(idMappings)
+  const escapedIds = [...replacements.keys()]
+    .sort((left, right) => right.length - left.length)
+    .map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const referencePattern = new RegExp(escapedIds.join('|'), 'g')
+  const scopeReferences = (value) => value.replace(
+    referencePattern,
+    (original) => replacements.get(original) ?? original
+  )
+
+  ;[clone, ...clone.querySelectorAll('*')].forEach((element) => {
+    for (const attribute of [...element.attributes]) {
+      if (referencePattern.test(attribute.value)) {
+        referencePattern.lastIndex = 0
+        element.setAttribute(attribute.name, scopeReferences(attribute.value))
+      }
+      referencePattern.lastIndex = 0
+    }
+  })
+  clone.querySelectorAll('style').forEach((style) => {
+    style.textContent = scopeReferences(style.textContent ?? '')
+  })
+
+  return clone.outerHTML
+}
+
 function openDiagram(stage) {
   const svg = stage.querySelector('svg')
   if (!svg) {
@@ -43,7 +88,7 @@ function openDiagram(stage) {
   }
   lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
   activeTitle.value = diagramTitleFor(stage)
-  activeSvg.value = svg.outerHTML
+  activeSvg.value = lightboxSvgMarkup(svg)
   document.documentElement.classList.add('tpf-mermaid-lightbox-open')
   nextTick(() => {
     document.querySelector('.tpf-mermaid-lightbox__close')?.focus()

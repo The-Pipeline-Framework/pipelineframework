@@ -71,4 +71,4 @@ public Uni<PaymentStatus> process(PaymentRecord input) {
 }
 ```
 
-Micrometer is documented at [micrometer.io](https://micrometer.io/), and SmallRye Fault Tolerance provides the Quarkus circuit-breaker annotations documented at [quarkus.io/designs/smallrye-fault-tolerance](https://quarkus.io/designs/smallrye-fault-tolerance).
+Micrometer is documented at [micrometer.io](https://micrometer.io/), and SmallRye Fault Tolerance provides the Quarkus circuit-breaker annotations documented at [quarkus.io/architectures/smallrye-fault-tolerance](https://quarkus.io/architectures/smallrye-fault-tolerance).

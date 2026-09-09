@@ -20,7 +20,7 @@ Treat it as an experimental verification path that still requires manual setup. 
 
 Canonical Azure Functions development and operations guidance lives here:
 
-- [Quarkus Azure Functions Extension](https://quarkus.io/designs/azure-functions)
+- [Quarkus Azure Functions Extension](https://quarkus.io/architectures/azure-functions)
 - [Azure Functions Documentation](https://learn.microsoft.com/en-us/azure/azure-functions/functions-reference)
 
 ## Architecture Notes
@@ -129,7 +129,7 @@ Expected result:
 
 ### Local Function Runtime Testing
 
-**Important**: Quarkus dev mode and `quarkus:run` do not work with Azure Functions (see [Quarkus Azure Functions Guide](https://quarkus.io/designs/azure-functions#development-mode)). The extension generates the required function project structure (`host.json`, `function.json`) only during `quarkus:deploy`.
+**Important**: Quarkus dev mode and `quarkus:run` do not work with Azure Functions (see [Quarkus Azure Functions Guide](https://quarkus.io/architectures/azure-functions#development-mode)). The extension generates the required function project structure (`host.json`, `function.json`) only during `quarkus:deploy`.
 
 For local runtime testing with Azure Functions Core Tools, use the helper script to prepare the project structure:
 
@@ -429,4 +429,4 @@ az functionapp log tail \
 
 - Review [AWS Lambda Platform (Development)](/deploy/aws-lambda) for Function platform concepts
 - See [Search Lambda Verification Lane](search-lambda.md) for AWS Lambda-specific guidance
-- Consult [Quarkus Azure Functions Guide](https://quarkus.io/designs/azure-functions) for extension details
+- Consult [Quarkus Azure Functions Guide](https://quarkus.io/architectures/azure-functions) for extension details

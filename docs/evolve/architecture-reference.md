@@ -5,7 +5,7 @@ This is the older broad architecture overview. Use [Architecture](/evolve/archit
 :::
 
 ::: tip Current Architecture Lens
-Read this as implementation architecture. For application-facing concepts, route readers to [Functional Core, Imperative Shell](/design/fcis), [State Model](/design/state-model), [Runtime Layouts](/deploy/runtime-layouts/), and [Observability](/operate/observability/).
+Read this as implementation architecture. For application-facing concepts, route readers to [Functional Core, Imperative Shell](/architecture/fcis), [State Model](/architecture/state-model), [Runtime Layouts](/deploy/runtime-layouts/), and [Observability](/operate/observability/).
 :::
 
 The Pipeline Framework is designed as a modular, extensible system for building reactive pipeline processing applications. Understanding its architecture is key to leveraging its full potential. The framework encourages append-only persistence by default, helping preserve transformations and maintain an audit trail when desired.

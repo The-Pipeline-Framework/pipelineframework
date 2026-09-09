@@ -13,9 +13,9 @@ cancellation, and make provider fetch windows look like pipeline semantics. Crea
 Query streaming engine would duplicate the existing `StepOneToMany`, retry, lineage, transport,
 and blocking-iterator machinery.
 
-ONE_TO_MANY retry resubscribes the source expansion. Child identity is derived from the logical
-upstream item, step, and zero-based output ordinal. A retried expansion must therefore rewind only
-its own ordinal sequence, while other concurrent upstream expansions continue independently.
+ONE_TO_MANY retry resubscribes the source publisher. Child identity is derived from the logical
+upstream item, step, and zero-based output ordinal. A retried fan-out execution must therefore rewind
+only its own ordinal sequence, while other concurrent upstream fan-out executions continue independently.
 
 ## Decision
 
@@ -31,7 +31,7 @@ The publisher must be finite, demand-aware, cancellation-aware, and deterministi
 the same logical observation.
 
 On retry, TPF resets the output ordinal on the active `StepExecutionScope` selected by runtime step
-and span. That scope represents one logical upstream expansion. The reset is neither static nor
+and span. That scope represents one logical upstream fan-out execution. The reset is neither static nor
 step-wide, so concurrent inputs and parallel ONE_TO_MANY executions retain independent counters.
 Stable ordering makes a re-emitted prefix recreate the same child identities; reordered rows cannot
 be made replay-safe by resetting an ordinal.

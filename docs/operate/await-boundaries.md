@@ -2,7 +2,7 @@
 
 Await boundaries are operationally different from ordinary remote calls. A `kind: await` step dispatches work to an external actor and admits only correlated completions. Some paths park a `QUEUE_ASYNC` execution as `WAITING_EXTERNAL`; brokered itemized streams can keep a live await session open and use the parked state as the recovery fallback.
 
-Use this page with [Await Boundaries](/design/await-boundaries) for application design, [Await runtime setup](/deploy/orchestrator-runtime/await) for adapter configuration, and [Replay & Live Topology](/operate/observability/replay) for replay inspection.
+Use this page with [Await Boundaries](/architecture/await-boundaries) for application design, [Await runtime setup](/deploy/orchestrator-runtime/await) for adapter configuration, and [Replay & Live Topology](/operate/observability/replay) for replay inspection.
 
 ## Runtime Requirements
 

@@ -2,7 +2,7 @@
 
 Await units are the durable suspend/resume model for `kind: await` steps. The unit is the interaction boundary TPF owns: it records what was dispatched, what completion is required, and what payload should be replayed when the owning execution resumes.
 
-This guide is implementation-facing. Application-facing design guidance lives in [Await Boundaries](/design/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await).
+This guide is implementation-facing. Application-facing design guidance lives in [Await Boundaries](/architecture/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await).
 
 For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/). For the immutable queue-async model that treats await completion and checkpoint handoff as the same boundary-admission shape, see [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries).
 

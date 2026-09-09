@@ -1,36 +1,76 @@
 # Operational Confidence
 
-<p class="value-lead">The Pipeline Framework (TPF) is designed for production environments where teams need retries, crash recovery, failed-work handling, and runtime health to stay understandable.</p>
+<p class="value-lead">TPF makes an execution inspectable from admission to completion—including
+model usage, captured reads, effects, waiting, retries, recovery, rejection, and terminal failure.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Container Ready</strong> &middot; Fits naturally into container and Kubernetes deployment models.</div>
-  <div class="value-glance-item"><strong>Runtime Visibility</strong> &middot; Generated endpoints, status data, and telemetry make it easier to see what is running and how work moves.</div>
-  <div class="value-glance-item"><strong>Crash Survival</strong> &middot; For persistence-backed background execution such as `QUEUE_ASYNC`: accepted work can be stored outside the JVM, retried, recovered, and investigated.</div>
+  <div class="value-glance-item"><strong>One Execution Timeline</strong> &middot; Correlate typed steps, Query observations, Commands, Await transitions, and completion.</div>
+  <div class="value-glance-item"><strong>AI Cost Evidence</strong> &middot; Export provider-reported input and output token usage beside Query traces.</div>
+  <div class="value-glance-item"><strong>Crash-Surviving Work</strong> &middot; Queue-backed execution can lease, retry, recover, and dead-letter accepted work.</div>
+  <div class="value-glance-item"><strong>Replay Without Pretence</strong> &middot; Reuse captured observations without describing replay as a new external call.</div>
 </div>
 
-## Use This When
+## The Operational Timeline
 
-- Production incidents take too long to diagnose.
-- Teams need a consistent operational baseline across services.
-- Container/Kubernetes rollout has outpaced ops maturity.
+```mermaid
+sequenceDiagram
+    participant A as Admission
+    participant P as Pipeline
+    participant Q as Query or model
+    participant C as Command
+    participant W as Await
+    participant O as Telemetry and replay
+    A->>P: accepted execution
+    P->>Q: typed observation request
+    Q-->>P: captured result and usage
+    P->>C: logical effect with stable ID
+    C-->>P: recorded outcome
+    P->>W: suspend for external completion
+    W-->>P: correlated resume
+    P-->>O: lineage, spans, metrics, state
+```
 
-For background execution, TPF can record accepted work outside the current process before it depends on that work being complete. If the JVM, container, or worker dies, another worker can pick up the stored execution and run it again after the lease expires. This is lease-based recovery, not mid-pipeline checkpoint resume, so teams should design downstream calls and writes to be safe when the same work is attempted again.
+The exact evidence depends on enabled runtime features and exporters. TPF does not claim that every
+application is automatically durable or observable merely because it compiled. Teams still choose
+persistence providers, telemetry exporters, retry budgets, idempotency keys, alerts, and rollout
+policy.
 
-The exact TPF mode for this is `QUEUE_ASYNC`. In plain terms, this is the background execution mode where TPF stores execution state, dispatches work, retries failed transitions, recovers leased work after crashes, and can publish terminal failures to a DLQ, a dead-letter channel for investigation or replay.
+## AI and External Systems Remain Accountable
 
-Persistence and caching strengthen this recovery story. Persistence gives teams durable business records they can inspect or query after a failure. Cache reduces the cost of replaying expensive downstream work when recovery requires recomputation instead of a full rerun.
+An LLM Query records one managed observation. When the provider reports usage, TPF emits
+`gen_ai.client.token.usage` and retains token counts on the Query observation span. Captured replay
+marks the span as replayed and emits no new usage metric.
 
-## Jump to Guides
+External writes follow Command semantics rather than model or HTTP semantics. Stable Command
+identity and duplicate policy make a lost response investigable. Await has separate durable state
+for callback correlation, timeout, duplicate completion, and resume.
+
+## Background Recovery
+
+`QUEUE_ASYNC` can store accepted work outside the current JVM, dispatch it to workers, recover
+expired leases after crashes, retry failed transitions, and publish terminal failures to a DLQ. This
+is lease-based re-execution, not arbitrary mid-pipeline checkpoint resume, so downstream effects
+must still be replay-safe.
+
+Operational confidence comes from the combination: explicit semantics, durable authority where
+configured, generated metadata, runtime telemetry, and examples that exercise failure paths.
+
+The Coffee Machine goes deeper in
+[the operational timeline](/architecture/coffee-machine/keep-it-sane-in-production/operational-timeline),
+[retry is not for rejection](/architecture/coffee-machine/keep-it-sane-in-production/retry-is-not-for-rejection),
+and [test uncertain effects](/architecture/coffee-machine/test-the-claim/test-uncertain-effects).
+
+## Go Deeper
 
 <div class="value-links">
 
-- [Error Handling & DLQ](/operate/error-handling)
+- [Observability](/operate/observability/)
+- [LLM Query Token Usage](/operate/observability/metrics#llm-query-token-usage)
+- [Error Handling and DLQ](/operate/error-handling)
 - [In-flight Probe](/operate/in-flight-probe)
 - [Orchestrator Runtime](/deploy/orchestrator-runtime/)
-- [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
-- [Observability](/operate/observability/)
-- [Best Practices](/operate/best-practices)
+- [Replay Viewer](/replay-viewer/)
 
 </div>

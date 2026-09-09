@@ -1,7 +1,7 @@
 # Handling File Operations with Generated REST Resources
 
 ::: warning Legacy Approach
-This page documents a generated-REST-plus-custom-resource approach for file uploads and downloads. For new ingestion flows, prefer connector-based I/O shells such as [Object Ingest](/design/object-ingest). Connectors keep listing, identity, filtering, duplicate admission, and payload references out of business steps.
+This page documents a generated-REST-plus-custom-resource approach for file uploads and downloads. For new ingestion flows, prefer connector-based I/O shells such as [Object Ingest](/architecture/object-ingest). Connectors keep listing, identity, filtering, duplicate admission, and payload references out of business steps.
 :::
 
 This guide explains how to handle file operations such as downloads and uploads when using the auto-generated REST resources in The Pipeline Framework.
@@ -100,7 +100,7 @@ public class ProcessFileRestResource {
 
 ### Connector-first approach
 
-Use a connector when the application needs to admit files or object-store entries as pipeline input. Start with [Object Ingest](/design/object-ingest) and use this page only for request/response file endpoints that are truly custom application APIs.
+Use a connector when the application needs to admit files or object-store entries as pipeline input. Start with [Object Ingest](/architecture/object-ingest) and use this page only for request/response file endpoints that are truly custom application APIs.
 
 ### Option 2: Hybrid generated/custom REST approach
 Keep both the generated resource for standard operations and create custom resources for file operations:

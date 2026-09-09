@@ -17,8 +17,8 @@ Provider and plugin configuration selects framework-owned shell behavior around 
 
 ## Related Design Guides
 
-- [Persistence](/design/persistence)
-- [Caching](/design/caching/)
-- [Field Materialization](/design/materialization)
-- [State Model](/design/state-model)
+- [Persistence](/architecture/persistence)
+- [Caching](/architecture/caching/)
+- [Field Materialization](/architecture/materialization)
+- [State Model](/architecture/state-model)
 - [Using Plugins](/develop/using-plugins)

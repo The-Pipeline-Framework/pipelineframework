@@ -82,7 +82,7 @@ while parsing or compiling. `operationVersion` defaults to `1` when omitted.
 Command or Query authentication: they cannot receive tenant or invocation identity. New
 authenticated connectors must resolve a typed connection from `ConnectionRef` plus
 `ConnectorExecutionContext`, as described in
-[Host-authenticated Connectors](/develop/extension/host-authenticated-connectors).
+[Host-authenticated Connectors](/develop/oauth-connections/reference).
 
 The deprecated provider-first form remains readable during migration and is not silently
 reinterpreted. Select it instead of `command`, never alongside it:
@@ -219,8 +219,8 @@ or arbitrary metadata.
 Pipeline cache replay, execution-scoped Query capture replay, and a live provider observation are
 separate paths. A generic cache hit returns before Query runtime. After a cache miss that permits
 execution, an existing Query capture is replayed before resolving the provider. Only a miss in
-both layers invokes the provider. See [Cache Policies](/design/caching/policies) and
-[Capture, Replay, and Persistence](/design/jpa-query-connector/capture-and-persistence).
+both layers invokes the provider. See [Cache Policies](/architecture/caching/policies) and
+[Capture, Replay, and Persistence](/architecture/jpa-query-connector/capture-and-persistence).
 
 Query capture persists observation metadata beside `outputJson` and `outputType`; it does not put
 metadata into the application value or the capture-key basis. Runtime records a completed live
@@ -253,7 +253,7 @@ the configured table with string key `capture_key` and numeric key `revision`. T
 `memory` provider remains intended for tests and single-process development. Dynamo capture
 coordinates streaming writers across replicas, redacts Query inputs to fingerprints, and preserves
 the existing generic-cache-miss → capture-lookup → live-provider ordering. See
-[Capture, Replay, and Persistence](../../design/jpa-query-connector/capture-and-persistence.md#durable-dynamodb-capture)
+[Capture, Replay, and Persistence](../../architecture/jpa-query-connector/capture-and-persistence.md#durable-dynamodb-capture)
 for provisioning, IAM, limits, and recovery behavior.
 
 ## Command Id Generator

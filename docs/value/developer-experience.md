@@ -1,45 +1,84 @@
 # Developer Experience
 
-<p class="value-lead">TPF lets teams write focused Java business transformations while the framework builds, checks, and runs the shell around them.</p>
+<p class="value-lead">Describe the application in types and pipeline topology, let a coding agent
+help with the mechanical work, and use the compiler as the boundary between plausible code and a
+valid TPF application.</p>
 
-## At a Glance
+## Start with the Authoring Model
 
-<div class="value-glance">
-  <div class="value-glance-item"><strong>Start Fast</strong> &middot; Model the flow in YAML or sketch a baseline in Pipeline Studio.</div>
-  <div class="value-glance-item"><strong>Type Safety</strong> &middot; Explicit input/output types catch function, mapper, and operator mismatches at build time.</div>
-  <div class="value-glance-item"><strong>Less Boilerplate</strong> &middot; REST, gRPC, local, and cloud-function callers are generated for you.</div>
-</div>
+Install the repository's Agent Skill:
 
-## Use This When
+```shell
+gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-hidden-dirs
+```
 
-- You want new developers productive quickly.
-- Refactors are becoming risky because Java types and API shapes drift across modules.
-- Teams are spending too much time on repeated integration glue.
+The skill teaches an agent to choose between an ordinary service, operator, Query, Command, Await,
+nested pipeline, Connector, Block, Expansion, or Plugin before it generates Java. It then routes the
+agent to current documentation, examples, dependency sources, and compiler diagnostics for exact
+release details.
 
-In practice, developers write the domain function and the supporting code that matters: Java types, optional mappers, and clear business decisions. TPF handles the repeated shell around that function, including generated callers, generated runtime files, connector boundaries, and build-time validation.
+## The Feedback Loop
 
-Quarkus is the mature production runtime today. Spring support has started for a limited local/REST unary path; see [Spring Support Status](/develop/spring-support) before planning Spring-based applications.
+```mermaid
+flowchart LR
+    I[Business intent] --> A[Authoring skill]
+    A --> Y[Types and pipeline YAML]
+    Y --> C[TPF compiler]
+    C -->|diagnostics| Y
+    C --> G[Generated contract and adapters]
+    G --> T[Focused tests and working application]
+```
 
-## Operator Reuse
+This replaces the old idea of scaffolding a pile of code and filling it in by hand. The useful unit
+of authoring is the application contract:
 
-When teams already have stable Java compute libraries, operators let them plug those methods directly into the pipeline flow from `pipeline.yaml`.
-This shortens delivery time and avoids duplicate implementations.
+- canonical types express business meaning;
+- Pipeline Template DSL expresses topology, cardinality, branches, semantic effects, Connectors,
+  Blocks, and bounded composition;
+- focused Java functions implement application decisions;
+- compiler diagnostics reject unresolved steps, incompatible types, invalid mappings, unsupported
+  cardinality, missing capabilities, and transport mismatches;
+- generated metadata makes the built contract inspectable.
 
-## Business Rejections Without Workflow Collapse
+## What Developers Spend Time On
 
-Not every failed item is a platform error. TPF lets step authors model per-item rejection as an expected business path using Item Reject Sink, the built-in reject-and-continue mechanism for bad records.
-Teams can reject specific records, continue processing the rest of the workload, and keep an audit trail plus a clear replay path that can survive process restarts when backed by a persistent provider.
-This avoids custom side channels and keeps recovery logic explicit in step code.
+Developers still own domain types, business policy, direct mappings, effect identity, connection
+policy, and the tests that prove behaviour. They spend less time hand-maintaining callers, route
+plumbing, connector lifecycles, retry loops, correlation state, telemetry conventions, and
+deployment adapters.
 
-## Jump to Guides
+An LLM Query uses the same workflow. Authors define instructions, a trusted input projection, an
+output contract, and any callable catalogue. TPF projects model-safe JSON Schema and validates the
+response against the canonical contract. A model can propose code or an operation; it cannot make
+the application valid by assertion.
+
+## Keep External Surfaces Intentional
+
+MCP import pins selected external tools. GraphQL Blocks use digest-pinned documents. OAuth-backed
+connections are resolved by the host rather than supplied in payloads. When an application exposes
+its own API, the
+[public OpenAPI contract filter](/develop/openapi-contract) can publish only application-owned
+facade routes and their reachable schemas.
+
+Quarkus is the mature production runtime. Spring supports a narrower local/REST unary path and
+common connection-resolver wiring; check [Spring Support Status](/develop/spring-support) before
+assuming parity.
+
+The Coffee Machine versions of this story are
+[compiler without a compiler degree](/architecture/coffee-machine/the-spiky-bits/compiler-without-compiler-degree),
+[generation and diagnostics](/architecture/coffee-machine/the-spiky-bits/generation-and-diagnostics),
+and [business core is Java](/architecture/coffee-machine/test-the-claim/business-core-is-java).
+
+## Go Deeper
 
 <div class="value-links">
 
-- [Pipeline Compilation](/develop/pipeline-compilation/)
-- [Functional Core, Imperative Shell](/design/fcis)
-- [Operators](/design/operators)
-- [Item Reject Sink](/develop/item-reject-sink)
-- [Mappers and DTOs](/develop/mappers-and-dtos)
+- [Pipeline Template Guide](/develop/pipeline-template/)
+- [Examples Guide](/develop/examples/)
+- [Functional Core, Imperative Shell](/architecture/fcis)
+- [One-turn LLM Query](/develop/extension/llm-query)
+- [Connectors Guide](/develop/connectors/)
+- [Blocks Guide](/develop/blocks/)
 - [Testing](/develop/testing)
 
 </div>

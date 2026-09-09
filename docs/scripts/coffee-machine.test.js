@@ -17,7 +17,7 @@ import { loadCoffeeMachineSource } from './coffee-machine-source.js'
 
 function sourcePage(id = 'example-faq', overrides = {}) {
   const base = {
-    url: `/value/coffee-machine/testing/${id}`,
+    url: `/architecture/coffee-machine/testing/${id}`,
     frontmatter: {
       title: 'Example FAQ',
       faq: { id, track: 'testing', question: 'Does this example work?', added: '2026-08-22' },
@@ -53,7 +53,7 @@ test('author-only frontmatter is stripped recursively as one visibility class', 
 })
 
 test('Coffee Machine visibility applies to current and versioned pages', () => {
-  assert.equal(isCoffeeMachinePage('value/coffee-machine/testing/example.md'), true)
+  assert.equal(isCoffeeMachinePage('architecture/coffee-machine/testing/example.md'), true)
   assert.equal(isCoffeeMachinePage('versions/v26.8.1/value/coffee-machine/testing/example.md'), true)
   assert.equal(isCoffeeMachinePage('versions/v26.8.1/value/overview.md'), false)
 })

@@ -20,7 +20,7 @@ This page is the current roadmap front door. The older detailed notebook is arch
 | Application design tradeoffs | [Design Spectrum](/evolve/tpfgo/design-spectrum) |
 | Example implementation notes | [TPFGo Example](/develop/tpfgo-example) |
 | User-facing checkpoint boundary | [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) |
-| Public state model | [State Model](/design/state-model) |
+| Public state model | [State Model](/architecture/state-model) |
 
 ## Open Work
 

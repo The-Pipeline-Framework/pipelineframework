@@ -7,10 +7,10 @@ status: accepted
 
 ## Context
 
-ADR-0019 makes a finite streaming Query an ordinary TPF `ONE_TO_MANY` expansion. Hibernate ORM
+ADR-0019 makes a finite streaming Query an ordinary TPF `ONE_TO_MANY` stream. Hibernate ORM
 offers a blocking result stream, while Hibernate Reactive exposes list-oriented query results rather
 than a row publisher. Treating either API as `List<Row>` pipeline semantics would discard demand,
-cancellation, and bounded resource ownership. Retried source expansions also derive stable child
+cancellation, and bounded resource ownership. Retried source subscriptions also derive stable child
 identity from output ordinal, so provider ordering must be total and repeatable.
 
 ## Decision

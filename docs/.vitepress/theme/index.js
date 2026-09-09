@@ -16,9 +16,11 @@
 
 // .vitepress/theme/index.js
 import DefaultTheme from 'vitepress/theme'
+import GlossaryTooltip from 'vitepress-plugin-glossary/vue'
 import {h} from 'vue'
 import './custom.css'
 import './mermaid.css'
+import './glossary.css'
 import './coffee-machine.css'
 import Callout from './components/Callout.vue'
 import FeaturedArticles from './components/FeaturedArticles.vue'
@@ -26,6 +28,7 @@ import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
 import MermaidDiagramEnhancer from './components/MermaidDiagramEnhancer.vue'
+import GlossaryIndex from './components/GlossaryIndex.vue'
 import SidebarAccordion from './components/SidebarAccordion.vue'
 import CoffeeFaqFooter from './components/coffee-machine/CoffeeFaqFooter.vue'
 import CoffeeMachineLanding from './components/coffee-machine/CoffeeMachineLanding.vue'
@@ -87,6 +90,8 @@ export default {
     app.component('CoffeePersonas', CoffeePersonas)
     app.component('CoffeeQuotes', CoffeeQuotes)
     app.component('CoffeeSearch', CoffeeSearch)
+    app.component('GlossaryTooltip', GlossaryTooltip)
+    app.component('GlossaryIndex', GlossaryIndex)
     installReplayViewerHardNavigation()
   }
 }

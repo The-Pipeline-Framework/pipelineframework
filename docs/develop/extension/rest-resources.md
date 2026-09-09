@@ -78,18 +78,14 @@ public class PaymentResourceExtension {
 
 ## Publish an application-owned OpenAPI contract
 
-Generated REST resources expose typed step boundaries. When a frontend or external client should see only an
-application-owned façade, add the SmallRye OpenAPI extension and activate TPF's opt-in contract filter:
+This customer-facing capability now has a dedicated Guide: [Publish a Public OpenAPI Contract](../openapi-contract).
+Generated REST resources expose typed step boundaries, while the opt-in filter keeps the published contract
+focused on application-owned facade paths:
 
 ```properties
 mp.openapi.filter=org.pipelineframework.openapi.PublicApiContractFilter
 pipeline.openapi.public-path-prefixes=/api/cases
 ```
 
-The filter retains only the configured path roots and the transitive closure of schemas referenced by those
-operations. Internal generated resources and unrelated runtime schemas therefore remain outside the published
-contract. Multiple comma-separated roots are supported. A configured filter without a public root fails closed.
-
-The application still owns its aggregate resources and their OpenAPI annotations. In particular, annotate sealed
-or polymorphic application contracts with their concrete variants and discriminator mapping; the filter preserves
-those reachable schemas but does not infer application-specific discriminator values.
+The dedicated page covers multiple roots, transitive component retention, discriminator ownership, fail-closed
+behaviour, and verification. This section remains so existing deep links continue to lead readers to the feature.

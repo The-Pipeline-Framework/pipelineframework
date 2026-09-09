@@ -175,7 +175,7 @@ steps:
 
 ## Related
 
-- [Operators](/design/operators)
+- [Operators](/architecture/operators)
 - [External Library Delegation](/develop/external-library-delegation)
 - [Mappers and DTOs](/develop/mappers-and-dtos)
 - [Extending TPF with Operator Libraries](/develop/extension/operator-libraries)

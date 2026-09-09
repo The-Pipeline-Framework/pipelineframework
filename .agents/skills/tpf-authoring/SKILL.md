@@ -29,7 +29,10 @@ pipeline-result replay            -> generic cache
 external-observation replay       -> Query capture
 external-effect authority         -> CommandEffectStore
 branching                          -> typed unions / accepts
-composition                        -> pipeline step / nested pipeline
+one input to many outputs          -> ONE_TO_MANY
+local composition                  -> pipeline step / nested pipeline
+reusable packaged composition      -> Block
+capability distribution            -> Expansion package
 typed iteration / agentic looping -> bounded recursive nested pipeline
 ```
 
@@ -60,6 +63,9 @@ Do not inject repositories, connector clients, object stores, materializers, wor
 - Prefer reactive shapes for async work and end-to-end backpressure. Use an explicit blocking shape for synchronous libraries; list forms materialize, while the supported iterator shape is incremental.
 - Use an ordinary service for an application transformation. Use an operator when a reusable/delegated execution unit owns its own model or genuinely needs an independently selectable boundary. A helper method or one application's policy is not an operator.
 - Query, Command, and Await are semantic I/O boundaries, not operator variants.
+- Use `ONE_TO_MANY` for one-input-to-stream cardinality. Do not call that shape an Expansion; compatibility code may still parse the historical uppercase `EXPANSION` token.
+- A Block is a compile-time dependency containing reusable pipeline definitions. The application still owns connector bindings and Command authority.
+- An Expansion is a versioned distribution package of related Blocks, Connectors, and supporting assets. It does not introduce a runtime step kind or transfer application-owned bindings and authority into the package.
 - Repeated fields are value shape, not stream/cardinality semantics. Use unions and `accepts` for compiler-known branch applicability, not Java `instanceof` or switch dispatch.
 
 Read [authoring-model.md](references/authoring-model.md) for types, operators, cardinality, backpressure, unions, nested pipelines, recursion, failure channels, or tests.
@@ -97,7 +103,11 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 - Read [execution-and-replay.md](references/execution-and-replay.md) for Query/Command/Await, connectors, aspects, persistence/cache/capture/effects, resilience, retry/DLQ, or checkpoint handoff.
 - Read [deployment-and-packaging.md](references/deployment-and-packaging.md) for configuration lifetime, telemetry, runtime placement, transport/platform, generated artifacts, bootstrap, testing, or single-unit packaging.
 
-Do not load every reference. Search `docs/design/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
+For current authoring journeys, prefer the [Connector](/develop/connectors/), [Block](/develop/blocks/),
+[Expansion](/develop/expansions/), and [experimental OAuth connection](/develop/oauth-connections/)
+Guides over reconstructing a contract from implementation classes.
+
+Do not load every reference. Search `docs/architecture/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
 
 ## Repository reconnaissance
 

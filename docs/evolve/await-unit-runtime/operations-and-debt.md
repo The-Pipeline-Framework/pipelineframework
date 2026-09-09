@@ -2,7 +2,7 @@
 
 This implementation-facing page tracks limitations and follow-up work for the await unit model.
 
-Application-facing design guidance lives in [Await Boundaries](/design/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await). Operational guidance lives in [Await Boundary Operations](/operate/await-boundaries).
+Application-facing design guidance lives in [Await Boundaries](/architecture/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await). Operational guidance lives in [Await Boundary Operations](/operate/await-boundaries).
 
 ## Limitations
 

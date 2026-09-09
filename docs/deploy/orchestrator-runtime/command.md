@@ -170,4 +170,4 @@ creates a deterministic new occurrence id; if that reissue fails retryably, a la
 - [Writing Command Connectors](/develop/extension/command-connectors)
 - [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async)
 - [Replay & Live Topology](/operate/observability/replay)
-- [Functional Core, Imperative Shell](/design/fcis)
+- [Functional Core, Imperative Shell](/architecture/fcis)

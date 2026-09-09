@@ -41,7 +41,7 @@ Watch for
 
 ## Related
 
-- [Operators](/design/operators)
+- [Operators](/architecture/operators)
 - [Developing with Operators](/develop/operators)
 - [Observability](/operate/observability/)
 - [Error Handling](/operate/error-handling)
