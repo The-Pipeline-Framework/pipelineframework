@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.llm;
 
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -10,7 +11,8 @@ public record LlmTurnConfiguration(
     Optional<Map<String, LlmCallableConfiguration>> callables,
     Optional<StructuredOutputSchemaMode> structuredOutputSchema,
     Optional<Map<String, String>> completion,
-    Optional<Map<String, String>> modelInputExcludes
+    Optional<List<String>> modelInputExcludes,
+    Optional<Map<String, String>> callContext
 ) {
     public LlmTurnConfiguration {
         instructions = Objects.requireNonNull(instructions, "LLM instructions must not be null").trim();
@@ -23,12 +25,15 @@ public record LlmTurnConfiguration(
             structuredOutputSchema, "structured output schema mode must not be null");
         completion = Objects.requireNonNull(completion, "LLM direct completion configuration must not be null")
             .map(Map::copyOf);
-        modelInputExcludes = Objects.requireNonNull(modelInputExcludes, "LLM model input exclusions must not be null")
-            .map(Map::copyOf);
-        modelInputExcludes.orElseGet(Map::of).values().forEach(path -> {
-            if (path == null || !path.matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*")) {
-                throw new IllegalArgumentException("LLM model input exclusion must be a dotted field path: " + path);
+        modelInputExcludes = Objects.requireNonNull(
+            modelInputExcludes, "LLM model input exclusions must not be null").map(List::copyOf);
+        callContext = Objects.requireNonNull(callContext, "LLM call context must not be null").map(Map::copyOf);
+        modelInputExcludes.orElseGet(List::of).forEach(path -> requirePath(path, "LLM model input exclusion"));
+        callContext.orElseGet(Map::of).forEach((target, path) -> {
+            if (target == null || !target.matches("[A-Za-z][A-Za-z0-9_]*")) {
+                throw new IllegalArgumentException("LLM call context key must be a field token: " + target);
             }
+            requirePath(path, "LLM call context source");
         });
         callables.orElseGet(Map::of).keySet().forEach(alias -> {
             if (!alias.matches("[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*")) {
@@ -38,7 +43,9 @@ public record LlmTurnConfiguration(
     }
 
     public LlmTurnConfiguration(String instructions, Map<String, LlmCallableConfiguration> callables) {
-        this(instructions, Optional.ofNullable(callables), Optional.empty(), Optional.empty(), Optional.empty());
+        this(instructions, Optional.of(Objects.requireNonNull(callables, "LLM callables must not be null")),
+            Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty());
     }
 
     public LlmTurnConfiguration(
@@ -47,7 +54,8 @@ public record LlmTurnConfiguration(
         StructuredOutputSchemaMode structuredOutputSchema
     ) {
         this(instructions, Optional.ofNullable(callables), Optional.of(Objects.requireNonNull(
-            structuredOutputSchema, "structured output schema mode must not be null")), Optional.empty(), Optional.empty());
+            structuredOutputSchema, "structured output schema mode must not be null")), Optional.empty(),
+            Optional.empty(), Optional.empty());
     }
 
     public LlmTurnConfiguration(
@@ -55,7 +63,7 @@ public record LlmTurnConfiguration(
         Optional<Map<String, LlmCallableConfiguration>> callables,
         Optional<StructuredOutputSchemaMode> structuredOutputSchema
     ) {
-        this(instructions, callables, structuredOutputSchema, Optional.empty(), Optional.empty());
+        this(instructions, callables, structuredOutputSchema, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public LlmTurnConfiguration(
@@ -64,7 +72,20 @@ public record LlmTurnConfiguration(
         Optional<StructuredOutputSchemaMode> structuredOutputSchema,
         Optional<Map<String, String>> completion
     ) {
-        this(instructions, callables, structuredOutputSchema, completion, Optional.empty());
+        this(instructions, callables, structuredOutputSchema, completion, Optional.empty(), Optional.empty());
+    }
+
+    public LlmTurnConfiguration(
+        String instructions,
+        Optional<Map<String, LlmCallableConfiguration>> callables,
+        Optional<StructuredOutputSchemaMode> structuredOutputSchema,
+        Optional<Map<String, String>> completion,
+        List<String> modelInputExcludes,
+        Map<String, String> callContext
+    ) {
+        this(instructions, callables, structuredOutputSchema, completion,
+            Optional.of(Objects.requireNonNull(modelInputExcludes, "LLM model input exclusions must not be null")),
+            Optional.of(Objects.requireNonNull(callContext, "LLM call context must not be null")));
     }
 
     public Map<String, LlmCallableConfiguration> callableCatalogue() {
@@ -85,6 +106,16 @@ public record LlmTurnConfiguration(
     }
 
     public java.util.List<String> excludedModelInputPaths() {
-        return java.util.List.copyOf(modelInputExcludes.orElseGet(Map::of).values());
+        return modelInputExcludes.orElseGet(List::of);
+    }
+
+    public Map<String, String> callContextMappings() {
+        return callContext.orElseGet(Map::of);
+    }
+
+    private static void requirePath(String path, String label) {
+        if (path == null || !path.matches("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)*")) {
+            throw new IllegalArgumentException(label + " must be a dotted field path: " + path);
+        }
     }
 }

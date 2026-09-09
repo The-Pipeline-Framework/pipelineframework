@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 import org.pipelineframework.processor.ir.ConnectorOperationSelection;
+import org.pipelineframework.processor.ir.DynamicOperationSelection;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 
 class LocalPipelineInvocationRendererTest {
@@ -30,5 +31,17 @@ class LocalPipelineInvocationRendererTest {
         when(model.serviceName()).thenReturn("ProcessCanonicalizeGraphqlQueryService");
 
         assertTrue(LocalPipelineInvocationRenderer.matchesAuthoredStep(model, "Canonicalize GraphQL Query"));
+    }
+
+    @Test void matchesImportedDynamicOperationModelsByQualifiedRuntimeIdentity() {
+        PipelineStepModel model = mock(PipelineStepModel.class);
+        DynamicOperationSelection selection = mock(DynamicOperationSelection.class);
+        when(model.connectorOperationSelection()).thenReturn(Optional.empty());
+        when(model.dynamicOperationSelection()).thenReturn(Optional.of(selection));
+        when(selection.ownsAuthoredStep("Invoke proposal")).thenReturn(true);
+        when(selection.ownsAuthoredStep("Other proposal")).thenReturn(false);
+
+        assertTrue(LocalPipelineInvocationRenderer.matchesAuthoredStep(model, "Invoke proposal"));
+        assertFalse(LocalPipelineInvocationRenderer.matchesAuthoredStep(model, "Other proposal"));
     }
 }

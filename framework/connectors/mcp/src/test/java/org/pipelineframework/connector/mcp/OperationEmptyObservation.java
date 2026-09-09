@@ -4,8 +4,10 @@ public record OperationEmptyObservation(
     String binding,
     String operation,
     String kind,
-    int majorVersion,
+    int operationVersion,
     String outcome,
-    String code
+    String code,
+    String argumentsJson,
+    String contextJson
 ) {
 }

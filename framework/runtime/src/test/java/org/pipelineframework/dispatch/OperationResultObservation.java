@@ -7,6 +7,8 @@ public record OperationResultObservation(
     int operationVersion,
     String outcome,
     String code,
+    String argumentsJson,
+    String contextJson,
     String resultType,
     String resultJson
 ) {

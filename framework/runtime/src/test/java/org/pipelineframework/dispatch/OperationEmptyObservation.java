@@ -6,6 +6,8 @@ public record OperationEmptyObservation(
     String kind,
     int operationVersion,
     String outcome,
-    String code
+    String code,
+    String argumentsJson,
+    String contextJson
 ) {
 }

@@ -26,7 +26,8 @@ public final class LlmProtocolTypeContributor implements ProtocolTypeContributor
                 new PipelineTemplateTypeDefinition.RecordType("AgentCall", List.of(
                     new PipelineTemplateTypeDefinition.Field("binding", string),
                     new PipelineTemplateTypeDefinition.Field("operation", string),
-                    new PipelineTemplateTypeDefinition.Field("argumentsJson", string)))),
+                    new PipelineTemplateTypeDefinition.Field("argumentsJson", string),
+                    new PipelineTemplateTypeDefinition.Field("contextJson", string)))),
             new ProtocolTypeDescriptor(
                 ASK_USER,
                 new PipelineTemplateTypeDefinition.RecordType("AskUser", List.of(

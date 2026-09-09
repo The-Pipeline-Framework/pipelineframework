@@ -37,6 +37,7 @@ class PipelineYamlConfigLoaderTest {
                     operationVersion: 2
                     kind: command
                     input: ChargeArguments
+                    trustedArguments: { " effect_key ": " state.next_effect_key " }
               - name: Invoke proposal
                 input: <tpf.llm.AgentCall>
                 output: <tpf.connector.OperationObservation>
@@ -50,6 +51,7 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("payments", callable.using());
         assertEquals("charge.create", callable.operation());
         assertEquals(2, callable.operationVersion());
+        assertEquals(java.util.Map.of("effect_key", "state.next_effect_key"), callable.trustedArguments());
         assertTrue(step.operationConfig().containsKey("callables"));
         @SuppressWarnings("unchecked")
         var compiled = (java.util.Map<String, java.util.Map<String, Object>>) step.operationConfig().get("callables");

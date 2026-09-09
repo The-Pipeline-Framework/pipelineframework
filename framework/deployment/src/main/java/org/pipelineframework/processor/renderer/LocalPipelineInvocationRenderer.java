@@ -143,7 +143,9 @@ public final class LocalPipelineInvocationRenderer {
     static boolean matchesAuthoredStep(PipelineStepModel candidate, String authoredStepName) {
         return candidate.connectorOperationSelection()
             .map(selection -> selection.authoredStepName().equals(authoredStepName))
-            .orElseGet(() -> candidate.serviceName().equals(toYamlServiceName(authoredStepName)));
+            .orElseGet(() -> candidate.dynamicOperationSelection()
+                .map(selection -> selection.ownsAuthoredStep(authoredStepName))
+                .orElseGet(() -> candidate.serviceName().equals(toYamlServiceName(authoredStepName))));
     }
 
     private List<String> rootClasses(PipelineCompilationContext ctx,

@@ -2302,6 +2302,18 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
         },
+        "operationVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["query", "command"]
+        },
+        "input": {
+          "$ref": "#/$defs/contractOrJavaType"
+        },
         "commandIdGenerator": {
           "type": "string",
           "minLength": 1
@@ -2317,6 +2329,16 @@
         "policy": {
           "type": "object",
           "additionalProperties": true
+        },
+        "trustedArguments": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$"
+          }
         }
       },
       "required": ["using", "operation", "kind", "input"]

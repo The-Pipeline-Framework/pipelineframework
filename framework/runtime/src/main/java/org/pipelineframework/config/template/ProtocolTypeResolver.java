@@ -54,9 +54,11 @@ final class ProtocolTypeResolver {
                 entry -> new org.pipelineframework.config.pipeline.PipelineYamlCallable(
                     entry.getValue().alias(), entry.getValue().using(), entry.getValue().operation(),
                     entry.getValue().kind(), entry.getValue().operationVersion(),
-                    normalizeNullableContract(entry.getValue().input())),
+                    normalizeNullableContract(entry.getValue().input()), entry.getValue().trustedArguments(),
+                    entry.getValue().commandIdGenerator(), entry.getValue().duplicatePolicy(),
+                    entry.getValue().config(), entry.getValue().policy()),
                 (left, right) -> { throw new IllegalStateException("duplicate callable alias: " + left.alias()); },
-                LinkedHashMap::new)));
+                LinkedHashMap::new)), step.modelInputExcludes(), step.callContext());
     }
 
     private String normalizeNullableContract(String contract) {

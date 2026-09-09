@@ -992,7 +992,7 @@ public class StepDefinitionParser {
                     name, operation, using, stepData, operationConfig, negativeCacheTtl,
                     Optional.ofNullable(shape), inputType, outputType,
                     contracts.logicalInput().orElse(null), contracts.logicalOutput().orElse(null), connectorBindings,
-                    requireExactOperationTypes);
+                    requireExactOperationTypes && !stepData.containsKey("callables"));
                 if (validatedSelection.isEmpty()) {
                     throw new StepSkippedException();
                 }
@@ -1213,7 +1213,7 @@ public class StepDefinitionParser {
                 throw new StepSkippedException();
             }
             Map<String, Object> descriptor = new LinkedHashMap<>();
-            for (String field : List.of("using", "operation", "kind", "operationVersion", "input")) {
+            for (String field : List.of("using", "operation", "kind", "operationVersion", "input", "trustedArguments")) {
                 if (callable.containsKey(field) && callable.get(field) == null) {
                     report(Diagnostic.Kind.ERROR, "Skipping step '" + getStringValue(stepData, "name")
                         + "': callable '" + alias + "' field '" + field + "' must not be null");

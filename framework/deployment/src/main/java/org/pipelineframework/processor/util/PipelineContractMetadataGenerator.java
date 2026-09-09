@@ -148,6 +148,36 @@ public class PipelineContractMetadataGenerator {
         value.put("resolvedRequirements", definition.resolvedRequirements().stream()
             .map(this::resolvedRequirement)
             .toList());
+        value.put("resolvedCallables", definition.resolvedCallables().stream()
+            .map(this::resolvedCallable)
+            .toList());
+        return immutableSortedMap(value);
+    }
+
+    private Map<String, Object> resolvedCallable(
+        org.pipelineframework.processor.block.ImportedPipelineDefinition.ResolvedBlockCallable callable
+    ) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("sourceStep", callable.sourceStep());
+        value.put("alias", callable.alias());
+        value.put("requirement", callable.requirement());
+        value.put("kind", callable.kind());
+        value.put("binding", callable.binding());
+        value.put("provider", callable.provider());
+        value.put("providerVersion", callable.providerVersion());
+        value.put("operation", callable.operation());
+        value.put("operationVersion", callable.operationVersion());
+        value.put("inputType", callable.input());
+        value.put("outputType", callable.output());
+        value.put("trustedArguments", immutableSortedMap(callable.trustedArguments()));
+        if (!callable.commandIdGenerator().isBlank()) {
+            value.put("commandIdGenerator", callable.commandIdGenerator());
+            value.put("duplicatePolicy", callable.duplicatePolicy());
+            value.put("commandPolicy", immutableSortedMap(callable.commandPolicy()));
+        }
+        if (!callable.connectorConfigurationDigest().isBlank()) {
+            value.put("connectorConfigurationDigest", callable.connectorConfigurationDigest());
+        }
         return immutableSortedMap(value);
     }
 
@@ -462,6 +492,12 @@ public class PipelineContractMetadataGenerator {
     }
 
     private static String stepTokenFromModel(PipelineStepModel model) {
+        Optional<String> authored = model.connectorOperationSelection()
+            .map(selection -> selection.authoredStepName())
+            .or(() -> model.dynamicOperationSelection().map(selection -> selection.authoredStepName()));
+        if (authored.isPresent()) {
+            return authored.orElseThrow();
+        }
         String token = stripTrailingService(model.generatedName());
         return token.startsWith("Process") && token.length() > "Process".length()
             ? token.substring("Process".length())

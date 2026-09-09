@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.connector.ConnectorConfigSchema;
 import org.pipelineframework.connector.MaterializedPayload;
@@ -244,6 +246,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
         Optional<String> callDiscriminator,
         Optional<String> directCompletionType,
         Optional<LlmDirectCompletionProjection> directCompletion,
+        Map<String, String> callContext,
         List<LlmToolDefinition> tools
     ) {
         private DecisionContract {
@@ -254,6 +257,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 directCompletionType, "direct completion type must not be null");
             directCompletion = Objects.requireNonNull(
                 directCompletion, "direct completion projection must not be null");
+            callContext = Map.copyOf(Objects.requireNonNull(callContext, "LLM call context must not be null"));
             tools = List.copyOf(tools);
         }
 
@@ -283,6 +287,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                     Optional.empty(),
                     Optional.of(completionType),
                     projection,
+                    configuration.callContextMappings(),
                     List.of(new LlmToolDefinition(
                         "complete", "Complete with " + completionType, catalogue.schema(completionType))));
             }
@@ -316,7 +321,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 tools.add(new LlmToolDefinition(
                     entry.getKey(),
                     "Propose " + callable.using() + "/" + callable.operation(),
-                    catalogue.schema(callable.input())));
+                    catalogue.schema(callable.input(), callable.trustedArgumentMappings().keySet())));
             });
             decisions.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
                 tools.add(new LlmToolDefinition(
@@ -330,6 +335,7 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
                 Optional.of(callDiscriminator),
                 Optional.empty(),
                 Optional.empty(),
+                configuration.callContextMappings(),
                 tools);
         }
 
@@ -360,13 +366,14 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             LlmCallableConfiguration callable = callables.get(proposal.alias());
             if (callable != null) {
                 try {
-                    String arguments = catalogue.validateAndCanonicalize(callable.input(), proposal.argumentsJson());
-                    Object agentCall = instantiateAgentCall(callable, arguments);
+                    String arguments = materializeCallableArguments(callable, proposal.argumentsJson(), input);
+                    String contextJson = MODEL_INPUT.selectedFieldsJson(input, callContext);
+                    Object agentCall = instantiateAgentCall(callable, arguments, contextJson);
                     return instantiateVariant(callDiscriminator.orElseThrow(), agentCall);
                 } catch (InvalidModelDecisionException failure) {
                     throw failure;
-                } catch (IllegalArgumentException failure) {
-                    throw new InvalidModelDecisionException(failure.getMessage(), failure);
+                } catch (Exception failure) {
+                    throw new InvalidModelDecisionException("callable payload cannot be materialized", failure);
                 }
             }
             String decisionType = decisionVariants.get(proposal.alias());
@@ -385,12 +392,39 @@ final class LlmQueryOperation implements QueryOperation<Object, LlmTurnConfigura
             }
         }
 
-        private Object instantiateAgentCall(LlmCallableConfiguration callable, String arguments) {
+        private String materializeCallableArguments(
+            LlmCallableConfiguration callable,
+            String modelArgumentsJson,
+            Object input
+        ) throws Exception {
+            JsonNode parsed = JSON.readTree(modelArgumentsJson);
+            if (!(parsed instanceof ObjectNode modelArguments)) {
+                throw new InvalidModelDecisionException("callable arguments must be a JSON object");
+            }
+            for (String trustedTarget : callable.trustedArgumentMappings().keySet()) {
+                if (modelArguments.has(trustedTarget)) {
+                    throw new InvalidModelDecisionException(
+                        "model supplied trusted argument field '" + trustedTarget + "'");
+                }
+            }
+            ObjectNode trustedArguments = (ObjectNode) JSON.readTree(
+                MODEL_INPUT.selectedFieldsJson(input, callable.trustedArgumentMappings()));
+            trustedArguments.fields().forEachRemaining(entry ->
+                modelArguments.set(entry.getKey(), entry.getValue()));
+            return catalogue.validateAndCanonicalize(callable.input(), JSON.writeValueAsString(modelArguments));
+        }
+
+        private Object instantiateAgentCall(
+            LlmCallableConfiguration callable,
+            String arguments,
+            String contextJson
+        ) {
             try {
                 Class<?> agentCall = Class.forName(outputType.getPackageName() + ".AgentCall", true,
                     classLoader);
-                Constructor<?> constructor = agentCall.getDeclaredConstructor(String.class, String.class, String.class);
-                return constructor.newInstance(callable.using(), callable.operation(), arguments);
+                Constructor<?> constructor = agentCall.getDeclaredConstructor(
+                    String.class, String.class, String.class, String.class);
+                return constructor.newInstance(callable.using(), callable.operation(), arguments, contextJson);
             } catch (Exception failure) {
                 throw new InvalidModelDecisionException("AgentCall payload cannot be materialized", failure);
             }

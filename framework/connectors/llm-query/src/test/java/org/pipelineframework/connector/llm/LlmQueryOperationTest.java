@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -27,6 +29,16 @@ import org.pipelineframework.type.CanonicalTypeCatalogue;
 class LlmQueryOperationTest {
 
     @Test
+    void acceptsUnderscoresInTypedProjectionPaths() {
+        LlmTurnConfiguration configuration = new LlmTurnConfiguration(
+            "Choose one alternative.", Optional.empty(), Optional.empty(), Optional.empty(),
+            List.of("state.effect_scope"), Map.of("effect_scope", "state.effect_scope"));
+
+        assertEquals(List.of("state.effect_scope"), configuration.excludedModelInputPaths());
+        assertEquals(Map.of("effect_scope", "state.effect_scope"), configuration.callContextMappings());
+    }
+
+    @Test
     void declaresPipelineResultCachingSupport() {
         LlmQueryOperation operation = new LlmQueryOperation(ignored ->
             CompletableFuture.failedStage(new IllegalStateException("inactive")));
@@ -43,7 +55,7 @@ class LlmQueryOperationTest {
     private static final LlmTurnConfiguration CONFIGURATION = new LlmTurnConfiguration(
         "Choose one alternative.",
         Map.of("charge", new LlmCallableConfiguration(
-            "payments", "charge.create", "command", 1, "ToolArguments")),
+            "payments", "charge.create", "command", 1, "ToolArguments", Map.of())),
         StructuredOutputSchemaMode.OPTIONAL);
 
     @Test
@@ -66,8 +78,64 @@ class LlmQueryOperationTest {
         assertEquals("payments", call.value().binding());
         assertEquals("charge.create", call.value().operation());
         assertEquals("{\"amount\":42,\"note\":\"invoice 7\"}", call.value().argumentsJson());
+        assertEquals("{}", call.value().contextJson());
         assertEquals(Optional.of(observation), outcome.observation());
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void independentlyProjectsModelInputContextAndTrustedArgumentsFromTheOriginalInput() {
+        AtomicReference<LlmTurnRequest> observed = new AtomicReference<>();
+        LlmTurnConfiguration configuration = new LlmTurnConfiguration(
+            "Choose one alternative.",
+            Optional.of(Map.of("charge", new LlmCallableConfiguration(
+                "payments", "charge.create", "command", 1, "ToolArguments",
+                Map.of("note", "invoiceId")))),
+            Optional.of(StructuredOutputSchemaMode.OPTIONAL),
+            Optional.empty(),
+            java.util.List.of("invoiceId"),
+            Map.of("state", "invoiceId"));
+
+        QueryOutcome<Object> outcome = operation(request -> {
+            observed.set(request);
+            return CompletableFuture.completedFuture(
+                new LlmDecision(new LlmToolProposal("charge", "{\"amount\":42}")));
+        }).query(invocation(configuration)).toCompletableFuture().join();
+
+        Decision.Call call = assertInstanceOf(Decision.Call.class,
+            assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+        assertEquals("{}", observed.get().applicationStateJson());
+        String toolSchema = observed.get().tools().stream()
+            .filter(tool -> tool.alias().equals("charge")).findFirst().orElseThrow().inputSchemaJson();
+        assertFalse(toolSchema.contains("note"));
+        assertEquals("{\"amount\":42,\"note\":\"7\"}", call.value().argumentsJson());
+        assertEquals("{\"state\":\"7\"}", call.value().contextJson());
+    }
+
+    @Test
+    void rejectsAModelAttemptToSupplyATrustedArgument() {
+        AtomicReference<LlmTurnRequest> observed = new AtomicReference<>();
+        LlmTurnConfiguration configuration = new LlmTurnConfiguration(
+            "Choose one alternative.",
+            Optional.of(Map.of("charge", new LlmCallableConfiguration(
+                "payments", "charge.create", "command", 1, "ToolArguments",
+                Map.of("note", "invoiceId")))),
+            Optional.of(StructuredOutputSchemaMode.OPTIONAL),
+            Optional.empty(),
+            java.util.List.of("invoiceId"),
+            Map.of("state", "invoiceId"));
+
+        QueryOutcome<Object> outcome = operation(request -> {
+            observed.set(request);
+            return CompletableFuture.completedFuture(new LlmDecision(
+                new LlmToolProposal("charge", "{\"amount\":42,\"note\":\"model-owned\"}")));
+        }).query(invocation(configuration)).toCompletableFuture().join();
+
+        assertEquals("invalid-model-decision",
+            assertInstanceOf(QueryOutcome.TerminalFailure.class, outcome).code());
+        assertTrue(observed.get().tools().stream()
+            .filter(tool -> tool.alias().equals("charge"))
+            .noneMatch(tool -> tool.inputSchemaJson().contains("note")));
     }
 
     @Test
@@ -365,7 +433,8 @@ class LlmQueryOperationTest {
             "Analyse once.",
             Optional.of(Map.of()),
             Optional.empty(),
-            Optional.of(Map.of("field", "review", "invoiceId", "invoiceId")));
+            Optional.of(Map.of("field", "review", "invoiceId", "invoiceId")),
+            java.util.List.of(), Map.of());
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) ReviewEnvelope.class;
 
@@ -403,7 +472,8 @@ class LlmQueryOperationTest {
             "Analyse once.",
             Optional.of(Map.of()),
             Optional.empty(),
-            Optional.of(Map.of("field", "review", "invoiceId", "invoice.invoiceId")));
+            Optional.of(Map.of("field", "review", "invoiceId", "invoice.invoiceId")),
+            java.util.List.of(), Map.of());
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) ReviewEnvelope.class;
 
@@ -453,7 +523,7 @@ class LlmQueryOperationTest {
             null, Map.of(), Optional.empty());
         LlmTurnConfiguration completion = new LlmTurnConfiguration(
             "Analyse text once.", Optional.of(Map.of()), Optional.of(StructuredOutputSchemaMode.OPTIONAL), Optional.empty(),
-            Optional.of(Map.of("invoice", "invoice")));
+            java.util.List.of("invoice"), Map.of());
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> output = (Class) ReviewReady.class;
 

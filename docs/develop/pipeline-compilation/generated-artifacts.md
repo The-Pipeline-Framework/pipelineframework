@@ -25,7 +25,10 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
 - `pipeline-contract.json`: deterministic schema 3 release contract. Imported Blocks include package
   provenance, source and linked definition fingerprints, and resolved capability metadata. The
   resolution records binding/provider/operation versions, application-selected Command authority,
-  and a sanitized connector-configuration digest, never raw configuration or credentials.
+  and a sanitized connector-configuration digest. Imported callable catalogues additionally record
+  source step, alias, canonical contracts, trusted source/target mappings, and the resolved native
+  Query or Command target. Raw configuration, credentials, prompts containing application data, and
+  runtime context values are never emitted.
 
 If you package a grouped runtime such as monolith or pipeline-runtime, keep these resources aligned with the runtime artifact that will execute the pipeline.
 

@@ -114,14 +114,14 @@ public final class BlockDefinitionImporter {
             for (PackageDefinition definition : source.definitions()) {
                 Map<String, Object> normalized = mutableMap(definition.definition());
                 rewritePipelineReferences(normalized, Set.of(), importedByShortName, packageAliases);
-                List<ImportedPipelineDefinition.ResolvedBlockRequirement> resolvedRequirements =
+                LinkedRequirements linkedRequirements =
                     linkRequirements(definition, normalized, blockBindings, applicationConnectors);
                 applicationPipelines.put(definition.qualifiedId(), normalized);
                 provenance.add(new ImportedPipelineDefinition(
                     definition.qualifiedId(), definition.name(), source.manifest().namespace(),
                     source.manifest().artifact().groupId(), source.manifest().artifact().artifactId(),
                     source.manifest().artifact().version(), definition.resource(), definition.definitionFingerprint(),
-                    fingerprint(normalized), resolvedRequirements));
+                    fingerprint(normalized), linkedRequirements.requirements(), linkedRequirements.callables()));
             }
         }
 
@@ -290,6 +290,12 @@ public final class BlockDefinitionImporter {
             throw new IllegalStateException("Imported block '" + definitionName + "' requires at least one step.");
         }
         Set<String> referencedRequirements = new LinkedHashSet<>();
+        Map<String, Map<?, ?>> stepsByName = new LinkedHashMap<>();
+        for (Object rawStep : steps) {
+            if (rawStep instanceof Map<?, ?> step && step.get("name") instanceof String name && !name.isBlank()) {
+                stepsByName.put(name.strip(), step);
+            }
+        }
         for (Object rawStep : steps) {
             if (!(rawStep instanceof Map<?, ?> step)) {
                 throw new IllegalStateException("Imported block '" + definitionName + "' contains an invalid step.");
@@ -307,9 +313,9 @@ public final class BlockDefinitionImporter {
                 throw new IllegalStateException("Imported block '" + definitionName
                     + "' contains forbidden step kind '" + rawKind + "'.");
             }
-            if (step.get("operation") instanceof Map<?, ?>) {
-                throw new IllegalStateException("Imported block '" + definitionName
-                    + "' contains forbidden dynamic-operation declaration.");
+            if (step.get("operation") instanceof Map<?, ?> dynamicOperation) {
+                validateDynamicOperation(definitionName, step, dynamicOperation, stepsByName);
+                continue;
             }
             if (!"query".equals(kind) && !"command".equals(kind)) {
                 if (step.containsKey("using") || step.containsKey("operation") || step.containsKey("operationVersion")) {
@@ -341,12 +347,98 @@ public final class BlockDefinitionImporter {
                 }
             }
             referencedRequirements.add(requirementName);
+            validateCallableRequirements(definitionName, step, requirements, referencedRequirements);
         }
         for (String requirement : requirements.keySet()) {
             if (!referencedRequirements.contains(requirement)) {
                 throw new IllegalStateException("Imported block '" + definitionName
                     + "' declares unused requirement '" + requirement + "'.");
             }
+        }
+    }
+
+    private static void validateDynamicOperation(
+        String definitionName,
+        Map<?, ?> step,
+        Map<?, ?> operation,
+        Map<String, Map<?, ?>> stepsByName
+    ) {
+        Set<String> keys = operation.keySet().stream().map(String::valueOf).collect(java.util.stream.Collectors.toSet());
+        if (!keys.equals(Set.of("mode", "from"))
+            || !"dynamic".equalsIgnoreCase(String.valueOf(operation.get("mode")))) {
+            throw new IllegalStateException("Imported block '" + definitionName
+                + "' dynamic operation must declare only mode: dynamic and from.");
+        }
+        String sourceName = requiredText(operation.get("from"), "Imported block '" + definitionName
+            + "' dynamic operation requires a non-blank from step");
+        Map<?, ?> source = stepsByName.get(sourceName);
+        if (source == null || !"query".equalsIgnoreCase(String.valueOf(source.get("kind")))
+            || !(source.get("callables") instanceof Map<?, ?> callables) || callables.isEmpty()) {
+            throw new IllegalStateException("Imported block '" + definitionName
+                + "' dynamic operation from must reference a Query step in the same definition"
+                + " with an explicit callable catalogue: " + sourceName);
+        }
+        if (step.containsKey("using") || step.containsKey("kind")) {
+            throw new IllegalStateException("Imported block '" + definitionName
+                + "' dynamic operation must not declare using or kind.");
+        }
+    }
+
+    private static void validateCallableRequirements(
+        String definitionName,
+        Map<?, ?> step,
+        Map<String, BlockPackageManifest.Requirement> requirements,
+        Set<String> referencedRequirements
+    ) {
+        Object rawCallables = step.get("callables");
+        if (rawCallables == null) {
+            return;
+        }
+        if (!(rawCallables instanceof Map<?, ?> callables) || callables.isEmpty()) {
+            throw new IllegalStateException("Imported block '" + definitionName
+                + "' callables must be a non-empty map.");
+        }
+        Set<String> targets = new LinkedHashSet<>();
+        for (Map.Entry<?, ?> entry : callables.entrySet()) {
+            String alias = requiredText(entry.getKey(), "Imported block '" + definitionName
+                + "' callable alias must not be blank");
+            if (!(entry.getValue() instanceof Map<?, ?> callable)) {
+                throw new IllegalStateException("Imported block '" + definitionName
+                    + "' callable '" + alias + "' must be a map.");
+            }
+            String kind = requiredText(callable.get("kind"), "Imported block '" + definitionName
+                + "' callable '" + alias + "' requires kind").toUpperCase(Locale.ROOT);
+            if (!Set.of("QUERY", "COMMAND").contains(kind)) {
+                throw new IllegalStateException("Imported block '" + definitionName
+                    + "' callable '" + alias + "' kind must be QUERY or COMMAND.");
+            }
+            String requirementName = requiredText(callable.get("using"), "Imported block '" + definitionName
+                + "' callable '" + alias + "' requires using");
+            String operation = requiredText(callable.get("operation"), "Imported block '" + definitionName
+                + "' callable '" + alias + "' requires operation");
+            BlockPackageManifest.Requirement requirement = requirements.get(requirementName);
+            if (requirement == null) {
+                throw new IllegalStateException("Imported block '" + definitionName + "' callable '" + alias
+                    + "' references undeclared requirement '" + requirementName + "'.");
+            }
+            if (!requirement.kind().equals(kind)) {
+                throw new IllegalStateException("Imported block '" + definitionName + "' requirement '"
+                    + requirementName + "' is " + requirement.kind() + " but callable '" + alias
+                    + "' is " + kind + ".");
+            }
+            if ("COMMAND".equals(kind)) {
+                for (String authority : List.of("commandIdGenerator", "duplicatePolicy", "policy")) {
+                    if (callable.containsKey(authority)) {
+                        throw new IllegalStateException("Imported block '" + definitionName + "' callable '"
+                            + alias + "' must not declare application-owned Command field '" + authority + "'.");
+                    }
+                }
+            }
+            if (!targets.add(requirementName + "\u0000" + operation)) {
+                throw new IllegalStateException("Imported block '" + definitionName
+                    + "' callable catalogue contains duplicate requirement/operation target for alias '" + alias + "'.");
+            }
+            referencedRequirements.add(requirementName);
         }
     }
 
@@ -370,7 +462,7 @@ public final class BlockDefinitionImporter {
     }
 
     @SuppressWarnings("unchecked")
-    private List<ImportedPipelineDefinition.ResolvedBlockRequirement> linkRequirements(
+    private LinkedRequirements linkRequirements(
         PackageDefinition definition,
         Map<String, Object> normalizedDefinition,
         Map<String, Object> blockBindings,
@@ -391,7 +483,7 @@ public final class BlockDefinitionImporter {
                 throw new IllegalStateException("Block '" + definition.qualifiedId()
                     + "' declares no requirements but blockBindings supplies mappings.");
             }
-            return List.of();
+            return new LinkedRequirements(List.of(), List.of());
         }
         if (rawMappings == null) {
             throw new IllegalStateException("Block '" + definition.qualifiedId()
@@ -407,13 +499,25 @@ public final class BlockDefinitionImporter {
         Object rawSteps = normalizedDefinition.get("steps");
         List<Object> steps = (List<Object>) rawSteps;
         Map<Object, String> declaredRequirements = new IdentityHashMap<>();
+        Map<Object, String> declaredCallableRequirements = new IdentityHashMap<>();
         for (Object rawStep : steps) {
             Map<String, Object> step = (Map<String, Object>) rawStep;
             Object declaredUsing = step.get("using");
             declaredRequirements.put(rawStep,
                 declaredUsing == null ? "" : String.valueOf(declaredUsing).strip());
+            if (step.get("callables") instanceof Map<?, ?> rawCallables) {
+                for (Object rawCallable : rawCallables.values()) {
+                    if (rawCallable instanceof Map<?, ?> callable) {
+                        Object declaredCallableUsing = callable.get("using");
+                        declaredCallableRequirements.put(rawCallable, declaredCallableUsing == null
+                            ? "" : String.valueOf(declaredCallableUsing).strip());
+                    }
+                }
+            }
         }
         List<ImportedPipelineDefinition.ResolvedBlockRequirement> resolved = new ArrayList<>();
+        List<ImportedPipelineDefinition.ResolvedBlockCallable> resolvedCallables = new ArrayList<>();
+        Set<String> resolvedCallableTargets = new LinkedHashSet<>();
         for (Map.Entry<String, BlockPackageManifest.Requirement> requirementEntry
             : definition.requirements().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             String requirementName = requirementEntry.getKey();
@@ -459,23 +563,90 @@ public final class BlockDefinitionImporter {
                 Map<String, Object> step = (Map<String, Object>) rawStep;
                 String stepKind = String.valueOf(step.getOrDefault("kind", "")).trim().toUpperCase(Locale.ROOT);
                 String stepRequirement = declaredRequirements.get(rawStep);
-                if (!kind.equals(stepKind) || !requirementName.equals(stepRequirement)) {
+                if (kind.equals(stepKind) && requirementName.equals(stepRequirement)) {
+                    String operation = requiredText(step.get("operation"), "Imported operation must not be blank");
+                    int operationVersion = step.containsKey("operationVersion")
+                        ? integer(step.get("operationVersion")) : 1;
+                    if (operationVersion < 1) {
+                        throw new IllegalStateException("Imported block '" + definition.qualifiedId()
+                            + "' operationVersion must be a positive integer.");
+                    }
+                    step.put("using", bindingName);
+                    if ("COMMAND".equals(kind)) {
+                        step.put("commandIdGenerator", commandIdGenerator);
+                        step.put("duplicatePolicy", duplicatePolicy);
+                        step.put("policy", deepCopy(commandPolicy));
+                    }
+                    operations.add(new ImportedPipelineDefinition.ResolvedOperation(operation, operationVersion));
+                }
+                if (!(step.get("callables") instanceof Map<?, ?> rawCallables)) {
                     continue;
                 }
-                String operation = requiredText(step.get("operation"), "Imported operation must not be blank");
-                int operationVersion = step.containsKey("operationVersion")
-                    ? integer(step.get("operationVersion")) : 1;
-                if (operationVersion < 1) {
-                    throw new IllegalStateException("Imported block '" + definition.qualifiedId()
-                        + "' operationVersion must be a positive integer.");
+                for (Map.Entry<?, ?> callableEntry : rawCallables.entrySet()) {
+                    if (!(callableEntry.getValue() instanceof Map<?, ?> rawCallable)) {
+                        continue;
+                    }
+                    Map<String, Object> callable = (Map<String, Object>) rawCallable;
+                    String callableKind = String.valueOf(callable.getOrDefault("kind", ""))
+                        .trim().toUpperCase(Locale.ROOT);
+                    String callableRequirement = declaredCallableRequirements.get(rawCallable);
+                    if (!kind.equals(callableKind) || !requirementName.equals(callableRequirement)) {
+                        continue;
+                    }
+                    String alias = String.valueOf(callableEntry.getKey());
+                    String operation = requiredText(callable.get("operation"), "Imported callable operation must not be blank");
+                    if (!resolvedCallableTargets.add(bindingName + "\u0000" + operation)) {
+                        throw new IllegalStateException("Imported block '" + definition.qualifiedId()
+                            + "' callable '" + alias + "' resolves to duplicate binding/operation target '"
+                            + bindingName + "/" + operation + "'.");
+                    }
+                    int operationVersion = callable.containsKey("operationVersion")
+                        ? integer(callable.get("operationVersion")) : 1;
+                    if (operationVersion < 1) {
+                        throw new IllegalStateException("Imported block '" + definition.qualifiedId()
+                            + "' callable operationVersion must be a positive integer.");
+                    }
+                    String input = requiredText(callable.get("input"), "Imported callable input must not be blank");
+                    Map<String, Object> operationConfig = callable.get("config") instanceof Map<?, ?> rawConfig
+                        ? mutableMap(rawConfig) : Map.of();
+                    callable.put("using", bindingName);
+                    if ("COMMAND".equals(kind)) {
+                        callable.put("commandIdGenerator", commandIdGenerator);
+                        callable.put("duplicatePolicy", duplicatePolicy);
+                        callable.put("policy", deepCopy(commandPolicy));
+                    }
+                    var operationKind = "COMMAND".equals(kind)
+                        ? org.pipelineframework.connector.ConnectorOperationKind.COMMAND
+                        : org.pipelineframework.connector.ConnectorOperationKind.QUERY;
+                    var operationDescriptor = providerManifestCatalog().requireOperation(
+                        ConnectorProviderId.of(connector.provider()), connector.providerVersion(), operation,
+                        operationKind, operationVersion);
+                    var typeContract = operationDescriptor.typeContract().orElseThrow(() ->
+                        new IllegalStateException("Imported callable '" + alias + "' operation " + operation
+                            + " has no canonical type contract."));
+                    providerManifestCatalog().validateOperationConfiguration(
+                        ConnectorProviderId.of(connector.provider()), connector.providerVersion(), operation,
+                        operationKind, operationVersion,
+                        new ConnectorConfigurationDocument(operationConfig),
+                        "imported Block callable '" + definition.qualifiedId() + "#" + alias + "'");
+                    if ("QUERY".equals(kind)
+                        && operationDescriptor.queryCardinality().orElseThrow()
+                            != org.pipelineframework.connector.QueryOperationCardinality.ONE_TO_ONE) {
+                        throw new IllegalStateException("Imported callable '" + alias
+                            + "' must select a ONE_TO_ONE Query operation.");
+                    }
+                    Map<String, String> trustedArguments = callable.get("trustedArguments") instanceof Map<?, ?> rawTrusted
+                        ? stringMap(rawTrusted, "Imported callable '" + alias + "' trustedArguments") : Map.of();
+                    String configurationDigest = connectorConfigurationDigest(connector);
+                    resolvedCallables.add(new ImportedPipelineDefinition.ResolvedBlockCallable(
+                        String.valueOf(step.get("name")), alias, requirementName, kind, bindingName,
+                        connector.provider(), connector.providerVersion(), operation, operationVersion,
+                        input, typeContract.outputType().orElseThrow(() -> new IllegalStateException(
+                            "Imported callable '" + alias + "' operation " + operation
+                                + " has no canonical output contract.")),
+                        trustedArguments, commandIdGenerator, duplicatePolicy, commandPolicy, configurationDigest));
+                    operations.add(new ImportedPipelineDefinition.ResolvedOperation(operation, operationVersion));
                 }
-                step.put("using", bindingName);
-                if ("COMMAND".equals(kind)) {
-                    step.put("commandIdGenerator", commandIdGenerator);
-                    step.put("duplicatePolicy", duplicatePolicy);
-                    step.put("policy", deepCopy(commandPolicy));
-                }
-                operations.add(new ImportedPipelineDefinition.ResolvedOperation(operation, operationVersion));
             }
             List<ImportedPipelineDefinition.ResolvedOperation> distinctOperations = operations.stream()
                 .distinct()
@@ -491,7 +662,9 @@ public final class BlockDefinitionImporter {
                 distinctOperations, commandIdGenerator, duplicatePolicy, commandPolicy,
                 connectorConfigurationDigest(connector)));
         }
-        return List.copyOf(resolved);
+        resolvedCallables.sort(Comparator.comparing(ImportedPipelineDefinition.ResolvedBlockCallable::sourceStep)
+            .thenComparing(ImportedPipelineDefinition.ResolvedBlockCallable::alias));
+        return new LinkedRequirements(List.copyOf(resolved), List.copyOf(resolvedCallables));
     }
 
     private ApplicationConnectorBinding applicationConnector(
@@ -637,6 +810,18 @@ public final class BlockDefinitionImporter {
         return copy;
     }
 
+    private static Map<String, String> stringMap(Map<?, ?> source, String subject) {
+        Map<String, String> result = new LinkedHashMap<>();
+        source.forEach((key, value) -> {
+            if (!(key instanceof String target) || target.isBlank()
+                || !(value instanceof String path) || path.isBlank()) {
+                throw new IllegalStateException(subject + " must map non-blank string fields to typed source paths.");
+            }
+            result.put(target, path);
+        });
+        return Map.copyOf(result);
+    }
+
     private static Object deepCopy(Object value) {
         if (value instanceof Map<?, ?> map) {
             return mutableMap(map);
@@ -749,6 +934,16 @@ public final class BlockDefinitionImporter {
     ) {
         private ApplicationConnectorBinding {
             configuration = Map.copyOf(configuration);
+        }
+    }
+
+    private record LinkedRequirements(
+        List<ImportedPipelineDefinition.ResolvedBlockRequirement> requirements,
+        List<ImportedPipelineDefinition.ResolvedBlockCallable> callables
+    ) {
+        private LinkedRequirements {
+            requirements = List.copyOf(requirements);
+            callables = List.copyOf(callables);
         }
     }
 }

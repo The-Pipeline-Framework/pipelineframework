@@ -46,12 +46,15 @@ class OperationDispatchSupportTest {
 
         OperationObservation.Result result = assertInstanceOf(OperationObservation.Result.class,
             support.dispatch(descriptor(), "payments", "charge.lookup",
-                    "{\"note\":\"invoice\",\"amount\":42}", OperationObservation.class)
+                    "{\"note\":\"invoice\",\"amount\":42}",
+                    "{\"turn\":1,\"state\":{\"z\":2,\"a\":1}}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
 
         assertEquals("found", result.value().outcome());
         assertEquals("found", result.value().code());
         assertEquals("ToolResult", result.value().resultType());
+        assertEquals("{\"amount\":42,\"note\":\"invoice\"}", result.value().argumentsJson());
+        assertEquals("{\"state\":{\"a\":1,\"z\":2},\"turn\":1}", result.value().contextJson());
         assertEquals("{\"acceptedAmount\":42,\"receipt\":\"r-1\"}", result.value().resultJson());
     }
 
@@ -62,7 +65,7 @@ class OperationDispatchSupportTest {
 
         OperationObservation.Empty result = assertInstanceOf(OperationObservation.Empty.class,
             support.dispatch(descriptor(), "payments", "charge.lookup",
-                    "{\"amount\":42,\"note\":\"invoice\"}", OperationObservation.class)
+                    "{\"amount\":42,\"note\":\"invoice\"}", "{}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
 
         assertEquals("not-found", result.value().outcome());
@@ -79,11 +82,13 @@ class OperationDispatchSupportTest {
 
         OperationObservation.Result result = assertInstanceOf(OperationObservation.Result.class,
             commandSupport.dispatch(commandDescriptor(), "payments", "charge.create",
-                    "{\"amount\":42,\"note\":\"invoice\"}", OperationObservation.class)
+                    "{\"amount\":42,\"note\":\"invoice\"}", "{\"turn\":1}", OperationObservation.class)
                 .await().atMost(Duration.ofSeconds(2)));
 
         assertEquals("succeeded", result.value().outcome());
         assertEquals("tpf:command", result.value().kind());
+        assertEquals("{\"amount\":42,\"note\":\"invoice\"}", result.value().argumentsJson());
+        assertEquals("{\"turn\":1}", result.value().contextJson());
         assertEquals("{\"acceptedAmount\":42,\"receipt\":\"r-2\"}", result.value().resultJson());
         verify(queries, never()).queryOutcomeOneToOne(any(), any(), any());
     }
@@ -91,10 +96,10 @@ class OperationDispatchSupportTest {
     @Test
     void rejectsInvalidArgumentsAndUnexposedTargetsBeforeProviderInvocation() {
         assertThrows(IllegalArgumentException.class, () -> support.dispatch(
-                descriptor(), "payments", "charge.lookup", "{\"amount\":42}", OperationObservation.class)
+                descriptor(), "payments", "charge.lookup", "{\"amount\":42}", "{}", OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
         assertThrows(IllegalArgumentException.class, () -> support.dispatch(
-                descriptor(), "other", "charge.lookup", "{}", OperationObservation.class)
+                descriptor(), "other", "charge.lookup", "{}", "{}", OperationObservation.class)
             .await().atMost(Duration.ofSeconds(2)));
 
         verify(queries, never()).queryOutcomeOneToOne(any(), any(), any());

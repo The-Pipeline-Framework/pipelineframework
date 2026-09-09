@@ -26,6 +26,19 @@ class CanonicalTypeCatalogueTest {
     }
 
     @Test
+    void projectsTrustedTopLevelFieldsOutOfTheModelSchemaWithoutWeakeningCanonicalValidation() throws Exception {
+        var schema = PipelineJson.mapper().readTree(catalogue.schema("ToolArguments", Set.of("note")));
+
+        assertTrue(schema.path("properties").has("amount"));
+        assertFalse(schema.path("properties").has("note"));
+        assertFalse(schema.path("required").toString().contains("note"));
+        assertThrows(IllegalArgumentException.class,
+            () -> catalogue.validateAndCanonicalize("ToolArguments", "{\"amount\":42}"));
+        assertDoesNotThrow(() -> catalogue.validateAndCanonicalize(
+            "ToolArguments", "{\"amount\":42,\"note\":\"trusted\"}"));
+    }
+
+    @Test
     void projectsOnlyDefinitionsReachableFromTheRootType() throws Exception {
         var schema = PipelineJson.mapper().readTree(catalogue.schema("ConstraintArguments"));
         Set<String> definitions = new TreeSet<>();

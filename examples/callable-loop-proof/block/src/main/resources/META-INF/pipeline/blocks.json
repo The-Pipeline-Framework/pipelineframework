@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.examples.callable",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "callable-loop-proof-block",
+    "version": "${project.version}"
+  },
+  "definitions": [
+    {
+      "name": "callable-loop-proof",
+      "resource": "META-INF/pipeline/callable-loop-proof.yaml",
+      "requires": {
+        "decision.model": { "kind": "QUERY" },
+        "proof.read": { "kind": "QUERY" },
+        "proof.write": { "kind": "COMMAND" }
+      }
+    }
+  ]
+}

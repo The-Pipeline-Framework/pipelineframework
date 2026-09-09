@@ -1,0 +1,12 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: callable-loop-proof-app
+  module: callable-loop-proof-app
+  synthetic:
+    module: callable-loop-proof-app
+modules:
+  callable-loop-proof-app:
+    runtime: callable-loop-proof-app
+    steps:
+      - call-callable-loop-proof

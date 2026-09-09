@@ -14,7 +14,8 @@ public record ImportedPipelineDefinition(
     String resource,
     String definitionFingerprint,
     String linkedDefinitionFingerprint,
-    List<ResolvedBlockRequirement> resolvedRequirements
+    List<ResolvedBlockRequirement> resolvedRequirements,
+    List<ResolvedBlockCallable> resolvedCallables
 ) {
     public ImportedPipelineDefinition(
         String qualifiedId,
@@ -27,7 +28,7 @@ public record ImportedPipelineDefinition(
         String definitionFingerprint
     ) {
         this(qualifiedId, logicalName, namespace, groupId, artifactId, version, resource,
-            definitionFingerprint, definitionFingerprint, List.of());
+            definitionFingerprint, definitionFingerprint, List.of(), List.of());
     }
 
     public ImportedPipelineDefinition {
@@ -41,6 +42,8 @@ public record ImportedPipelineDefinition(
         requireText(definitionFingerprint, "definitionFingerprint");
         requireText(linkedDefinitionFingerprint, "linkedDefinitionFingerprint");
         resolvedRequirements = resolvedRequirements == null ? List.of() : List.copyOf(resolvedRequirements);
+        resolvedCallables = List.copyOf(java.util.Objects.requireNonNull(
+            resolvedCallables, "resolvedCallables must not be null"));
     }
 
     /** Sanitized application resolution of one Block capability requirement. */
@@ -77,6 +80,51 @@ public record ImportedPipelineDefinition(
             if (version < 1) {
                 throw new IllegalArgumentException("operation.version must be positive");
             }
+        }
+    }
+
+    /** Sanitized linked identity of one callable exposed by an imported Block decision step. */
+    public record ResolvedBlockCallable(
+        String sourceStep,
+        String alias,
+        String requirement,
+        String kind,
+        String binding,
+        String provider,
+        int providerVersion,
+        String operation,
+        int operationVersion,
+        String input,
+        String output,
+        Map<String, String> trustedArguments,
+        String commandIdGenerator,
+        String duplicatePolicy,
+        Map<String, Object> commandPolicy,
+        String connectorConfigurationDigest
+    ) {
+        public ResolvedBlockCallable {
+            requireText(sourceStep, "callable.sourceStep");
+            requireText(alias, "callable.alias");
+            requireText(requirement, "callable.requirement");
+            requireText(kind, "callable.kind");
+            requireText(binding, "callable.binding");
+            requireText(provider, "callable.provider");
+            if (providerVersion < 1 || operationVersion < 1) {
+                throw new IllegalArgumentException("callable provider and operation versions must be positive");
+            }
+            requireText(operation, "callable.operation");
+            requireText(input, "callable.input");
+            requireText(output, "callable.output");
+            trustedArguments = Map.copyOf(java.util.Objects.requireNonNull(
+                trustedArguments, "callable.trustedArguments must not be null"));
+            commandIdGenerator = java.util.Objects.requireNonNull(
+                commandIdGenerator, "callable.commandIdGenerator must not be null");
+            duplicatePolicy = java.util.Objects.requireNonNull(
+                duplicatePolicy, "callable.duplicatePolicy must not be null");
+            commandPolicy = Map.copyOf(java.util.Objects.requireNonNull(
+                commandPolicy, "callable.commandPolicy must not be null"));
+            connectorConfigurationDigest = java.util.Objects.requireNonNull(
+                connectorConfigurationDigest, "callable.connectorConfigurationDigest must not be null");
         }
     }
 

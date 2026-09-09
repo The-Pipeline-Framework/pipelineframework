@@ -297,6 +297,14 @@ class PipelineContractMetadataGeneratorTest {
             .get(0).getAsJsonObject().get("id").getAsString());
         assertEquals("RETURN_RECORDED", requirement.get("duplicatePolicy").getAsString());
         assertEquals("configuration-digest", requirement.get("connectorConfigurationDigest").getAsString());
+        JsonObject callable = imported.getAsJsonArray("resolvedCallables").get(0).getAsJsonObject();
+        assertEquals("Decide", callable.get("sourceStep").getAsString());
+        assertEquals("update", callable.get("alias").getAsString());
+        assertEquals("UpdateRequest", callable.get("inputType").getAsString());
+        assertEquals("UpdateResult", callable.get("outputType").getAsString());
+        assertEquals("nextEffectKey", callable.getAsJsonObject("trustedArguments")
+            .get("effectKey").getAsString());
+        assertEquals("RETURN_RECORDED", callable.get("duplicatePolicy").getAsString());
         assertFalse(first.toString().contains("credential"));
         assertNotEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
     }
@@ -388,6 +396,12 @@ class PipelineContractMetadataGeneratorTest {
             List.of(new ImportedPipelineDefinition.ResolvedBlockRequirement(
                 "graphql.write", "COMMAND", "primary-graphql", "graphql.smallrye", 1,
                 List.of(new ImportedPipelineDefinition.ResolvedOperation("execute.mutation", 1)),
+                "com.example.GraphQlMutationCommandId", duplicatePolicy,
+                Map.of("requiredExecutionPosture", "AUTOMATED"), "configuration-digest")),
+            List.of(new ImportedPipelineDefinition.ResolvedBlockCallable(
+                "Decide", "update", "graphql.write", "COMMAND", "primary-graphql",
+                "graphql.smallrye", 1, "execute.mutation", 1,
+                "UpdateRequest", "UpdateResult", Map.of("effectKey", "nextEffectKey"),
                 "com.example.GraphQlMutationCommandId", duplicatePolicy,
                 Map.of("requiredExecutionPosture", "AUTOMATED"), "configuration-digest")))));
         new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
