@@ -10,7 +10,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.Filer;
+import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 import org.pipelineframework.representation.spi.ArtifactDescription;
 import org.pipelineframework.representation.spi.ArtifactKind;
@@ -48,15 +50,23 @@ public final class ProviderArtifactWriter {
             throw new IllegalArgumentException("filer must not be null");
         }
         for (ArtifactDescription description : orderedAndDeduped(descriptions)) {
-            if (description.kind() != ArtifactKind.JAVA_SOURCE) {
-                throw new IllegalStateException("The compiler host accepts only JAVA_SOURCE provider artifacts; got "
-                    + description.kind() + " for '" + description.logicalPath() + "'.");
-            }
-            String className = description.logicalPath().substring(0, description.logicalPath().length() - ".java".length())
-                .replace('/', '.');
-            JavaFileObject source = filer.createSourceFile(className);
-            try (Writer writer = source.openWriter()) {
-                writer.write(description.content());
+            switch (description.kind()) {
+                case RESOURCE -> {
+                    FileObject resource = filer.createResource(
+                        StandardLocation.CLASS_OUTPUT, "", description.logicalPath());
+                    try (Writer writer = resource.openWriter()) {
+                        writer.write(description.content());
+                    }
+                }
+                case JAVA_SOURCE -> {
+                    String className = description.logicalPath()
+                        .substring(0, description.logicalPath().length() - ".java".length())
+                        .replace('/', '.');
+                    JavaFileObject source = filer.createSourceFile(className);
+                    try (Writer writer = source.openWriter()) {
+                        writer.write(description.content());
+                    }
+                }
             }
         }
     }

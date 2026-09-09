@@ -227,6 +227,7 @@ const mainSidebar = [
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
                     {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
+                    {text: 'Pinned HTTP Connector', link: '/develop/extension/pinned-http-connector'},
                     {text: 'GraphQL Connector and Blocks', link: '/develop/extension/graphql-connector'},
                     {text: 'Embedding and Vector Connectors', link: '/develop/extension/embedding-and-vector-connectors'},
                     {text: 'One-turn LLM Query', link: '/develop/extension/llm-query'},

@@ -91,6 +91,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             new org.pipelineframework.processor.phase.RepresentationProviderPreparationPhase(),
             new org.pipelineframework.processor.phase.PipelineBranchPlanningPhase(),
             new org.pipelineframework.processor.phase.ModelExtractionPhase(),
+            new org.pipelineframework.processor.phase.OperationRepresentationGenerationPhase(),
             new org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase(),
             new org.pipelineframework.processor.phase.RepresentationProviderGenerationPhase(),
             new org.pipelineframework.processor.phase.PipelineSemanticAnalysisPhase(),
