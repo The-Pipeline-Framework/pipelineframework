@@ -1,0 +1,154 @@
+version: 3
+
+types:
+  GraphQlQueryRequest:
+    java: org.pipelineframework.connector.graphql.GraphQlQueryRequest
+    fields:
+      - [operationKey, string]
+      - [variablesJson, <tpf.graphql.GraphQlVariablesJson>]
+  GraphQlMutationRequest:
+    java: org.pipelineframework.connector.graphql.GraphQlMutationRequest
+    fields:
+      - [operationKey, string]
+      - [effectKey, string]
+      - [variablesJson, <tpf.graphql.GraphQlVariablesJson>]
+  GraphQlResponse:
+    java: org.pipelineframework.connector.graphql.GraphQlResponse
+    fields:
+      - { name: data, type: <tpf.graphql.GraphQlDataJson>, presence: OPTIONAL }
+      - { name: errors, repeated: <tpf.graphql.GraphQlError> }
+  GraphQlAgentOperation:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentOperation
+    fields:
+      - [operationKey, string]
+      - [kind, string]
+      - [description, string]
+      - [variablesGuide, string]
+  GraphQlAgentOperationGuide:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentOperationGuide
+    fields:
+      - { name: operations, repeated: GraphQlAgentOperation }
+  GraphQlAgentObservation:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentObservation
+    fields:
+      - [turn, int32]
+      - [operationKey, string]
+      - [kind, string]
+      - [variablesJson, <tpf.graphql.GraphQlVariablesJson>]
+      - [outcome, string]
+      - [code, string]
+      - [dataJson, string]
+      - { name: errors, repeated: <tpf.graphql.GraphQlError> }
+  GraphQlAgentState:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentState
+    fields:
+      - [objective, string]
+      - [operationGuide, GraphQlAgentOperationGuide]
+      - [effectScope, string]
+      - [maxTurns, int32]
+      - [turn, int32]
+      - { name: history, repeated: GraphQlAgentObservation }
+  GraphQlAgentTurn:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentTurn
+    fields:
+      - [state, GraphQlAgentState]
+      - [nextEffectKey, string]
+  GraphQlAgentCompletion:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentCompletion
+    fields:
+      - [summary, string]
+  GraphQlAgentDecision:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentDecision
+    variants:
+      call: <tpf.llm.AgentCall>
+      complete: GraphQlAgentCompletion
+  GraphQlAgentTurnGate:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentTurnGate
+    variants:
+      ready: GraphQlAgentTurn
+      complete: GraphQlAgentCompletion
+  GraphQlAgentProgress:
+    java: org.pipelineframework.blocks.graphql.agent.GraphQlAgentProgress
+    variants:
+      recur: GraphQlAgentState
+      complete: GraphQlAgentCompletion
+
+pipelines:
+  graphql-agent:
+    input: GraphQlAgentState
+    output: GraphQlAgentCompletion
+    steps:
+      - name: Prepare GraphQL agent turn
+        service: org.pipelineframework.blocks.graphql.agent.PrepareGraphQlAgentTurnService
+        cardinality: ONE_TO_ONE
+        input: GraphQlAgentState
+        output: GraphQlAgentTurnGate
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.GraphQlAgentState
+          output: org.pipelineframework.blocks.graphql.agent.GraphQlAgentTurnGate
+      - name: Decide GraphQL operation
+        kind: query
+        using: llm.decide
+        operation: decide
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: GraphQlAgentTurn
+        output: GraphQlAgentDecision
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.GraphQlAgentTurn
+          output: org.pipelineframework.blocks.graphql.agent.GraphQlAgentDecision
+        config:
+          instructions: Select one persisted GraphQL operation by key, or complete. Never invent GraphQL documents, endpoints, credentials, headers, tenants, accounts, effect keys, or authority.
+          modelInputExcludes:
+            - state.effectScope
+            - nextEffectKey
+          callContext:
+            state: state
+        callables:
+          graphql_query:
+            using: graphql.read
+            operation: execute.query
+            operationVersion: 1
+            kind: query
+            input: GraphQlQueryRequest
+          graphql_mutation:
+            using: graphql.write
+            operation: execute.mutation
+            operationVersion: 1
+            kind: command
+            input: GraphQlMutationRequest
+            trustedArguments:
+              effectKey: nextEffectKey
+      - name: Invoke GraphQL proposal
+        cardinality: ONE_TO_ONE
+        input: <tpf.llm.AgentCall>
+        output: <tpf.connector.OperationObservation>
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.AgentCall
+          output: org.pipelineframework.blocks.graphql.agent.OperationObservation
+        operation: { mode: dynamic, from: Decide GraphQL operation }
+      - name: Reduce GraphQL observation
+        service: org.pipelineframework.blocks.graphql.agent.ReduceGraphQlAgentObservationService
+        cardinality: ONE_TO_ONE
+        input: <tpf.connector.OperationObservation>
+        output: GraphQlAgentProgress
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.OperationObservation
+          output: org.pipelineframework.blocks.graphql.agent.GraphQlAgentProgress
+      - name: Recur GraphQL agent
+        pipeline: graphql-agent
+        cardinality: ONE_TO_ONE
+        input: GraphQlAgentState
+        output: GraphQlAgentCompletion
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.GraphQlAgentState
+          output: org.pipelineframework.blocks.graphql.agent.GraphQlAgentCompletion
+      - name: Finish GraphQL agent
+        service: org.pipelineframework.blocks.graphql.agent.FinishGraphQlAgentService
+        cardinality: ONE_TO_ONE
+        input: GraphQlAgentCompletion
+        output: GraphQlAgentCompletion
+        terminal: true
+        java:
+          input: org.pipelineframework.blocks.graphql.agent.GraphQlAgentCompletion
+          output: org.pipelineframework.blocks.graphql.agent.GraphQlAgentCompletion

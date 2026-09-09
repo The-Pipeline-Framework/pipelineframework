@@ -77,6 +77,40 @@ class BlockDefinitionImporterTest {
         }
     }
 
+    @Test void collapsesIdenticalViewsOfTheSameBlockArtifact() throws Exception {
+        String yaml = block("reusable");
+        Path first = dependency("first-copy", "org.example.shared", "shared", "1.0.0", "reusable", yaml);
+        Path second = dependency("second-copy", "org.example.shared", "shared", "${project.version}", "reusable", yaml);
+        Path application = application("""
+            version: 3
+            appName: Consumer
+            basePackage: org.example.consumer
+            transport: LOCAL
+            platform: COMPUTE
+            contract: { input: BlockInput, output: BlockOutput }
+            steps:
+              - { name: Use block, pipeline: reusable, cardinality: ONE_TO_ONE, input: BlockInput, output: BlockOutput, java: { input: org.example.BlockInput, output: org.example.BlockOutput } }
+            """);
+
+        try (URLClassLoader loader = loader(first, second);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
+            assertEquals(1, imported.definitions().size());
+            assertEquals("org.example.shared/reusable", imported.definitions().getFirst().qualifiedId());
+            assertEquals("1.0.0", imported.definitions().getFirst().version());
+        }
+
+        Path unresolvedFirst = dependency(
+            "a-copy", "org.example.shared", "shared", "${project.version}", "reusable", yaml);
+        Path resolvedSecond = dependency(
+            "b-copy", "org.example.shared", "shared", "1.0.0", "reusable", yaml);
+        try (URLClassLoader loader = loader(unresolvedFirst, resolvedSecond);
+             ImportedPipelineSources imported = new BlockDefinitionImporter(loader).importInto(application)) {
+            assertEquals(1, imported.definitions().size());
+            assertEquals("org.example.shared/reusable", imported.definitions().getFirst().qualifiedId());
+            assertEquals("1.0.0", imported.definitions().getFirst().version());
+        }
+    }
+
     @Test void rejectsUndeclaredExternalAuthorityInsideImportedDefinition() throws Exception {
         Path dependency = dependency("query", "org.example.bad", "bad", "1.0.0", "bad-block", """
             version: 3

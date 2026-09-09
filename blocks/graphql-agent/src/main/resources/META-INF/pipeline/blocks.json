@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.graphql",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "graphql-agent",
+    "version": "${project.version}"
+  },
+  "definitions": [
+    {
+      "name": "graphql-agent",
+      "resource": "META-INF/pipeline/graphql-agent.yaml",
+      "requires": {
+        "llm.decide": { "kind": "QUERY" },
+        "graphql.read": { "kind": "QUERY" },
+        "graphql.write": { "kind": "COMMAND" }
+      }
+    }
+  ]
+}

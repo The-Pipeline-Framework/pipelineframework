@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.ServiceLoader;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.connector.CommandExecutionPosture;
@@ -16,6 +17,8 @@ import org.pipelineframework.connector.QueryCacheability;
 import org.pipelineframework.protocol.ProtocolTypeContributor;
 
 class GraphQlContractTest {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     @Test void ownsNominalCanonicalJsonAndOperationContracts() {
         var json = new GraphQlVariablesJson(" { \"z\": 1, \"a\": {\"b\": true} } ");
 
@@ -37,6 +40,15 @@ class GraphQlContractTest {
             .getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList());
         assertEquals(List.of("operationKey", "effectKey", "variablesJson"), Arrays.stream(GraphQlMutationRequest.class
             .getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList());
+    }
+
+    @Test void roundTripsNominalJsonWrappersAsCanonicalScalars() throws Exception {
+        var variables = new GraphQlVariablesJson("{\"z\":1,\"a\":2}");
+        var data = new GraphQlDataJson("{\"customer\":{\"id\":\"customer-7\"}}");
+
+        assertEquals(variables, JSON.readValue(JSON.writeValueAsString(variables), GraphQlVariablesJson.class));
+        assertEquals(data, JSON.readValue(JSON.writeValueAsString(data), GraphQlDataJson.class));
+        assertEquals("\"{\\\"a\\\":2,\\\"z\\\":1}\"", JSON.writeValueAsString(variables));
     }
 
     @Test void boundsAndSanitizesGraphQlErrors() {

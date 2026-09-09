@@ -20,6 +20,8 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlConnectorBinding;
 import org.pipelineframework.config.pipeline.PipelineYamlOperationSelection;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.connector.ConnectorConfigSchemaDescriptor;
 import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorConfigurationSnapshot;
@@ -28,6 +30,7 @@ import org.pipelineframework.connector.ConnectorProviderId;
 import org.pipelineframework.connector.ConnectorProviderManifestCatalog;
 import org.pipelineframework.connector.ConnectorProviderManifestLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 
 /**
  * Emits sanitized immutable metadata for configured connector bindings and their step references.
@@ -56,10 +59,13 @@ public final class ConnectorBindingMetadataGenerator {
             return;
         }
         PipelineYamlConfig effectiveConfig = config;
+        Optional<PipelineTemplateConfig> template = context.getPipelineTemplateConfig() instanceof PipelineTemplateConfig value
+            ? Optional.of(value)
+            : Optional.empty();
         ConnectorProviderManifestCatalog catalog = ConnectorProviderManifestLoader.load(metadataClassLoader());
         List<BindingMetadata> bindings = config.connectors().values().stream()
             .sorted(Comparator.comparing(PipelineYamlConnectorBinding::name))
-            .map(binding -> metadata(binding, effectiveConfig, catalog))
+            .map(binding -> metadata(binding, effectiveConfig, template, catalog))
             .toList();
         var resource = processingEnv.getFiler()
             .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);
@@ -71,6 +77,7 @@ public final class ConnectorBindingMetadataGenerator {
     private static BindingMetadata metadata(
         PipelineYamlConnectorBinding binding,
         PipelineYamlConfig config,
+        Optional<PipelineTemplateConfig> template,
         ConnectorProviderManifestCatalog catalog
     ) {
         ConnectorProviderId providerId = ConnectorProviderId.of(binding.provider());
@@ -92,7 +99,7 @@ public final class ConnectorBindingMetadataGenerator {
             .flatMap(step -> step.callables().values().stream()
                 .filter(callable -> binding.name().equals(callable.using()))
                 .map(callable -> callableReference(
-                    step.name(), callable, config.basePackage(), providerId, binding.version(), catalog)))
+                    step.name(), callable, config.basePackage(), template, providerId, binding.version(), catalog)))
             .sorted(Comparator.comparing(CallableReference::step).thenComparing(CallableReference::alias))
             .toList();
         return new BindingMetadata(binding.name(), binding.provider(), binding.version(), configuration, operations, callables);
@@ -102,6 +109,7 @@ public final class ConnectorBindingMetadataGenerator {
         String step,
         org.pipelineframework.config.pipeline.PipelineYamlCallable callable,
         String basePackage,
+        Optional<PipelineTemplateConfig> template,
         ConnectorProviderId providerId,
         int providerVersion,
         ConnectorProviderManifestCatalog catalog
@@ -111,7 +119,15 @@ public final class ConnectorBindingMetadataGenerator {
         var contract = operation.typeContract().orElseThrow(() -> new IllegalArgumentException(
             "callable operation has no normalized type contract: " + callable.using() + "/" + callable.operation()));
         String canonicalInput = basePackage + ".domain." + callable.input();
-        if (!contract.inputType().equals(callable.input()) && !contract.inputType().equals(canonicalInput)) {
+        boolean javaBindingMatches = template
+            .filter(value -> value.dialect() == PipelineTemplateDialect.V3)
+            .map(V3JavaTypeResolver::new)
+            .flatMap(resolver -> resolver.resolve(callable.input()))
+            .map(javaType -> contract.inputType().equals(javaType.canonicalName()))
+            .orElse(false);
+        if (!contract.inputType().equals(callable.input())
+            && !contract.inputType().equals(canonicalInput)
+            && !javaBindingMatches) {
             throw new IllegalArgumentException("callable input contract for " + callable.using() + "/" + callable.operation()
                 + " does not match trusted connector metadata: " + contract.inputType());
         }

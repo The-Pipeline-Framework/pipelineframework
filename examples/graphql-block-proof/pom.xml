@@ -14,7 +14,9 @@
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-smallrye-connector</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>graphql</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-block-proof-connectors</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>graphql-agent</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-graphql-client</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
@@ -26,7 +28,9 @@
             <path><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-deployment</artifactId><version>${project.version}</version></path>
             <path><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${project.version}</version></path>
             <path><groupId>org.pipelineframework</groupId><artifactId>graphql-smallrye-connector</artifactId><version>${project.version}</version></path>
-            <path><groupId>org.pipelineframework.blocks</groupId><artifactId>graphql</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework</groupId><artifactId>graphql-block-proof-connectors</artifactId><version>${project.version}</version></path>
+            <path><groupId>org.pipelineframework.blocks</groupId><artifactId>graphql-agent</artifactId><version>${project.version}</version></path>
         </annotationProcessorPaths></configuration><executions>
             <execution><id>default-compile</id><phase>compile</phase><goals><goal>compile</goal></goals><configuration><compilerArgs><arg>${pipeline.configArg}</arg><arg>${pipeline.generatedSourcesArg}</arg><arg>${pipeline.moduleArg}</arg></compilerArgs></configuration></execution>
             <execution><id>compile-orchestrator-client-generated</id><phase>process-classes</phase><goals><goal>compile</goal></goals><configuration><proc>none</proc><compileSourceRoots><compileSourceRoot>${project.build.directory}/generated-sources/pipeline/orchestrator-client</compileSourceRoot></compileSourceRoots><outputDirectory>${project.build.outputDirectory}</outputDirectory></configuration></execution>

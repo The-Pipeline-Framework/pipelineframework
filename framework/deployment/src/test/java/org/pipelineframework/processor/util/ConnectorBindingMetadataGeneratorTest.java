@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.List;
+import java.util.Optional;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -30,6 +31,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 
 class ConnectorBindingMetadataGeneratorTest {
     @TempDir
@@ -113,7 +119,7 @@ class ConnectorBindingMetadataGeneratorTest {
                 {"id":"decide","kind":"tpf:query","majorVersion":1,"queryCapabilities":{"cacheability":"LIVE_ONLY"}}]},
               {"id":"acme.payments","version":{"major":1,"minor":0},"operations":[
                 {"id":"charge.create","kind":"tpf:command","majorVersion":2,
-                 "typeContract":{"input":"com.example.domain.ChargeArguments","output":"ChargeResult"}}]}
+                 "typeContract":{"input":"com.example.boundary.ChargeArguments","output":"ChargeResult"}}]}
             ]}
             """);
         Path pipeline = tempDir.resolve("llm-pipeline.yaml");
@@ -139,6 +145,17 @@ class ConnectorBindingMetadataGeneratorTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipeline.toString()));
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
         context.setModuleDir(tempDir);
+        PipelineTemplateConfig template = mock(PipelineTemplateConfig.class);
+        PipelineTemplateTypeModel typeModel = mock(PipelineTemplateTypeModel.class);
+        PipelineTemplateTypeReference.Named arguments = new PipelineTemplateTypeReference.Named("ChargeArguments");
+        when(template.dialect()).thenReturn(PipelineTemplateDialect.V3);
+        when(template.typeModel()).thenReturn(typeModel);
+        when(typeModel.resolveAliases(arguments)).thenReturn(arguments);
+        when(typeModel.definition("ChargeArguments")).thenReturn(Optional.of(
+            new PipelineTemplateTypeDefinition.RecordType("ChargeArguments", List.of())));
+        when(typeModel.javaTypeBinding("ChargeArguments"))
+            .thenReturn(Optional.of("com.example.boundary.ChargeArguments"));
+        context.setPipelineTemplateConfig(template);
 
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
