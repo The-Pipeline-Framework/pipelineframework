@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,18 +76,29 @@ class HttpRepresentationProviderTest {
     void generatesDeterministicMapperAndBindingArtifactsForBoundedOptions() {
         HttpRepresentationProvider provider = provider(NESTED_INPUT_SCHEMA);
         OperationBoundaryClaim claim = provider.claimOperation(boundary()).orElseThrow();
-        RepresentationMappingRequest authored = new RepresentationMappingRequest("http.lookup.request", INPUT,
-            Optional.empty(), Optional.empty(), Map.of("fields", Map.of("subject", "request.subject")));
-        var request = new OperationRepresentationRequest(boundary(), claim, OperationRepresentationRole.REQUEST,
-            INPUT, INPUT_SCHEMA, claim.request(), Optional.of(authored));
+        Map<String, Object> fieldsFirst = new LinkedHashMap<>();
+        fieldsFirst.put("fields", Map.of("subject", "request.subject"));
+        fieldsFirst.put("constants", Map.of());
+        Map<String, Object> constantsFirst = new LinkedHashMap<>();
+        constantsFirst.put("constants", Map.of());
+        constantsFirst.put("fields", Map.of("subject", "request.subject"));
+        RepresentationMappingRequest authoredFieldsFirst = new RepresentationMappingRequest(
+            "http.lookup.request", INPUT, Optional.empty(), Optional.empty(), fieldsFirst);
+        RepresentationMappingRequest authoredConstantsFirst = new RepresentationMappingRequest(
+            "http.lookup.request", INPUT, Optional.empty(), Optional.empty(), constantsFirst);
+        var fieldsFirstRequest = new OperationRepresentationRequest(boundary(), claim,
+            OperationRepresentationRole.REQUEST, INPUT, INPUT_SCHEMA, claim.request(), Optional.of(authoredFieldsFirst));
+        var constantsFirstRequest = new OperationRepresentationRequest(boundary(), claim,
+            OperationRepresentationRole.REQUEST, INPUT, INPUT_SCHEMA, claim.request(),
+            Optional.of(authoredConstantsFirst));
 
-        var resolved = provider.resolveOperation(request).orElseThrow();
-        var repeated = provider.resolveOperation(request).orElseThrow();
+        var resolved = provider.resolveOperation(fieldsFirstRequest).orElseThrow();
+        var reordered = provider.resolveOperation(constantsFirstRequest).orElseThrow();
         var artifacts = provider.describeOperationArtifacts(new OperationProviderGenerationRequest(List.of(resolved)));
 
         assertEquals("GENERATED", resolved.mode());
-        assertEquals(resolved.mappingFingerprint(), repeated.mappingFingerprint());
-        assertEquals(resolved.mapperType(), repeated.mapperType());
+        assertEquals(resolved.mappingFingerprint(), reordered.mappingFingerprint());
+        assertEquals(resolved.mapperType(), reordered.mapperType());
         assertTrue(artifacts.stream().anyMatch(artifact -> artifact.kind() == ArtifactKind.JAVA_SOURCE
             && artifact.content().contains("HttpOptionMappingSupport")));
         var resource = artifacts.stream().filter(artifact -> artifact.kind() == ArtifactKind.RESOURCE)
