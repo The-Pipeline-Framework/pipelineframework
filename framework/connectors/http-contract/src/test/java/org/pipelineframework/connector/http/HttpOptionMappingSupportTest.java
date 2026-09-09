@@ -47,5 +47,22 @@ class HttpOptionMappingSupportTest {
         assertThrows(IllegalArgumentException.class, () -> new HttpRepresentationMappingOptions(
             Map.of(), Map.of(), Map.of("state", Map.of("OPEN", "open", "CLOSED", " open ")), Map.of(),
             List.of(), Optional.empty()));
+        assertThrows(IllegalArgumentException.class, () -> new HttpRepresentationMappingOptions(
+            Map.of(), Map.of(), Map.of(), Map.of(),
+            List.of(new HttpRepresentationMappingOptions.CollectionMapping(
+                "items", "request.items", Map.of())), Optional.empty()));
+    }
+
+    @Test
+    void skipsAnAbsentOptionalCollection() {
+        HttpRepresentationMappingOptions options = new HttpRepresentationMappingOptions(
+            Map.of("subject", "subject"), Map.of(), Map.of(), Map.of(),
+            List.of(new HttpRepresentationMappingOptions.CollectionMapping(
+                "items", "items", Map.of("value", "value"))), Optional.empty());
+
+        var canonical = HttpPinnedJson.parse("{\"subject\":\"acme\"}");
+
+        assertEquals(canonical, HttpOptionMappingSupport.toWire(canonical, options));
+        assertEquals(canonical, HttpOptionMappingSupport.fromWire(canonical, options));
     }
 }

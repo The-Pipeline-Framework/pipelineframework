@@ -40,4 +40,16 @@ class HttpWireValueValidatorTest {
         assertThrows(IllegalArgumentException.class, () ->
             HttpWireValueValidator.validate(HttpPinnedJson.parse("1"), ambiguous));
     }
+
+    @Test
+    void compilesPatternsWhenThePinIsConstructedAndKeepsItsParsedTreeIsolated() {
+        HttpWireSchema patterned = new HttpWireSchema("{\"type\":\"string\",\"pattern\":\"^[a-z]+$\"}");
+
+        assertDoesNotThrow(() -> HttpWireValueValidator.validate(HttpPinnedJson.parse("\"alpha\""), patterned));
+        assertDoesNotThrow(() -> HttpWireValueValidator.validate(HttpPinnedJson.parse("\"beta\""), patterned));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) patterned.node()).put("pattern", "broken");
+        assertDoesNotThrow(() -> HttpWireValueValidator.validate(HttpPinnedJson.parse("\"gamma\""), patterned));
+        assertThrows(IllegalArgumentException.class,
+            () -> new HttpWireSchema("{\"type\":\"string\",\"pattern\":\"[\"}"));
+    }
 }

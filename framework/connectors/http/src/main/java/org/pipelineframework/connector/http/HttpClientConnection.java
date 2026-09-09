@@ -25,11 +25,15 @@ public final class HttpClientConnection implements ResolvedConnection {
             throw new IllegalArgumentException(
                 "host HTTP client must disable automatic redirects so pinned origin authority cannot drift");
         }
-        this.baseUri = baseUri(baseUri);
         this.securityCapabilities = Set.copyOf(Objects.requireNonNull(securityCapabilities,
             "HTTP security capabilities must not be null"));
         if (this.securityCapabilities.stream().anyMatch(value -> value == null || value.isBlank())) {
             throw new IllegalArgumentException("HTTP security capabilities must be non-blank");
+        }
+        this.baseUri = baseUri(baseUri);
+        if (!this.securityCapabilities.isEmpty() && !"https".equalsIgnoreCase(this.baseUri.getScheme())) {
+            throw new IllegalArgumentException(
+                "HTTP base URI must use HTTPS when the connection declares security capabilities");
         }
         this.authorizationProvider = Objects.requireNonNull(authorizationProvider,
             "HTTP authorization provider must not be null");

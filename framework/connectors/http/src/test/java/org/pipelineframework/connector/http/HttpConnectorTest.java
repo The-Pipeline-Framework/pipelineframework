@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,14 +15,17 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -79,39 +84,38 @@ class HttpConnectorTest {
 
     @Test
     void executesPinnedPostQueryWithAllParameterLocationsAndHostAuthorization() throws Exception {
-        AtomicReference<String> seen = new AtomicReference<>();
-        server.createContext("/api/evidence/", exchange -> {
-            seen.set(exchange.getRequestMethod() + " " + exchange.getRequestURI().getRawPath() + "?"
-                + exchange.getRequestURI().getRawQuery()
-                + " trace=" + exchange.getRequestHeaders().getFirst("X-Trace")
-                + " auth=" + exchange.getRequestHeaders().getFirst("Authorization")
-                + " cookie=" + exchange.getRequestHeaders().getFirst("Cookie")
-                + " body=" + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            respond(exchange, 200, "application/json", "{\"value\":\"found\"}");
-        });
+        AtomicReference<HttpRequest> seen = new AtomicReference<>();
+        HttpClient client = successfulClient(seen, "{\"value\":\"found\"}");
         HttpOperationPin pin = queryPin();
         HttpConnector connector = connector(pin);
-        connector.start(runtime(connection(Set.of("oauth2"), request -> CompletableFuture.completedStage(
+        connector.start(runtime(connection(client, URI.create("https://api.example.test/api"), Set.of("oauth2"),
+            request -> CompletableFuture.completedStage(
             new HttpAuthorizationMaterial(MapBuilder.headers("Authorization", "Bearer token"),
-                MapBuilder.values("api_key", "secret"), java.util.Map.of())))), configuration()).toCompletableFuture().join();
+                MapBuilder.values("api_key", "secret"), java.util.Map.of())))), configuration())
+            .toCompletableFuture().join();
 
         QueryOutcome<LookupOutput> outcome = query(connector).query(new QueryInvocation<>(
             new LookupInput("acme corp", 2, "trace-1", "session-1", new LookupBody("needle")),
             ConnectorConfigurationDocument.empty(), LookupOutput.class,
             org.pipelineframework.connector.ConnectorExecutionContext.empty())).toCompletableFuture().get(5, TimeUnit.SECONDS);
 
-        assertEquals(new LookupOutput("found"), assertInstanceOf(QueryOutcome.Found.class, outcome,
-            "outcome=" + outcome + ", seen=" + seen.get()).output());
-        assertEquals("POST /api/evidence/acme%20corp/lookup?limit=2&api_key=secret trace=trace-1 auth=Bearer token "
-            + "cookie=session=session-1 body={\"phrase\":\"needle\"}", seen.get());
+        assertEquals(new LookupOutput("found"), assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+        assertEquals("POST", seen.get().method());
+        assertEquals("https://api.example.test/api/evidence/acme%20corp/lookup?limit=2&api_key=secret",
+            seen.get().uri().toASCIIString());
+        assertEquals(Optional.of("trace-1"), seen.get().headers().firstValue("X-Trace"));
+        assertEquals(Optional.of("Bearer token"), seen.get().headers().firstValue("Authorization"));
+        assertEquals(Optional.of("session=session-1"), seen.get().headers().firstValue("Cookie"));
+        assertTrue(seen.get().bodyPublisher().isPresent());
     }
 
     @Test
     void rejectsAuthorizationFieldsOutsideTheSelectedConstraintWithoutDispatch() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        server.createContext("/api/evidence/", exchange -> calls.incrementAndGet());
+        HttpClient client = mock(HttpClient.class);
+        when(client.followRedirects()).thenReturn(HttpClient.Redirect.NEVER);
         HttpConnector connector = connector(queryPin());
-        connector.start(runtime(connection(Set.of("oauth2"), request -> CompletableFuture.completedStage(
+        connector.start(runtime(connection(client, URI.create("https://api.example.test/api"), Set.of("oauth2"),
+            request -> CompletableFuture.completedStage(
             new HttpAuthorizationMaterial(java.util.Map.of(), MapBuilder.values("limit", "99"), java.util.Map.of())))),
             configuration()).toCompletableFuture().join();
 
@@ -121,26 +125,17 @@ class HttpConnectorTest {
             org.pipelineframework.connector.ConnectorExecutionContext.empty())).toCompletableFuture().get(5, TimeUnit.SECONDS);
 
         assertEquals("http-authorization-failed", outcome.code());
-        assertEquals(0, calls.get());
+        verify(client, never()).sendAsync(any(), any());
     }
 
     @Test
-    void rejectsCaseInsensitiveAuthorizationCollisionsWithSynthesisedCookieHeaders() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        server.createContext("/api/evidence/", exchange -> calls.incrementAndGet());
-        HttpConnector connector = connector(queryPinWithCookieHeaderAuthorization());
-        connector.start(runtime(connection(Set.of("cookie-auth"), request -> CompletableFuture.completedStage(
-            new HttpAuthorizationMaterial(MapBuilder.headers("cookie", "host-session=secret"),
-                java.util.Map.of(), java.util.Map.of())))), configuration()).toCompletableFuture().join();
-
-        QueryOutcome<LookupOutput> outcome = query(connector).query(new QueryInvocation<>(
-            new LookupInput("acme corp", 2, "trace-1", "session-1", new LookupBody("needle")),
-            ConnectorConfigurationDocument.empty(), LookupOutput.class,
-            org.pipelineframework.connector.ConnectorExecutionContext.empty())).toCompletableFuture()
-            .get(5, TimeUnit.SECONDS);
-
-        assertEquals("http-invalid-request", outcome.code());
-        assertEquals(0, calls.get());
+    void reservesTheCookieHeaderForCookieLocationAuthorization() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new HttpAuthorizationTarget(HttpParameterLocation.HEADER, "Cookie"));
+        assertThrows(IllegalArgumentException.class, () -> new HttpAuthorizationMaterial(
+            MapBuilder.headers("cookie", "host-session=secret"), Map.of(), Map.of()));
+        assertEquals(HttpParameterLocation.COOKIE,
+            new HttpAuthorizationTarget(HttpParameterLocation.COOKIE, "host-session").location());
     }
 
     @Test
@@ -192,6 +187,24 @@ class HttpConnectorTest {
     }
 
     @Test
+    void prefersAnExactMediaResponseOverAMediaAgnosticResponse() throws Exception {
+        server.createContext("/api/evidence/", exchange ->
+            respond(exchange, 200, "application/json", "{\"value\":\"found\"}"));
+        HttpOperationPin pin = queryPinWithResponseSpecificity();
+        HttpConnector connector = connector(pin);
+        connector.start(runtime(connection(Set.of(), HttpAuthorizationProvider.none())), configuration())
+            .toCompletableFuture().join();
+
+        QueryOutcome<LookupOutput> outcome = query(connector).query(new QueryInvocation<>(
+            new LookupInput("acme corp", 2, "trace-1", "session-1", new LookupBody("needle")),
+            ConnectorConfigurationDocument.empty(), LookupOutput.class,
+            org.pipelineframework.connector.ConnectorExecutionContext.empty())).toCompletableFuture()
+            .get(5, TimeUnit.SECONDS);
+
+        assertEquals(new LookupOutput("found"), assertInstanceOf(QueryOutcome.Found.class, outcome).output());
+    }
+
+    @Test
     void rejectsManifestAndPinContractDisagreementAtStartup() {
         HttpOperationPin pin = queryPin();
         ConnectorProviderManifestCatalog wrong = manifests(pin, "WrongOutput");
@@ -239,16 +252,28 @@ class HttpConnectorTest {
     }
 
     @Test
+    void requiresHttpsBeforeAHostMayDeclareSecurityCapabilities() {
+        HttpClient client = mock(HttpClient.class);
+        when(client.followRedirects()).thenReturn(HttpClient.Redirect.NEVER);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> new HttpClientConnection(client, baseUri, Set.of("oauth2"), HttpAuthorizationProvider.none()));
+
+        assertTrue(failure.getMessage().contains("must use HTTPS"));
+    }
+
+    @Test
     void anInFlightDispatchKeepsItsConfigurationSnapshotWhenTheBindingStops() throws Exception {
-        server.createContext("/api/snapshot", exchange ->
-            respond(exchange, 200, "application/json", "{\"value\":\"recorded\"}"));
+        AtomicReference<HttpRequest> seen = new AtomicReference<>();
+        HttpClient client = successfulClient(seen, "{\"value\":\"recorded\"}");
         HttpConnector connector = connector(commandPinWithHostAuth("/snapshot"));
         AtomicReference<ConnectorRuntimeContext> runtime = new AtomicReference<>();
         HttpAuthorizationProvider authorization = request -> {
             connector.stop(runtime.get()).toCompletableFuture().join();
             return CompletableFuture.completedStage(HttpAuthorizationMaterial.none());
         };
-        ConnectorRuntimeContext activeRuntime = runtime(connection(Set.of("host-auth"), authorization));
+        ConnectorRuntimeContext activeRuntime = runtime(connection(client, URI.create("https://api.example.test/api"),
+            Set.of("host-auth"), authorization));
         runtime.set(activeRuntime);
         connector.start(activeRuntime, configuration()).toCompletableFuture().join();
 
@@ -259,6 +284,7 @@ class HttpConnectorTest {
             .toCompletableFuture().get(5, TimeUnit.SECONDS);
 
         assertEquals(new LookupOutput("recorded"), assertInstanceOf(CommandOutcome.Succeeded.class, outcome).output());
+        assertEquals("https://api.example.test/api/snapshot", seen.get().uri().toASCIIString());
     }
 
     private CommandOutcome<LookupOutput> dispatch(HttpOperationPin pin) throws Exception {
@@ -316,8 +342,17 @@ class HttpConnectorTest {
     }
 
     private HttpClientConnection connection(Set<String> security, HttpAuthorizationProvider authorization) {
-        return new HttpClientConnection(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
-            baseUri, security, authorization);
+        return connection(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(), baseUri,
+            security, authorization);
+    }
+
+    private static HttpClientConnection connection(
+        HttpClient client,
+        URI baseUri,
+        Set<String> security,
+        HttpAuthorizationProvider authorization
+    ) {
+        return new HttpClientConnection(client, baseUri, security, authorization);
     }
 
     private static HttpProviderConfiguration configuration() {
@@ -360,14 +395,32 @@ class HttpConnectorTest {
             OBJECT, "http.lookup.request", Optional.empty(), SOURCE);
     }
 
-    private static HttpOperationPin queryPinWithCookieHeaderAuthorization() {
+    private static HttpOperationPin queryPinWithResponseSpecificity() {
         HttpOperationPin base = queryPin();
-        HttpSecurityConstraint security = new HttpSecurityConstraint(List.of(new HttpSecurityRequirement(
-            "cookie-auth", List.of(), List.of(new HttpAuthorizationTarget(HttpParameterLocation.HEADER, "Cookie")))));
         return new HttpOperationPin(base.operation(), base.kind(), base.majorVersion(), base.inputType(),
             base.outputType(), base.method(), base.relativePathTemplate(), base.parameters(), base.requestBody(),
-            base.responses(), security, base.requestSchema(), base.requestMappingKey(),
+            List.of(new HttpResponsePin("200", Optional.empty(), HttpResponseOutcome.EMPTY,
+                    Optional.empty(), Optional.of("media-agnostic-empty"), Optional.empty(), Optional.empty()),
+                base.responses().getFirst()),
+            HttpSecurityConstraint.none(), base.requestSchema(), base.requestMappingKey(),
             base.providerIdempotencyKey(), base.sourceFingerprint());
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static HttpClient successfulClient(AtomicReference<HttpRequest> seen, String body) {
+        HttpClient client = mock(HttpClient.class);
+        when(client.followRedirects()).thenReturn(HttpClient.Redirect.NEVER);
+        HttpResponse<byte[]> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.headers()).thenReturn(HttpHeaders.of(
+            Map.of("Content-Type", List.of("application/json")), (left, right) -> true));
+        when(response.body()).thenReturn(body.getBytes(StandardCharsets.UTF_8));
+        when(response.uri()).thenAnswer(ignored -> seen.get().uri());
+        doAnswer(invocation -> {
+            seen.set(invocation.getArgument(0));
+            return CompletableFuture.completedFuture(response);
+        }).when(client).sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+        return client;
     }
 
     private static HttpOperationPin commandPin(String path) {

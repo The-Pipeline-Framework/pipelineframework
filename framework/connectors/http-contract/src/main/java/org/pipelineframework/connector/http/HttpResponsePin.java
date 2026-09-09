@@ -44,13 +44,15 @@ public record HttpResponsePin(
         if (!successful && mappingKey.isPresent()) {
             throw new IllegalArgumentException("failure and empty HTTP outcomes cannot declare a representation mapping key");
         }
-        if (outcome == HttpResponseOutcome.SUCCEEDED != confirmation.isPresent()) {
+        boolean commandSucceeded = outcome == HttpResponseOutcome.SUCCEEDED;
+        if (commandSucceeded != confirmation.isPresent()) {
             throw new IllegalArgumentException("only succeeded HTTP responses declare Command confirmation");
         }
-        if (switch (outcome) {
+        boolean successfulOutcome = switch (outcome) {
             case RETRYABLE_FAILURE, TERMINAL_FAILURE, AUTHENTICATION_REQUIRED, EMPTY -> false;
             default -> true;
-        } == code.isPresent()) {
+        };
+        if (successfulOutcome == code.isPresent()) {
             throw new IllegalArgumentException("only non-result HTTP response outcomes require an outcome code");
         }
     }

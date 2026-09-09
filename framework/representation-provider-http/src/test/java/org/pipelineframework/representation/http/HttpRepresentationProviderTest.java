@@ -81,9 +81,12 @@ class HttpRepresentationProviderTest {
             INPUT, INPUT_SCHEMA, claim.request(), Optional.of(authored));
 
         var resolved = provider.resolveOperation(request).orElseThrow();
+        var repeated = provider.resolveOperation(request).orElseThrow();
         var artifacts = provider.describeOperationArtifacts(new OperationProviderGenerationRequest(List.of(resolved)));
 
         assertEquals("GENERATED", resolved.mode());
+        assertEquals(resolved.mappingFingerprint(), repeated.mappingFingerprint());
+        assertEquals(resolved.mapperType(), repeated.mapperType());
         assertTrue(artifacts.stream().anyMatch(artifact -> artifact.kind() == ArtifactKind.JAVA_SOURCE
             && artifact.content().contains("HttpOptionMappingSupport")));
         var resource = artifacts.stream().filter(artifact -> artifact.kind() == ArtifactKind.RESOURCE)
@@ -118,6 +121,27 @@ class HttpRepresentationProviderTest {
         assertEquals("CURATED", resolved.mode());
         assertEquals(Optional.of("example.HttpInput"), resolved.representationType());
         assertEquals(Optional.of("example.HttpInputMapper"), resolved.mapperType());
+    }
+
+    @Test
+    void ignoresSchemaAnnotationsAtEveryDepthForDirectMappings() {
+        String annotated = """
+            {
+              "title": "Input",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": { "type": "string", "description": "A subject", "examples": [ "one" ] }
+              },
+              "required": [ "subject" ]
+            }
+            """;
+        HttpRepresentationProvider provider = provider(INPUT_SCHEMA);
+        OperationBoundaryClaim claim = provider.claimOperation(boundary()).orElseThrow();
+        var request = new OperationRepresentationRequest(boundary(), claim, OperationRepresentationRole.REQUEST,
+            INPUT, annotated, claim.request(), Optional.empty());
+
+        assertEquals("DIRECT", provider.resolveOperation(request).orElseThrow().mode());
     }
 
     private static HttpRepresentationProvider provider(String requestSchema) {

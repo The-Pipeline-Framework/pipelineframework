@@ -38,7 +38,14 @@ public record ResolvedOperationRepresentation(
     private static Map<String, Object> immutableMap(Map<String, Object> value) {
         Objects.requireNonNull(value, "operation generation configuration must not be null");
         Map<String, Object> result = new LinkedHashMap<>();
-        value.forEach((key, child) -> result.put(text(key, "operation generation configuration key"), child));
+        value.forEach((key, child) -> {
+            String normalized = text(key, "operation generation configuration key");
+            if (result.containsKey(normalized)) {
+                throw new IllegalArgumentException(
+                    "duplicate operation generation configuration key after normalisation: " + normalized);
+            }
+            result.put(normalized, child);
+        });
         return Collections.unmodifiableMap(result);
     }
 

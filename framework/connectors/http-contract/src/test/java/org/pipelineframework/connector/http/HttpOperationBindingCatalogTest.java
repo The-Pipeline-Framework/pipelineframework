@@ -26,9 +26,14 @@ class HttpOperationBindingCatalogTest {
 
     @Test
     void requiresMapperForGeneratedAndCuratedBindings() {
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException generated = assertThrows(IllegalArgumentException.class,
             () -> new HttpOperationRepresentationBinding("http.generated", HttpRepresentationMode.GENERATED,
                 Optional.empty(), Optional.empty(), "1".repeat(64)));
-        assertTrue(failure.getMessage().contains("require representation"));
+        IllegalArgumentException curated = assertThrows(IllegalArgumentException.class,
+            () -> new HttpOperationRepresentationBinding("http.curated", HttpRepresentationMode.CURATED,
+                Optional.empty(), Optional.empty(), "1".repeat(64)));
+
+        assertTrue(generated.getMessage().contains("require representation"));
+        assertTrue(curated.getMessage().contains("require representation"));
     }
 }

@@ -62,8 +62,14 @@ public record HttpOperationPin(
                 HttpParameterPin.requireText(inputType, "canonical HTTP input type"),
                 HttpParameterPin.requireText(outputType, "canonical HTTP output type"),
                 HttpParameterPin.requireText(method, "HTTP method").toUpperCase(Locale.ROOT),
-                relativePath(relativePathTemplate), parameters, requestBody, responses, security, requestSchema,
-                ConnectorProviderId.of(requestMappingKey).value(), providerIdempotencyKey,
+                relativePath(relativePathTemplate),
+                Objects.requireNonNull(parameters, "HTTP parameters must not be null"),
+                Objects.requireNonNull(requestBody, "HTTP request body must not be null"),
+                Objects.requireNonNull(responses, "HTTP responses must not be null"),
+                Objects.requireNonNull(security, "HTTP security constraint must not be null"),
+                Objects.requireNonNull(requestSchema, "HTTP request wire schema must not be null"),
+                ConnectorProviderId.of(requestMappingKey).value(),
+                Objects.requireNonNull(providerIdempotencyKey, "provider idempotency-key target must not be null"),
                 digest(sourceFingerprint, "HTTP source fingerprint")));
     }
 

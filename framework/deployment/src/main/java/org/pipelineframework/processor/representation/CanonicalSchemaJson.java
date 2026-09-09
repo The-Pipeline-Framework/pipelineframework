@@ -73,6 +73,9 @@ public final class CanonicalSchemaJson {
                         if (type.isTextual()) {
                             ArrayNode types = JsonNodeFactory.instance.arrayNode().add(type.textValue()).add("null");
                             object.set("type", types);
+                        } else if (object.path("oneOf") instanceof ArrayNode alternatives
+                            && !containsNull(alternatives)) {
+                            alternatives.add(JsonNodeFactory.instance.objectNode().put("type", "null"));
                         }
                     }
                     properties.set(field.name(), value);
@@ -106,6 +109,19 @@ public final class CanonicalSchemaJson {
         union.variants().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
             .forEach(entry -> oneOf.add(schema(model, entry.getValue().payload(), visiting)));
         return result;
+    }
+
+    private static boolean containsNull(ArrayNode alternatives) {
+        for (JsonNode alternative : alternatives) {
+            JsonNode type = alternative.path("type");
+            if (type.isTextual() && "null".equals(type.textValue())) return true;
+            if (type.isArray()) {
+                for (JsonNode candidate : type) {
+                    if (candidate.isTextual() && "null".equals(candidate.textValue())) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static ObjectNode scalar(String name) {

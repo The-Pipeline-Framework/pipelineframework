@@ -61,8 +61,9 @@ public final class HttpOptionMappingSupport {
     ) {
         String from = reverse ? mapping.wirePath() : mapping.canonicalPath();
         String to = reverse ? mapping.canonicalPath() : mapping.wirePath();
-        JsonNode selected = select(source, from).orElseThrow(() ->
-            new IllegalArgumentException("HTTP collection mapping source is absent: " + from));
+        Optional<JsonNode> sourceValue = select(source, from);
+        if (sourceValue.isEmpty()) return;
+        JsonNode selected = sourceValue.orElseThrow();
         if (!selected.isArray()) throw new IllegalArgumentException("HTTP collection mapping source is not an array: " + from);
         ArrayNode result = JsonNodeFactory.instance.arrayNode();
         selected.forEach(item -> {

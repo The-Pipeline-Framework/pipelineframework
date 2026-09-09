@@ -24,12 +24,16 @@ public final class HttpOperationBindingCatalog {
     public HttpOperationBindingCatalog(List<HttpOperationRepresentationBinding> bindings) {
         Set<String> keys = new HashSet<>();
         this.bindings = Objects.requireNonNull(bindings, "HTTP representation bindings must not be null").stream()
-            .map(binding -> Objects.requireNonNull(binding, "HTTP representation binding must not be null"))
-            .sorted(Comparator.comparing(HttpOperationRepresentationBinding::mappingKey)).peek(binding -> {
-                if (!keys.add(binding.mappingKey())) {
-                    throw new IllegalArgumentException("duplicate HTTP representation mapping key: " + binding.mappingKey());
+            .map(binding -> {
+                HttpOperationRepresentationBinding required = Objects.requireNonNull(binding,
+                    "HTTP representation binding must not be null");
+                if (!keys.add(required.mappingKey())) {
+                    throw new IllegalArgumentException(
+                        "duplicate HTTP representation mapping key: " + required.mappingKey());
                 }
-            }).toList();
+                return required;
+            })
+            .sorted(Comparator.comparing(HttpOperationRepresentationBinding::mappingKey)).toList();
     }
 
     public List<HttpOperationRepresentationBinding> bindings() {

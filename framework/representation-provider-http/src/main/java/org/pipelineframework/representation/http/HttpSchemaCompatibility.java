@@ -50,11 +50,18 @@ final class HttpSchemaCompatibility {
 
     private static JsonNode normalized(String value) {
         JsonNode node = HttpPinnedJson.parse(value).deepCopy();
-        if (node.isObject()) {
-            ((com.fasterxml.jackson.databind.node.ObjectNode) node).remove(
-                java.util.List.of("$schema", "title", "description", "examples"));
-        }
+        removeAnnotations(node);
         return node;
+    }
+
+    private static void removeAnnotations(JsonNode node) {
+        if (node.isObject()) {
+            com.fasterxml.jackson.databind.node.ObjectNode object = (com.fasterxml.jackson.databind.node.ObjectNode) node;
+            object.remove(java.util.List.of("$schema", "title", "description", "examples"));
+            object.elements().forEachRemaining(HttpSchemaCompatibility::removeAnnotations);
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(HttpSchemaCompatibility::removeAnnotations);
+        }
     }
 
     private static JsonNode at(JsonNode schema, String path) {

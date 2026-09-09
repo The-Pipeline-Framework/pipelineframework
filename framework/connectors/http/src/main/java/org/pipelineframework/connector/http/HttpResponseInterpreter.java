@@ -77,7 +77,8 @@ final class HttpResponseInterpreter {
         return pin.responses().stream()
             .filter(candidate -> status(candidate.status(), response.statusCode()))
             .filter(candidate -> candidate.mediaType().isEmpty() || candidate.mediaType().orElseThrow().equals(mediaType))
-            .sorted(Comparator.comparingInt(candidate -> specificity(candidate.status())))
+            .sorted(Comparator.comparingInt((HttpResponsePin candidate) -> specificity(candidate.status()))
+                .thenComparingInt(candidate -> candidate.mediaType().isPresent() ? 0 : 1))
             .findFirst().orElseThrow(() -> new IllegalStateException(
                 "unclassified HTTP response status/media after dispatch: " + response.statusCode() + " " + mediaType));
     }

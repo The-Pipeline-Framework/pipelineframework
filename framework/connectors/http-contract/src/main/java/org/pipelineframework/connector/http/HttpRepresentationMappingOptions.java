@@ -30,6 +30,10 @@ public record HttpRepresentationMappingOptions(
             "HTTP collection mappings must not be null"));
         if (collections.size() > 32) throw new IllegalArgumentException("HTTP collection mappings exceed limit");
         discriminator = Objects.requireNonNull(discriminator, "HTTP discriminator mapping must not be null");
+        if (fields.isEmpty() && hasRenamedSupplementalPath(jsonObjects, collections, discriminator)) {
+            throw new IllegalArgumentException(
+                "renamed HTTP collection, JSON-object, or discriminator mappings require explicit field mappings");
+        }
     }
 
     public static HttpRepresentationMappingOptions empty() {
@@ -115,6 +119,16 @@ public record HttpRepresentationMappingOptions(
         source.forEach((canonical, wire) -> putOneToOne(result,
             path(canonical, subject + " canonical path"), path(wire, subject + " wire path"), subject));
         return Collections.unmodifiableMap(result);
+    }
+
+    private static boolean hasRenamedSupplementalPath(
+        Map<String, String> jsonObjects,
+        List<CollectionMapping> collections,
+        Optional<DiscriminatorMapping> discriminator
+    ) {
+        return jsonObjects.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue()))
+            || collections.stream().anyMatch(mapping -> !mapping.canonicalPath().equals(mapping.wirePath()))
+            || discriminator.filter(mapping -> !mapping.canonicalPath().equals(mapping.wirePath())).isPresent();
     }
 
     private static Map<String, JsonNode> constants(Map<String, JsonNode> source) {

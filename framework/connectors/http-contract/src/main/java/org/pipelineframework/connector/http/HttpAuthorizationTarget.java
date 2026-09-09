@@ -15,7 +15,7 @@ public record HttpAuthorizationTarget(HttpParameterLocation location, String nam
             throw new IllegalArgumentException("HTTP authorization target has an invalid name: " + name);
         }
         if (location == HttpParameterLocation.HEADER && switch (name.toLowerCase(Locale.ROOT)) {
-            case "host", "content-length", "content-type", "connection", "expect", "upgrade",
+            case "host", "content-length", "content-type", "cookie", "connection", "expect", "upgrade",
                 "transfer-encoding" -> true;
             default -> false;
         }) {

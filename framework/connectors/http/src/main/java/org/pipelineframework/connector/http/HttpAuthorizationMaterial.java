@@ -51,7 +51,7 @@ public record HttpAuthorizationMaterial(
                 throw new IllegalArgumentException(subject + " has an invalid name: " + key);
             }
             if (header && switch (key.toLowerCase(Locale.ROOT)) {
-                case "host", "content-length", "content-type", "connection", "expect", "upgrade",
+                case "host", "content-length", "content-type", "cookie", "connection", "expect", "upgrade",
                     "transfer-encoding" -> true;
                 default -> false;
             }) {

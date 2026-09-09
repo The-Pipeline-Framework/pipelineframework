@@ -4,8 +4,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -17,16 +15,16 @@ public final class HttpWireValueValidator {
     }
 
     public static void validate(JsonNode value, HttpWireSchema schema) {
-        validate(value, schema.node(), "$", 0);
+        validate(value, schema.node(), schema, "$", 0);
     }
 
-    private static void validate(JsonNode value, JsonNode schema, String path, int depth) {
+    private static void validate(JsonNode value, JsonNode schema, HttpWireSchema owner, String path, int depth) {
         if (depth > MAX_DEPTH) throw new IllegalArgumentException("HTTP wire value exceeds schema depth at " + path);
         if (schema.isBoolean()) {
             if (!schema.booleanValue()) throw new IllegalArgumentException("HTTP wire value is rejected at " + path);
             return;
         }
-        alternatives(value, schema, path, depth);
+        alternatives(value, schema, owner, path, depth);
         if (schema.has("const") && !schema.get("const").equals(value)) {
             throw new IllegalArgumentException("HTTP wire value disagrees with const at " + path);
         }
@@ -38,29 +36,41 @@ public final class HttpWireValueValidator {
         if (!matchesType(value, schema.path("type"))) {
             throw new IllegalArgumentException("HTTP wire value has the wrong type at " + path);
         }
-        if (value.isObject()) object(value, schema, path, depth);
-        if (value.isArray()) array(value, schema, path, depth);
-        if (value.isTextual()) string(value, schema, path);
+        if (value.isObject()) object(value, schema, owner, path, depth);
+        if (value.isArray()) array(value, schema, owner, path, depth);
+        if (value.isTextual()) string(value, schema, owner, path);
         if (value.isNumber()) number(value, schema, path);
     }
 
-    private static void alternatives(JsonNode value, JsonNode schema, String path, int depth) {
+    private static void alternatives(
+        JsonNode value,
+        JsonNode schema,
+        HttpWireSchema owner,
+        String path,
+        int depth
+    ) {
         if (schema.path("allOf").isArray()) {
-            for (JsonNode item : schema.path("allOf")) validate(value, item, path, depth + 1);
+            for (JsonNode item : schema.path("allOf")) validate(value, item, owner, path, depth + 1);
         }
-        if (schema.path("anyOf").isArray() && matches(value, schema.path("anyOf"), path, depth) < 1) {
+        if (schema.path("anyOf").isArray() && matches(value, schema.path("anyOf"), owner, path, depth) < 1) {
             throw new IllegalArgumentException("HTTP wire value matches no anyOf branch at " + path);
         }
-        if (schema.path("oneOf").isArray() && matches(value, schema.path("oneOf"), path, depth) != 1) {
+        if (schema.path("oneOf").isArray() && matches(value, schema.path("oneOf"), owner, path, depth) != 1) {
             throw new IllegalArgumentException("HTTP wire value must match exactly one oneOf branch at " + path);
         }
     }
 
-    private static int matches(JsonNode value, JsonNode alternatives, String path, int depth) {
+    private static int matches(
+        JsonNode value,
+        JsonNode alternatives,
+        HttpWireSchema owner,
+        String path,
+        int depth
+    ) {
         int matches = 0;
         for (JsonNode candidate : alternatives) {
             try {
-                validate(value, candidate, path, depth + 1);
+                validate(value, candidate, owner, path, depth + 1);
                 matches++;
             } catch (IllegalArgumentException ignored) {
                 // A branch mismatch is expected while evaluating a bounded union.
@@ -93,7 +103,7 @@ public final class HttpWireValueValidator {
         };
     }
 
-    private static void object(JsonNode value, JsonNode schema, String path, int depth) {
+    private static void object(JsonNode value, JsonNode schema, HttpWireSchema owner, String path, int depth) {
         JsonNode required = schema.path("required");
         if (required.isArray()) {
             required.forEach(field -> {
@@ -108,19 +118,20 @@ public final class HttpWireValueValidator {
         value.fields().forEachRemaining(fields::add);
         for (Map.Entry<String, JsonNode> field : fields) {
             if (properties.isObject() && properties.has(field.getKey())) {
-                validate(field.getValue(), properties.get(field.getKey()), path + "." + field.getKey(), depth + 1);
+                validate(field.getValue(), properties.get(field.getKey()), owner,
+                    path + "." + field.getKey(), depth + 1);
             } else if (schema.path("additionalProperties").isBoolean()
                 && !schema.path("additionalProperties").booleanValue()) {
                 throw new IllegalArgumentException("HTTP wire value has an undeclared field at "
                     + path + "." + field.getKey());
             } else if (schema.path("additionalProperties").isObject()) {
-                validate(field.getValue(), schema.path("additionalProperties"),
+                validate(field.getValue(), schema.path("additionalProperties"), owner,
                     path + "." + field.getKey(), depth + 1);
             }
         }
     }
 
-    private static void array(JsonNode value, JsonNode schema, String path, int depth) {
+    private static void array(JsonNode value, JsonNode schema, HttpWireSchema owner, String path, int depth) {
         int size = value.size();
         if (schema.path("minItems").canConvertToInt() && size < schema.path("minItems").intValue()) {
             throw new IllegalArgumentException("HTTP wire array is shorter than minItems at " + path);
@@ -131,12 +142,12 @@ public final class HttpWireValueValidator {
         JsonNode items = schema.path("items");
         if (items.isObject() || items.isBoolean()) {
             for (int index = 0; index < size; index++) {
-                validate(value.get(index), items, path + "[" + index + "]", depth + 1);
+                validate(value.get(index), items, owner, path + "[" + index + "]", depth + 1);
             }
         }
     }
 
-    private static void string(JsonNode value, JsonNode schema, String path) {
+    private static void string(JsonNode value, JsonNode schema, HttpWireSchema owner, String path) {
         int length = value.textValue().codePointCount(0, value.textValue().length());
         if (schema.path("minLength").canConvertToInt() && length < schema.path("minLength").intValue()) {
             throw new IllegalArgumentException("HTTP wire string is shorter than minLength at " + path);
@@ -145,12 +156,8 @@ public final class HttpWireValueValidator {
             throw new IllegalArgumentException("HTTP wire string exceeds maxLength at " + path);
         }
         if (schema.path("pattern").isTextual()) {
-            try {
-                if (!Pattern.compile(schema.path("pattern").textValue()).matcher(value.textValue()).find()) {
-                    throw new IllegalArgumentException("HTTP wire string does not match pattern at " + path);
-                }
-            } catch (PatternSyntaxException invalidPin) {
-                throw new IllegalStateException("pinned HTTP schema contains an invalid pattern", invalidPin);
+            if (!owner.matchesPattern(schema.path("pattern").textValue(), value.textValue())) {
+                throw new IllegalArgumentException("HTTP wire string does not match pattern at " + path);
             }
         }
     }
