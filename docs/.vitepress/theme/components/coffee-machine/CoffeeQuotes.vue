@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 import { normalizeSearch } from '../../coffee-machine/public-utils.js'
 
 const query = ref('')

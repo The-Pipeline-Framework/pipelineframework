@@ -12,7 +12,7 @@ This guide uses QuickBooks Online as a concrete example. The same workflow appli
 servers.
 
 ::: tip Version
-MCP Connector import is available from `26.9.2-SNAPSHOT`. Keep the importer plugin, runtime
+MCP Connector import is available from `26.9.2`. Keep the importer plugin, runtime
 connector, and application on the same exact TPF version.
 :::
 
@@ -26,14 +26,11 @@ An MCP tool passes through three deliberately separate states:
 3. **Callable**: a particular LLM Query step exposes the imported operation in its release-pinned
    `callables` catalogue.
 
-```text
-MCP discovery
-    ↓ explicit author selection
-pinned TPF operation import
-    ↓ named Connector binding
-release-pinned callable exposure
-    ↓ ordinary AgentCall dispatch
-Query or Command semantics
+```mermaid
+flowchart TB
+    D[MCP discovery] -->|explicit author selection| I[Pinned TPF operation import]
+    I -->|named Connector binding| C[Release-pinned callable exposure]
+    C -->|ordinary AgentCall dispatch| Q[Query or Command semantics]
 ```
 
 Discovery never grants authority. Import does not make an operation callable.
@@ -509,7 +506,7 @@ owns initialized-client reuse, transport health checking, and shutdown. Node own
 local STDIO case. If the application has other
 authenticated connectors, route all of them behind the same `ConnectionResolver` bean.
 
-The optional [Gmail host connection library](./host-authenticated-connectors.md#durable-gmail-host-connections)
+The optional [Gmail host connection library](../oauth-connections/reference.md#durable-gmail-host-connections)
 demonstrates durable authorization behind that boundary; it is not a QuickBooks implementation.
 For a QuickBooks STDIO server that refreshes and persists its own tokens, keep that server or host
 connection infrastructure as the sole refresh authority. Startup environment injection alone does
@@ -666,7 +663,7 @@ discovery and identified callable snapshots are a separate capability; they are 
 this pinned/static workflow.
 
 See [One-turn LLM Query](./llm-query.md) for callable exposure and
-[Host-authenticated Connectors](./host-authenticated-connectors.md) for the runtime connection seam.
+[Experimental OAuth Connections](../oauth-connections/reference.md) for the runtime connection seam.
 
 External references:
 

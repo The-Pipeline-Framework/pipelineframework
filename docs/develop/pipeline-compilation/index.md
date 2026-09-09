@@ -133,7 +133,7 @@ All generated classes are automatically registered with the CDI container, makin
 
 ## Guide Pages
 
-- [Pipeline template types and linear contracts](../pipeline-template-dsl)
+- [Pipeline Template Guide](../pipeline-template/)
 - [Generated Artifacts](./generated-artifacts)
 - [Module Ownership](./module-ownership)
 - [Build Integration](./build-integration)

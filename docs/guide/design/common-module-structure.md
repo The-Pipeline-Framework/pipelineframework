@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/design/common-module-structure
+      content: 0;url=/architecture/common-module-structure
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/design/common-module-structure'))
+    window.location.replace(withBase('/architecture/common-module-structure'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/design/common-module-structure](/design/common-module-structure).
+This page moved to [/architecture/common-module-structure](/architecture/common-module-structure).

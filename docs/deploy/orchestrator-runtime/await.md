@@ -8,7 +8,7 @@ Await steps model external boundaries inside `QUEUE_ASYNC` execution. TPF persis
 
 The memory execution, await, and event-dispatch providers support this behavior for a single running process. They preserve the typed interaction, completion, and continuation lifecycle while the process is alive, but lose all orchestration state on process exit. They are suitable for local development and attended single-process applications; they do not provide restart recovery, multi-replica coordination, or high availability. Those require a complete durable coordination-store suite, not an application registry adapter.
 
-For modeling guidance, start with [Await Boundaries](/design/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
+For modeling guidance, start with [Await Boundaries](/architecture/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
 ## Version 3 completion representation
 

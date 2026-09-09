@@ -68,7 +68,7 @@ signals the runtime to abort the current run before resources are exhausted.
 
 ### Tuning Guidance
 
-**Expansion steps** (1→N) tend to create slow, steady inflight growth. Tune for those:
+**`ONE_TO_MANY` steps** tend to create slow, steady inflight growth. Tune for those:
 
 - Start with `window=PT30S` and `sustain-samples=3`
 - Lower the slope threshold until it trips at the point you consider unhealthy

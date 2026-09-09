@@ -1,6 +1,6 @@
 ---
 name: tpf-docs-writer
-description: "Navigate and write The Pipeline Framework (TPF) documentation. Understand its VitePress information architecture, historical layers, Guides, Coffee Machine architecture conversations, glossary, redirects, diagrams, and the distinct roles of value, architecture/design, develop, deploy, operate, decisions, and evolve."
+description: "Navigate and write The Pipeline Framework (TPF) documentation. Understand its VitePress information architecture, historical layers, Guides, Coffee Machine architecture conversations, glossary, redirects, diagrams, and the distinct roles of value, architecture, develop, deploy, operate, decisions, and evolve."
 ---
 
 # TPF Docs Writer
@@ -30,9 +30,7 @@ This is about outcomes, engineering economics, organisational consequences, deve
 
 Keep it accessible. Architecture may support the argument, but detailed architectural explanation belongs elsewhere.
 
-### `docs/design/` — architecture
-
-`design` is the current directory and site section name, but conceptually this is **Architecture** and is expected to be renamed accordingly.
+### `docs/architecture/` — architecture
 
 Treat it as the home for:
 
@@ -44,7 +42,7 @@ Treat it as the home for:
 - architectural trade-offs;
 - the Coffee Machine.
 
-When writing new material, think **Architecture**, even while the repository path remains `docs/design/`.
+Use **Architecture** consistently for the section name, navigation label, and canonical `/architecture/` routes.
 
 ### The Coffee Machine
 
@@ -220,7 +218,7 @@ Whenever moving or renaming a page or Guide:
 
 Follow the repository's established VitePress redirect mechanism rather than inventing an ad-hoc HTML redirect.
 
-This rule applies to individual pages, whole Guides and top-level reorganisations — particularly moves such as Coffee Machine from `value` into Architecture and the eventual `design → architecture` rename.
+This rule applies to individual pages, whole Guides and top-level reorganisations — including the historical Coffee Machine move from `value` into Architecture and the `design → architecture` migration.
 
 Do not destroy old inbound URLs while cleaning up the site.
 
@@ -262,7 +260,7 @@ Documentation improvements belong in the current documentation tree. Historical 
 
 When searching the repository, take care not to mistake matches under `docs/versions/` for current documentation. Exclude version snapshots from ordinary documentation reconnaissance unless the task specifically requires comparing historical versions.
 
-Likewise, do not include `docs/versions/` when performing site-wide terminology migrations, page moves, Guide reorganisations, glossary adoption, or the future `design → architecture` migration.
+Likewise, do not include `docs/versions/` when performing site-wide terminology migrations, page moves, Guide reorganisations, glossary adoption, or route migrations.
 
 Treat `docs/versions/vX.Y.Z/` as immutable release artefacts.
 
@@ -271,7 +269,7 @@ Treat `docs/versions/vX.Y.Z/` as immutable release artefacts.
 Ask what question the material answers:
 
 - **Value** — Why should I care?
-- **Architecture** (`design` today) — How should I understand the system and its trade-offs?
+- **Architecture** — How should I understand the system and its trade-offs?
 - **Develop** — How do I build it?
 - **Deploy** — How do I put it into an environment?
 - **Operate** — How do I run, observe and recover it?

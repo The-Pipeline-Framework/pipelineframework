@@ -5,7 +5,7 @@ This scaffold walkthrough predates the current IA and connector/FCIS positioning
 :::
 
 ::: warning Legacy Reference
-This page still contains useful examples, but it predates the current docs IA and the stronger connector/FCIS positioning. Prefer [Pipeline Compilation](/develop/pipeline-compilation/), [Configuration](/develop/configuration/), and [Object Ingest](/design/object-ingest) for current user-facing guidance.
+This page still contains useful examples, but it predates the current docs IA and the stronger connector/FCIS positioning. Prefer [Pipeline Compilation](/develop/pipeline-compilation/), [Configuration](/develop/configuration/), and [Object Ingest](/architecture/object-ingest) for current user-facing guidance.
 :::
 
 ## Overview
@@ -84,7 +84,7 @@ steps:
     outputTypeName: "ValidationOutput"
 ```
 
-The archived configuration intentionally retains the historical `inputTypeName` and `outputTypeName` syntax. Current v2 templates use logical `input` and `output`; see [pipeline template types and linear contracts](../develop/pipeline-template-dsl).
+The archived configuration intentionally retains the historical `inputTypeName` and `outputTypeName` syntax. Current templates use logical `input` and `output`; see [Pipeline composition](/develop/pipeline-template/composition).
 
 ### 3. Generate Application
 

@@ -1,33 +1,79 @@
-# Plugins, Not Glue
+# Reusable Capabilities
 
-<p class="value-lead">TPF gives teams clear extension rules so infrastructure concerns do not leak into business functions.</p>
+<p class="value-lead">TPF gives each kind of reuse one owner so teams can distribute useful
+capabilities and proven agentic compositions without creating a generic plugin bucket or a second
+execution engine.</p>
 
-## At a Glance
+## Choose the Right Unit
 
-<div class="value-glance">
-  <div class="value-glance-item"><strong>Clean Extensions</strong> &middot; Add persistence, caching, telemetry, and logging as declared plugins.</div>
-  <div class="value-glance-item"><strong>Consistent Integration</strong> &middot; Generated callers keep plugin behaviour aligned across REST, gRPC, and local paths.</div>
-  <div class="value-glance-item"><strong>Explicit Rules</strong> &middot; Aspect rules say where cross-cutting work runs instead of hiding it inside business functions.</div>
-</div>
+| Unit | Owns | Does not own |
+| --- | --- | --- |
+| **Connector** | A typed external observation, effect, or object-I/O boundary | Application credentials, account selection, or hidden business policy |
+| **Block** | Reusable pipeline definitions imported and linked at compile time | Runtime download, an executor, or the consuming application's Connector bindings |
+| **Expansion** | A coherent versioned package of Blocks, Connectors, types, examples, operations, and documentation | A runtime step kind or transferred application authority |
+| **Plugin** | Declared cross-cutting behaviour such as persistence, cache, telemetry, or logging | Typed external business I/O |
+| **Operator** | Reuse or delegation of a stable compute unit with its own model or boundary | A substitute for every helper method or semantic Query/Command boundary |
 
-## Use This When
+```mermaid
+flowchart TB
+    E[Expansion package] --> B[Blocks and packaged loops]
+    E --> C[Connectors]
+    E --> S[Types, examples, operations, and docs]
+    B --> L[Compile-time linked pipeline]
+    C --> L
+    A[Application composition, bindings, and authority] --> L
+    P[Plugins and aspects] --> R[Generated runtime shell]
+    L --> R
+```
 
-- Platform features keep duplicating across teams.
-- Core services are getting polluted with infrastructure logic.
-- You need shared extension patterns with predictable behaviour.
+## Why This Matters for AI and SaaS
 
-In TPF, an **aspect** is the rule that says where a plugin should run, such as before or after a step. A **plugin** provides the implementation, such as persistence or cache. Your business function remains focused on the domain work.
+A platform team can package a GraphQL-aware agent loop, its Query and Command Blocks, the Connector
+contract, canonical types, and operational guidance without shipping credentials or deciding which
+customer account may be used. An application can import selected MCP operations without exposing a
+server's whole catalogue to a model. An OpenAPI Expansion can adapt selected external operations
+without making an API description ambient runtime authority.
 
-Persistence and caching are more than generic extension examples. They are the main state-and-replay primitives in TPF: persistence keeps durable business records, and cache accelerates recomputation and replay. See the dedicated value page for that combined story.
+The result is reuse with explicit authority:
 
-## Jump to Guides
+1. package authors own stable contracts, reusable topology, and implementation;
+2. application authors choose composition, capability exposure, and effect policy;
+3. deployment hosts own connections, credentials, and client lifecycle;
+4. the compiler links everything into one release contract;
+5. the ordinary runtime executes it—there is no Block registry or Expansion engine.
+
+## Concrete Expansion Families
+
+The GraphQL Expansion is the first complete proof. It combines GraphQL Connector contracts and a
+provider, persisted Query and Mutation Blocks, and a production `graphql-agent` Block that packages
+operation guidance, model tools, trusted effect identity, routing, reduction, bounded recursion, and
+typed completion. The consuming application still owns documents, connections, bindings, and
+Command authority.
+
+The OpenAPI Expansion maps synchronous operations to Query or Command, asynchronous callback
+operations to Command → Await, and supports direct, LLM-assisted, or curated-DTO schema adaptation.
+Both families are composed from ordinary TPF artefacts rather than requiring an Expansion runtime or
+registry.
+
+“Expansion” remains a versioned distribution boundary, not the `ONE_TO_MANY` cardinality and not a
+marketing label for an arbitrary collection of modules.
+
+For practical boundary tests, see
+[Connector, Plugin, or step?](/architecture/coffee-machine/keep-it-sane-in-production/connector-plugin-or-step),
+[connector governance](/architecture/coffee-machine/architecture-arguments/connector-governance),
+and
+[customisation without forking](/architecture/coffee-machine/the-spiky-bits/customization-without-forking).
+
+## Go Deeper
 
 <div class="value-links">
 
+- [Connectors Guide](/develop/connectors/)
+- [Blocks Guide](/develop/blocks/)
+- [Expansions Guide](/develop/expansions/)
+- [GraphQL Connector, Blocks, and packaged agent](/develop/extension/graphql-connector)
 - [Using Plugins](/develop/using-plugins)
-- [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
 - [Writing a Plugin](/develop/writing-a-plugin)
-- [Persistence Plugin](/design/persistence)
-- [Plugins Architecture](/evolve/plugins-architecture)
+- [Operators](/architecture/operators)
 
 </div>

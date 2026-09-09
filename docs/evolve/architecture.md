@@ -13,7 +13,7 @@ Use public Design/Develop/Deploy docs for application usage. Use this page when 
 | Runtime layout vs build topology | [Runtime Layouts](/deploy/runtime-layouts/) |
 | Queue-async durable execution | [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) |
 | Queue-async immutable segment/boundary model | [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries) |
-| Await and callback admission | [Await Boundaries](/design/await-boundaries) and [Await Runtime Setup](/deploy/orchestrator-runtime/await) |
+| Await and callback admission | [Await Boundaries](/architecture/await-boundaries) and [Await Runtime Setup](/deploy/orchestrator-runtime/await) |
 | Checkpoint handoff | [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) |
 | Brokered runtime boundaries | [Brokered Runtime Boundaries](/evolve/brokered-boundaries/) |
 | Runtime portability and Spring status | [Runtime Core Decoupling](/evolve/runtime-core-decoupling) and [Spring Support Status](/develop/spring-support) |

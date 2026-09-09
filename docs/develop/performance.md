@@ -31,8 +31,8 @@ Practical guidance:
 - Keep sequential stages as late as possible in the pipeline.
 - Isolate slow, blocking work into dedicated steps so parallel stages can run earlier.
 
-For step shapes and how to reason about expansion vs. reduction, see
-[Expansion and Reduction](/design/expansion-and-reduction).
+For step shapes and how to reason about fan-out and reduction, see
+[Fan-out and Reduction](/architecture/cardinality-and-reduction).
 
 ## Server Execution Strategy
 

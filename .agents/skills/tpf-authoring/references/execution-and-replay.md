@@ -10,7 +10,7 @@ Verify exact configuration and release support in current docs/source/tests.
 
 - Call it only to start or resume a root TPF execution from an external application boundary.
 - Code already participating in a TPF execution must not call `PipelineExecutionService` to continue, decompose, dispatch, persist, or otherwise re-enter TPF.
-- Express internal work through pipeline composition: steps, Query, Command, Await, Expansion, nested pipelines, bounded recursion, and configured aspects as appropriate.
+- Express internal work through pipeline composition: steps, Query, Command, Await, nested pipelines, bounded recursion, and configured aspects as appropriate.
 - Do not introduce application services, repositories, providers, or generic executors merely to orchestrate work that belongs in `pipeline.yaml`.
 
 When reviewing an authored design, ask:

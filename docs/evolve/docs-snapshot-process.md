@@ -28,4 +28,4 @@ When cutting a version snapshot, run the snapshot command for the target release
 
 ## Route Rule
 
-Current docs no longer use `/guide`. Version snapshots may still contain historical `/guide` routes. Current public docs should link to `/design`, `/develop`, `/deploy`, `/operate`, `/evolve`, and `/value`.
+Current docs no longer use `/guide`. Version snapshots may still contain historical `/guide` routes. Current public docs should link to `/architecture`, `/develop`, `/deploy`, `/operate`, `/evolve`, and `/value`.

@@ -2,21 +2,49 @@
 
 Load this file when terminology, docs wording, transport/platform naming, architecture explanations, or public-facing copy matters.
 
+This is the authoring and agent-facing terminology authority: it includes guardrails, negative
+definitions, internal distinctions, and maintenance-sensitive wording. The public
+[`docs/glossary.md`](docs/glossary.md) is the shorter reader-facing vocabulary and supplies tooltip
+definitions through `vitepress-plugin-glossary`. Keep shared definitions aligned; do not replace this
+file with the public glossary because they serve different concerns.
+
 ## Canonical Terms
 
+- **Agentic loop**: business-shaped pipeline composition in which one-turn model decisions may route through approved Queries, Commands, Await boundaries, deterministic policy, reducers, and nested pipelines before recurring or completing. It is not a fixed `model → tool → model` primitive or a separate Agent runtime. A Block or Expansion may package a proven specialised loop while the application retains composition and external authority.
 - **Functional core**: typed Java business logic that transforms explicit input contracts into explicit output contracts. It should not own persistence, transport, retries, correlation, polling, or deployment wiring.
 - **Imperative shell**: framework-owned or infrastructure-owned code around the functional core: generated adapters, connectors, await handling, persistence, caching, materialization, replay, telemetry, retries, and deployment/runtime integration.
 - **Pipeline**: a strongly typed application flow made of ordered steps. It is not a CI/CD pipeline, generic workflow diagram, or arbitrary orchestration graph.
 - **Block**: a reusable packaged pipeline definition imported at compile time and linked through ordinary pipeline composition. A Block may require Query or Command capabilities, but the consuming application owns their connector bindings and Command authority. A Block is not a separate runtime execution unit or registry entry.
+- **Expansion**: a versioned distribution package that can group related Blocks, Connector contracts and providers, types, configuration, examples, operational assets, and documentation. It preserves the contained capabilities' existing compile-time and runtime contracts. Do not use Expansion as a synonym for `ONE_TO_MANY`; compatibility code may still accept the historical uppercase `EXPANSION` cardinality token.
+- **GraphQL Expansion**: the release-aligned family of GraphQL Connector contracts/providers, persisted Query and Mutation Blocks, the packaged `graphql-agent` Block, examples, and guidance. Applications retain documents, connections, LLM bindings, and Command authority.
+- **OpenAPI Expansion**: the capability family that maps selected synchronous OpenAPI operations to Query or Command, asynchronous callback operations to Command → Await, and schema differences through direct, LLM-assisted, or curated-DTO adaptation. It consumes external contracts and is distinct from the public OpenAPI contract filter.
 - **Step**: one typed unit in the pipeline. A step may be an authored Java service, an operator reference, an await boundary, a connector-backed boundary, or another semantic step kind supported by YAML/compiler validation.
+- **Pipeline template**: the `pipeline.yaml` authoring document that declares canonical types, logical contracts, ordered steps, composition, and supported semantic boundaries. It is the authoring front door to the functional core, not a deployment manifest or an untyped workflow graph.
+- **Canonical type**: an application-domain type declared in pipeline YAML. Generated Java and protobuf forms share this semantic model; application/provider representations connect through explicit bindings and mappers rather than becoming a second canonical type system.
+- **Callable catalogue**: the release-pinned set of application-approved Query and Command operations a one-turn LLM Query may propose. Discovery or Connector availability does not grant callable authority; aliases and argument schemas are compiled and validated before dynamic dispatch.
+- **Pipeline contract**: the declared logical input, output, types, and ordered transformations for one pipeline. Keep it independent of runtime layout and build topology.
+- **IDL lock**: the committed sibling `pipeline.idl.json` compatibility state that owns generated field/variant tags and reservations. Declaration order must not be used as wire identity.
+- **Cardinality**: the typed stream relationship at a step boundary, such as `ONE_TO_ONE`, `ONE_TO_MANY`, or `MANY_TO_ONE`. Do not use Expansion as a cardinality term.
+- **Fan-out**: one input producing multiple output items, normally `ONE_TO_MANY`. Prefer this term over the historical uppercase `EXPANSION` cardinality token.
+- **Reduction**: multiple input items producing one result, normally `MANY_TO_ONE`.
 - **Business function**: ordinary application code that makes a domain decision or transformation. Prefer keeping it transport-neutral and framework-light.
 - **Operator**: an existing Java method, class method reference, or remote endpoint reused as a pipeline step, for example `operator: fully.qualified.Class::method`. Operator references are resolved and validated at build time where possible.
 - **Mapper**: typed boundary translation code between domain types and external/operator/transport types. Mapper selection must stay pair-accurate (`Domain` + `External`) and deterministic in ambiguity diagnostics.
 - **Connector**: framework-owned I/O shell that admits or publishes external reality while preserving a typed pipeline boundary. Examples include object ingest/publish and captured query connectors. Connectors are not generic plugins.
+- **Query**: a typed read of external reality whose result can be captured and replayed without repeating the provider call. Query is not a hidden network call inside a business function.
+- **Query capture**: the durable typed Query result plus bounded safe observation metadata. It excludes credentials, SDK objects, hidden reasoning, and sensitive prompt/provider bodies.
+- **Query observation**: framework-owned metadata about a completed provider call, including replay status and optional provider-reported usage/model/finish information. Observation does not enter the application output type or capture key.
+- **Command**: a typed external effect with stable identity, explicit duplicate policy, execution posture, machine-confirmation requirement, recorded result, and failure semantics.
+- **Command authority**: application-owned choices governing an external effect. A reusable Block may require a Command capability but must not choose the consuming application's id generator, duplicate policy, endpoint, credentials, or policy.
+- **Application facade**: application-owned API resources that compose generated typed boundaries into a stable customer contract. Do not make generated step endpoints the customer model by default.
+- **Public OpenAPI contract**: the application facade paths and their reachable component closure after opt-in filtering. The filter does not infer application-specific discriminator values and must fail closed without valid public roots.
+- **Item Reject Sink**: the reject-and-continue boundary for invalid individual items. It is not the orchestrator DLQ and does not turn a business rejection into a platform failure.
+- **Host connection**: a deployment-owned logical identity for an authenticated external capability. The host owns authorisation, credential lifecycle, encryption, tenant/actor policy, and client construction; a Connector borrows the resolved capability at invocation time. The provisional Quarkus OIDC helpers do not define a portable OAuth SPI.
 - **Plugin**: cross-cutting framework extension such as persistence, caching, telemetry, or logging. Plugins run through declared aspect/side-effect rules and should not redefine the application contract.
 - **Aspect**: a declared rule for where plugin side effects run relative to pipeline steps, such as before/after a step. Aspects are semantic side effects expanded during compilation.
 - **Generated adapter**: TPF-generated REST, gRPC, local, function-style, worker-facing, or envelope/wire-boundary code that calls the business function without moving transport logic into the function.
 - **Transport mode**: the top-level generated component call mode selected by `pipeline.transport`. Canonical transport modes are `GRPC`, `REST`, and `LOCAL`. Do not describe `FUNCTION`, `HTTP_LAMBDA`, `PROTOBUF_HTTP_V1`, or `ENVELOPE_HTTP_V1` as top-level transport modes.
+- **Trusted argument**: a callable-input field copied from a typed LLM Query input rather than authored by the model. It is excluded from the model tool schema, merged before canonical validation, and commonly carries application-owned context such as effect identity.
 - **Deployment pattern**: a composed runtime/deployment shape, not a transport mode. `HTTP_LAMBDA` is the HTTP/Lambda-style path implemented as `pipeline.transport=REST` with `pipeline.platform=FUNCTION`.
 - **Wire/envelope protocol**: payload or invocation envelope shape used at a boundary, layered on top of a transport or dispatch substrate. `PROTOBUF_HTTP_V1` and `ENVELOPE_HTTP_V1` describe HTTP boundary encoding/contract shape for remote step hosts/operators; they do not replace `REST`, `GRPC`, or `LOCAL` as `pipeline.transport` values.
 - **Worker invocation protocol**: how a queue-async coordinator invokes remote transition workers. Current protocols include REST, gRPC, and SQS-style worker targets. This is related to, but narrower than, public transport mode.
@@ -35,5 +63,6 @@ Load this file when terminology, docs wording, transport/platform naming, archit
 - **Field materialization**: claim-check style representation policy for large fields. TPF can move payloads out of line via `payload_ref` while preserving the semantic message contract.
 - **Replay**: rerunning or reconstructing execution from captured lineage, state surfaces, cache, persistence, await completions, and connector snapshots where supported. Replay is bounded by what was captured.
 - **Lineage**: deterministic metadata that tracks where an item came from and which step produced it, including split/merge relationships. Treat lineage behavior as deterministic, not best-effort.
+- **LLM Query**: an ordinary provider-backed Query that asks a model for exactly one typed application decision. It does not execute tools, own a loop, or gain authority over credentials, connections, effects, or retries.
 - **DLQ**: dead-letter channel for terminal execution failures that need investigation or replay.
 - **TPFGo**: reference/evolution work around checkpoint-style business flows and DDD alignment. Do not present TPFGo roadmap material as general product behavior unless examples and tests prove it.

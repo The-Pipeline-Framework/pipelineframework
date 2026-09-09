@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/design/caching/configuration
+      content: 0;url=/architecture/caching/configuration
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/design/caching/configuration'))
+    window.location.replace(withBase('/architecture/caching/configuration'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/design/caching/configuration](/design/caching/configuration).
+This page moved to [/architecture/caching/configuration](/architecture/caching/configuration).

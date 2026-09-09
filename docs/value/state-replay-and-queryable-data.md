@@ -1,67 +1,78 @@
 # State, Replay, and Queryable Data
 
-<p class="value-lead">TPF helps developers keep useful application state, replay work safely, and expose queryable results to downstream services or UIs without hand-building separate storage and replay plumbing.</p>
+<p class="value-lead">TPF keeps the facts used for a decision, the effects requested from the
+world, the state needed to resume, and the business records worth querying as separate surfaces.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Durable Business State</strong> &middot; Persistence stores business outputs so teams can query them later from APIs, reports, or user interfaces.</div>
-  <div class="value-glance-item"><strong>Captured Decision Reads</strong> &middot; Query connectors make database facts explicit pipeline inputs before pure business decisions run.</div>
-  <div class="value-glance-item"><strong>Fast Recompute</strong> &middot; Caching reuses expensive step outputs and makes replay or rewind far cheaper.</div>
-  <div class="value-glance-item"><strong>Better Together</strong> &middot; Persistence keeps the durable record; cache accelerates derived-state recomputation and selective replay.</div>
+  <div class="value-glance-item"><strong>Captured Observations</strong> &middot; Query records external facts before pure business decisions consume them.</div>
+  <div class="value-glance-item"><strong>Durable Effect Identity</strong> &middot; Command records logical write authority and duplicate outcomes separately from reads.</div>
+  <div class="value-glance-item"><strong>Durable Waiting</strong> &middot; Await owns correlation, timeout, duplicate completion, and resume state.</div>
+  <div class="value-glance-item"><strong>Queryable Business Records</strong> &middot; Persistence keeps outputs for APIs, reports, and UIs; cache accelerates stable recomputation.</div>
 </div>
 
-## Use This When
+## One Application, Several Kinds of State
 
-- A background process produces data that a UI needs to query later.
-- A pipeline decision depends on database state that should be captured for retry, audit, and tests.
-- Expensive steps should not rerun every time downstream logic changes.
-- Teams want replay or recompute capabilities without inventing a separate event-storage and replay layer.
+```mermaid
+flowchart TB
+    Q[Query observation revisions] --> D[Pure typed decision]
+    D --> C[Command effect revisions]
+    C --> A[Await state and completion]
+    D --> P[Persisted business records]
+    D --> K[Cached derived outputs]
+    Q --> R[Replay evidence]
+    C --> R
+    A --> R
+    P --> U[APIs, reports, and UIs]
+    K --> RC[Selective recomputation]
+```
 
-## What Persistence Gives You
+These stores answer different questions:
 
-Persistence stores pipeline data without changing the flow itself. In practical terms, this gives developers a durable record they can query later from downstream APIs, reports, admin tools, or user interfaces.
+- Query capture asks, “Which external facts did this execution observe?”
+- Command effects ask, “Which logical effect did we authorise, and what outcome was recorded?”
+- Await asks, “What is suspended, how is completion correlated, and when may it resume?”
+- Pipeline execution state asks, “What work is accepted, leased, running, failed, or complete?”
+- Persistence asks, “Which business data should remain queryable after the run?”
+- Cache asks, “Which derived output is safe and useful to reuse?”
 
-This matters outside microservices too. In a regular application, persistence often solves the whole "how do I show the processed results in the UI later?" problem. TPF keeps that storage concern aligned with reactive execution instead of forcing developers into custom persistence wrappers around every function.
+Treating them as separate authorities prevents a cache hit from becoming an effect ledger, a
+business table from becoming an Await registry, or replay from silently consulting newer provider
+state.
 
-## What Caching Gives You
+## Why AI Benefits from the Same Model
 
-Caching protects expensive steps by reusing outputs that are still valid. That helps with throughput in normal production runs, and it becomes even more valuable when you need to replay or recompute part of a flow.
+An LLM Query is an external observation. Its typed result and provider-reported metadata can be
+captured like any other Query. A replay uses that captured decision without resolving a live model
+connection, consuming fresh tokens, or allowing a newer model to rewrite history.
 
-If a downstream step changes, cache can let you reuse earlier stable outputs instead of rerunning the whole pipeline. This is the practical replay story: keep the durable records you care about, then selectively recompute the parts that should change.
+If the model proposes a write, the selected native Command still owns stable effect identity,
+duplicate policy, and confirmation posture. If more information is needed, `AskUser` ends the Query;
+an ordinary application interaction or Await boundary owns durable correlation and later admission.
 
-## What Captured Queries Give You
+## Practical Outcomes
 
-Captured query steps make read-side facts explicit before a decision step runs. A JPA query connector can load `CustomerRiskFacts` from a database, capture those facts for the managed execution, and pass the immutable record to `AssessCustomerRisk`.
+- A UI can query persisted processing results without inventing a second read-model pipeline.
+- A changed downstream rule can reuse captured reads and cached upstream work.
+- An incident review can distinguish the model's observation from the external effect that followed.
+- A retry after a lost response can apply Command duplicate policy rather than guessing.
+- A long-running callback can resume from Await state without an Agent process remaining alive.
 
-That separation keeps the decision step pure and testable. It also prevents a retry of the same execution from silently using newer database state as if it were the original decision input.
+The Coffee Machine explores these failure modes in
+[DLQ and replay](/architecture/coffee-machine/keep-it-sane-in-production/dlq-and-replay),
+[idempotency after a lost response](/architecture/coffee-machine/keep-it-sane-in-production/idempotency-after-lost-response),
+and [event sourcing is not required](/architecture/coffee-machine/thinking-in-pipelines/event-sourcing-not-required).
 
-## Why They Work Best Together
-
-Persistence and caching solve different parts of the same problem:
-
-1. Captured queries make decision inputs explicit before business logic runs.
-2. Persistence keeps the durable business record for audit, query, and follow-on processing.
-3. Cache keeps reusable derived outputs close at hand so replay and recomputation stay fast.
-4. Together they reduce the need for bespoke state stores, custom read models, or one-off replay scripts.
-
-## Concrete Examples
-
-- **Search**: persist crawl and parse outputs, cache tokenize and index outputs, then replay downstream indexing changes without re-crawling everything.
-- **Business application with a UI**: process inputs in the pipeline, persist the resulting business records, and let the UI query them later through a normal API.
-- **Risk or eligibility decision**: load captured customer facts with a query connector, then keep the assessment step as pure Java over those facts.
-- **Background processing**: keep durable state for recovery and reporting, while cache reduces the cost of replaying expensive downstream steps.
-
-## Jump to Guides
+## Go Deeper
 
 <div class="value-links">
 
-- [Persistence Plugin](/design/persistence)
-- [JPA Query Connector](/design/jpa-query-connector/)
-- [Caching](/design/caching/)
-- [Cache vs Persistence](/design/caching/cache-vs-persistence)
-- [Search Replay Walkthrough](/design/caching/replay-walkthrough)
-- [Using Plugins](/develop/using-plugins)
+- [State Model](/architecture/state-model)
+- [JPA Query Connector](/architecture/jpa-query-connector/)
+- [Persistence Plugin](/architecture/persistence)
+- [Caching](/architecture/caching/)
+- [Await Boundaries](/architecture/await-boundaries)
 - [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 
 </div>

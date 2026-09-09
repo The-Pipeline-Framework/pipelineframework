@@ -7,12 +7,12 @@ Load this file before choosing validation commands for non-trivial changes.
 Framework:
 
 - Build (warm-up worktree): `./mvnw -f framework/pom.xml clean install -DskipTests -Dgpg.skip -Dmaven.repo.local="$PWD/.m2/repository"`
-- Verify: `./mvnw -f framework/pom.xml verify -Dmaven.repo.local="$PWD/.m2/repository`
+- Verify: `./mvnw -f framework/pom.xml verify -Dmaven.repo.local="$PWD/.m2/repository"`
 
 Root project:
 
-- Build: `./mvnw clean package`
-- Verify: `./mvnw verify`
+- Build: `./mvnw clean package -Dmaven.repo.local="$PWD/.m2/repository"`
+- Verify: `./mvnw verify -Dmaven.repo.local="$PWD/.m2/repository"`
 
 CSV payments targeted examples:
 
@@ -25,8 +25,8 @@ CSV payments targeted examples:
 Search targeted example:
 
 - Function platform smoke verification (build-switch based; no Lambda Maven profile):
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -DskipTests compile`
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -Dtest=LambdaMockEventServerSmokeTest test`
+  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -DskipTests compile -Dmaven.repo.local="$PWD/.m2/repository"`
+  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -Dtest=LambdaMockEventServerSmokeTest test -Dmaven.repo.local="$PWD/.m2/repository"`
 
 Targeted unit-test coverage helper:
 
@@ -37,7 +37,8 @@ Targeted unit-test coverage helper:
 
 Node/docs surfaces:
 
-- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
+- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test -Dmaven.repo.local="$PWD/.m2/repository"`
+- Docs tests: `npm --prefix docs test`
 - Docs build: `npm --prefix docs run build`
 
 ## Testing Conventions

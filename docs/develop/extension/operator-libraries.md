@@ -39,5 +39,5 @@ steps:
 ## Related
 
 - [Developing with Operators](/develop/operators)
-- [Operator Reuse Strategy](/design/operator-reuse-strategy)
-- [Operators](/design/operators)
+- [Operator Reuse Strategy](/architecture/operator-reuse-strategy)
+- [Operators](/architecture/operators)

@@ -1,65 +1,69 @@
-# Portable Serverless Functions
+# Deploy Without Rewriting the Core
 
-<p class="value-lead">The Pipeline Framework (TPF) lets teams keep the same typed Java functions while targeting either a standard Quarkus service runtime (`COMPUTE`) or a portable serverless function runtime (`FUNCTION`).</p>
+<p class="value-lead">Keep business functions and pipeline semantics stable while transport,
+runtime layout, build topology, cloud platform, and authenticated host integrations evolve
+independently.</p>
 
-## At a Glance
+## Separate the Decisions
 
-<div class="value-glance">
-  <div class="value-glance-item"><strong>Same Functions, Different Runtime</strong> &middot; Keep the same typed Java flow while choosing between `COMPUTE` and `FUNCTION` platform modes.</div>
-  <div class="value-glance-item"><strong>Portable Serverless Targets</strong> &middot; Target AWS Lambda, Azure Functions, and Google's Cloud Run functions without rewriting the business functions.</div>
-  <div class="value-glance-item"><strong>Transport Still Separate</strong> &middot; REST, gRPC, and local calls remain a separate transport decision from the platform mode.</div>
-</div>
+```mermaid
+flowchart TB
+    CORE[Typed business core]
+    CORE --> FLOW[Pipeline semantics]
+    FLOW --> T[Transport: LOCAL, REST, or GRPC]
+    FLOW --> P[Platform: COMPUTE or FUNCTION]
+    FLOW --> L[Runtime layout]
+    FLOW --> B[Build topology]
+    FLOW --> H[Host capabilities and connections]
+```
 
-## Use This When
+These dimensions are related but not interchangeable:
 
-- You want a serverless deployment target without rewriting the business flow.
-- You need the same pipeline logic to stay portable across cloud function providers.
-- You need platform choices and call mechanisms to stay explicit instead of getting mixed together.
+- **Transport mode** chooses how generated components call: `LOCAL`, `REST`, or `GRPC`.
+- **Platform mode** chooses a standard service runtime (`COMPUTE`) or generated serverless entry
+  points (`FUNCTION`).
+- **Runtime layout** chooses the logical placement of orchestrator, functions, and side effects.
+- **Build topology** is the Maven, JAR, and container structure that produces deployables.
+- **Host capabilities** supply provider clients, connection resolution, security, and
+  platform-specific integration.
 
-TPF keeps the business functions stable while changing the generated runtime around them. That means you can keep one typed Java flow and choose whether TPF generates a standard service runtime or serverless function entry points.
+Keeping those choices outside the business functions means a deployment change need not become a
+domain rewrite.
 
-## Platform mode vs transport mode
+## Service and Function Platforms
 
-These are different decisions:
+`COMPUTE` produces standard Quarkus service runtimes suitable for containers and Kubernetes.
+`FUNCTION` can target AWS Lambda, Azure Functions, and Google's Cloud Run functions while retaining
+the same typed flow and validation model.
 
-1. **Platform mode** chooses the generated runtime shape.
-   - `COMPUTE`: standard Quarkus service/runtime
-   - `FUNCTION`: serverless function entry points and handlers
-2. **Transport mode** chooses how generated components call each other.
-   - REST
-   - gRPC
-   - local in-process calls
+Current limits still matter:
 
-In TPF, an **adapter** is generated code that lets another component call your business function. Platform mode decides what kind of runtime TPF generates around that function. Transport mode decides how the generated components talk.
-
-## What FUNCTION mode gives you
-
-With `FUNCTION` mode, TPF can generate serverless function entry points while preserving the same typed Java functions and build-time validation rules.
-
-This is the current portable function-platform story:
-
-1. AWS Lambda
-2. Azure Functions
-3. Google's Cloud Run functions
-
-The provider-specific handler shape changes, but the flow logic, operator reuse, and generated validation model stay aligned.
-
-## Current constraints
-
-Keep the current platform limits explicit:
-
-1. `FUNCTION` currently requires `REST` transport; `gRPC` is not a supported `FUNCTION` transport today.
+1. `FUNCTION` requires `REST` transport; gRPC is not a supported function transport.
 2. Checkpoint handoff is not available in `FUNCTION` mode.
-3. Queue-backed HA and crash recovery belong to the orchestrator `COMPUTE` + `QUEUE_ASYNC` path. `FUNCTION` mode is limited to generated serverless entry points and provider portability; it does not implement the queue-async recovery model.
+3. Queue-backed HA and crash recovery belong to the `COMPUTE` + `QUEUE_ASYNC` orchestrator path.
+4. Connector, OAuth, and provider support can be host-specific; a portable pipeline contract does
+   not imply every host integration exists on every runtime.
 
-## Jump to Guides
+## Why This Matters More with AI and SaaS
+
+Model providers, API protocols, credential brokers, and deployment targets change faster than
+business rules. A TPF application can keep a canonical model decision, Query/Command semantics, and
+authored reducer stable while the host changes model implementation or connection source. Captured
+replay bypasses live provider resolution, preserving the meaning of the original execution.
+
+For the architectural discussion, see
+[portability without handwaving](/architecture/coffee-machine/make-it-run/portability-without-handwaving),
+[runtime layout is not Maven](/architecture/coffee-machine/make-it-run/runtime-layout-not-maven), and
+[deploy without a new religion](/architecture/coffee-machine/make-it-run/deploy-without-a-new-religion).
+
+## Go Deeper
 
 <div class="value-links">
 
+- [Runtime Layouts](/deploy/runtime-layouts/)
 - [AWS Lambda Platform](/deploy/aws-lambda)
 - [Azure Functions Platform](/deploy/azure-functions)
 - [Google Cloud Run Functions Platform](/deploy/google-cloud-run-functions)
-- [Runtime Layouts](/deploy/runtime-layouts/)
 - [Multi-Cloud Function Providers](/deploy/function-providers)
 - [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 

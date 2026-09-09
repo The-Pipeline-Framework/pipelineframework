@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useData } from 'vitepress'
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 import { chooseDifferentIndex } from '../../coffee-machine/public-utils.js'
 
 const { frontmatter } = useData()

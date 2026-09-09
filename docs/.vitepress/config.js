@@ -16,6 +16,8 @@
 
 import {defineConfig} from 'vitepress'
 import {withMermaid} from "vitepress-plugin-mermaid"
+import {markdownGlossaryPlugin} from 'vitepress-plugin-glossary'
+import glossary from './glossary.json'
 import {isCoffeeMachinePage, stripAuthorOnlyFrontmatter} from './coffee-machine/visibility-policy.js'
 
 // Use withMermaid to wrap the entire configuration - this enables GitHub-style mermaid code blocks
@@ -28,83 +30,85 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/value/'},
-            {
-                text: 'Coffee Machine',
-                link: '/value/coffee-machine/',
-                collapsed: true,
-                items: [
-                    {text: 'Coffee Machine', link: '/value/coffee-machine/'},
-                    {text: 'Search', link: '/value/coffee-machine/search'},
-                    {text: 'Quotes', link: '/value/coffee-machine/quotes'},
-                    {text: 'Personas', link: '/value/coffee-machine/personas'}
-                ]
-            },
+            {text: 'AI and Agentic Applications', link: '/value/ai-and-agentic-applications'},
+            {text: 'SaaS Integration', link: '/value/saas-integration'},
             {text: 'Business Value', link: '/value/business-value'},
             {text: 'Developer Joy', link: '/value/developer-experience'},
-            {text: 'Performance', link: '/value/runtime-efficiency'},
-            {text: 'Portable Serverless Functions', link: '/value/integration-flexibility'},
+            {text: 'Runtime Efficiency', link: '/value/runtime-efficiency'},
+            {text: 'Deploy Without Rewriting the Core', link: '/value/integration-flexibility'},
             {text: 'State, Replay, and Queryable Data', link: '/value/state-replay-and-queryable-data'},
-            {text: 'Start Monolith, Split Later', link: '/value/deployment-evolution'},
+            {text: 'Start Together, Split Deliberately', link: '/value/deployment-evolution'},
             {text: 'Operational Confidence', link: '/value/operational-confidence'},
-            {text: 'Plugins, Not Glue', link: '/value/extensibility-and-platform'}
+            {text: 'Reusable Capabilities', link: '/value/extensibility-and-platform'}
         ]
     },
     {
-        text: 'Design',
+        text: 'Architecture',
         collapsed: true,
         items: [
-            {text: 'Overview', link: '/design/'},
+            {text: 'Overview', link: '/architecture/'},
             {text: 'Architectural Decisions', link: '/decisions/'},
             {
-                text: 'Data Architecture',
-                link: '/design/data-architecture/',
+                text: 'Coffee Machine',
+                link: '/architecture/coffee-machine/',
                 collapsed: true,
                 items: [
-                    {text: 'Immutable Dataflow', link: '/design/data-architecture/'},
-                    {text: 'Data coupling', link: '/design/data-architecture/carry-data-computation'},
-                    {text: 'Query and Command', link: '/design/data-architecture/query-command'},
-                    {text: 'Effects and comparisons', link: '/design/data-architecture/workflow-effects'}
+                    {text: 'Coffee Machine', link: '/architecture/coffee-machine/'},
+                    {text: 'Search', link: '/architecture/coffee-machine/search'},
+                    {text: 'Quotes', link: '/architecture/coffee-machine/quotes'},
+                    {text: 'Personas', link: '/architecture/coffee-machine/personas'}
                 ]
             },
-            {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
-            {text: 'State Model', link: '/design/state-model'},
-            {text: 'Application Structure', link: '/design/application-structure'},
-            {text: 'Common Module Structure', link: '/design/common-module-structure'},
-            {text: 'Operators', link: '/design/operators'},
-            {text: 'Execution Safety', link: '/design/execution-safety'},
-            {text: 'Await Boundaries', link: '/design/await-boundaries'},
-            {text: 'Object Ingest', link: '/design/object-ingest'},
             {
-                text: 'JPA Query Connector',
-                link: '/design/jpa-query-connector/',
+                text: 'Data Architecture',
+                link: '/architecture/data-architecture/',
                 collapsed: true,
                 items: [
-                    {text: 'Overview', link: '/design/jpa-query-connector/'},
-                    {text: 'Setup and YAML', link: '/design/jpa-query-connector/setup'},
-                    {text: 'Predicates and Selection', link: '/design/jpa-query-connector/predicates'},
-                    {text: 'Capture and Persistence', link: '/design/jpa-query-connector/capture-and-persistence'}
+                    {text: 'Immutable Dataflow', link: '/architecture/data-architecture/'},
+                    {text: 'Data coupling', link: '/architecture/data-architecture/carry-data-computation'},
+                    {text: 'Query and Command', link: '/architecture/data-architecture/query-command'},
+                    {text: 'Effects and comparisons', link: '/architecture/data-architecture/workflow-effects'}
+                ]
+            },
+            {text: 'Functional Core, Imperative Shell', link: '/architecture/fcis'},
+            {text: 'State Model', link: '/architecture/state-model'},
+            {text: 'Application Structure', link: '/architecture/application-structure'},
+            {text: 'Common Module Structure', link: '/architecture/common-module-structure'},
+            {text: 'Operators', link: '/architecture/operators'},
+            {text: 'Execution Safety', link: '/architecture/execution-safety'},
+            {text: 'Await Boundaries', link: '/architecture/await-boundaries'},
+            {text: 'Object Ingest', link: '/architecture/object-ingest'},
+            {
+                text: 'JPA Query Connector',
+                link: '/architecture/jpa-query-connector/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/architecture/jpa-query-connector/'},
+                    {text: 'Setup and YAML', link: '/architecture/jpa-query-connector/setup'},
+                    {text: 'Predicates and Selection', link: '/architecture/jpa-query-connector/predicates'},
+                    {text: 'Capture and Persistence', link: '/architecture/jpa-query-connector/capture-and-persistence'}
                 ]
             },
             {
                 text: 'Caching',
-                link: '/design/caching/',
+                link: '/architecture/caching/',
                 collapsed: true,
                 items: [
-                    {text: 'Overview', link: '/design/caching/'},
-                    {text: 'Configuration', link: '/design/caching/configuration'},
-                    {text: 'Policies', link: '/design/caching/policies'},
-                    {text: 'Invalidation', link: '/design/caching/invalidation'},
-                    {text: 'Replay Walkthrough', link: '/design/caching/replay-walkthrough'},
-                    {text: 'Key Strategy', link: '/design/caching/key-strategy'},
-                    {text: 'Cache vs Persistence', link: '/design/caching/cache-vs-persistence'}
+                    {text: 'Overview', link: '/architecture/caching/'},
+                    {text: 'Configuration', link: '/architecture/caching/configuration'},
+                    {text: 'Policies', link: '/architecture/caching/policies'},
+                    {text: 'Invalidation', link: '/architecture/caching/invalidation'},
+                    {text: 'Replay Walkthrough', link: '/architecture/caching/replay-walkthrough'},
+                    {text: 'Key Strategy', link: '/architecture/caching/key-strategy'},
+                    {text: 'Cache vs Persistence', link: '/architecture/caching/cache-vs-persistence'}
                 ]
             },
-            {text: 'Persistence', link: '/design/persistence'},
-            {text: 'Field Materialization', link: '/design/materialization'},
-            {text: 'Expansion and Reduction', link: '/design/expansion-and-reduction'},
-            {text: 'Operator Reuse Strategy', link: '/design/operator-reuse-strategy'},
-            {text: 'Runtime Topology Strategy', link: '/design/runtime-topology-strategy'},
-            {text: 'Design Best Practices', link: '/design/best-practices'}
+            {text: 'Persistence', link: '/architecture/persistence'},
+            {text: 'Field Materialization', link: '/architecture/materialization'},
+            {text: 'Fan-out and Reduction', link: '/architecture/cardinality-and-reduction'},
+            {text: 'Operator Reuse Strategy', link: '/architecture/operator-reuse-strategy'},
+            {text: 'Runtime Topology Strategy', link: '/architecture/runtime-topology-strategy'},
+            {text: 'Architecture Best Practices', link: '/architecture/best-practices'}
         ]
     },
     {
@@ -142,7 +146,69 @@ const mainSidebar = [
                     {text: 'Lambda-Focused Configuration', link: '/develop/configuration/lambda-focused'}
                 ]
             },
-            {text: 'Pipeline Template DSL', link: '/develop/pipeline-template-dsl'},
+            {
+                text: 'Pipeline Template',
+                link: '/develop/pipeline-template/',
+                collapsed: false,
+                items: [
+                    {text: 'Guide Overview', link: '/develop/pipeline-template/'},
+                    {text: 'Model the Functional Core', link: '/develop/pipeline-template/functional-core'},
+                    {text: 'Canonical Types', link: '/develop/pipeline-template/types'},
+                    {text: 'Pipeline Composition', link: '/develop/pipeline-template/composition'},
+                    {text: 'Boundaries', link: '/develop/pipeline-template/boundaries'},
+                    {text: 'Complete DSL Reference', link: '/develop/pipeline-template/reference'}
+                ]
+            },
+            {text: 'Public OpenAPI Contract', link: '/develop/openapi-contract'},
+            {
+                text: 'Examples',
+                link: '/develop/examples/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/examples/'},
+                    {text: 'Catalogue', link: '/develop/examples/catalogue'}
+                ]
+            },
+            {
+                text: 'Connectors',
+                link: '/develop/connectors/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/connectors/'},
+                    {text: 'Author a Boundary', link: '/develop/connectors/authoring'},
+                    {text: 'Catalogue', link: '/develop/connectors/catalogue'}
+                ]
+            },
+            {
+                text: 'Blocks',
+                link: '/develop/blocks/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/blocks/'},
+                    {text: 'Use a Block', link: '/develop/blocks/use'},
+                    {text: 'Publish a Block', link: '/develop/blocks/publish'}
+                ]
+            },
+            {
+                text: 'Expansions',
+                link: '/develop/expansions/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/expansions/'},
+                    {text: 'Package an Expansion', link: '/develop/expansions/author'}
+                ]
+            },
+            {
+                text: 'Experimental OAuth Connections',
+                link: '/develop/oauth-connections/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/oauth-connections/'},
+                    {text: 'Configure', link: '/develop/oauth-connections/configure'},
+                    {text: 'Operate', link: '/develop/oauth-connections/operate'},
+                    {text: 'Full Reference', link: '/develop/oauth-connections/reference'}
+                ]
+            },
             {text: '@PipelineStep Annotation', link: '/develop/pipeline-step'},
             {text: 'Code a Step', link: '/develop/code-a-step'},
             {text: 'Item Reject Sink', link: '/develop/item-reject-sink'},
@@ -161,7 +227,6 @@ const mainSidebar = [
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
                     {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
-                    {text: 'Host-authenticated Connectors', link: '/develop/extension/host-authenticated-connectors'},
                     {text: 'GraphQL Connector and Blocks', link: '/develop/extension/graphql-connector'},
                     {text: 'Embedding and Vector Connectors', link: '/develop/extension/embedding-and-vector-connectors'},
                     {text: 'One-turn LLM Query', link: '/develop/extension/llm-query'},
@@ -279,6 +344,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/evolve/'},
+            {text: 'Documentation Audit — September 2026', link: '/evolve/documentation-audit-2026-09'},
             {text: 'Architecture', link: '/evolve/architecture'},
             {text: 'Queue-Async Immutable Boundaries', link: '/evolve/queue-async-immutable-boundaries'},
             {text: 'Architecture Reference', link: '/evolve/architecture-reference'},
@@ -315,7 +381,7 @@ const mainSidebar = [
                 collapsed: true,
                 items: [
                     {text: 'Overview', link: '/evolve/tpfgo/'},
-                    {text: 'Design Spectrum', link: '/evolve/tpfgo/design-spectrum'},
+                    {text: 'Design Spectrum', link: '/evolve/tpfgo/architecture-spectrum'},
                     {text: 'DDD Alignment', link: '/evolve/tpfgo/ddd-alignment'},
                     {text: 'Observer and Tap Contract', link: '/evolve/tpfgo/observer-tap-contract'},
                     {text: 'Roadmap', link: '/evolve/tpfgo/roadmap'},
@@ -538,11 +604,21 @@ export default withMermaid(
     
     // Base URL for the site (can be changed for different deployments)
     base: '/',
+
+    markdown: {
+      config: (md) => {
+        md.use(markdownGlossaryPlugin, {
+          glossary,
+          firstOccurrenceOnly: true
+        })
+      }
+    },
     
     // Register custom theme
     themeConfig: {
         nav: [
             ...topNavSections,
+            {text: 'Glossary', link: '/glossary'},
             {text: 'Versions', link: '/versions/', activeMatch: '^/versions(?:/|$)'}
         ],
 
@@ -683,9 +759,9 @@ export default withMermaid(
           const pathname = new URL(item.url, 'https://pipelineframework.org').pathname
           // Exclude redirect stubs from route migrations; keep their canonical targets.
           return !pathname.startsWith('/guide/')
-            && !pathname.startsWith('/design/runtime-layouts')
-            && !pathname.startsWith('/design/pipeline-studio')
-            && pathname !== '/design/await'
+            && !pathname.startsWith('/architecture/runtime-layouts')
+            && !pathname.startsWith('/architecture/pipeline-studio')
+            && pathname !== '/architecture/await'
             && pathname !== '/develop/mcp-template-generation'
             && pathname !== '/evolve/bridge-release-coordination'
         })

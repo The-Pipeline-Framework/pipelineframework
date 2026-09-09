@@ -1,7 +1,7 @@
 # I/O Shell Absorption Priorities
 
 ::: tip Strategic Context
-This page is the internal strategy companion to the public [Functional Core, Imperative Shell](/design/fcis) guide. Keep public docs focused on typed boundaries and connector usage; use this page for evolution decisions about which I/O shells TPF should absorb next.
+This page is the internal strategy companion to the public [Functional Core, Imperative Shell](/architecture/fcis) guide. Keep public docs focused on typed boundaries and connector usage; use this page for evolution decisions about which I/O shells TPF should absorb next.
 :::
 
 This note explores where TPF should absorb imperative I/O plumbing into framework semantics. It is an evolve document: it is useful for architecture and prioritisation, but it is not a public commitment that every capability below exists today.
@@ -95,7 +95,7 @@ input:
     mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
 ```
 
-This keeps object discovery out of business steps. In CSV Payments, the folder expansion step can be removed and the pipeline can start with `Process Csv Payments Input`. In Search, an S3 text source can emit `RawDocument` and start at `Parse Document`.
+This keeps object discovery out of business steps. In CSV Payments, the folder fan-out step can be removed and the pipeline can start with `Process Csv Payments Input`. In Search, an S3 text source can emit `RawDocument` and start at `Parse Document`.
 
 The output-side DSL uses top-level `publish` plus an output binding:
 
@@ -220,7 +220,7 @@ instead of hiding mutable database state inside:
 AssessCustomerRisk(customerId) -> RiskDecision
 ```
 
-For the current user-facing JPA connector shape, see [JPA Query Connector](/design/jpa-query-connector/).
+For the current user-facing JPA connector shape, see [JPA Query Connector](/architecture/jpa-query-connector/).
 
 Benefits to the user:
 

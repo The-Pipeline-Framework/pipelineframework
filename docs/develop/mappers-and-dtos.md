@@ -39,7 +39,7 @@ public interface PaymentRecordMapper extends Mapper<PaymentRecord, PaymentRecord
 
 Use a second mapper with the same two-type interface when the step output has a different domain or external type. The two mapper declarations are explicit in YAML so TPF can validate both generated boundaries.
 
-Logical type names in pipeline YAML determine the generated contract; Java bindings and application-owned mappers connect it to DTO and domain types. See the [Pipeline Template DSL](/develop/pipeline-template-dsl) for the type model and defaults.
+Logical type names in pipeline YAML determine the generated contract; Java bindings and application-owned mappers connect it to DTO and domain types. See [Canonical Types](/develop/pipeline-template/types) for the model and defaults.
 
 ## Working with DTOs (Optional)
 

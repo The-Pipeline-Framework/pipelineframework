@@ -5,7 +5,7 @@ This is the long-form reference for operator delegation. Start with [External Li
 :::
 
 ::: tip Current Reading Path
-Use this page for implementation details behind delegated steps. Start with [Operators](/design/operators) for the application design model, then return here when wiring an external library or operator boundary.
+Use this page for implementation details behind delegated steps. Start with [Operators](/architecture/operators) for the application design model, then return here when wiring an external library or operator boundary.
 :::
 
 ## Overview

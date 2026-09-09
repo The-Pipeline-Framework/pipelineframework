@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useData } from 'vitepress'
-import { data } from '../../../../value/coffee-machine/coffee-machine.data.js'
+import { data } from '../../../../architecture/coffee-machine/coffee-machine.data.js'
 
 const { frontmatter } = useData()
 const personaById = new Map(data.personas.map((persona) => [persona.id, persona]))

@@ -36,4 +36,4 @@ Build and CI failures are covered in the development guide:
 ## Related
 
 - [Operator Runbook](/operate/operators-playbook)
-- [Operators](/design/operators)
+- [Operators](/architecture/operators)

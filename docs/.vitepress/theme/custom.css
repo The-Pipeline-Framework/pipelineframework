@@ -94,7 +94,7 @@ kbd {
 
 .vp-doc .value-glance {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 0.85rem;
   margin: 0.75rem 0 1.5rem;
 }

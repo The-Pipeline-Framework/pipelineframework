@@ -6,240 +6,203 @@
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.39.2-orange)](https://quarkus.io)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/The-Pipeline-Framework/pipelineframework?label=CodeRabbit&color=purple)](https://coderabbit.ai)
 
-The Pipeline Framework (TPF) is a Java framework for strongly typed application flows.
-Keep the core pure. Connect to reality.
+## Build with AI. Run with guarantees.
 
-You write focused Java transformations such as "validate this payment", "enrich this record", "parse this document", or "call this existing operator". TPF keeps those transformations isolated from persistence, transport, replay, observability, retries, await boundaries, connectors, and deployment concerns.
+The Pipeline Framework (TPF) is a Java framework for strongly typed application flows. Compose
+model decisions, authorised SaaS capabilities, deterministic business logic, and long-running work
+in one application model. TPF generates and runs the imperative shell around that model: transport,
+connections, persistence, retries, durable effects, waits, replay, telemetry, and deployment
+integration.
 
-## AI-Assisted TPF Authoring
+**Keep the core pure. Connect to reality.**
 
-TPF ships a dedicated [`tpf-authoring` Agent Skill](.agents/skills/tpf-authoring/SKILL.md) for building business applications with the framework. It teaches an AI coding agent which TPF primitive owns data flow, external observations, side effects, suspension, replay, placement, and configuration—so ordinary Java or workflow-engine patterns do not displace the framework's typed application model. The skill is self-contained and directs the agent to versioned documentation, resolved dependency sources, examples, and compiler diagnostics for exact framework details.
+[Documentation](https://pipelineframework.org) ·
+[AI and agentic applications](https://pipelineframework.org/value/ai-and-agentic-applications) ·
+[SaaS integration](https://pipelineframework.org/value/saas-integration) ·
+[Examples](https://pipelineframework.org/develop/examples/)
 
-Install the skill from this repository with GitHub's skill tooling, or ask Codex to install it directly:
+## What TPF Lets You Build
 
-```bash
+- **AI-assisted applications** where a model returns one schema-checked business decision.
+- **Composable agentic applications** whose reads, effects, policy, approvals, waits, nested
+  pipelines, recurrence, and completion follow the business—not a fixed Agent loop.
+- **Connected SaaS applications** built from selected MCP tools, persisted GraphQL operations,
+  OpenAPI contracts, and host-owned OAuth connections.
+- **Long-running business flows** with durable background execution, callbacks, human interaction,
+  checkpoint handoff, crash recovery, and replay.
+- **Reusable internal platforms** that distribute typed flows as Blocks, external boundaries as
+  Connectors, and coherent capability families as Expansions.
+- **Applications that can change runtime shape** without moving transport and deployment concerns
+  into business functions.
+
+In TPF, a Pipeline is not CI/CD and not an arbitrary workflow graph. It is an ordered, strongly
+typed application flow: each Step transforms an explicit business contract, while semantic
+boundaries say when the application observes external reality, performs an effect, or waits for a
+later completion.
+
+```mermaid
+flowchart TB
+    Y[Pipeline YAML and typed Java] --> C[Build-time compiler]
+    C --> P[Validated application Pipeline]
+    MCP[MCP catalogues] --> K[Pinned capabilities]
+    GQL[GraphQL Expansion] --> K
+    API[OpenAPI Expansion] --> K
+    K --> P
+    P --> Q[Query: captured observation]
+    P --> CMD[Command: durable effect]
+    P --> A[Await: correlated suspension]
+    P --> F[Pure typed transformation]
+    Q --> R[Generated runtime shell]
+    CMD --> R
+    A --> R
+    F --> R
+    H[Host-owned connections and credentials] --> R
+    R --> O[Replay, lineage, telemetry, retries, and deployment]
+```
+
+## AI Is Part of the Application, Not a Second Runtime
+
+TPF models one model inference as an ordinary provider-backed Query. The result is a typed
+application value or an inert proposal from a release-pinned callable catalogue. A later generated
+boundary validates and invokes at most one approved Query or Command; the model never receives
+ambient connector, credential, account, or effect authority.
+
+An agentic loop is then ordinary Pipeline composition. The application decides where to:
+
+- prepare trusted context and business constraints;
+- ask the model for one typed decision;
+- route reads, effects, approvals, interactions, or specialist Pipelines differently;
+- reduce each observation back into trusted state;
+- recur within an explicit bound, escalate, wait, or complete.
+
+Repeated loop semantics can be packaged in a Block and distributed with related Connectors, types,
+examples, and operations as an Expansion. Applications can consume that loop or compose another
+shape from the lower-level capabilities.
+
+The **GraphQL Expansion** proves the model. Its production `graphql-agent` Block packages operation
+guidance, persisted Query/Mutation tools, trusted effect-key derivation, observation normalisation,
+bounded history, reduction, recursion, and typed completion. The application still owns the LLM
+binding, digest-pinned documents, connection, effect scope, Command identity, duplicate policy, and
+Command policy.
+
+The same integration model spans:
+
+- **MCP** — discover broadly, import deliberately, and expose selected tools as pinned Query or
+  Command operations;
+- **GraphQL** — use persisted Query and Mutation Blocks directly or through a packaged agent loop;
+- **OpenAPI** — map synchronous operations to Query or Command, asynchronous callbacks to Command →
+  Await, and schema differences through direct, LLM-assisted, or curated-DTO adaptation;
+- **OAuth-backed hosts** — resolve logical connections to authenticated Google, Microsoft, LLM, or
+  MCP clients without putting tokens in Pipeline values. These host APIs remain experimental.
+
+## The Guarantees Behind the Headline
+
+| Concern | TPF model |
+| --- | --- |
+| Business logic | Explicit canonical input/output types and transport-neutral Java functions |
+| External reads | Query captures typed observations for replay without repeating the provider call |
+| External writes | Command owns stable effect identity, duplicate policy, confirmation, and ambiguity |
+| Deferred work | Await owns durable suspension, correlation, completion admission, timeout, and resume |
+| AI decisions | Canonical schema validation, pinned callable catalogues, trusted context, and one inference per Query execution |
+| Runtime execution | Generated adapters, lineage, retries, DLQ handling, telemetry, persistence, caching, and replay |
+| Deployment | Separate transport, platform, runtime-layout, and build-topology decisions |
+
+Quarkus is the mature production runtime. Spring support is emerging behind the same semantic model
+with limited local/REST unary coverage; it is not production parity. See the
+[Spring support status](https://pipelineframework.org/develop/spring-support).
+
+## Author with Your Coding Agent
+
+Install the repository's [`tpf-authoring`](.agents/skills/tpf-authoring/SKILL.md) Agent Skill. It
+teaches a coding agent which TPF primitive owns data flow, external observation, effects,
+suspension, replay, placement, and configuration, then directs it to versioned documentation,
+resolved dependencies, examples, and compiler diagnostics for exact details.
+
+```shell
 gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-hidden-dirs
 ```
 
-```text
-$skill-installer install https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/.agents/skills/tpf-authoring
-```
+## Start from Working Proof
 
-Quarkus is the mature production runtime today. Spring support has started behind the same semantic model with limited local/REST unary smoke coverage; it is not production parity yet. See [Spring support status](https://pipelineframework.org/develop/spring-support) for the current boundary.
+- [`examples/callable-loop-proof`](examples/callable-loop-proof/) packages a domain-neutral typed
+  callable loop while the application supplies bindings and Command authority.
+- [`examples/graphql-block-proof`](examples/graphql-block-proof/) runs the production GraphQL agent
+  through persisted Query → partial-error Mutation → typed completion.
+- [`examples/quickbooks-collections-briefing`](examples/quickbooks-collections-briefing/) imports one
+  pinned QuickBooks MCP Query and turns its unstructured result into a typed collections plan.
+- [`examples/csv-payments`](examples/csv-payments/) is the broad runtime proof for streaming,
+  rejection, Await, lineage, replay, telemetry, performance, and multiple runtime layouts.
+- [`examples/restaurant-approval`](examples/restaurant-approval/) demonstrates durable human
+  interaction and resume through the interaction API.
+- [`examples/search`](examples/search/) covers fan-out/fan-in, REST and gRPC, functions, generated
+  workers, caching, persistence, replay, and branch-aware execution.
+- [`examples/rag-turnkey`](examples/rag-turnkey/) composes separate indexing and query applications
+  backed by Ollama and PostgreSQL/pgvector.
 
-## What TPF Means by Pipeline
+The [Examples Guide](https://pipelineframework.org/develop/examples/) links and briefs every example
+README in the repository.
 
-In TPF, a pipeline is not a CI/CD or batch pipeline made of coarse, long-running jobs. It is a typed application flow where each step transforms an explicit business contract.
+## Choose a Documentation Path
 
-- A **step** is one function in that flow.
-- A **typed** step has explicit Java input and output types.
-- A **reactive** flow can keep many items moving without blocking one thread per item.
-- The flow moves forward through declared functions with explicit boundaries.
-- The shape is simpler than an arbitrary graph because order, progress, and handoff points stay visible.
-- TPF generates, validates, and runs the shell around that flow.
-
-## Key Terms in Plain English
-
-- **Generated adapter**: TPF-created REST, gRPC, local, or function-style code that calls your business function.
-- **Operator**: an existing Java method or remote endpoint reused as a pipeline step.
-- **Mapper**: code that translates between your domain types and transport or external-system types.
-- **Durable execution**: accepted work is recorded outside the current JVM or process, so it can survive crashes and restarts.
-- **`QUEUE_ASYNC`**: the config value for background execution where TPF stores execution state, dispatches work, retries failed work, recovers after worker crashes, and sends terminal failures to a dead-letter channel.
-- **DLQ**: a dead-letter queue or channel for failed executions that need investigation or replay.
-- **Idempotency**: stable keys that let retries avoid duplicating business effects.
-- **Lineage**: enough tracking information to know where an item came from and which step produced it.
-- **Runtime layout**: where TPF logically places the orchestrator, steps, and plugin side effects.
-- **Build topology**: the Maven modules, JARs, and containers that physically create deployables.
-- **Transport mode**: how generated components call each other: gRPC, REST, or local in-process calls.
-- **Connector**: a framework-owned I/O shell that admits external reality, such as files, object stores, APIs, human decisions, or provider callbacks.
-- **Platform mode**: whether the app runs as a normal service runtime or through function-style entry points.
-
-## How TPF Splits Responsibilities
-
-TPF splits responsibility between your application code and the framework runtime.
-
-- **You define the business flow**: typed functions, input/output contracts, operators, mappers, and domain decisions such as "validate this payment", "reject this bad record", "index this document", or "handoff this checkout checkpoint".
-- **TPF generates the repeated shell**: REST endpoints, gRPC services, local clients, function-style handlers, client calls, connectors, and runtime descriptions that would otherwise become hand-written service glue.
-- **TPF runs the generated runtime**: it starts the flow, calls each step, records progress when configured, retries failed work, recovers leased work after crashes, and sends terminal failures to the configured failure channel.
-- **You choose the runtime shape**: `modular`, `pipeline-runtime`, or `monolith`, plus the Maven and container topology that physically builds the deployables.
-- **TPF validates the flow before startup**: function shape, mapper compatibility, operator references, transport requirements, and generated runtime files are checked during the build.
-- **You own production policy**: provider selection, idempotency choices, retry budgets, DLQ handling, observability thresholds, and deployment rollout.
-
-The result is that application code stays focused on business behaviour while the framework handles the repeatable work of moving items through the pipeline reliably.
-
-## Why TPF
-
-- **Strongly typed pipelines**: Model business flows as explicit transformations between typed contracts.
-- **One flow, multiple ways to call it**: Generate gRPC, REST, local, and function-style entry points from the same ordered function chain.
-- **Build-time safety**: Catch mismatched operators, mappers, input/output types, and generated call paths before the application starts.
-- **Operator reuse**: Reuse a local Java `Class::method` operator or remote IDL v2 operator without hiding it behind ad-hoc service glue.
-- **Layout flexibility**: Run the same pipeline in `modular`, `pipeline-runtime`, or `monolith` layouts as your team and deployment model evolve.
-- **Transport and platform flexibility**: Run as a normal service runtime or through function-style entry points without changing the business functions.
-- **Operational readiness**: Built-in health checks, tracing/metrics/logging hooks, crash-surviving background execution, retries, and dead-letter handling.
-- **Plugin extensibility**: Add persistence, caching, telemetry, and other cross-cutting work declaratively instead of repeating side-effect code in every function.
-
-## Core Capabilities
-
-### Model-driven pipeline generation
-
-TPF is YAML-driven first. You declare the function chain and write the business functions; TPF generates the code that exposes, calls, validates, and runs them.
-
-- Pipeline order is written at build time to `META-INF/pipeline/order.json`.
-- Telemetry descriptions are written at build time to `META-INF/pipeline/telemetry.json`.
-- Build-time generation makes the generated call paths visible instead of spreading them through hand-written glue code.
-- In a payments flow, this means the framework can connect validation, enrichment, status creation, and rejection handling without each function owning its own transport layer.
-
-### Operators and external delegation
-
-Operators let a pipeline step call reusable code while the pipeline still makes the boundary explicit.
-
-- Local Java operators use `operator: fully.qualified.Class::method` and are resolved at build time.
-- Remote IDL v2 operators use generated adapters and explicit runtime targets for code that lives outside the Java build.
-- Mapper and transport checks keep delegated operator boundaries explicit instead of relying on implicit conversion.
-- For AI enrichment, an existing embedding, vector search, or LLM helper library can become part of the pipeline without rewriting it as a full service first.
-
-### Reducing hidden coupling
-
-Coupling is where function chains often decay: one function starts depending on another function's internal class, HTTP shape, deployment unit, side effect, retry assumption, or failure channel. TPF does not pretend coupling disappears; it makes the important coupling explicit and moves repeatable coupling into generated code or framework runtime behaviour.
-
-- **Data coupling**: explicit input/output types and mappers keep each function from importing another function's private classes.
-- **Transport coupling**: generated REST, gRPC, local, and function-style adapters keep business functions independent from how they are called.
-- **Deployment coupling**: runtime layout and build topology are separate decisions, so the business flow is not locked to one deployable shape.
-- **Cross-cutting coupling**: plugins/aspects keep persistence, cache, telemetry, and logging out of business functions.
-- **Lineage and idempotency coupling**: TPF tracks item identity, previous-item references, payload version, and idempotency keys so retries and investigation have stable context.
-- **Application state coupling**: examples such as CSV Payments carry prior context forward explicitly using a "Russian dolls" style domain model, instead of reaching sideways into earlier functions or shared mutable state.
-- **Failure coupling**: Item Reject Sink handles per-item business rejection, while an execution DLQ handles full-run failures that need operator attention.
-
-### Runtime layouts and deployment evolution
-
-TPF separates where the flow logically runs from how the deployable files are built.
-
-- **Runtime layout** decides the logical placement of orchestrators, business functions, and plugin side effects.
-- **Build topology** decides which Maven modules, JARs, and containers are actually produced.
-- **Transport mode** (`GRPC`, `REST`, `LOCAL`) decides how generated clients call pipeline functions.
-- **Platform mode** (`COMPUTE`, `FUNCTION`) decides whether the generated runtime targets a standard service or a function-style entry point model.
-
-That separation lets teams start with a monolith or grouped runtime, then move toward more distributed layouts when ownership, throughput, or deployment constraints justify it.
-
-### Connectors, plugins, aspects, and side effects
-
-TPF uses connectors for I/O admission and plugins/aspects for cross-cutting work.
-
-- Connectors model external input or external waiting without pushing correlation, polling, or payload-admission code into a business function.
-- You declare concerns such as persistence, cache, telemetry, or logging around the pipeline.
-- TPF generates and runs the transport-aware side-effect integration for gRPC, REST, and local execution paths.
-- Business functions stay focused on domain transformations instead of repeating infrastructure code.
-
-### Background execution and checkpoint-driven flows
-
-TPF supports normal request/response execution and background execution where callers submit work, receive an execution ID, and let TPF continue the flow after the request returns.
-
-- Background execution can store accepted work outside the current JVM so crashes and restarts do not lose that work.
-- Checkpoint-style handoff patterns for cross-pipeline orchestration, as demonstrated by the TPFGo example.
-- Lineage and replay-safe state handling across split/merge flows.
-- In a checkout flow, one pipeline can publish a stable checkpoint and the next pipeline can accept it through framework-owned handoff endpoints.
-
-### High availability and crash-surviving execution
-
-TPF's crash-surviving execution path is configured with `pipeline.orchestrator.mode=QUEUE_ASYNC`.
-
-- TPF stores execution progress, dispatches work, retries failed transitions, recovers work after worker crashes, and publishes terminal failures.
-- Execution state can be backed by providers outside the current process instead of process-local memory.
-- Work dispatch can use queue-backed providers for recovery and worker takeover.
-- Terminal execution failures can be routed to an execution DLQ, while item-level failures can use Item Reject Sink.
-- Your team still chooses the production policy: providers, idempotency rules, retry budgets, observability thresholds, and rollout strategy.
-
-### Function and cloud deployment
-
-TPF supports function-style deployment paths in addition to standard service runtimes.
-
-- `FUNCTION` and `COMPUTE` are first-class platform modes.
-- Function-oriented flows use the same business functions and generated runtime rules rather than becoming a separate programming model.
-- Multi-cloud function support is part of the current platform story, including AWS Lambda, Azure Functions, and Google Cloud Functions guidance.
-
-## Architecture Model
-
-At a high level, TPF works like this:
-
-1. Define the pipeline, types, and business logic.
-2. Configure runtime mapping, transport, platform, and optional aspects/plugins.
-3. Compile the application so TPF validates the model and generates endpoints, clients, handlers, and runtime files.
-4. Run the application so TPF calls the generated code, records progress when configured, retries failures, and routes failed work.
-5. Operate the deployables with the production policies and topology your environment requires.
-
-This keeps the domain flow stable while generated endpoints, clients, handlers, and deployable shapes can change around it.
-
-## Getting Started
-
-### Design flow
-
-Canvas can help sketch and scaffold a baseline flow:
-
-1. Open [app.pipelineframework.org](https://app.pipelineframework.org).
-2. Design the pipeline visually.
-3. Download the generated application scaffold.
-4. Build and run it with Maven.
-
-YAML is the canonical path for current advanced features such as await boundaries, object ingest, checkpoint handoff, and runtime configuration. Use Canvas as a visual baseline, then refine through YAML and code.
-
-### Core docs
-
-- [Documentation home](https://pipelineframework.org)
-- [Functional Core, Imperative Shell](https://pipelineframework.org/design/fcis)
-- [Pipeline Studio](https://pipelineframework.org/design/pipeline-studio/)
+- [Functional Core / Imperative Shell](https://pipelineframework.org/architecture/fcis)
+- [Pipeline Template Guide](https://pipelineframework.org/develop/pipeline-template/)
+- [One-turn LLM Query and callable composition](https://pipelineframework.org/develop/extension/llm-query)
+- [MCP Connector Import](https://pipelineframework.org/develop/extension/mcp-connector-import)
+- [GraphQL Connector, Blocks, and packaged agent](https://pipelineframework.org/develop/extension/graphql-connector)
+- [Connectors](https://pipelineframework.org/develop/connectors/),
+  [Blocks](https://pipelineframework.org/develop/blocks/), and
+  [Expansions](https://pipelineframework.org/develop/expansions/)
 - [Runtime layouts and build topologies](https://pipelineframework.org/deploy/runtime-layouts/)
-- [Using plugins](https://pipelineframework.org/develop/using-plugins)
-- [Orchestrator runtime](https://pipelineframework.org/deploy/orchestrator-runtime/)
-- [Testing](https://pipelineframework.org/develop/testing)
-- [Observability](https://pipelineframework.org/operate/observability/)
-- [Operators](https://pipelineframework.org/design/operators)
-- [Error handling and DLQ](https://pipelineframework.org/operate/error-handling)
-- [TPFGo example](https://pipelineframework.org/develop/tpfgo-example)
-- [MCP and template generation](https://pipelineframework.org/develop/mcp-template-generation)
+- [Observability and replay](https://pipelineframework.org/operate/observability/)
+- [Architecture conversations in the Coffee Machine](https://pipelineframework.org/architecture/coffee-machine/)
+- [Glossary](https://pipelineframework.org/glossary)
 
-## Reference Examples
+## Repository Map
 
-- [`examples/csv-payments`](examples/csv-payments/) shows the topology and runtime-layout story across modular, pipeline-runtime, and monolith builds.
-- [`examples/restaurant-approval`](examples/restaurant-approval/) is the canonical `interaction-api` human-await example, pairing a generator-backed monolith runtime with a small Next.js approval inbox.
-- [`examples/search`](examples/search/) is the richer reference application for crawl/parse/tokenize/index flows, cache/persistence interplay, function-platform verification, and integration hardening.
-- [`examples/checkout`](examples/checkout/) contains the TPFGo reference flow for checkpoint-boundary handoff and multi-pipeline orchestration.
-
-## Project Surfaces
-
-- [`framework/runtime`](framework/runtime/) contains runtime APIs, execution, telemetry, and config loading.
-- [`framework/deployment`](framework/deployment/) contains annotation processing, validation, and code generation phases.
-- [`plugins`](plugins/) contains foundational cross-cutting capabilities such as persistence and cache.
-- [`docs`](docs/) contains the VitePress documentation site.
-- [`web-ui`](web-ui/) contains the Canvas/web UI.
-- [`ai-sdk`](ai-sdk/) contains the standalone Java SDK used for AI/delegation and transport exercises.
+- [`framework/api`](framework/api/) — framework-neutral contracts for generated applications.
+- [`framework/runtime-core`](framework/runtime-core/) — framework-neutral TPF semantics.
+- [`framework/deployment`](framework/deployment/) — compilation, validation, and code generation.
+- [`framework/runtime`](framework/runtime/) — the canonical Quarkus runtime, execution engine,
+  telemetry, and configuration.
+- [`framework/runtime-spring`](framework/runtime-spring/) — the emerging Spring runtime surface.
+- [`framework/connectors`](framework/connectors/) — typed I/O and external-observation/effect
+  boundaries.
+- [`framework/plugins`](framework/plugins/) — cross-cutting persistence, caching, materialisation,
+  telemetry, and related capabilities.
+- [`blocks`](blocks/) — reusable compile-time Pipeline definitions, including packaged specialised
+  loops.
+- [`examples`](examples/) — reference applications and end-to-end compatibility proofs.
+- [`docs`](docs/) — the VitePress documentation site.
+- [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport
+  exercises.
 
 ## Build and Validation
 
+This repository uses an isolated Maven local repository per worktree.
+
 Framework verification:
 
-```bash
-./mvnw -f framework/pom.xml verify
+```shell
+./mvnw -f framework/pom.xml verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 Full repository verification:
 
-```bash
-./mvnw verify
+```shell
+./mvnw verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-Docs build:
+Documentation verification:
 
-```bash
+```shell
+npm --prefix docs test
 npm --prefix docs run build
 ```
 
-## Security
+## Contributing and Security
 
-If you discover a security vulnerability, see our [security policy](SECURITY.md) for responsible disclosure details.
+Contributions are welcome across framework code, examples, documentation, tooling, and architecture
+discussion. Read [CONTRIBUTING.md](CONTRIBUTING.md) to get started and [AGENTS.md](AGENTS.md) for
+repository-specific engineering guidance.
 
-## Contributing
-
-Contributions are welcome across framework code, examples, docs, tooling, and design discussion.
-
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
-- Use [AGENTS.md](AGENTS.md) for repo-specific engineering guidance when working inside this repository.
+Report vulnerabilities through the [security policy](SECURITY.md).

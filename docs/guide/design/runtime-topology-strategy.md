@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/design/runtime-topology-strategy
+      content: 0;url=/architecture/runtime-topology-strategy
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/design/runtime-topology-strategy'))
+    window.location.replace(withBase('/architecture/runtime-topology-strategy'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/design/runtime-topology-strategy](/design/runtime-topology-strategy).
+This page moved to [/architecture/runtime-topology-strategy](/architecture/runtime-topology-strategy).

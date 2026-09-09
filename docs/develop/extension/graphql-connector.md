@@ -17,8 +17,9 @@ Command, preserving effect identity, duplicate policy, confirmation, and ambigui
 ## Add the artifacts
 
 The portable contract contributes the `tpf.graphql` canonical vocabulary and provider-neutral
-operation contracts. The SmallRye artifact supplies provider `graphql.smallrye`. The Block artifact
-supplies the reusable `graphql-query` and `graphql-mutation` definitions.
+operation contracts. The SmallRye artifact supplies provider `graphql.smallrye`. The `graphql`
+Block artifact supplies the reusable `graphql-query` and `graphql-mutation` definitions. The
+separate `graphql-agent` Block packages a complete GraphQL-aware callable loop.
 
 ```xml
 <dependency>
@@ -125,7 +126,10 @@ choices.
 
 ## Add the packaged GraphQL agent
 
-Use the separate production Block when an application needs a bounded GraphQL-aware callable loop:
+Use the separate production `graphql-agent` Block when an application needs a bounded GraphQL-aware
+callable loop. It exports
+`org.pipelineframework.graphql/graphql-agent` and adds one LLM Query requirement without changing
+the standalone `graphql-query` or `graphql-mutation` Blocks.
 
 ```xml
 <dependency>
@@ -135,20 +139,17 @@ Use the separate production Block when an application needs a bounded GraphQL-aw
 </dependency>
 ```
 
-It exports `org.pipelineframework.graphql/graphql-agent` and adds one LLM Query requirement without
-changing the standalone `graphql-query` or `graphql-mutation` Blocks.
-
 ```mermaid
 flowchart LR
-    S[GraphQlAgentState] --> B[derive turn bound and trusted effect key]
-    B --> L[one-turn LLM Query]
-    L --> D{decision}
-    D -->|graphql_query| Q[native GraphQL Query]
-    D -->|graphql_mutation| C[native GraphQL Command]
+    S[GraphQlAgentState] --> B[Derive turn bound and trusted effect key]
+    B --> L[One-turn LLM Query]
+    L --> D{Decision}
+    D -->|graphql_query| Q[Native GraphQL Query]
+    D -->|graphql_mutation| C[Native GraphQL Command]
     D -->|complete| R[GraphQlAgentCompletion]
     Q --> O[OperationObservation]
     C --> O
-    O --> N[normalize and reduce]
+    O --> N[Normalise and reduce]
     N -->|turn available| S
     N -->|turn exhausted| R
 ```
@@ -181,7 +182,7 @@ Then invoke it through ordinary composition:
 ```
 
 `GraphQlAgentState.start(...)` takes the objective, a typed operation guide, an application effect
-scope, and `maxTurns` from 1 through 16. The guide helps the model choose, but the connector's
+scope, and `maxTurns` from 1 through 16. The guide helps the model choose, but the Connector's
 digest-pinned operation catalogue remains authoritative.
 
 The model-facing Query and Mutation tools accept only `operationKey` and validated `variablesJson`.

@@ -156,6 +156,46 @@ return timer.recordCallable(() -> processPayment(record));
 
 Connector-owned I/O and await boundaries use low-cardinality metrics. Keep object keys, execution ids, await unit ids, interaction ids, and correlation ids in spans/replay events, not metric attributes.
 
+### LLM Query token usage
+
+When a Query provider reports token usage, TPF preserves the observation through capture and exposes
+bounded OpenTelemetry signals. Counts are provider-reported and independently optional; TPF does not
+estimate missing values or derive a total.
+
+```mermaid
+flowchart LR
+    L[Live LLM Query] --> O[Query observation]
+    O --> M[Token usage histogram]
+    O --> S[Query observation span]
+    C[Captured replay] --> S
+    C -. no newly consumed tokens .-> M
+```
+
+Live observations emit one histogram point for each reported input or output count:
+
+| Metric | Type | Unit | Attributes | Meaning |
+| --- | --- | --- | --- | --- |
+| `gen_ai.client.token.usage` | histogram | `{token}` | `gen_ai.token.type=input|output`, `tpf.connector.provider`, `tpf.connector.operation` | Provider-reported tokens newly consumed by a live Query. |
+
+Total tokens are not recorded as another metric point because the provider total may not equal the
+sum of independently reported input and output counts. Instead, the `tpf.query.observation` span can
+carry:
+
+| Span attribute | Meaning |
+| --- | --- |
+| `tpf.query.replayed` | Whether the observation came from Query capture replay. |
+| `gen_ai.usage.input_tokens` | Provider-reported input count, when present. |
+| `gen_ai.usage.output_tokens` | Provider-reported output count, when present. |
+| `tpf.query.usage.total_tokens` | Provider-reported total count, when present. |
+| `gen_ai.response.model` | Bounded provider response-model identity, when present. |
+| `gen_ai.response.finish_reasons` | Bounded provider finish reason, when present. |
+| `tpf.connector.provider`, `tpf.connector.operation` | Stable Connector operation identity. |
+
+Captured replay can reproduce the observation attributes on a span with
+`tpf.query.replayed=true`, but does not emit a new usage histogram point because no provider tokens
+were consumed. Prompts, completions, credentials, application payloads, execution IDs, and provider
+response IDs are excluded from these signals.
+
 Object Ingest metrics:
 
 | Metric | Type | Attributes | Meaning |
