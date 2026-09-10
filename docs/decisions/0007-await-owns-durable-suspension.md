@@ -12,7 +12,8 @@ after the current invocation and must survive retries, duplicates, and deploymen
 
 ## Decision
 
-Await is a durable suspension boundary, not a delayed function call. Await owns the
+Await is a durable suspension boundary, not a delayed function call or an operation
+kind. As refined by ADR-0036, `await:` decorates an ordinary semantic operation. Await owns the
 stored request, correlation, completion admission, timeout, duplicate completion,
 projection, and resume semantics independently of transport. The exact suspended request
 is trusted context; submitted human/browser/provider completion is untrusted observation.
@@ -22,7 +23,7 @@ metadata into the canonical output without asking the submitter to echo authorit
 Projection failure does not consume or corrupt the durable interaction. Surviving
 interactions remain pinned to their release/contract interpretation. This decision
 governs `framework/runtime-core` Await contracts, `framework/runtime` Await coordination,
-Await stores, adapters, and generated Await boundaries.
+Await stores, adapters, and generated deferred-completion decorators.
 
 ## Rationale
 

@@ -19,7 +19,7 @@ package org.pipelineframework.config.pipeline;
 import java.util.Optional;
 
 /**
- * Await-step configuration parsed from pipeline.yaml.
+ * Deferred-completion modifier parsed from an ordinary operation in pipeline.yaml.
  *
  * @param correlation correlation configuration
  * @param transport transport adapter configuration

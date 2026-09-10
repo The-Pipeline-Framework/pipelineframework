@@ -35,7 +35,7 @@ Each layer has one job and one persistence shape.
 
 ## Why CSV Backpressure Was Hard
 
-CSV Payments exposed a gap between ordinary reactive backpressure and durable distributed coordination. The input parser could be made lazy, but the await step introduces an external chasm: requests leave the process, completions can arrive through a broker before the parent transition is parked, and a worker retry can resubscribe a cold source if suspension is misclassified as failure.
+CSV Payments exposed a gap between ordinary reactive backpressure and durable distributed coordination. The input parser could be made lazy, but deferred completion introduces an external chasm: operation results leave the process, completions can arrive through a broker before the parent transition is parked, and a worker retry can resubscribe a cold source if suspension is misclassified as failure.
 
 The first durable fix made the await unit the release gate. That prevented duplicate source reads and premature continuations, but it also made the healthy path look like a barrier: the parser could dispatch a large window of items, then status processing waited behind durable release.
 

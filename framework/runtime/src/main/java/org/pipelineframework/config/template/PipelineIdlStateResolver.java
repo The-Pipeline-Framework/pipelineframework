@@ -213,7 +213,8 @@ public final class PipelineIdlStateResolver {
             }
         }
         List<PipelineIdlSnapshot.StepSnapshot> steps = config.steps().stream()
-            .map(step -> new PipelineIdlSnapshot.StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName())).toList();
+            .map(step -> new PipelineIdlSnapshot.StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName(),
+                step.deferredOperationOutputTypeName())).toList();
         return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), Map.of(), Map.of(), types, steps);
     }
 

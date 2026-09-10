@@ -69,7 +69,7 @@ final class PipelineStepContractValidator {
     private Optional<TypeName> domainOutput(PipelineStepModel model) {
         return model == null || model.outputMapping() == null
             ? Optional.empty()
-            : Optional.ofNullable(model.outputMapping().domainType());
+            : Optional.ofNullable(model.pipelineOutputType());
     }
 
     private String stepName(PipelineTemplateConfig config, int index, PipelineStepModel fallback) {

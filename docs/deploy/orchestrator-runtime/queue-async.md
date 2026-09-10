@@ -147,7 +147,7 @@ Recovery points:
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
 
-Await steps add one more boundary. For brokered `ONE_TO_ONE` await over a stream, the live queue-async transition can keep a live await session open: completions are recorded durably, signalled to the session, and emitted to downstream demand without waiting for every item in the unit to finish. That is how CSV Payments lets the parser, Kafka await, status processing, and Object Publish move together.
+Deferred completion adds one more lifecycle boundary to an ordinary operation. For a brokered operation emitting a stream, the live queue-async transition can keep a live await session open: completions are recorded durably, signalled to the session, and emitted to downstream demand without waiting for every item in the unit to finish. That is how CSV Payments lets the parser, Kafka completion transport, status processing, and Object Publish move together.
 
 The durable `WAITING_EXTERNAL` path still exists. It is the recovery and fallback path when no live session can accept the completion, or when the worker suspends and another claim must resume later. In that path, the coordinator waits for dispatch completion and the parent execution's `WAITING_EXTERNAL` state before releasing item continuations from the stores.
 

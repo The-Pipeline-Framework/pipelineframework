@@ -69,11 +69,12 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
     private void resolveBoundary(PipelineCompilationContext ctx, PipelineTemplateConfig config,
                                  RepresentationProviderRegistry providers, PipelineReference definition,
                                  StepDefinition step) {
-        if (step.executionClass() == null || step.inputType() == null || step.outputType() == null) {
+        Optional<ClassName> operationOutputType = operationOutputType(config, step);
+        if (step.executionClass() == null || step.inputType() == null || operationOutputType.isEmpty()) {
             return;
         }
         CanonicalType input = canonical(config, step.inputType());
-        CanonicalType output = canonical(config, step.outputType());
+        CanonicalType output = canonical(config, operationOutputType.orElseThrow());
         Map<String, Object> boundaryConfiguration = boundaryConfiguration(config, input, output);
         BoundaryRequest request = new BoundaryRequest(step.name(), step.executionClass().canonicalName(), input, output,
             step.streamingShapeHint() == null ? "UNARY_UNARY" : step.streamingShapeHint().name(),
@@ -110,6 +111,17 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         });
         ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(definition, request, claim.orElseThrow(), resolved,
             generationConfiguration(mappings)));
+    }
+
+    private static Optional<ClassName> operationOutputType(PipelineTemplateConfig config, StepDefinition step) {
+        if (step.deferredCompletion().isEmpty()) {
+            return Optional.ofNullable(step.outputType());
+        }
+        var completion = step.deferredCompletion().orElseThrow();
+        if (completion.operationOutputJavaType().isPresent()) {
+            return completion.operationOutputJavaType();
+        }
+        return new V3JavaTypeResolver(config).resolve(completion.operationOutputType());
     }
 
     private static List<MappingBinding> mappings(PipelineTemplateConfig config, CanonicalType input,

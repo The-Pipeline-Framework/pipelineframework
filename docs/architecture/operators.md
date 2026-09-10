@@ -106,16 +106,16 @@ Envelope mode sends and receives `application/vnd.tpf.envelope.v1+json`. TPF own
 
 ## Operator vs Await
 
-Use operators when the external call completes within the current pipeline invocation. Use await steps when the request leaves the current execution turn and the result comes back later.
+Use operators when the external call completes within the current pipeline invocation. Use deferred completion when an ordinary operation starts the request but its final result comes back later.
 
 | External shape | Use |
 | --- | --- |
 | Inline HTTP/gRPC call returning now | Operator / remote execution |
-| Broker request/reply with later correlated message | Await step |
-| Webhook callback later | Await step |
-| UI/human approval | Await step |
+| Broker request/reply with later correlated message | Operation with `await:` |
+| Webhook callback later | Operation with `await:` |
+| UI/human approval | Authored service with `await:` |
 
-If a remote system returns `accepted` now and the final business result arrives later, that is not a remote operator. Model it as `kind: await`.
+If a remote system returns `accepted` now and the final business result arrives later, that is not a remote operator. Model the semantic operation and attach `await:` for deferred completion.
 
 ## Working Example
 

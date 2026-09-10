@@ -23,7 +23,7 @@ import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.PipelineRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
-import org.pipelineframework.processor.renderer.AwaitClientStepRenderer;
+import org.pipelineframework.processor.renderer.DeferredCompletionStepRenderer;
 import org.pipelineframework.processor.renderer.CommandClientStepRenderer;
 import org.pipelineframework.processor.renderer.QueryClientStepRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
@@ -96,7 +96,7 @@ class StepArtifactGenerationService {
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
-            AwaitClientStepRenderer awaitClientStepRenderer,
+            DeferredCompletionStepRenderer awaitClientStepRenderer,
             CommandClientStepRenderer commandClientStepRenderer,
             QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         PipelineTemplateConfig template = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
@@ -122,9 +122,9 @@ class StepArtifactGenerationService {
                         v3GeneratedDomainTypes));
                     roleMetadataGenerator.recordClassWithRole(commandClientClassName, clientRole.name());
                 }
-                case AWAIT_CLIENT_STEP -> {
+                case DEFERRED_COMPLETION_STEP -> {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
-                    String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "AwaitClientStep";
+                    String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "DeferredCompletionStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     awaitClientStepRenderer.render(model, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -136,7 +136,7 @@ class StepArtifactGenerationService {
                         ctx.getTransportMode(),
                         template == null ? null : template.basePackage(),
                         null,
-                        v3GeneratedDomainTypes));
+                        v3GeneratedDomainTypes), grpcBinding);
                     roleMetadataGenerator.recordClassWithRole(awaitClientClassName, clientRole.name());
                 }
                 case QUERY_CLIENT_STEP -> {
@@ -464,7 +464,7 @@ class StepArtifactGenerationService {
             restFunctionHandlerRenderer,
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
-            new AwaitClientStepRenderer(),
+            new DeferredCompletionStepRenderer(),
             new CommandClientStepRenderer(),
             new QueryClientStepRenderer());
     }

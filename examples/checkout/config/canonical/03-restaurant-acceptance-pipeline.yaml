@@ -34,17 +34,13 @@ steps:
     output: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
     outputTypeName: OrderAcceptedByRestaurant
     outboundMapper: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderAcceptedByRestaurantMapper
-  - name: Await Restaurant Acceptance
-    kind: await
-    cardinality: ONE_TO_ONE
-    input: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
-    inputTypeName: OrderAcceptedByRestaurant
-    output: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
-    outputTypeName: OrderAcceptedByRestaurant
-    timeout: PT30M
-    idempotencyKeyFields:
-      - orderId
     await:
+      operationOutput:
+        type: OrderAcceptedByRestaurant
+        java: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
+      timeout: PT30M
+      idempotency:
+        fields: [orderId]
       correlation:
         strategy: interactionId
       transport:

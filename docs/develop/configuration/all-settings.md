@@ -317,7 +317,7 @@ Background execution notes:
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
-6. For webhook, Kafka, or SQS await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
+6. For webhook, Kafka, or SQS deferred completion using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
 7. Remote transition worker selection is inferred from configured targets: REST uses `pipeline.orchestrator.worker.rest.base-url`, gRPC uses `pipeline.orchestrator.worker.grpc.endpoint`, SQS uses `pipeline.orchestrator.worker.sqs.request-queue-url`, and no remote target uses the local in-process worker.
 8. Configure at most one remote worker target. Multiple remote targets fail startup as ambiguous; there is no `worker.provider` selector.
 9. `pipeline.platform` remains orthogonal and does not select worker invocation.
@@ -340,7 +340,7 @@ pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
 
 ### Await Transports
 
-Await transport selection is authored per `kind: await` step in pipeline YAML. These runtime properties enable the concrete adapter plumbing for broker-backed await providers.
+Await transport selection is authored under the `await:` modifier on an ordinary operation in pipeline YAML. These runtime properties enable the concrete adapter plumbing for broker-backed completion providers.
 
 #### Kafka Await
 
@@ -366,7 +366,7 @@ Prefix: `tpf.await.sqs`
 | `tpf.await.sqs.wait-time-seconds` | int | `1` | Long-poll wait time for SQS receive calls. Values are clamped to the SQS range `1..20`. |
 | `tpf.await.sqs.max-messages` | int | `1` | Maximum messages received per poll. Values are clamped to the SQS range `1..10`. |
 
-SQS await dispatch uses the `request.queueUrl` and `response.queueUrl` authored on the await step. The completion poller uses the runtime `response-queue-url` so the hosting coordinator can decide which queue it consumes. Region and endpoint override reuse `pipeline.orchestrator.sqs.region` and `pipeline.orchestrator.sqs.endpoint-override`.
+SQS completion dispatch uses the `request.queueUrl` and `response.queueUrl` authored under the operation's `await:` modifier. The completion poller uses the runtime `response-queue-url` so the hosting coordinator can decide which queue it consumes. Region and endpoint override reuse `pipeline.orchestrator.sqs.region` and `pipeline.orchestrator.sqs.endpoint-override`.
 
 ### Item Reject Sink
 

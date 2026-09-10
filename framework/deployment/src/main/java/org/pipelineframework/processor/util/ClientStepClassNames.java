@@ -17,8 +17,8 @@ public final class ClientStepClassNames {
     }
 
     public static String suffix(PipelineStepModel model, String defaultSuffix) {
-        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-            return "AwaitClientStep";
+        if (model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)) {
+            return "DeferredCompletionStep";
         }
         if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
             return "CommandClientStep";

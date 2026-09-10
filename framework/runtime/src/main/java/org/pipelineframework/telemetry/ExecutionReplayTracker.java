@@ -722,8 +722,8 @@ final class ExecutionReplayTracker {
             .replace("LocalClientStep", "")
             .replace("Service", "");
         String service = step.endsWith("Service") ? step : step + "Service";
-        String renderRole = step.toLowerCase(Locale.ROOT).contains("await") ? "await" : "primary";
-        return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null, renderRole, null);
+        return new PipelineReplayTopology.Step(
+            runtimeStepClass, step, service, "one-to-one", -1, false, null, null, "primary", null, false);
     }
 
     private PipelineReplayTopology.Step resolveAwaitStep(String stepId, Integer stepIndex) {
@@ -737,22 +737,26 @@ final class ExecutionReplayTracker {
                 if (stepId.equals(step.step()) || normalizedStepId.equals(step.step())) {
                     return step;
                 }
-                if ("await".equals(step.renderRole()) && firstAwaitStep == null) {
+                if (hasDeferredCompletion(step) && firstAwaitStep == null) {
                     firstAwaitStep = step;
                 }
             }
         }
         if (stepIndex != null) {
             for (PipelineReplayTopology.Step step : topology.steps()) {
-                if (step.index() == stepIndex && "await".equals(step.renderRole())) {
+                if (step.index() == stepIndex && hasDeferredCompletion(step)) {
                     return step;
                 }
-                if ("await".equals(step.renderRole()) && firstAwaitStep == null) {
+                if (hasDeferredCompletion(step) && firstAwaitStep == null) {
                     firstAwaitStep = step;
                 }
             }
         }
         return firstAwaitStep;
+    }
+
+    private static boolean hasDeferredCompletion(PipelineReplayTopology.Step step) {
+        return step != null && (step.deferredCompletion() || "await".equals(step.renderRole()));
     }
 
     private static String normalizeAwaitStepId(String stepId) {

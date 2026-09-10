@@ -232,9 +232,75 @@ public final class PipelineBranchingMetadataGenerator {
             List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
                 .map(type -> runtimeAcceptedType(type, ctx, transportMappedRuntime))
                 .toList();
+            if (model.deferredCompletionSelection().isPresent()) {
+                appendDeferredCompletionMetadata(
+                    ctx,
+                    definitionId,
+                    plan,
+                    step,
+                    model,
+                    inputRuntimeClass,
+                    acceptedRuntimeClasses,
+                    steps);
+                continue;
+            }
             steps.add(stepMetadata(
                 definitionId, plan, step, runtimeStepClass, inputRuntimeClass, acceptedRuntimeClasses));
         }
+    }
+
+    private void appendDeferredCompletionMetadata(
+        PipelineCompilationContext ctx,
+        String definitionId,
+        PipelineBranchingPlan plan,
+        PipelineBranchingPlan.BranchStep step,
+        PipelineStepModel model,
+        String operationInputRuntimeClass,
+        List<String> operationAcceptedRuntimeClasses,
+        List<StepMetadata> steps
+    ) {
+        PipelineTransport transport = java.util.Objects.requireNonNullElse(
+            ctx.getTransportMode(), PipelineTransport.GRPC);
+        String operationRuntimeClass = model.servicePackage() + ".pipeline."
+            + stripTrailingService(model.generatedName()) + transport.clientStepSuffix();
+        steps.add(new StepMetadata(
+            definitionId,
+            plan.terminalStepIndex(),
+            step.index(),
+            step.stepName(),
+            operationRuntimeClass,
+            operationInputRuntimeClass,
+            step.acceptedContractTypes(),
+            operationAcceptedRuntimeClasses,
+            variants(step.inputVariants()),
+            variants(step.acceptedVariants()),
+            List.of(),
+            false,
+            false));
+
+        TypeName operationOutputType = model.outboundDomainType();
+        if (!(operationOutputType instanceof ClassName operationOutputClass)) {
+            throw new IllegalStateException("Deferred-completion operation output for step '"
+                + step.stepName() + "' must resolve to a declared canonical class, but was '"
+                + operationOutputType + "'.");
+        }
+        boolean transportMappedRuntime = usesTransportMappedRuntime(model, ctx);
+        String completionInputRuntimeClass = runtimeAcceptedType(
+            operationOutputClass, ctx, transportMappedRuntime);
+        steps.add(new StepMetadata(
+            definitionId,
+            plan.terminalStepIndex(),
+            step.index(),
+            step.stepName(),
+            clientClass(model, ctx),
+            completionInputRuntimeClass,
+            List.of(operationOutputClass.simpleName()),
+            List.of(completionInputRuntimeClass),
+            List.of(),
+            List.of(),
+            variants(step.producedVariants()),
+            step.terminal(),
+            false));
     }
 
     private StepMetadata stepMetadata(
@@ -391,7 +457,7 @@ public final class PipelineBranchingMetadataGenerator {
         if (ctx.isOrchestratorGenerated()) {
             return true;
         }
-        return model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
+        return model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)
             || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);

@@ -338,6 +338,7 @@ public class PipelineProtoGenerator {
                 inputTypeName,
                 inputFields,
                 step.outputTypeName(),
+                step.operationOutputTypeName(),
                 step.outputFields(),
                 step.execution());
             resolved.add(resolvedStep);
@@ -358,6 +359,7 @@ public class PipelineProtoGenerator {
             resolveV3ProtoContract(step.inputTypeName(), typeModel),
             step.inputFields(),
             resolveV3ProtoContract(step.outputTypeName(), typeModel),
+            resolveV3ProtoContract(step.operationOutputTypeName(), typeModel),
             step.outputFields(),
             step.execution())).toList();
     }
@@ -688,12 +690,17 @@ public class PipelineProtoGenerator {
         }
 
         if (!v2) {
+            if (!java.util.Objects.equals(step.operationOutputTypeName(), step.outputTypeName())) {
+                throw new IllegalStateException("Deferred completion with distinct operation and final output types "
+                    + "requires pipeline template version 2 or later; version 1 has no separate operation-output "
+                    + "field schema for step '" + step.name() + "'");
+            }
             int outputStartNumber = 1;
             List<PipelineTemplateField> inputFields = step.inputFields();
             if (inputFields != null && !inputFields.isEmpty()) {
                 outputStartNumber = inputFields.size() + 1;
             }
-            renderLegacyMessage(builder, step.outputTypeName(), step.outputFields(), outputStartNumber);
+            renderLegacyMessage(builder, step.operationOutputTypeName(), step.outputFields(), outputStartNumber);
             builder.append('\n');
         }
 
@@ -887,7 +894,7 @@ public class PipelineProtoGenerator {
             .append(step.serviceNameFormatted())
             .append("Service {\n");
         String inputType = (v2 || firstStep || previous == null) ? step.inputTypeName() : previous.outputTypeName();
-        String outputType = step.outputTypeName();
+        String outputType = step.operationOutputTypeName();
         CardinalitySemantics canonicalCardinality = CardinalitySemantics.fromString(step.cardinality());
         if (canonicalCardinality == CardinalitySemantics.ONE_TO_MANY) {
             builder.append("  rpc remoteProcess(")
@@ -946,7 +953,7 @@ public class PipelineProtoGenerator {
         }
 
         for (AspectDefinition aspect : afterAspects) {
-            renderAspectService(builder, aspect, step.outputTypeName());
+            renderAspectService(builder, aspect, step.operationOutputTypeName());
         }
 
         if (!afterAspects.isEmpty()) {
@@ -954,7 +961,7 @@ public class PipelineProtoGenerator {
         }
 
         for (AspectDefinition aspect : beforeAspects) {
-            renderAspectService(builder, aspect, step.outputTypeName());
+            renderAspectService(builder, aspect, step.operationOutputTypeName());
         }
     }
 
@@ -1304,6 +1311,7 @@ public class PipelineProtoGenerator {
         String inputTypeName,
         List<PipelineTemplateField> inputFields,
         String outputTypeName,
+        String operationOutputTypeName,
         List<PipelineTemplateField> outputFields,
         PipelineTemplateStepExecution execution
     ) {

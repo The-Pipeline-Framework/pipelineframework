@@ -520,20 +520,23 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
-    void loadsAwaitStepConfiguration() {
+    void loadsDeferredCompletionConfiguration() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"
             transport: "GRPC"
             platform: "COMPUTE"
             steps:
               - name: "Fraud Check"
-                kind: "await"
+                service: "com.example.CreateFraudCheck"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "com.example.FraudCheckRequest"
                 outputTypeName: "com.example.FraudCheckDecision"
-                timeout: "PT10M"
-                idempotencyKeyFields: ["orderId"]
                 await:
+                  operationOutput:
+                    type: "FraudCheckPending"
+                  timeout: "PT10M"
+                  idempotency:
+                    fields: ["orderId"]
                   correlation:
                     strategy: "interactionId"
                   completion:
@@ -548,7 +551,7 @@ class PipelineYamlConfigLoaderTest {
             """));
 
         PipelineYamlStep step = config.steps().getFirst();
-        assertEquals("await", step.kind());
+        assertEquals("internal", step.kind());
         assertEquals("ONE_TO_ONE", step.cardinality());
         assertEquals("PT10M", step.timeout());
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
@@ -572,12 +575,13 @@ class PipelineYamlConfigLoaderTest {
                 platform: COMPUTE
                 steps:
                   - name: Fraud Check
-                    kind: await
+                    service: com.example.CreateFraudCheck
                     cardinality: ONE_TO_ONE
                     inputTypeName: com.example.Request
                     outputTypeName: com.example.Decision
-                    timeout: PT10M
                     await:
+                      operationOutput: { type: FraudCheckPending }
+                      timeout: PT10M
                       correlation:
                         strategy: interactionId
                       %s
@@ -596,12 +600,13 @@ class PipelineYamlConfigLoaderTest {
                 platform: "COMPUTE"
                 steps:
                   - name: "Await Batch"
-                    kind: "await"
+                    service: "com.example.CreateBatch"
                     cardinality: "MANY_TO_MANY"
                     inputTypeName: "com.example.BatchRequest"
                     outputTypeName: "com.example.BatchDecision"
-                    timeout: "PT10M"
                     await:
+                      operationOutput: { type: "BatchPending" }
+                      timeout: "PT10M"
                       dispatch:
                         mode: "per-item"
                       correlation:
@@ -626,10 +631,12 @@ class PipelineYamlConfigLoaderTest {
                 platform: "COMPUTE"
                 steps:
                   - name: "Fraud Check"
-                    kind: "await"
+                    service: "com.example.CreateFraudCheck"
                     inputTypeName: "com.example.FraudCheckRequest"
                     outputTypeName: "com.example.FraudCheckDecision"
                     await:
+                      operationOutput: { type: "FraudCheckPending" }
+                      timeout: "PT10M"
                       correlation:
                         strategy: "  "
                       transport:
@@ -648,10 +655,12 @@ class PipelineYamlConfigLoaderTest {
                 platform: "COMPUTE"
                 steps:
                   - name: "Fraud Check"
-                    kind: "await"
+                    service: "com.example.CreateFraudCheck"
                     inputTypeName: "com.example.FraudCheckRequest"
                     outputTypeName: "com.example.FraudCheckDecision"
                     await:
+                      operationOutput: { type: "FraudCheckPending" }
+                      timeout: "PT10M"
                       transport:
                         type: "webhook"
                 """)));
