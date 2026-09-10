@@ -507,14 +507,24 @@ class PipelineCompositionProductizationTest {
               input: A
               output: A
               steps:
-                - { name: Wait, kind: await, cardinality: ONE_TO_ONE, input: A, output: A, java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A } }
+                - name: Wait
+                  service: com.example.diagnostic.WaitService
+                  cardinality: ONE_TO_ONE
+                  input: A
+                  output: A
+                  java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A }
+                  await:
+                    operationOutput: { type: A, java: com.example.diagnostic.A }
+                    timeout: PT1M
+                    correlation: { strategy: interactionId }
+                    transport: { type: interaction-api }
             """, """
             - { name: Call inner, pipeline: inner, cardinality: ONE_TO_ONE, input: A, output: A, java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A } }
             """), diagnosticSources()).compilation();
 
         assertThat(compilation).failed();
         assertThat(compilation).hadErrorContaining(
-            "Pipeline definition 'inner' contains kind: await; nested Await is not supported in this slice");
+            "nested pipeline definitions do not support await: yet");
     }
 
     private Object instantiateGeneratedInvocation(

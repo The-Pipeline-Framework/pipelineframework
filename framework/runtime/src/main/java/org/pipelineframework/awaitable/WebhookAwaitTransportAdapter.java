@@ -50,7 +50,7 @@ public class WebhookAwaitTransportAdapter implements AwaitTransportAdapter<Objec
     @Override
     public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
         Objects.requireNonNull(request, "request must not be null");
-        AwaitStepDescriptor descriptor = request.descriptor();
+        AwaitCompletionDescriptor descriptor = request.descriptor();
         AwaitInteractionRecord interaction = request.interaction();
         String url = requiredUrl(descriptor.transportConfig());
         String method = stringValue(descriptor.transportConfig().get("method"), "POST").toUpperCase(Locale.ROOT);
@@ -91,7 +91,7 @@ public class WebhookAwaitTransportAdapter implements AwaitTransportAdapter<Objec
     }
 
     private Map<String, Object> envelope(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         AwaitInteractionRecord interaction,
         Object payload,
         String resumeToken) {

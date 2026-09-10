@@ -39,12 +39,6 @@ public enum StepKind {
     REMOTE,
 
     /**
-     * An await step that dispatches external work, stores durable interaction state,
-     * and resumes from a correlated completion.
-     */
-    AWAIT,
-
-    /**
      * A command step that executes an idempotent external effect through a managed connector.
      */
     COMMAND,

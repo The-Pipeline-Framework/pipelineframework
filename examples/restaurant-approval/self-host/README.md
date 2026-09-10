@@ -48,7 +48,7 @@ The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the fail
 | --- | --- |
 | `TPF_TENANT_ID` | `restaurant-demo` |
 | `TPF_PIPELINE_ID` | `org.pipelineframework.restaurantapproval` |
-| `TPF_AWAIT_STEP_ID` | `ProcessAwaitRestaurantDecisionService` |
+| `TPF_AWAIT_STEP_ID` | `ProcessCreatePendingApprovalService` |
 | `TPF_COORDINATOR_PORT` | `8081` |
 | `TPF_WORKER_PORT` | `8181` |
 | `TPF_CONTROL_PLANE_TOKEN` | `restaurant-control-plane-admin-token` |
@@ -95,7 +95,7 @@ python3 examples/restaurant-approval/self-host/demo-client.py run-flows \
   --base-url http://localhost:8081 \
   --tenant-id restaurant-demo \
   --pipeline-id org.pipelineframework.restaurantapproval \
-  --await-step-id ProcessAwaitRestaurantDecisionService \
+  --await-step-id ProcessCreatePendingApprovalService \
   --control-plane-token restaurant-control-plane-admin-token
 ```
 
@@ -115,7 +115,7 @@ List pending await interactions:
 python3 examples/restaurant-approval/self-host/demo-client.py pending \
   --base-url http://localhost:8081 \
   --tenant-id restaurant-demo \
-  --await-step-id ProcessAwaitRestaurantDecisionService \
+  --await-step-id ProcessCreatePendingApprovalService \
   --control-plane-token restaurant-control-plane-admin-token
 ```
 
@@ -136,7 +136,7 @@ python3 examples/restaurant-approval/self-host/demo-client.py run-incident \
   --base-url http://localhost:8081 \
   --tenant-id restaurant-demo \
   --pipeline-id org.pipelineframework.restaurantapproval \
-  --await-step-id ProcessAwaitRestaurantDecisionService \
+  --await-step-id ProcessCreatePendingApprovalService \
   --control-plane-token restaurant-control-plane-admin-token \
   --log-file examples/restaurant-approval/monolith-svc/target/tpf-self-host/logs/coordinator.log
 ```
@@ -149,7 +149,7 @@ For a normal await flow:
 
 1. Submit through `/tpf/control-plane/tenants/{tenantId}/executions`.
 2. Poll `/tpf/control-plane/tenants/{tenantId}/executions/{executionId}` until `WAITING_EXTERNAL`.
-3. Query `/tpf/control-plane/tenants/{tenantId}/interactions/pending` with the await step id.
+3. Query `/tpf/control-plane/tenants/{tenantId}/interactions/pending` with the decorated operation's step id.
 4. Complete the interaction through `/tpf/control-plane/tenants/{tenantId}/interactions/complete`.
 5. Poll status until `SUCCEEDED`, then read `/result`.
 

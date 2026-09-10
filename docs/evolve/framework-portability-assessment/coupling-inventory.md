@@ -7,7 +7,7 @@ The scan counted source matches in main framework and plugin source, excluding `
 | Quarkus-specific runtime APIs | 134 matches in 42 runtime files | `PipelineStepResolver`, config classes, gRPC customizers, context filters, `ItemRejectRouter` | Medium |
 | Quarkus deployment APIs | 198 matches in 37 deployment files | `OperatorInvokerBuildSteps`, `StepClientRegistrar`, `StepServerRegistrar`, `PipelineFrameworkProcessor` | High but isolated |
 | CDI/Jakarta DI and lifecycle | 343 matches in 72 runtime files | `PipelineExecutionService`, `QueueAsyncCoordinator`, `AwaitCoordinator`, `CheckpointPublicationService`, `PipelineRunner` | Medium |
-| Mutiny | 1,347 matches in 111 runtime files | `PipelineStepExecutor`, `QueueAsyncCoordinator`, `AwaitStepSupport`, `PipelineExecutionService`, `AwaitCoordinator` | High if removed, medium if adapted |
+| Mutiny | 1,347 matches in 111 runtime files | `PipelineStepExecutor`, `QueueAsyncCoordinator`, `AwaitCompletionSupport`, `PipelineExecutionService`, `AwaitCoordinator` | High if removed, medium if adapted |
 | Panache/Hibernate Reactive | 0 matches in framework runtime, 8 matches in 2 persistence plugin files | `ReactivePanachePersistenceProvider`, `PersistenceService` | Low to medium |
 | Vert.x | 33 matches in 8 runtime files, 27 matches in 3 persistence plugin files, 22 matches in 4 deployment files | context holders, persistence context safety, renderer annotations | Medium |
 

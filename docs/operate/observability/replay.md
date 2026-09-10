@@ -103,14 +103,14 @@ retain execution and item identity that must not become a metric label.
 
 Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
-Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the explicit terminal merge, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, merge, and publish progress should overlap. The old folder, single `Process Payment Status`, and output-file services should only appear when the legacy file-step config is being replayed.
+Connector-first pipelines add framework-owned participants that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Process Csv Payments Input` as the semantic operation with a deferred-completion overlay, the Kafka broker and provider as external participants, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the explicit terminal merge, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, merge, and publish progress should overlap. The old folder, standalone Await, single `Process Payment Status`, and output-file services should only appear when a historical release dataset is being replayed.
 
 Telemetry impact for live itemized await:
 
 1. await interaction and unit events still describe durable admission and recovery state;
 2. step spans and object-publish events show whether completed items are flowing downstream;
 3. `await_resume_released` mainly describes durable fallback release, not every live item handoff;
-4. a replay that shows the await step waiting for every item before status/publish starts is showing batch-like behavior, not the intended live queue-async path.
+4. a replay that shows the decorated operation waiting for every item before status/publish starts is showing batch-like behaviour, not the intended live queue-async path.
 
 Connector replay events include:
 
@@ -144,8 +144,8 @@ the proof:
 | Input records | `1000` |
 | Execution max concurrency | `250` |
 | Provider reject probability | `0.08` |
-| Replay duration | `17.047s` |
-| Effective replay throughput | `58.7 records/s` |
+| Replay duration | `14.732s` |
+| Effective replay throughput | `67.9 records/s` |
 | Replay events | `17006` |
 | Approved / unapproved branch items | `907` / `93` |
 
@@ -155,16 +155,17 @@ Key timing checks:
 
 | Signal | Time from start |
 | --- | --- |
-| First status event | `1.635s` |
-| Last input parser event | `9.962s` |
-| Last live admission release | `15.149s` |
-| Object Publish | `17.047s` |
+| First status event | `1.642s` |
+| Last input parser event | `11.901s` |
+| Last live admission release | `14.019s` |
+| Object Publish | `14.732s` |
 
 The important operational signal is the overlap: status processing starts before the parser has
-finished. The capture contains live admission acquire/release and interaction-dispatch events,
-not durable await-unit completion or resume events. That means the parser is being paced by
-reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the
-terminal boundary after status output exists and before success is committed.
+finished. The capture contains live admission acquire/release and interaction-dispatch events as
+an overlay on `ProcessCsvPaymentsInput`, not a standalone Await node or durable await-unit
+completion/resume events. That means the parser is being paced by reactive demand and the
+deferred-completion in-flight window, not by a forced sleep. Object Publish runs at the terminal
+boundary after status output exists and before success is committed.
 
 The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture. Do not extrapolate the replay timing into a large-workload SLA.
 

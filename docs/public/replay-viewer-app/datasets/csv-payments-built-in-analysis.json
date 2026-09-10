@@ -9,7 +9,7 @@
     "outputRecords": 1000,
     "databaseRecords": 1000,
     "replayEventCount": 17006,
-    "replayDurationMs": 17047,
+    "replayDurationMs": 14732,
     "replayEventCounts": {
       "object_ingest_listed": 1,
       "object_ingest_submitted": 1,
@@ -27,8 +27,9 @@
       "approved": 907,
       "unapproved": 93
     },
-    "liveAwait": {
+    "deferredCompletion": {
       "firstStatusBeforeSourceExhaustion": true,
+      "legacyAwaitNodeEvents": 0,
       "awaitUnitDispatchCompleteEvents": 0,
       "awaitExecutionWaitingEvents": 0,
       "awaitUnitItemCompletedEvents": 0,
@@ -36,15 +37,15 @@
       "awaitResumeReleasedEvents": 0
     },
     "timing": {
-      "firstInputSeconds": 0.355,
-      "lastInputSeconds": 9.962,
-      "firstAwaitAdmissionSeconds": 0.994,
-      "firstAwaitDispatchSeconds": 1.487,
-      "firstStatusSeconds": 1.635,
-      "lastStatusSeconds": 15.151,
-      "lastAwaitAdmissionReleaseSeconds": 15.149,
-      "firstPublishSeconds": 17.047,
-      "lastPublishSeconds": 17.047
+      "firstInputSeconds": 0.146,
+      "lastInputSeconds": 11.901,
+      "firstCompletionAdmissionSeconds": 1.168,
+      "firstCompletionDispatchSeconds": 1.656,
+      "firstStatusSeconds": 1.642,
+      "lastStatusSeconds": 14.017,
+      "lastCompletionAdmissionReleaseSeconds": 14.019,
+      "firstPublishSeconds": 14.732,
+      "lastPublishSeconds": 14.732
     }
   }
 }

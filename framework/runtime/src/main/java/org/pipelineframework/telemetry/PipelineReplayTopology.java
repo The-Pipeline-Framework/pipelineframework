@@ -106,8 +106,9 @@ public record PipelineReplayTopology(
      * @param sideEffect whether this step is a synthetic side-effect branch
      * @param parentStep logical parent step when this step branches from a base step
      * @param pluginKind canonical plugin kind when this is a plugin node
-     * @param renderRole viewer-oriented role classification such as primary, await, broker, external-provider, store, or plugin
+     * @param renderRole viewer-oriented role classification such as primary, broker, external-provider, store, or plugin
      * @param actorKind optional actor subtype for richer rendering, for example kafka or database
+     * @param deferredCompletion whether the semantic operation is decorated with durable deferred completion
      */
     public record Step(
         String runtimeStepClass,
@@ -119,8 +120,25 @@ public record PipelineReplayTopology(
         String parentStep,
         String pluginKind,
         String renderRole,
-        String actorKind
+        String actorKind,
+        boolean deferredCompletion
     ) {
+        public Step(
+            String runtimeStepClass,
+            String step,
+            String service,
+            String cardinality,
+            int index,
+            boolean sideEffect,
+            String parentStep,
+            String pluginKind,
+            String renderRole,
+            String actorKind
+        ) {
+            this(runtimeStepClass, step, service, cardinality, index, sideEffect, parentStep, pluginKind,
+                renderRole, actorKind, false);
+        }
+
         public Step(
             String runtimeStepClass,
             String step,
@@ -131,7 +149,8 @@ public record PipelineReplayTopology(
             String parentStep,
             String pluginKind
         ) {
-            this(runtimeStepClass, step, service, cardinality, index, sideEffect, parentStep, pluginKind, null, null);
+            this(runtimeStepClass, step, service, cardinality, index, sideEffect, parentStep, pluginKind,
+                null, null, false);
         }
     }
 

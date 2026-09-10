@@ -6,24 +6,28 @@
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
-
 package org.pipelineframework.processor.awaitable;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import com.squareup.javapoet.TypeName;
 
-/** Compiler-resolved Java boundary types for a generated Await step. */
-public record AwaitStepTypeBinding(TypeName inputType, TypeName outputType) {
+/** Compiler-resolved Java boundary for an authored operation decorated with deferred completion. */
+public record AwaitStepTypeBinding(
+    TypeName operationOutputType,
+    TypeName finalOutputType,
+    String finalOutputCanonicalType,
+    Optional<String> completionPayloadCanonicalType,
+    Optional<TypeName> completionPayloadType
+) {
     public AwaitStepTypeBinding {
-        Objects.requireNonNull(inputType, "inputType");
-        Objects.requireNonNull(outputType, "outputType");
+        Objects.requireNonNull(operationOutputType, "operationOutputType");
+        Objects.requireNonNull(finalOutputType, "finalOutputType");
+        Objects.requireNonNull(finalOutputCanonicalType, "finalOutputCanonicalType");
+        completionPayloadCanonicalType = completionPayloadCanonicalType == null
+            ? Optional.empty() : completionPayloadCanonicalType;
+        completionPayloadType = completionPayloadType == null ? Optional.empty() : completionPayloadType;
     }
 }

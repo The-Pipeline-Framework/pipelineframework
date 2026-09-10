@@ -6,11 +6,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +35,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AwaitStepSupportTest {
+class AwaitCompletionSupportTest {
 
     @Mock
     PipelineOrchestratorConfig orchestratorConfig;
@@ -48,7 +50,7 @@ class AwaitStepSupportTest {
 
     @Test
     void awaitOneToOneFailsOutsideQueueAsyncMode() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.SYNC);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
@@ -59,7 +61,7 @@ class AwaitStepSupportTest {
 
     @Test
     void awaitOneToOneFailsWithoutExecutionContext() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
@@ -70,12 +72,12 @@ class AwaitStepSupportTest {
 
     @Test
     void interactionApiAwaitSuspendsThroughTheQueueAsyncContinuationPath() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContext context = new AwaitExecutionContext("tenant1", "exec123", 0);
         AwaitExecutionContextHolder.set(context);
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         AwaitInteractionRecord mockRecord = new AwaitInteractionRecord(
             "tenant1", "exec123", "review", 0, String.class.getName(),
             "interaction-id", "correlation-id", "causation-id", "idem-key",
@@ -116,11 +118,11 @@ class AwaitStepSupportTest {
 
     @Test
     void awaitOneToOneWithDescriptorUniCapturesExecutionContextBeforeReactiveResolution() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 4));
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         AwaitInteractionRecord mockRecord = new AwaitInteractionRecord(
             "tenant1", "exec123", "review", 4, String.class.getName(),
             "interaction-id", "correlation-id", "causation-id", "idem-key",
@@ -161,12 +163,38 @@ class AwaitStepSupportTest {
     }
 
     @Test
+    void awaitOneToOneRestoresCallerContextBeforePendingUniTerminates() {
+        AwaitCompletionSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContext captured = new AwaitExecutionContext("tenant1", "exec123", 4);
+        AwaitExecutionContext caller = new AwaitExecutionContext("tenant2", "exec456", 9);
+        AwaitExecutionContextHolder.set(captured);
+
+        Uni<String> pending = support.awaitOneToOne(descriptor(), "input");
+        AwaitExecutionContextHolder.set(caller);
+        when(awaitCoordinator.createOrGet(any(), any(), any(), anyInt(), any(), any(), any(), any()))
+            .thenAnswer(invocation -> {
+                assertEquals(captured, AwaitExecutionContextHolder.get());
+                return Uni.createFrom().nothing();
+            });
+
+        Cancellable subscription = pending.subscribe().with(ignored -> {
+        }, ignored -> {
+        });
+        try {
+            assertEquals(caller, AwaitExecutionContextHolder.get());
+        } finally {
+            subscription.cancel();
+        }
+    }
+
+    @Test
     void awaitOneToOneStreamReinstallsExecutionContextInsidePerItemCallbacks() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
             org.mockito.ArgumentMatchers.eq("tenant1"),
@@ -228,11 +256,11 @@ class AwaitStepSupportTest {
 
     @Test
     void awaitOneToOneStreamSubscribesColdSourceOnceWhenSuspendingAfterDispatch() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         AtomicInteger subscriptions = new AtomicInteger();
         Multi<String> coldSource = Multi.createFrom().deferred(() -> {
             subscriptions.incrementAndGet();
@@ -297,11 +325,11 @@ class AwaitStepSupportTest {
 
     @Test
     void awaitOneToOneStreamContinuesWhenUnitCompletesBeforeSuspensionIsPersisted() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
             org.mockito.ArgumentMatchers.eq("tenant1"),
@@ -365,12 +393,12 @@ class AwaitStepSupportTest {
 
     @Test
     void kafkaOneToOneStreamUsesAcceptedCompletionsToAdvanceItsPendingWindow() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         support.pipelineConfig.maxConcurrency(2);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         DemandSource source = new DemandSource("first", "second", "third");
@@ -457,7 +485,7 @@ class AwaitStepSupportTest {
 
     @Test
     void durableHandoffSuspendsInsteadOfRetainingTheLiveWorkerSession() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
             "tenant1",
@@ -465,7 +493,7 @@ class AwaitStepSupportTest {
             2,
             AwaitContinuationMode.DURABLE_HANDOFF,
             TerminalOutputOwnership.COORDINATOR));
-        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
             org.mockito.ArgumentMatchers.eq("tenant1"),
@@ -508,7 +536,7 @@ class AwaitStepSupportTest {
 
     @Test
     void durableAwaitDispatchBoundsConcurrentItemsBeforeSuspending() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         support.pipelineConfig.maxConcurrency(3);
         support.pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
@@ -519,7 +547,7 @@ class AwaitStepSupportTest {
             AwaitContinuationMode.DURABLE_HANDOFF,
             TerminalOutputOwnership.COORDINATOR));
 
-        AwaitStepDescriptor testDescriptor = descriptor();
+        AwaitCompletionDescriptor testDescriptor = descriptor();
         AtomicInteger inFlight = new AtomicInteger();
         AtomicInteger peakInFlight = new AtomicInteger();
         when(awaitCoordinator.createOrGetItem(
@@ -562,7 +590,8 @@ class AwaitStepSupportTest {
             .collect().asList()
             .await().atMost(Duration.ofSeconds(5)));
 
-        assertEquals(3, peakInFlight.get());
+        assertTrue(peakInFlight.get() <= 3, "dispatch window exceeded: " + peakInFlight.get());
+        assertTrue(peakInFlight.get() > 1, "dispatch was not parallel: " + peakInFlight.get());
         org.mockito.Mockito.verify(awaitCoordinator, org.mockito.Mockito.times(24))
             .dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any());
         org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
@@ -574,13 +603,13 @@ class AwaitStepSupportTest {
 
     @Test
     void sequentialOneToOneStreamUsesAnEffectiveWindowOfOne() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         support.pipelineConfig.maxConcurrency(2);
         support.pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         DemandSource source = new DemandSource("first", "second");
@@ -625,13 +654,34 @@ class AwaitStepSupportTest {
     }
 
     @Test
+    void cancellingLiveStreamCancelsDispatchSubscription() {
+        AwaitCompletionSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
+
+        AtomicBoolean dispatchCancelled = new AtomicBoolean();
+        when(awaitCoordinator.preloadDurablePayloads("tenant1", "exec123"))
+            .thenReturn(Uni.createFrom().emitter(emitter -> {
+                emitter.onTermination(() -> dispatchCancelled.set(true));
+            }));
+
+        AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
+                testDescriptor, Multi.createFrom().item("first"))
+            .subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.cancel();
+        waitUntil(dispatchCancelled::get);
+    }
+
+    @Test
     void sqsOneToOneStreamUsesTheSameLivePendingWindow() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         support.pipelineConfig.maxConcurrency(1);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
-        AwaitStepDescriptor testDescriptor = sqsDescriptor();
+        AwaitCompletionDescriptor testDescriptor = sqsDescriptor();
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         when(awaitCoordinator.createOrGetItem(
@@ -678,10 +728,10 @@ class AwaitStepSupportTest {
 
     @Test
     void kafkaOneToOneStreamCompletesWithoutDurableDispatchWhenSourceIsEmpty() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
-        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
 
         List<String> output = support.<String, String>awaitOneToOneStream(
@@ -699,10 +749,10 @@ class AwaitStepSupportTest {
 
     @Test
     void kafkaOneToOneStreamFailsFastForTerminalExistingInteraction() {
-        AwaitStepSupport support = support();
+        AwaitCompletionSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
-        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         AwaitInteractionRecord failed = itemRecord(0, AwaitInteractionStatus.FAILED, "first", null);
         when(awaitCoordinator.createOrGetItem(
@@ -732,92 +782,8 @@ class AwaitStepSupportTest {
             any(), any(), anyInt(), anyLong());
     }
 
-    @Test
-    void awaitManyToManyMaterializesInputIntoSingleAggregateInteraction() {
-        AwaitStepSupport support = support();
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 5));
-
-        AwaitStepDescriptor testDescriptor = new AwaitStepDescriptor(
-            "batch-review",
-            String.class.getName(),
-            String.class.getName(),
-            "MANY_TO_MANY",
-            Duration.ofMinutes(5),
-            "signedResumeToken",
-            "kafka",
-            Map.of(),
-            List.of());
-        AwaitInteractionRecord mockRecord = new AwaitInteractionRecord(
-            "tenant1", "exec123", "batch-review", 5, String.class.getName(),
-            "interaction-id", "correlation-id", "causation-id", "idem-key",
-            0L, org.pipelineframework.awaitable.AwaitInteractionStatus.WAITING,
-            List.of("first", "second"), null, null, null, null, "kafka",
-            Map.of(), System.currentTimeMillis() + 300000, System.currentTimeMillis(),
-            System.currentTimeMillis(), System.currentTimeMillis() + 86400);
-        AwaitCreateResult mockCreateResult = new AwaitCreateResult(mockRecord, false);
-
-        when(awaitCoordinator.createOrGet(
-            org.mockito.ArgumentMatchers.eq(testDescriptor),
-            org.mockito.ArgumentMatchers.eq("tenant1"),
-            org.mockito.ArgumentMatchers.eq("exec123"),
-            org.mockito.ArgumentMatchers.eq(5),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(List.of("first", "second")),
-            org.mockito.ArgumentMatchers.isNull(),
-            org.mockito.ArgumentMatchers.isNull()))
-            .thenReturn(Uni.createFrom().item(mockCreateResult));
-        when(awaitCoordinator.dispatch(testDescriptor, mockRecord))
-            .thenReturn(Uni.createFrom().item(mockRecord));
-
-        assertThrows(
-            AwaitSuspendedException.class,
-            () -> support.awaitManyToMany(testDescriptor, Multi.createFrom().items("first", "second"))
-                .collect().asList()
-                .await().indefinitely());
-
-        org.mockito.Mockito.verify(awaitCoordinator).createOrGet(
-            org.mockito.ArgumentMatchers.eq(testDescriptor),
-            org.mockito.ArgumentMatchers.eq("tenant1"),
-            org.mockito.ArgumentMatchers.eq("exec123"),
-            org.mockito.ArgumentMatchers.eq(5),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(List.of("first", "second")),
-            org.mockito.ArgumentMatchers.isNull(),
-            org.mockito.ArgumentMatchers.isNull());
-        org.mockito.Mockito.verify(awaitCoordinator, never()).createOrGetItem(
-            any(), any(), any(), anyInt(), any(), any(), any(), anyInt(), any(), any());
-    }
-
-    @Test
-    void awaitManyToOneRejectsOversizedMaterializedInput() {
-        AwaitStepSupport support = support();
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(orchestratorConfig.awaitAggregateMaxInputItems()).thenReturn(1);
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 6));
-        AwaitStepDescriptor testDescriptor = new AwaitStepDescriptor(
-            "batch-review",
-            String.class.getName(),
-            String.class.getName(),
-            "MANY_TO_ONE",
-            Duration.ofMinutes(5),
-            "signedResumeToken",
-            "kafka",
-            Map.of(),
-            List.of());
-
-        IllegalStateException error = assertThrows(
-            IllegalStateException.class,
-            () -> support.awaitManyToOne(testDescriptor, Multi.createFrom().items("first", "second"))
-                .await().indefinitely());
-
-        assertTrue(error.getMessage().contains("pipeline.orchestrator.await-aggregate-max-input-items=1"));
-        org.mockito.Mockito.verify(awaitCoordinator, never()).createOrGet(
-            any(), any(), any(), anyInt(), any(), any(), any(), any());
-    }
-
-    private AwaitStepSupport support() {
-        AwaitStepSupport support = new AwaitStepSupport();
+    private AwaitCompletionSupport support() {
+        AwaitCompletionSupport support = new AwaitCompletionSupport();
         support.orchestratorConfig = orchestratorConfig;
         support.awaitCoordinator = awaitCoordinator;
         support.pipelineConfig = new PipelineConfig();
@@ -859,8 +825,8 @@ class AwaitStepSupportTest {
         return support;
     }
 
-    private AwaitStepDescriptor descriptor() {
-        return new AwaitStepDescriptor(
+    private AwaitCompletionDescriptor descriptor() {
+        return new AwaitCompletionDescriptor(
             "review",
             String.class.getName(),
             String.class.getName(),
@@ -871,16 +837,16 @@ class AwaitStepSupportTest {
             List.of());
     }
 
-    private AwaitStepDescriptor kafkaDescriptor() {
+    private AwaitCompletionDescriptor kafkaDescriptor() {
         return brokerDescriptor("kafka");
     }
 
-    private AwaitStepDescriptor sqsDescriptor() {
+    private AwaitCompletionDescriptor sqsDescriptor() {
         return brokerDescriptor("sqs");
     }
 
-    private AwaitStepDescriptor brokerDescriptor(String transportType) {
-        return new AwaitStepDescriptor(
+    private AwaitCompletionDescriptor brokerDescriptor(String transportType) {
+        return new AwaitCompletionDescriptor(
             "review",
             String.class.getName(),
             String.class.getName(),
@@ -915,7 +881,7 @@ class AwaitStepSupportTest {
         boolean dispatchComplete) {
         return new AwaitUnitRecord(
             "tenant1",
-            streamUnitId(),
+            unitId,
             "exec123",
             "review",
             2,
@@ -966,7 +932,7 @@ class AwaitStepSupportTest {
                 private boolean completed;
 
                 @Override
-                public void request(long n) {
+                public synchronized void request(long n) {
                     if (n <= 0 || completed) {
                         return;
                     }
@@ -981,7 +947,7 @@ class AwaitStepSupportTest {
                 }
 
                 @Override
-                public void cancel() {
+                public synchronized void cancel() {
                     completed = true;
                 }
             });

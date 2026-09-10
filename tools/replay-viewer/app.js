@@ -307,6 +307,7 @@ function replayLayoutStorageKey(document) {
       step: step.step,
       role: step.renderRole,
       actorKind: step.actorKind,
+      deferredCompletion: step.deferredCompletion === true,
       parentStep: step.parentStep,
       sideEffect: step.sideEffect === true,
       index: step.index
@@ -429,7 +430,7 @@ function defaultAwaitStepNameForTopology(topology) {
   if (!topology?.steps) {
     return null;
   }
-  return topology.steps.find((step) => resolveDisplayRole(step) === "await")?.step ?? null;
+  return topology.steps.find(isDeferredCompletionStep)?.step ?? null;
 }
 
 function normalizeTopologyForDisplay(topology, events = []) {
@@ -451,7 +452,7 @@ function normalizeTopologyForDisplay(topology, events = []) {
     resolveDisplayRole(step) === "primary" && !step.sideEffect && directEventSteps.has(step.step)
   );
   const visibleAwaitSteps = topology.steps.filter((step) =>
-    resolveDisplayRole(step) === "await" && !isInternalAwaitClientStep(step.step)
+    isDeferredCompletionStep(step) && !isInternalAwaitClientStep(step.step)
   );
   const defaultAwaitStep = visibleAwaitSteps[0]?.step ?? null;
   const hasConcretePersistenceNodes = topology.steps.some((step) => resolveDisplayRole(step) === "persistence-plugin");
@@ -644,7 +645,7 @@ function firstDisplayedStepByRole(renderRole) {
 
 function awaitDisplayStepForEvent(event) {
   const eventStep = resolveStepDefinition(event?.step);
-  if (eventStep?.renderRole === "await" && nodePositions.has(event.step)) {
+  if (isDeferredCompletionStep(eventStep) && nodePositions.has(event.step)) {
     return event.step;
   }
   return fallbackAwaitDisplayStep || firstDisplayedStepByRole("await") || event?.step || event?.from || event?.to;
@@ -1080,6 +1081,10 @@ function resolveDisplayRole(step) {
   return step.sideEffect ? "plugin" : "primary";
 }
 
+function isDeferredCompletionStep(step) {
+  return step?.deferredCompletion === true || resolveDisplayRole(step) === "await";
+}
+
 function resolveDisplayIconKind(step) {
   const role = resolveDisplayRole(step);
   if (step?.pluginKind) {
@@ -1296,6 +1301,13 @@ function disposeThreeObject(object) {
   if (!object) {
     return;
   }
+  object.traverse?.((child) => {
+    if (child === object) {
+      return;
+    }
+    child.geometry?.dispose?.();
+    disposeMaterial(child.material);
+  });
   object.geometry?.dispose?.();
   disposeMaterial(object.material);
 }
@@ -2258,6 +2270,14 @@ function registerNode(step, position) {
     metalness: 0.15
   });
   const mesh = new THREE.Mesh(geometry, material);
+  if (!isSideEffect && step.deferredCompletion === true) {
+    const completionHalo = new THREE.Mesh(
+      new THREE.SphereGeometry(BASE_NODE_RADIUS * 1.16, 18, 18),
+      new THREE.MeshBasicMaterial({ color: 0x9edcff, wireframe: true, transparent: true, opacity: 0.42 })
+    );
+    completionHalo.userData.deferredCompletionOverlay = true;
+    mesh.add(completionHalo);
+  }
   mesh.position.copy(position);
   mesh.userData.step = step;
   mesh.userData.phase = step.index * 0.73 + (isSideEffect ? 0.4 : 0);
@@ -2864,7 +2884,7 @@ function normalizeStepLabel(stepName) {
 function nodeColorForStep(step) {
   const role = resolveDisplayRole(step);
   if (!step?.sideEffect) {
-    if (role === "await") {
+    if (isDeferredCompletionStep(step)) {
       return 0x78c8ff;
     }
     if (role === "command") {
@@ -3236,7 +3256,7 @@ function displayStateForStep(stepName) {
       unknown: false
     };
   }
-  if (step.renderRole === "await" && replayHasAwaitLifecycleEvents) {
+  if (isDeferredCompletionStep(step) && replayHasAwaitLifecycleEvents) {
     return {
       state: directState,
       unknown: !directState.known

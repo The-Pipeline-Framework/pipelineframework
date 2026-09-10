@@ -1,5 +1,7 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.Map;
+
 /**
  * Ordered generated-pipeline step metadata.
  *
@@ -9,9 +11,9 @@ package org.pipelineframework.orchestrator;
  * @param cardinality authored cardinality
  * @param inputTypeId input domain type id
  * @param outputTypeId output domain type id
- * @param runtimeClass runtime service or await client class, when resolvable
+ * @param runtimeClass runtime service or completion-decorating client class, when resolvable
  * @param clientClass generated client step class, when resolvable
- * @param awaitTransport await transport type, for await steps
+ * @param deferredCompletion immutable deferred-completion metadata, or an empty map
  */
 public record PipelineBundleStepDescriptor(
     int index,
@@ -22,6 +24,9 @@ public record PipelineBundleStepDescriptor(
     String outputTypeId,
     String runtimeClass,
     String clientClass,
-    String awaitTransport
+    Map<String, Object> deferredCompletion
 ) {
+    public PipelineBundleStepDescriptor {
+        deferredCompletion = deferredCompletion == null ? Map.of() : Map.copyOf(deferredCompletion);
+    }
 }

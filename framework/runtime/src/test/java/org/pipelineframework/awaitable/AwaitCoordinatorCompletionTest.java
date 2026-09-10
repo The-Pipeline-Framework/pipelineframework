@@ -101,7 +101,7 @@ class AwaitCoordinatorCompletionTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AtomicReference<CanonicalRequest> adapterInput = new AtomicReference<>();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "CanonicalRequest",
             CanonicalRequest.class.getName(),
             String.class.getName(),
@@ -161,7 +161,7 @@ class AwaitCoordinatorCompletionTest {
             .setName("checkout.proto")
             .setPackage("org.pipelineframework.checkout")
             .build();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "ProtoFraudCheck",
             DescriptorProtos.FileDescriptorProto.class.getName(),
             "com.example.Decision",
@@ -193,7 +193,7 @@ class AwaitCoordinatorCompletionTest {
             .setName("checkout.proto")
             .setPackage("org.pipelineframework.checkout")
             .build();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "ProtoFraudCheck",
             DescriptorProtos.FileDescriptorProto.class.getName(),
             DescriptorProtos.FileDescriptorProto.class.getName(),
@@ -237,7 +237,7 @@ class AwaitCoordinatorCompletionTest {
     void createOrGetDerivesIdentityFromCanonicalRequestAndPersistsCanonicalRequest() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "V3PaymentProvider",
             Map.class.getName(),
             Map.class.getName(),
@@ -536,7 +536,7 @@ class AwaitCoordinatorCompletionTest {
     void failsDeterministicallyWhenDurableInteractionStepCannotResolveADescriptor() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        coordinator.descriptorFactory = new AwaitStepDescriptorFactory();
+        coordinator.descriptorFactory = new AwaitCompletionDescriptorRegistry();
         AwaitInteractionRecord record = store.createOrGet(createCommand(20_000L)).await().indefinitely().record();
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> coordinator.complete(
@@ -558,7 +558,7 @@ class AwaitCoordinatorCompletionTest {
     void loadResumePayloadCoercesStoredSnapshotToDeclaredOutputType() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "DescriptorApproval",
             DescriptorProtos.FileDescriptorProto.class.getName(),
             DescriptorProtos.FileDescriptorProto.class.getName(),
@@ -597,7 +597,7 @@ class AwaitCoordinatorCompletionTest {
     void resumePayloadUsesTransportTypeBeforeApplyingCanonicalAdapter() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "CanonicalDecision",
             Map.class.getName(),
             CanonicalDecision.class.getName(),
@@ -638,7 +638,7 @@ class AwaitCoordinatorCompletionTest {
     void requestAwareCompletionProjectsCanonicalRequestAndActorPayloadBeforePersistence() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "ConfirmedSelection",
             PendingSelection.class.getName(),
             ConfirmedSelection.class.getName(),
@@ -694,9 +694,9 @@ class AwaitCoordinatorCompletionTest {
     void createUsesThePreviouslyRegisteredProjectorForRepeatedStepIds() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor original = requestAwareDescriptor(
+        AwaitCompletionDescriptor original = requestAwareDescriptor(
             "RepeatedSelection", "selection-projector-v1", new OriginalSelectionProjector());
-        AwaitStepDescriptor replacement = requestAwareDescriptor(
+        AwaitCompletionDescriptor replacement = requestAwareDescriptor(
             "RepeatedSelection", "selection-projector-v2", new ChangedSelectionProjector());
 
         coordinator.createOrGet(
@@ -733,9 +733,9 @@ class AwaitCoordinatorCompletionTest {
                 return Uni.createFrom().item(new AwaitDispatchResult(Map.of()));
             }
         }));
-        AwaitStepDescriptor original = mappedRequestAwareDescriptor(
+        AwaitCompletionDescriptor original = mappedRequestAwareDescriptor(
             "MappedSelection", "selection-projector-v1", "interaction-api", "original");
-        AwaitStepDescriptor replacement = mappedRequestAwareDescriptor(
+        AwaitCompletionDescriptor replacement = mappedRequestAwareDescriptor(
             "MappedSelection", "selection-projector-v2", "unregistered-transport", "replacement");
 
         AwaitCreateResult regular = coordinator.createOrGet(
@@ -757,7 +757,7 @@ class AwaitCoordinatorCompletionTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         java.util.concurrent.atomic.AtomicInteger projections = new java.util.concurrent.atomic.AtomicInteger();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "PortableSelection", PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
             "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
             List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
@@ -803,7 +803,7 @@ class AwaitCoordinatorCompletionTest {
     void dispatchMetadataCannotOverwritePinnedCompletionProjector() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = requestAwareDescriptor(new OriginalSelectionProjector());
+        AwaitCompletionDescriptor descriptor = requestAwareDescriptor(new OriginalSelectionProjector());
         coordinator.descriptorFactory.register(descriptor);
         AwaitCreateResult created = coordinator.createOrGet(
             descriptor, "tenant-1", "exec-1", 1, "cause-1",
@@ -834,7 +834,7 @@ class AwaitCoordinatorCompletionTest {
     void normalCompletionIgnoresReservedProjectorMetadataFromTraceAndAdapter() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = descriptor("NormalSelection");
+        AwaitCompletionDescriptor descriptor = descriptor("NormalSelection");
         coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
             @Override
             public String type() {
@@ -873,7 +873,7 @@ class AwaitCoordinatorCompletionTest {
     void requestAwareProjectionFailureLeavesInteractionWaiting() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "RejectedSelection",
             PendingSelection.class.getName(),
             ConfirmedSelection.class.getName(),
@@ -925,7 +925,7 @@ class AwaitCoordinatorCompletionTest {
     void requestAwareCompletionRejectsAChangedProjectorAfterRestart() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator firstRuntime = coordinator(store);
-        AwaitStepDescriptor original = requestAwareDescriptor(new OriginalSelectionProjector());
+        AwaitCompletionDescriptor original = requestAwareDescriptor(new OriginalSelectionProjector());
         firstRuntime.descriptorFactory.register(original);
         AwaitCreateResult created = firstRuntime.createOrGet(
             original, "tenant-1", "exec-1", 1, "cause-1",
@@ -943,14 +943,14 @@ class AwaitCoordinatorCompletionTest {
             store.get("tenant-1", created.record().interactionId()).await().indefinitely().orElseThrow().status());
     }
 
-    private static AwaitStepDescriptor requestAwareDescriptor(
+    private static AwaitCompletionDescriptor requestAwareDescriptor(
         AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> projector
     ) {
         return requestAwareDescriptor(
             "RestartedSelection", projector.getClass().getName(), projector);
     }
 
-    private static AwaitStepDescriptor requestAwareDescriptor(
+    private static AwaitCompletionDescriptor requestAwareDescriptor(
         String stepId,
         String projectorId,
         AwaitCompletionProjector<PendingSelection, SelectionChoice, ConfirmedSelection> projector
@@ -958,14 +958,14 @@ class AwaitCoordinatorCompletionTest {
         @SuppressWarnings("unchecked")
         AwaitCompletionProjector<Object, Object, Object> untyped =
             (AwaitCompletionProjector<Object, Object, Object>) (AwaitCompletionProjector<?, ?, ?>) projector;
-        return new AwaitStepDescriptor(
+        return new AwaitCompletionDescriptor(
             stepId, PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
             "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(),
             List.of("documentId"), PendingSelection.class.getName(), SelectionChoice.class.getName(),
             Function.identity(), Function.identity(), projectorId, untyped, true);
     }
 
-    private static AwaitStepDescriptor mappedRequestAwareDescriptor(
+    private static AwaitCompletionDescriptor mappedRequestAwareDescriptor(
         String stepId,
         String projectorId,
         String transportType,
@@ -975,7 +975,7 @@ class AwaitCoordinatorCompletionTest {
         AwaitCompletionProjector<Object, Object, Object> projector =
             (AwaitCompletionProjector<Object, Object, Object>) (AwaitCompletionProjector<?, ?, ?>)
                 new OriginalSelectionProjector();
-        return new AwaitStepDescriptor(
+        return new AwaitCompletionDescriptor(
             stepId, PendingSelection.class.getName(), ConfirmedSelection.class.getName(),
             "ONE_TO_ONE", java.time.Duration.ofMinutes(10), "interactionId", transportType, Map.of(),
             List.of("documentId"), String.class.getName(), SelectionChoice.class.getName(),
@@ -988,7 +988,7 @@ class AwaitCoordinatorCompletionTest {
         AwaitCoordinator coordinator = coordinator(store);
         String binaryType = DescriptorProtos.FileDescriptorProto.class.getName();
         String sourceType = DescriptorProtos.FileDescriptorProto.class.getCanonicalName();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "LegacyProtobufDecision", binaryType, binaryType, java.time.Duration.ofMinutes(10),
             "interactionId", "interaction-api", Map.of(), List.of());
 
@@ -1014,7 +1014,7 @@ class AwaitCoordinatorCompletionTest {
     void defersLegacySemanticPayloadConversionUntilResume() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "LegacyDecision",
             Map.class.getName(),
             StrictDecision.class.getName(),
@@ -1051,53 +1051,11 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
-    void completeRejectsOversizedMaterializedOutputUnit() {
-        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
-        PipelineOrchestratorConfig config = org.mockito.Mockito.mock(PipelineOrchestratorConfig.class);
-        org.mockito.Mockito.when(config.awaitAggregateMaxOutputItems()).thenReturn(1);
-        AwaitCoordinator coordinator = coordinator(store, config);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
-            "BatchApproval",
-            List.class.getName(),
-            List.class.getName(),
-            "MANY_TO_MANY",
-            java.time.Duration.ofMinutes(10),
-            "interactionId",
-            "interaction-api",
-            Map.of(),
-            List.of());
-
-        AwaitCreateResult created = coordinator.createOrGet(
-            descriptor,
-            "tenant-1",
-            "exec-1",
-            1,
-            "cause-1",
-            List.of("input-a", "input-b"),
-            null,
-            null).await().indefinitely();
-        AwaitCompletionCommand completion = new AwaitCompletionCommand(
-            "tenant-1",
-            created.record().interactionId(),
-            null,
-            "completion-1",
-            List.of("output-a", "output-b"),
-            "alice",
-            11_000L);
-
-        IllegalStateException error = assertThrows(
-            IllegalStateException.class,
-            () -> coordinator.complete(completion).await().indefinitely());
-
-        assertTrue(error.getMessage().contains("pipeline.orchestrator.await-aggregate-max-output-items=1"));
-    }
-
-    @Test
     void dispatchReturnsCompletedRecordWhenCompletionWinsMetadataRace() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         coordinator.adapters = new SimpleInstance<>(List.of(new FastCompletionAdapter(coordinator)));
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "FastAwait",
             java.util.Map.class.getName(),
             java.util.Map.class.getName(),
@@ -1135,7 +1093,7 @@ class AwaitCoordinatorCompletionTest {
         coordinator.adapters = new SimpleInstance<>(List.<AwaitTransportAdapter<?>>of());
         coordinator.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
         coordinator.orchestratorConfig = config;
-        coordinator.descriptorFactory = new AwaitStepDescriptorFactory();
+        coordinator.descriptorFactory = new AwaitCompletionDescriptorRegistry();
         coordinator.descriptorFactory.register(descriptor("FraudCheck"));
         return coordinator;
     }
@@ -1177,8 +1135,8 @@ class AwaitCoordinatorCompletionTest {
             9_999_999_999L);
     }
 
-    private static AwaitStepDescriptor descriptor(String stepId) {
-        return new AwaitStepDescriptor(
+    private static AwaitCompletionDescriptor descriptor(String stepId) {
+        return new AwaitCompletionDescriptor(
             stepId,
             java.util.Map.class.getName(),
             java.util.Map.class.getName(),

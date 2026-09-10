@@ -4,7 +4,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
-import org.pipelineframework.awaitable.AwaitStepDescriptor;
+import org.pipelineframework.awaitable.AwaitCompletionDescriptor;
 
 /**
  * Adapter SPI for dispatching await interactions to external systems.
@@ -26,7 +26,7 @@ public interface AwaitTransportAdapter<I> {
      * @param descriptor authored await descriptor
      * @return true when live await windows are supported
      */
-    default boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
+    default boolean supportsLiveAwaitWindow(AwaitCompletionDescriptor descriptor) {
         return false;
     }
 
@@ -39,7 +39,7 @@ public interface AwaitTransportAdapter<I> {
      * @param descriptor authored await descriptor
      * @return normalized provider endpoint when available
      */
-    default Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
+    default Optional<String> admissionEndpoint(AwaitCompletionDescriptor descriptor) {
         return Optional.empty();
     }
 
@@ -65,7 +65,7 @@ public interface AwaitTransportAdapter<I> {
      * Dispatch request passed to adapters.
      */
     record AwaitDispatchRequest<I>(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         AwaitInteractionRecord interaction,
         I payload
     ) {
@@ -87,6 +87,6 @@ public interface AwaitTransportAdapter<I> {
      * @param interaction interaction to cancel
      * @param reason cancellation reason
      */
-    record AwaitCancelRequest(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction, String reason) {
+    record AwaitCancelRequest(AwaitCompletionDescriptor descriptor, AwaitInteractionRecord interaction, String reason) {
     }
 }
