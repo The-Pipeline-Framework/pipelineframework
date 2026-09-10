@@ -53,4 +53,5 @@ time. See [experimental OAuth connections](/develop/oauth-connections/) for the 
 
 Detailed authoring pages cover [Command connectors](/develop/extension/command-connectors),
 [GraphQL](/develop/extension/graphql-connector), [MCP imports](/develop/extension/mcp-connector-import),
+[OpenAPI imports](/develop/connectors/openapi-import),
 [LLM Query](/develop/extension/llm-query), and [embedding/vector operations](/develop/extension/embedding-and-vector-connectors).

@@ -1,0 +1,10 @@
+schemaVersion: 1
+runtimes:
+  openapi-capability-proof:
+    runtime: openapi-capability-proof
+    module: openapi-capability-proof
+modules:
+  openapi-capability-proof:
+    runtime: openapi-capability-proof
+    steps:
+      - call-imported-openapi-capabilities

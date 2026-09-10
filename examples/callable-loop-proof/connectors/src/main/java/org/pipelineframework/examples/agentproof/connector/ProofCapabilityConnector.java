@@ -61,9 +61,6 @@ public class ProofCapabilityConnector implements ConnectorProvider<ProofCapabili
     public record ProviderConfiguration(String fixture) {
     }
 
-    public record RecordConfiguration(String label) {
-    }
-
     private static final class LookupOperation
         implements QueryOperation<LookupArguments, org.pipelineframework.connector.ConnectorConfigurationDocument, LookupResult> {
         private final ProofCapabilityConnector provider;
@@ -87,9 +84,7 @@ public class ProofCapabilityConnector implements ConnectorProvider<ProofCapabili
     }
 
     private static final class RecordOperation
-        implements CommandOperation<RecordArguments, RecordConfiguration, RecordResult> {
-        private static final ConnectorConfigSchema<RecordConfiguration> CONFIGURATION = ConnectorConfigSchema.record(
-            RecordConfiguration.class, "proof.capabilities.evidence.record", 1);
+        implements CommandOperation<RecordArguments, org.pipelineframework.connector.ConnectorConfigurationDocument, RecordResult> {
         private final ProofCapabilityConnector provider;
 
         private RecordOperation(ProofCapabilityConnector provider) {
@@ -102,18 +97,12 @@ public class ProofCapabilityConnector implements ConnectorProvider<ProofCapabili
         }
 
         @Override
-        public Optional<ConnectorConfigSchema<RecordConfiguration>> configurationSchema() {
-            return Optional.of(CONFIGURATION);
-        }
-
-        @Override
         public CompletionStage<CommandOutcome<RecordResult>> dispatch(
-            CommandInvocation<RecordArguments, RecordConfiguration> invocation
+            CommandInvocation<RecordArguments, org.pipelineframework.connector.ConnectorConfigurationDocument> invocation
         ) {
             provider.requireRecorder().recordCommand(
                 invocation.executionContext(), invocation.input().effectKey());
-            RecordResult result = new RecordResult(
-                invocation.configuration().label() + ":" + invocation.input().action());
+            RecordResult result = new RecordResult("proof:" + invocation.input().action());
             return CompletableFuture.completedFuture(
                 new CommandOutcome.Succeeded<>(result, CommandConfirmation.none(), List.of()));
         }

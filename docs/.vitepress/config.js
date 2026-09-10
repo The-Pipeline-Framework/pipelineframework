@@ -176,7 +176,8 @@ const mainSidebar = [
                 items: [
                     {text: 'Overview', link: '/develop/connectors/'},
                     {text: 'Author a Boundary', link: '/develop/connectors/authoring'},
-                    {text: 'Catalogue', link: '/develop/connectors/catalogue'}
+                    {text: 'Catalogue', link: '/develop/connectors/catalogue'},
+                    {text: 'Import OpenAPI Operations', link: '/develop/connectors/openapi-import'}
                 ]
             },
             {

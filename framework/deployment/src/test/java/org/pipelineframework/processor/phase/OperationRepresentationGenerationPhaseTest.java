@@ -79,6 +79,8 @@ class OperationRepresentationGenerationPhaseTest {
         new OperationRepresentationGenerationPhase(writer).execute(context);
 
         assertEquals(List.of("REQUEST:http.request", "RESPONSE:http.response"), provider.resolved);
+        assertEquals(List.of("http.request", "http.response"), context.getResolvedOperationRepresentations().stream()
+            .map(ResolvedOperationRepresentation::mappingKey).toList());
         verify(writer).write(eq(filer), anyList());
     }
 
@@ -103,6 +105,42 @@ class OperationRepresentationGenerationPhaseTest {
         context.setPipelineTemplateConfig(config);
         context.setRepresentationProviderRegistry(RepresentationProviderRegistry.of(List.of(provider)));
         context.setStepModels(List.of(dynamicModel()));
+
+        new OperationRepresentationGenerationPhase(mock(ProviderArtifactWriter.class)).execute(context);
+
+        assertEquals(List.of("REQUEST:http.request", "RESPONSE:http.response"), provider.resolved);
+    }
+
+    @Test
+    void recoversCanonicalIdentityFromCompilerOwnedJavaBindingForNamedPipelineOperations() throws Exception {
+        Path yaml = tempDir.resolve("named-operation.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: operation-representation-proof
+            basePackage: example
+            types:
+              Input: { java: example.Input, fields: [[subject, string]] }
+              Output: { java: example.Output, fields: [[value, string]] }
+            steps: []
+            """);
+        var config = new PipelineTemplateConfigLoader().load(yaml);
+        var provider = new RecordingProvider();
+        ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
+        when(processing.getFiler()).thenReturn(mock(Filer.class));
+        PipelineCompilationContext context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+        context.setPipelineTemplateConfig(config);
+        context.setRepresentationProviderRegistry(RepresentationProviderRegistry.of(List.of(provider)));
+        context.setStepModels(List.of(new PipelineStepModel.Builder()
+            .serviceName("Lookup")
+            .generatedName("Lookup")
+            .servicePackage("example")
+            .serviceClassName(ClassName.get("example", "Lookup"))
+            .inputMapping(TypeMapping.withoutMapper(ClassName.get("example", "Input")))
+            .outputMapping(TypeMapping.withoutMapper(ClassName.get("example", "Output")))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .connectorOperationSelection(operation())
+            .build()));
 
         new OperationRepresentationGenerationPhase(mock(ProviderArtifactWriter.class)).execute(context);
 

@@ -4,6 +4,8 @@ TPF's generic HTTP Connector executes release-pinned wire operations as ordinary
 capabilities. It is infrastructure for contract importers: applications should generate the private
 pin resources from a reviewed source rather than hand-authoring them.
 
+For the supported release-time source and author workflow, see [Import OpenAPI operations](/develop/connectors/openapi-import).
+
 ```mermaid
 flowchart LR
     S[release-time contract source] --> M[standard Connector provider manifest]

@@ -67,6 +67,11 @@ This is distinct from the [public OpenAPI contract filter](../openapi-contract),
 focused application-owned contract. The Expansion consumes an external contract into application
 capabilities; the filter controls what an application publishes.
 
+Synchronous import is documented in [Import OpenAPI operations](../connectors/openapi-import). It
+uses the generic pinned HTTP Connector and ordinary callable catalogues. Callback-to-Await support
+is a separate delivery so the synchronous importer does not invent or partially duplicate Await
+semantics.
+
 ## Specialised loops
 
 An Expansion may package a domain- or protocol-specific agentic loop so each application does not

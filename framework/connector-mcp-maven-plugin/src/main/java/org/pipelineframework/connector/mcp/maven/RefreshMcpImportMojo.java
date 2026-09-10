@@ -4,11 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -42,12 +38,11 @@ import org.pipelineframework.connector.ConnectorOperationDescriptor;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorOperationTypeContract;
 import org.pipelineframework.connector.ConnectorProviderArtifactDescriptor;
-import org.pipelineframework.connector.ConnectorProviderArtifacts;
 import org.pipelineframework.connector.ConnectorProviderDescriptor;
 import org.pipelineframework.connector.ConnectorProviderId;
-import org.pipelineframework.connector.ConnectorProviderManifest;
-import org.pipelineframework.connector.ConnectorProviderManifestReader;
 import org.pipelineframework.connector.ConnectorProviderVersion;
+import org.pipelineframework.connector.importer.ConnectorImportResource;
+import org.pipelineframework.connector.importer.ConnectorImportWriter;
 import org.pipelineframework.connector.QueryCapabilities;
 import org.pipelineframework.connector.QueryOperationCardinality;
 import org.pipelineframework.protocol.ProtocolTypeDescriptor;
@@ -59,7 +54,6 @@ import org.pipelineframework.connector.mcp.McpJsonSchema;
 @Mojo(name = "refresh-import", requiresProject = true, threadSafe = false)
 public final class RefreshMcpImportMojo extends AbstractMojo {
     private static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("mcp.client");
-    private static final String MANIFEST_PATH = "META-INF/pipeline/connector-providers.json";
     private static final String PIN_PATH = "META-INF/pipeline/mcp-tools.json";
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -280,40 +274,17 @@ public final class RefreshMcpImportMojo extends AbstractMojo {
 
     static void write(Path root, ImportedArtifacts imported) throws MojoExecutionException {
         try {
-            Path manifestPath = root.resolve(MANIFEST_PATH);
-            List<ConnectorProviderArtifactDescriptor> providers = new ArrayList<>();
-            if (Files.isRegularFile(manifestPath)) {
-                try (var input = Files.newInputStream(manifestPath)) {
-                    providers.addAll(ConnectorProviderManifestReader.read(input).providers().stream()
-                        .filter(provider -> !PROVIDER_ID.equals(provider.provider().id())).toList());
-                }
-            }
             ConnectorConfigSchemaDescriptor providerSchema = new ConnectorConfigSchemaDescriptor(
                 "mcp.client.provider", 1,
                 List.of(new ConnectorConfigFieldDescriptor(
                     "connection", ConnectorConfigValueType.CONNECTION_REF, true)));
-            providers.add(new ConnectorProviderArtifactDescriptor(
-                new ConnectorProviderDescriptor(PROVIDER_ID, new ConnectorProviderVersion(1, 0), Optional.of(providerSchema)),
-                imported.operations(), imported.types()));
-            providers.sort(Comparator.comparing(provider -> provider.provider().id()));
-            ConnectorProviderManifest manifest = new ConnectorProviderManifest(
-                ConnectorProviderManifest.CURRENT_SCHEMA_VERSION, providers);
-            atomicWrite(manifestPath, ConnectorProviderArtifacts.json(manifest));
-
-            atomicWrite(root.resolve(PIN_PATH), new McpImportedToolCatalog(imported.pins()).json());
+            var provider = new ConnectorProviderArtifactDescriptor(
+                new ConnectorProviderDescriptor(PROVIDER_ID, new ConnectorProviderVersion(1, 0),
+                    Optional.of(providerSchema)), imported.operations(), imported.types());
+            ConnectorImportWriter.write(root, provider, List.of(new ConnectorImportResource(
+                PIN_PATH, new McpImportedToolCatalog(imported.pins()).json())));
         } catch (IOException failure) {
             throw new MojoExecutionException("Unable to write pinned MCP import", failure);
-        }
-    }
-
-    private static void atomicWrite(Path target, String value) throws IOException {
-        Files.createDirectories(target.getParent());
-        Path temporary = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
-        Files.writeString(temporary, value, StandardCharsets.UTF_8);
-        try {
-            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException ignored) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

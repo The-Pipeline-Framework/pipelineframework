@@ -20,8 +20,10 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
 - `order.json`: resolved runtime execution order
 - `telemetry.json`: item-boundary and parent-step telemetry metadata
 - `replay-topology.json`: replay and live-topology metadata used by execution-event playback and trace-aware topology surfaces
-- `connector-bindings.json`: sanitized connector bindings and operations used by both local and
-  imported steps; connection and secret values are never emitted
+- `connector-bindings.json`: schema 3 sanitized connector bindings and operations used by both local
+  and imported steps. Referenced release-time capability imports include only source, operation,
+  wire-contract, pin, and accepted representation fingerprints; connection and secret values are
+  never emitted
 - `pipeline-contract.json`: deterministic schema 3 release contract. Imported Blocks include package
   provenance, source and linked definition fingerprints, and resolved capability metadata. The
   resolution records binding/provider/operation versions, application-selected Command authority,
@@ -29,6 +31,12 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
   source step, alias, canonical contracts, trusted source/target mappings, and the resolved native
   Query or Command target. Raw configuration, credentials, prompts containing application data, and
   runtime context values are never emitted.
+- `connector-operation-provenance.json`: source-owned schema 1 provenance for imported Connector
+  operations. The compiler projects only referenced operations into `capabilityImports`; the full
+  source contract is never copied into runtime metadata.
+- `http-operations.json`: immutable private wire pins for imported `http.client` operations.
+- `http-operation-bindings.json`: compiler-generated direct or mapper-class bindings for each
+  referenced HTTP request and response representation.
 
 If you package a grouped runtime such as monolith or pipeline-runtime, keep these resources aligned with the runtime artifact that will execute the pipeline.
 

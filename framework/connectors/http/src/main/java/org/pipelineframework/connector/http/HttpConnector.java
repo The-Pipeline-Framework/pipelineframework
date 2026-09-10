@@ -26,7 +26,6 @@ import org.pipelineframework.connector.ConnectionResolutionException;
 import org.pipelineframework.connector.ConnectionResolutionRequest;
 import org.pipelineframework.connector.ConnectionResolver;
 import org.pipelineframework.connector.ConnectorConfigSchema;
-import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorExecutionContext;
 import org.pipelineframework.connector.ConnectorOperation;
 import org.pipelineframework.connector.ConnectorOperationDescriptor;
@@ -50,6 +49,8 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
     public static final ConnectorProviderId PROVIDER_ID = ConnectorProviderId.of("http.client");
     private static final ConnectorConfigSchema<HttpProviderConfiguration> PROVIDER_SCHEMA =
         ConnectorConfigSchema.record(HttpProviderConfiguration.class, "http.client.provider", 1);
+    private static final ConnectorConfigSchema<HttpOperationConfiguration> OPERATION_SCHEMA =
+        ConnectorConfigSchema.record(HttpOperationConfiguration.class, "http.client.operation", 1);
 
     private final AtomicReference<Optional<ActiveBinding>> active = new AtomicReference<>(Optional.empty());
     private final HttpRepresentationBindings representations;
@@ -174,7 +175,7 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
             .configuration();
     }
 
-    private final class PinnedQueryOperation implements QueryOperation<Object, ConnectorConfigurationDocument, Object> {
+    private final class PinnedQueryOperation implements QueryOperation<Object, HttpOperationConfiguration, Object> {
         private final HttpOperationPin pin;
 
         private PinnedQueryOperation(HttpOperationPin pin) {
@@ -184,10 +185,13 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         @Override public String id() { return pin.operation(); }
         @Override public int majorVersion() { return pin.majorVersion(); }
         @Override public QueryCapabilities capabilities() { return QueryCapabilities.conservative(); }
+        @Override public Optional<ConnectorConfigSchema<HttpOperationConfiguration>> configurationSchema() {
+            return Optional.of(OPERATION_SCHEMA);
+        }
 
         @Override
         public CompletionStage<QueryOutcome<Object>> query(
-            QueryInvocation<Object, ConnectorConfigurationDocument, Object> invocation
+            QueryInvocation<Object, HttpOperationConfiguration, Object> invocation
         ) {
             final HttpProviderConfiguration runtimeConfiguration;
             try {
@@ -228,7 +232,7 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         }
     }
 
-    private final class PinnedCommandOperation implements CommandOperation<Object, ConnectorConfigurationDocument, Object> {
+    private final class PinnedCommandOperation implements CommandOperation<Object, HttpOperationConfiguration, Object> {
         private final HttpOperationPin pin;
         private final CommandCapabilities capabilities;
 
@@ -240,10 +244,13 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         @Override public String id() { return pin.operation(); }
         @Override public int majorVersion() { return pin.majorVersion(); }
         @Override public CommandCapabilities capabilities() { return capabilities; }
+        @Override public Optional<ConnectorConfigSchema<HttpOperationConfiguration>> configurationSchema() {
+            return Optional.of(OPERATION_SCHEMA);
+        }
 
         @Override
         public CompletionStage<CommandOutcome<Object>> dispatch(
-            CommandInvocation<Object, ConnectorConfigurationDocument> invocation
+            CommandInvocation<Object, HttpOperationConfiguration> invocation
         ) {
             final HttpProviderConfiguration runtimeConfiguration;
             try {

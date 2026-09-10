@@ -17,6 +17,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.representation.CanonicalSchemaJson;
 import org.pipelineframework.processor.representation.ProviderArtifactWriter;
 import org.pipelineframework.processor.representation.RepresentationProviderRegistry;
+import org.pipelineframework.processor.routing.V3JavaTypeResolver;
 import org.pipelineframework.representation.spi.CanonicalType;
 import org.pipelineframework.representation.spi.CanonicalTypeShape;
 import org.pipelineframework.representation.spi.OperationBoundaryClaim;
@@ -67,6 +68,9 @@ public final class OperationRepresentationGenerationPhase implements PipelineCom
         List<org.pipelineframework.representation.spi.ArtifactDescription> artifacts = new ArrayList<>();
         byProvider.forEach((providerKey, values) -> artifacts.addAll(providers.provider(providerKey)
             .describeOperationArtifacts(new OperationProviderGenerationRequest(values))));
+        ctx.setResolvedOperationRepresentations(resolved.values().stream()
+            .sorted(Comparator.comparing(ResolvedOperationRepresentation::mappingKey))
+            .toList());
         artifactWriter.write(ctx.getProcessingEnv().getFiler(), artifacts);
     }
 
@@ -167,9 +171,12 @@ public final class OperationRepresentationGenerationPhase implements PipelineCom
         PipelineTemplateConfig config,
         org.pipelineframework.processor.ir.TypeMapping mapping
     ) {
-        String name = mapping.canonicalTypeName().orElseThrow(() ->
-            new IllegalStateException("Connector operation boundary has no canonical v3 type identity"));
-        return canonical(config, name, ClassName.bestGuess(mapping.domainType().toString()));
+        ClassName javaType = ClassName.bestGuess(mapping.domainType().toString());
+        String name = mapping.canonicalTypeName().or(() -> new V3JavaTypeResolver(config).semanticType(javaType))
+            .orElseThrow(() ->
+            new IllegalStateException("Connector operation boundary for Java type '" + mapping.domainType()
+                + "' has no canonical v3 type identity"));
+        return canonical(config, name, javaType);
     }
 
     private static CanonicalType canonical(PipelineTemplateConfig config, String name, ClassName javaType) {

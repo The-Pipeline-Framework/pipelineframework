@@ -22,8 +22,9 @@ public class ObservationReducerService implements ReactiveService<OperationObser
             }
             OperationObservation.Result result = (OperationObservation.Result) observation;
             TrustedContext context = context(result.value().contextJson());
+            String nextPhase = "lookup".equals(context.phase()) ? "action" : "complete";
             return Uni.createFrom().item(new AgentState(
-                context.state(), context.nextEffectKey(), result.value().resultJson(), "complete"));
+                context.state(), context.nextEffectKey(), result.value().resultJson(), nextPhase));
         } catch (Exception exception) {
             return Uni.createFrom().failure(exception);
         }

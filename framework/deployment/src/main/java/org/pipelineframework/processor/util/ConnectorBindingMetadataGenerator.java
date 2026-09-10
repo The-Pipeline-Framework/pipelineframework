@@ -67,10 +67,12 @@ public final class ConnectorBindingMetadataGenerator {
             .sorted(Comparator.comparing(PipelineYamlConnectorBinding::name))
             .map(binding -> metadata(binding, effectiveConfig, template, catalog))
             .toList();
+        List<Map<String, Object>> capabilityImports = new ConnectorOperationProvenanceProjector().project(
+            config, context.getModuleDir(), metadataClassLoader(), context.getResolvedOperationRepresentations());
         var resource = processingEnv.getFiler()
             .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);
         try (var writer = resource.openWriter()) {
-            writer.write(GSON.toJson(new Metadata(2, bindings)));
+            writer.write(GSON.toJson(new Metadata(3, bindings, capabilityImports)));
         }
     }
 
@@ -186,7 +188,11 @@ public final class ConnectorBindingMetadataGenerator {
         return ConnectorProviderManifestLoader.metadataClassLoader(ConnectorBindingMetadataGenerator.class);
     }
 
-    private record Metadata(int schemaVersion, List<BindingMetadata> bindings) {
+    private record Metadata(
+        int schemaVersion,
+        List<BindingMetadata> bindings,
+        List<Map<String, Object>> capabilityImports
+    ) {
     }
 
     private record BindingMetadata(

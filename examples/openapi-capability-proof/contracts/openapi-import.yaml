@@ -1,0 +1,45 @@
+schemaVersion: 1
+importId: evidence-api
+source:
+  snapshot: contract/openapi.yaml
+  closureSha256: 15c5db59b139a7d34bf2c678c5f36065a8453c93c78d3c4de64890ece1fce4a6
+operations:
+  - source: { operationId: lookupEvidence, method: POST, path: "/evidence/{subject}/lookup" }
+    operation: evidence.lookup
+    version: 1
+    kind: QUERY
+    input: LookupArguments
+    output: LookupResult
+    server: APPLICATION_BOUND
+    security:
+      require: { oauth2: [ evidence.read ] }
+    request:
+      mediaType: application/json
+      bodyPath: body
+      representation: http.evidence.lookup.request
+      parameterSources: { subject: subject, verbose: verbose }
+    responses:
+      - { status: '200', mediaType: application/json, outcome: RESULT, representation: http.evidence.lookup.response }
+      - { status: '404', outcome: EMPTY, code: evidence-not-found }
+      - { status: '429', outcome: RETRYABLE_FAILURE, code: rate-limited }
+  - source: { operationId: recordEvidence, method: POST, path: /evidence }
+    operation: evidence.record
+    version: 1
+    kind: COMMAND
+    input: RecordArguments
+    output: RecordResult
+    server: APPLICATION_BOUND
+    security:
+      require: { apiKey: [] }
+    request:
+      mediaType: application/json
+      representation: http.evidence.record.request
+    providerIdempotencyKey: { location: HEADER, name: Idempotency-Key }
+    responses:
+      - status: '202'
+        mediaType: application/json
+        outcome: SUCCEEDED
+        representation: http.evidence.record.response
+        confirmation: PROVIDER_ACKNOWLEDGED
+      - { status: '409', outcome: TERMINAL_FAILURE, code: evidence-conflict }
+      - { status: '429', outcome: RETRYABLE_FAILURE, code: rate-limited }

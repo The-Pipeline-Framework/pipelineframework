@@ -70,7 +70,7 @@ class CallableLoopProofIT {
             .invoke(ignored -> terminalResults.incrementAndGet())
             .await().indefinitely();
 
-        assertEquals(new ApplicationResult("query-not-found then command-succeeded", 3), result);
+        assertEquals(new ApplicationResult("query then command completed", 3), result);
         assertEquals(3, recorder.inferenceCount());
         assertEquals(List.of("lookup", "action", "complete"), recorder.phases());
         assertEquals(List.of(

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>org.pipelineframework</groupId><artifactId>framework-parent</artifactId><version>26.9.3-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <artifactId>connector-openapi-maven-plugin</artifactId>
+    <packaging>maven-plugin</packaging>
+    <name>The Pipeline Framework - OpenAPI Import Maven Plugin</name>
+    <description>Imports selected OpenAPI operations into release-pinned HTTP Connector capabilities.</description>
+    <dependencies>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>connector-import-tooling</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-contract</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-core</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.swagger.parser.v3</groupId><artifactId>swagger-parser-v3</artifactId><version>${swagger.parser.version}</version></dependency>
+        <dependency><groupId>com.fasterxml.jackson.dataformat</groupId><artifactId>jackson-dataformat-yaml</artifactId></dependency>
+        <dependency><groupId>org.apache.maven</groupId><artifactId>maven-plugin-api</artifactId><version>3.9.11</version><scope>provided</scope></dependency>
+        <dependency><groupId>org.apache.maven.plugin-tools</groupId><artifactId>maven-plugin-annotations</artifactId><version>3.15.2</version><scope>provided</scope></dependency>
+        <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins><plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-plugin-plugin</artifactId>
+        <version>3.15.2</version>
+        <configuration><goalPrefix>openapi</goalPrefix></configuration>
+    </plugin></plugins></build>
+</project>

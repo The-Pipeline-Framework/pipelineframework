@@ -6,8 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collections;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.connector.CommandMachineConfirmation;
 import org.pipelineframework.connector.ConnectorOperationKind;
 
@@ -27,6 +32,24 @@ class HttpOperationCatalogTest {
         assertEquals(new HttpOperationCatalog(List.of(operation)).json(), restored.json());
         assertEquals(new HttpWireSchema("{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}"),
             new HttpWireSchema("{\"properties\":{\"a\":{\"type\":\"string\"}},\"type\":\"object\"}"));
+    }
+
+    @Test
+    void deduplicatesEquivalentPinsExposedByMultipleApplicationArchives(@TempDir Path directory) throws Exception {
+        String json = new HttpOperationCatalog(List.of(query())).json();
+        Path first = Files.writeString(directory.resolve("first.json"), json);
+        Path second = Files.writeString(directory.resolve("second.json"), json);
+        ClassLoader duplicated = new ClassLoader(getClass().getClassLoader()) {
+            @Override
+            public java.util.Enumeration<URL> getResources(String name) throws java.io.IOException {
+                if (HttpOperationCatalog.RESOURCE_PATH.equals(name)) {
+                    return Collections.enumeration(List.of(first.toUri().toURL(), second.toUri().toURL()));
+                }
+                return super.getResources(name);
+            }
+        };
+
+        assertEquals(List.of(query()), HttpOperationCatalog.load(duplicated).operations());
     }
 
     @Test
