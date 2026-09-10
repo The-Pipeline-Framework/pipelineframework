@@ -242,7 +242,7 @@ class PipelineTelemetryMetadataGeneratorTest {
     }
 
     @Test
-    void writesAwaitTopologyActorsForKafkaAwaitStepWhenAwaitStepIsOnlyDeclaredInYaml() throws IOException {
+    void writesDistinctTopologyActorsForKafkaDeferredCompletion() throws IOException {
         PipelineCompilationContext ctx = buildContext();
         writeApplicationProperties("com.example.PaymentRecord", "com.example.PaymentOutput");
         writePipelineYaml("""
@@ -252,8 +252,8 @@ class PipelineTelemetryMetadataGeneratorTest {
               - name: Process Folder
                 input: com.example.InputFolder
                 output: com.example.InputFile
-              - name: Request Payment Provider
-                service: com.example.RequestPaymentProvider
+              - name: Process Payment Provider
+                service: com.example.ProcessPaymentProvider
                 cardinality: ONE_TO_ONE
                 input: com.example.PaymentRecord
                 output: com.example.PaymentStatus
@@ -279,7 +279,7 @@ class PipelineTelemetryMetadataGeneratorTest {
 
         List<PipelineStepModel> models = List.of(
             step("ProcessFolderService", "com.example.pipeline", type("InputFolder"), type("InputFile"), false),
-            step("RequestPaymentProviderService", "com.example.pipeline", type("PaymentRecord"), type("PaymentRecord"), false),
+            step("ProcessPaymentProviderService", "com.example.pipeline", type("PaymentRecord"), type("PaymentRecord"), false),
             step("ProcessPaymentStatusService", "com.example.pipeline", type("PaymentStatus"), type("PaymentOutput"), false)
         );
         ctx.setStepModels(models);
@@ -288,22 +288,34 @@ class PipelineTelemetryMetadataGeneratorTest {
 
         JsonObject topology = readReplayTopologyJson();
         assertEquals(5, topology.getAsJsonArray("steps").size());
-        JsonObject awaitStep = findStep(topology, "RequestPaymentProvider");
-        assertEquals("RequestPaymentProvider", awaitStep.get("step").getAsString());
+        JsonObject awaitStep = findStep(topology, "ProcessPaymentProvider");
+        assertEquals("ProcessPaymentProvider", awaitStep.get("step").getAsString());
         assertEquals("primary", awaitStep.get("renderRole").getAsString());
         assertTrue(awaitStep.get("deferredCompletion").getAsBoolean());
         assertEquals("kafka", awaitStep.get("actorKind").getAsString());
         JsonObject broker = findStepByRole(topology, "broker");
         assertEquals("broker", broker.get("renderRole").getAsString());
         assertEquals("kafka", broker.get("actorKind").getAsString());
-        JsonObject provider = findStep(topology, "PaymentProvider");
+        JsonObject provider = findStep(topology, "ProcessPaymentProviderExternalProvider");
         assertEquals("external-provider", provider.get("renderRole").getAsString());
         assertEquals("provider", provider.get("actorKind").getAsString());
-        assertEquals("PaymentProvider", provider.get("step").getAsString());
+        assertEquals("ProcessPaymentProviderExternalProvider", provider.get("step").getAsString());
+        assertEquals(
+            topology.getAsJsonArray("steps").size(),
+            java.util.stream.StreamSupport.stream(topology.getAsJsonArray("steps").spliterator(), false)
+                .map(element -> element.getAsJsonObject().get("step").getAsString())
+                .distinct()
+                .count());
         assertEquals(6, topology.getAsJsonArray("transitions").size());
-        JsonObject requestTransition = findTransition(topology, "RequestPaymentProvider", broker.get("step").getAsString());
+        assertEquals(
+            topology.getAsJsonArray("transitions").size(),
+            java.util.stream.StreamSupport.stream(topology.getAsJsonArray("transitions").spliterator(), false)
+                .map(element -> element.getAsJsonObject().get("id").getAsString())
+                .distinct()
+                .count());
+        JsonObject requestTransition = findTransition(topology, "ProcessPaymentProvider", broker.get("step").getAsString());
         assertEquals("await-request", requestTransition.get("relationKind").getAsString());
-        JsonObject completionTransition = findTransition(topology, broker.get("step").getAsString(), "RequestPaymentProvider");
+        JsonObject completionTransition = findTransition(topology, broker.get("step").getAsString(), "ProcessPaymentProvider");
         assertEquals("await-completion", completionTransition.get("relationKind").getAsString());
     }
 

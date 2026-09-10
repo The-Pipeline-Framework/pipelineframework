@@ -113,6 +113,8 @@ following:
 
 - 1,000 `await_interaction_dispatched`, `await_admission_acquired`, and
   `await_admission_released` events;
+- all deferred-completion lifecycle events use `ProcessCsvPaymentsInput`, and no replay event or
+  topology transition references the removed `AwaitPaymentProvider` step;
 - exactly 907 `ProcessApprovedPaymentStatus` and 93 `ProcessUnapprovedPaymentStatus` starts,
   with downstream status processing beginning before the final `ProcessCsvPaymentsInput` `emit`;
 - no `await_unit_dispatch_complete`, `await_execution_waiting`,
@@ -126,7 +128,7 @@ the ordinary happy-path E2E. Run that check both before and after the docs sync.
 Then update the current replay facts in
 `docs/operate/observability/replay.md`,
 `docs/deploy/concurrency-and-backpressure.md`, and
-`docs/design/object-ingest.md`, and regenerate the published viewer and homepage assets:
+`docs/architecture/object-ingest.md`, and regenerate the published viewer and homepage assets:
 
 ```bash
 cd "$REPO_ROOT"

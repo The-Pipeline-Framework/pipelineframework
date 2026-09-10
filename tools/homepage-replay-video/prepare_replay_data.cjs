@@ -54,6 +54,11 @@ function displayRole(step) {
   return "primary";
 }
 
+function isDeferredCompletionStep(step) {
+  return step?.deferredCompletion === true
+    || step?.renderRole === "await";
+}
+
 function isObjectIngestStep(step) {
   return step?.step === "ObjectIngest"
     || step?.runtimeStepClass === "runtime::ObjectIngest"
@@ -217,7 +222,7 @@ function deriveProviderId(awaitStep) {
 function buildNodeSet(steps, transitions) {
   const branchLayout = analyzePrimaryBranchLayout(steps, transitions);
   const mainline = orderedMainlineSteps(steps, transitions);
-  const awaitStep = mainline.find((step) => displayRole(step) === "await");
+  const awaitStep = mainline.find(isDeferredCompletionStep);
   const explicitBroker = steps.find((step) => displayRole(step) === "broker");
   const explicitProvider = steps.find((step) => {
     const role = displayRole(step);
@@ -234,9 +239,7 @@ function buildNodeSet(steps, transitions) {
   const roleByBusinessStep = new Map();
   let primaryRoleIndex = 0;
   for (const step of businessSteps) {
-    const role = displayRole(step) === "await"
-      ? "await"
-      : PRIMARY_ROLES[Math.min(primaryRoleIndex++, PRIMARY_ROLES.length - 1)];
+    const role = PRIMARY_ROLES[Math.min(primaryRoleIndex++, PRIMARY_ROLES.length - 1)];
     roleByBusinessStep.set(step.step, role);
   }
   const primaryCount = mainline.length;
@@ -258,7 +261,7 @@ function buildNodeSet(steps, transitions) {
   }
 
   mainline.forEach((step, index) => {
-    const awaitRole = displayRole(step) === "await";
+    const awaitRole = isDeferredCompletionStep(step);
     const centerOffset = primaryCount <= 1 ? 0.5 : index / (primaryCount - 1);
     const edgeLift = Math.abs(centerOffset - 0.5) * 1.08;
     const role = roleByBusinessStep.get(step.step) ?? (awaitRole ? "await" : "primary-a");
@@ -266,6 +269,7 @@ function buildNodeSet(steps, transitions) {
       id: step.step,
       sourceId: step.step,
       role,
+      deferredCompletion: awaitRole,
       tier: "primary",
       x: Number((minX + xSpan * centerOffset).toFixed(3)),
       y: Number((1.55 + edgeLift).toFixed(3)),
@@ -459,10 +463,10 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
       eventMatches(event, entry.from, entry.to, "emit")
         || (event.event === "start" && event.step === entry.to && event.from === entry.from)
     );
-    const segment = index === 0
-      ? [SEGMENTS.ingress[1] - 0.1, SEGMENTS.request[0] + 0.55]
-      : entry.from === awaitStep?.step
-        ? SEGMENTS.completion
+    const segment = entry.from === awaitStep?.step
+      ? SEGMENTS.completion
+      : index === 0
+        ? [SEGMENTS.ingress[1] - 0.1, SEGMENTS.request[0] + 0.55]
         : branchNodeNames.has(entry.from) || branchNodeNames.has(entry.to) || mergeStepNames.has(entry.to)
           ? SEGMENTS.continuation
           : index === primaryEdges.length - 1
@@ -490,11 +494,14 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
   if (awaitStep) {
     const awaitIndex = mainline.findIndex((step) => step.step === awaitStep.step);
     const previous = mainline[awaitIndex - 1]?.step;
-    const requestItems = sampleEvenly(
-      events.filter((event) => eventMatches(event, previous, awaitStep.step, "emit")
-        || (event.event === "start" && event.step === awaitStep.step && event.from === previous)),
-      14
-    );
+    const predecessorEvents = previous
+      ? events.filter((event) => eventMatches(event, previous, awaitStep.step, "emit")
+        || (event.event === "start" && event.step === awaitStep.step && event.from === previous))
+      : [];
+    const requestEvents = predecessorEvents.length > 0
+      ? predecessorEvents
+      : events.filter((event) => event.event === "await_interaction_dispatched" && event.step === awaitStep.step);
+    const requestItems = sampleEvenly(requestEvents, 14);
     const completionItems = sampleEvenly(
       events.filter((event) => event.event === "start" && event.from === awaitStep.step),
       10
@@ -546,7 +553,7 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
 function buildHighlights(nodes) {
   return [
     { targetId: nodes.find((node) => node.role === "object-ingest")?.id, kind: "ingest", start: SEGMENTS.ingress[0], end: SEGMENTS.ingress[1], intensity: 1.05, color: "#7af7c6" },
-    { targetId: nodes.find((node) => node.role === "await")?.id, kind: "await-in-flight", start: SEGMENTS.awaitInFlight[0], end: SEGMENTS.awaitInFlight[1], intensity: 1.25, color: "#95b8ff" },
+    { targetId: nodes.find((node) => node.deferredCompletion)?.id, kind: "await-in-flight", start: SEGMENTS.awaitInFlight[0], end: SEGMENTS.awaitInFlight[1], intensity: 1.25, color: "#95b8ff" },
     { targetId: nodes.find((node) => node.role === "store")?.id, kind: "store", start: SEGMENTS.store[0], end: SEGMENTS.store[1], intensity: 0.85, color: "#76d8ff" },
     { targetId: nodes.find((node) => node.role === "provider")?.id, kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" },
     { targetId: nodes.find((node) => node.role === "object-publish")?.id, kind: "publish", start: SEGMENTS.publish[0], end: SEGMENTS.publish[1], intensity: 1.1, color: "#ffe08a" }

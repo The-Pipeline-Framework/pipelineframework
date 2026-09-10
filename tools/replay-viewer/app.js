@@ -2,7 +2,10 @@ import * as THREE from "./vendor/three.module.min.js";
 import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
 import {
   awaitOutputCountFromDownstreamStart,
-  hasAwaitLifecycleCounterEvidence
+  deferredStartReceiptCount,
+  downstreamReceiptEvidenceKey,
+  hasAwaitLifecycleCounterEvidence,
+  isDeferredCompletionStep
 } from "./replay-counter-policy.js";
 
 const mount = document.getElementById("threeMount");
@@ -711,10 +714,10 @@ function awaitLifecycleNumber(event, key) {
 function awaitStepForLifecycleEvent(rawEvent, displayEvent = mapEventForDisplay(rawEvent)) {
   const stepId = awaitLifecycleAttribute(rawEvent, AWAIT_ATTR.stepId);
   const aliasedStep = aliasStepNameForDisplay(stepId);
-  if (stepHasRenderRole(aliasedStep, "await")) {
+  if (stepHasDeferredCompletion(aliasedStep)) {
     return aliasedStep;
   }
-  if (stepHasRenderRole(displayEvent?.step, "await")) {
+  if (stepHasDeferredCompletion(displayEvent?.step)) {
     return displayEvent.step;
   }
   return awaitDisplayStepForEvent(displayEvent);
@@ -1063,6 +1066,10 @@ function stepHasRenderRole(stepName, renderRole) {
   return resolveStepDefinition(stepName)?.renderRole === renderRole;
 }
 
+function stepHasDeferredCompletion(stepName) {
+  return isDeferredCompletionStep(resolveStepDefinition(stepName));
+}
+
 function resolveDisplayRole(step) {
   if (!step) {
     return "primary";
@@ -1151,18 +1158,6 @@ function resolveDisplayTargets(event) {
   };
 }
 
-function indexStepsByRole(topology) {
-  const stepsByRole = new Map();
-  for (const step of topology?.steps ?? []) {
-    const role = resolveDisplayRole(step);
-    if (!stepsByRole.has(role)) {
-      stepsByRole.set(role, []);
-    }
-    stepsByRole.get(role).push(step);
-  }
-  return stepsByRole;
-}
-
 function indexTransitionsByRelation(topology) {
   const transitionsByRelation = new Map();
   for (const transition of topology?.transitions ?? []) {
@@ -1187,7 +1182,6 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
   const policy = emptyAnimationPolicy();
   const displayTransitions = Array.isArray(displayTopology?.transitions) ? displayTopology.transitions : [];
   const rawSteps = Array.isArray(rawTopology?.steps) ? rawTopology.steps : [];
-  const stepsByRole = indexStepsByRole(displayTopology);
   const transitionsByRelation = indexTransitionsByRelation(displayTopology);
   const awaitRequestTransitions = transitionsByRelation.get("await-request") ?? [];
   const awaitCompletionTransitions = transitionsByRelation.get("await-completion") ?? [];
@@ -1200,7 +1194,8 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
     ...(transitionsByRelation.get("query") ?? [])
   ];
 
-  for (const awaitStep of stepsByRole.get("await") ?? []) {
+  const deferredCompletionSteps = (displayTopology?.steps ?? []).filter(isDeferredCompletionStep);
+  for (const awaitStep of deferredCompletionSteps) {
     const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);
     const secondRequest = firstRequest ? findTransitionByFrom(awaitRequestTransitions, firstRequest.to) : null;
     if (firstRequest) {
@@ -1777,7 +1772,7 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
       }
     }
     for (const transitionStepName of [displayFromName, displayToName]) {
-      if (stepHasRenderRole(transitionStepName, "await")) {
+      if (stepHasDeferredCompletion(transitionStepName)) {
         directEventSteps.add(transitionStepName);
       }
     }
@@ -3194,6 +3189,7 @@ function stateForStep(stepName) {
       peakInFlight: 0,
       peakCounterBacklog: 0,
       awaitLifecycleCounterEvidence: false,
+      explicitEmitCounterEvidence: new Set(),
       activeInputKeys: new Set()
     });
   }
@@ -3332,22 +3328,32 @@ function isCountedThroughputStep(stepName) {
   return Boolean(step) && !step.sideEffect && step.pluginKind !== "reject";
 }
 
-function hasPrimaryInboundTransition(stepName) {
+function hasPrimaryInboundTransition(fromStep, stepName) {
   return (replayDocument.topology?.transitions ?? []).some((transition) =>
-    transition.to === stepName
+    transition.from === fromStep
+      && transition.to === stepName
       && (transition.relationKind ?? "primary") === "primary"
       && isCountedThroughputStep(transition.from)
   );
 }
 
-function shouldCountStartAsReceived(event) {
+function startDerivedReceiptCount(event, itemKeys, itemCount) {
   if (!event?.step || !isCountedThroughputStep(event.step)) {
-    return false;
+    return 0;
   }
-  if (!hasPrimaryInboundTransition(event.step)) {
-    return true;
+  if (!hasPrimaryInboundTransition(event.from, event.step)) {
+    return itemCount;
   }
-  return stepHasRenderRole(event.from, "await");
+  if (!stepHasDeferredCompletion(event.from)) {
+    return 0;
+  }
+  return deferredStartReceiptCount(
+    true,
+    stateForStep(event.from).explicitEmitCounterEvidence,
+    event.step,
+    itemKeys,
+    itemCount
+  );
 }
 
 function updatePeakPressure(state) {
@@ -3465,15 +3471,16 @@ function recordReplayCounters(rawEvent) {
     return;
   }
   if (event.event === "start") {
-    if (shouldCountStartAsReceived(event)) {
-      recordReceived(state, inputCount);
+    const derivedReceiptCount = startDerivedReceiptCount(event, inputKeys, inputCount);
+    if (derivedReceiptCount > 0) {
+      recordReceived(state, derivedReceiptCount);
     }
     releaseInFlight(state, inputKeys, inputCount);
-    if (stepHasRenderRole(event.from, "await")) {
+    if (stepHasDeferredCompletion(event.from) && isCountedThroughputStep(event.step)) {
       const awaitState = stateForStep(event.from);
       const derivedOutputCount = awaitOutputCountFromDownstreamStart(
         awaitState.awaitLifecycleCounterEvidence,
-        inputCount
+        derivedReceiptCount
       );
       if (derivedOutputCount > 0) {
         recordSent(awaitState, derivedOutputCount);
@@ -3485,6 +3492,9 @@ function recordReplayCounters(rawEvent) {
   if (event.event === "emit") {
     recordSent(state, outputCount);
     if (event.to && isCountedThroughputStep(event.to)) {
+      if (rawEvent?.itemId) {
+        state.explicitEmitCounterEvidence.add(downstreamReceiptEvidenceKey(event.to, rawEvent.itemId));
+      }
       const targetState = stateForStep(event.to);
       recordReceived(targetState, outputCount);
       recordInFlight(targetState, rawEvent?.itemId ? [String(rawEvent.itemId)] : [], outputCount);

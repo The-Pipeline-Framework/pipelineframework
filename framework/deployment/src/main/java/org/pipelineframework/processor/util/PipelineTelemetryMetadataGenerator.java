@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
@@ -844,7 +845,10 @@ public class PipelineTelemetryMetadataGenerator {
             if (!"kafka".equalsIgnoreCase(transportType)) {
                 continue;
             }
-            String brokerStepName = deriveBrokerActorName(baseStep.step());
+            String brokerStepName = uniqueSyntheticActorName(
+                deriveBrokerActorName(baseStep.step()),
+                "Broker",
+                steps);
             ReplayTopologyStep brokerStep = new ReplayTopologyStep(
                 syntheticRuntimeStepClass(baseStep.runtimeStepClass(), brokerStepName),
                 brokerStepName,
@@ -857,7 +861,11 @@ public class PipelineTelemetryMetadataGenerator {
                 "broker",
                 "kafka",
                 false);
-            String providerBaseName = deriveProviderActorName(configStep, baseStep.step());
+            steps.add(brokerStep);
+            String providerBaseName = uniqueSyntheticActorName(
+                deriveProviderActorName(configStep, baseStep.step()),
+                "ExternalProvider",
+                steps);
             ReplayTopologyStep providerStep = new ReplayTopologyStep(
                 syntheticRuntimeStepClass(baseStep.runtimeStepClass(), providerBaseName),
                 providerBaseName,
@@ -870,7 +878,6 @@ public class PipelineTelemetryMetadataGenerator {
                 "external-provider",
                 "provider",
                 false);
-            steps.add(brokerStep);
             steps.add(providerStep);
             transitions.add(new ReplayTopologyTransition(
                 baseStep.step() + "->" + brokerStep.step(),
@@ -914,6 +921,29 @@ public class PipelineTelemetryMetadataGenerator {
                 "await-completion"));
         }
         return nextIndex;
+    }
+
+    private String uniqueSyntheticActorName(
+        String preferredName,
+        String collisionSuffix,
+        List<ReplayTopologyStep> existingSteps
+    ) {
+        Set<String> occupiedNames = existingSteps.stream()
+            .map(ReplayTopologyStep::step)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        if (!occupiedNames.contains(preferredName)) {
+            return preferredName;
+        }
+        String fallbackName = preferredName + collisionSuffix;
+        if (!occupiedNames.contains(fallbackName)) {
+            return fallbackName;
+        }
+        int discriminator = 2;
+        while (occupiedNames.contains(fallbackName + discriminator)) {
+            discriminator++;
+        }
+        return fallbackName + discriminator;
     }
 
     private int appendPersistenceStore(
