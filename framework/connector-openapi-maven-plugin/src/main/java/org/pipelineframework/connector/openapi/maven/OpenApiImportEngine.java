@@ -153,18 +153,25 @@ final class OpenApiImportEngine {
     ) {
         require(selected != null, "OpenAPI operation requires an explicit request selection");
         Map<String, String> sources = Optional.ofNullable(selected.parameterSources).orElse(Map.of());
-        List<Parameter> parameters = new ArrayList<>();
-        if (item.getParameters() != null) parameters.addAll(item.getParameters());
-        if (operation.getParameters() != null) parameters.addAll(operation.getParameters());
+        Map<String, Parameter> parameters = new LinkedHashMap<>();
+        if (item.getParameters() != null) {
+            item.getParameters().forEach(parameter -> parameters.put(parameterKey(parameter), parameter));
+        }
+        if (operation.getParameters() != null) {
+            operation.getParameters().forEach(parameter -> parameters.put(parameterKey(parameter), parameter));
+        }
         List<HttpParameterPin> pins = new ArrayList<>();
+        Set<String> sourcePaths = new java.util.LinkedHashSet<>();
         ObjectNode combined = JSON.createObjectNode();
         combined.put("type", "object");
         combined.put("additionalProperties", false);
         ObjectNode properties = combined.putObject("properties");
         ArrayNode required = combined.putArray("required");
-        for (Parameter parameter : parameters) {
+        for (Parameter parameter : parameters.values()) {
             String sourcePath = sources.getOrDefault(parameter.getName(), parameter.getName());
             require(!sourcePath.contains("."), "initial OpenAPI parameter source paths must be top-level fields");
+            require(sourcePaths.add(sourcePath),
+                "OpenAPI parameters resolve to a duplicate sourcePath: " + sourcePath);
             JsonNode schema = schema(parameter.getSchema(), "parameter " + parameter.getName());
             properties.set(sourcePath, schema);
             boolean isRequired = Boolean.TRUE.equals(parameter.getRequired()) || "path".equals(parameter.getIn());
@@ -187,6 +194,7 @@ final class OpenApiImportEngine {
             } else {
                 String path = selected.bodyPath == null || selected.bodyPath.isBlank() ? "body" : selected.bodyPath;
                 require(!path.contains("."), "initial OpenAPI request body paths must be top-level fields");
+                require(sourcePaths.add(path), "OpenAPI request body duplicates parameter sourcePath: " + path);
                 properties.set(path, schema);
                 if (Boolean.TRUE.equals(operation.getRequestBody().getRequired())) required.add(path);
                 bodyPath = Optional.of(path);
@@ -202,6 +210,11 @@ final class OpenApiImportEngine {
             ? "http." + operationId + ".request" : selected.representation;
         return new Request(List.copyOf(pins), body,
             new HttpWireSchema(HttpPinnedJson.canonicalize(combined)), mapping);
+    }
+
+    private static String parameterKey(Parameter parameter) {
+        return text(parameter.getName(), "OpenAPI parameter name") + "\u0000"
+            + text(parameter.getIn(), "OpenAPI parameter location").toLowerCase(Locale.ROOT);
     }
 
     private static List<HttpResponsePin> responses(
@@ -423,8 +436,14 @@ final class OpenApiImportEngine {
         restoreSchemaList(object.path("allOf"), source.getAllOf());
         restoreSchemaList(object.path("anyOf"), source.getAnyOf());
         restoreSchemaList(object.path("oneOf"), source.getOneOf());
-        if (source.getAdditionalProperties() instanceof Schema<?> additional) {
-            restoreSchemaTypes(object.path("additionalProperties"), additional);
+        if (source.getAdditionalProperties() instanceof Boolean additional) {
+            object.put("additionalProperties", additional);
+        } else if (source.getAdditionalProperties() instanceof Schema<?> additional) {
+            if (additional.getBooleanSchemaValue() != null) {
+                object.put("additionalProperties", additional.getBooleanSchemaValue());
+            } else {
+                restoreSchemaTypes(object.path("additionalProperties"), additional);
+            }
         }
     }
 
@@ -470,7 +489,12 @@ final class OpenApiImportEngine {
             case PATH, HEADER -> "simple";
             case QUERY, COOKIE -> "form";
         } : style.toString();
-        return HttpParameterStyle.valueOf(value.replace('-', '_').toUpperCase(Locale.ROOT));
+        return switch (value) {
+            case "spaceDelimited" -> HttpParameterStyle.SPACE_DELIMITED;
+            case "pipeDelimited" -> HttpParameterStyle.PIPE_DELIMITED;
+            case "deepObject" -> HttpParameterStyle.DEEP_OBJECT;
+            default -> HttpParameterStyle.valueOf(value.replace('-', '_').toUpperCase(Locale.ROOT));
+        };
     }
 
     private static ConnectorOperationKind kind(String value) {

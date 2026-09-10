@@ -42,8 +42,8 @@ final class ConnectorOperationProvenanceProjector {
             .forEach(value -> mappings.put(value.mappingKey(), value));
         Map<String, Map<String, Object>> imports = new LinkedHashMap<>();
         for (Document document : documents(moduleDir, classLoader)) {
-            Object schema = document.root().get("schemaVersion");
-            if (!(schema instanceof Number number) || number.intValue() != 1) {
+            int schemaVersion = integer(document.root().get("schemaVersion"), "schemaVersion", document.source());
+            if (schemaVersion != 1) {
                 throw new IllegalStateException("Connector operation provenance schemaVersion must be 1: "
                     + document.source());
             }
@@ -191,10 +191,15 @@ final class ConnectorOperationProvenanceProjector {
     }
 
     private static int integer(Object value, String field, String source) {
-        if (!(value instanceof Number number) || number.intValue() < 1) {
+        if (!(value instanceof Number number)) {
             throw new IllegalStateException("Connector operation provenance '" + field + "' must be positive: " + source);
         }
-        return number.intValue();
+        double numeric = number.doubleValue();
+        if (!Double.isFinite(numeric) || numeric < 1 || numeric > Integer.MAX_VALUE || numeric != Math.rint(numeric)) {
+            throw new IllegalStateException("Connector operation provenance '" + field
+                + "' must be a positive integer within the int range: " + source);
+        }
+        return (int) numeric;
     }
 
     private static String operationKey(Map<String, Object> value) {

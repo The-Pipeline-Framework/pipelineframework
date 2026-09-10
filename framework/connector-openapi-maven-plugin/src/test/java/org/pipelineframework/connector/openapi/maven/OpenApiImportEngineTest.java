@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.openapi.maven;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,9 +45,14 @@ class OpenApiImportEngineTest {
         var query = pins.operations().stream()
             .filter(value -> value.kind().equals(ConnectorOperationKind.QUERY))
             .findFirst().orElseThrow();
-        assertEquals(List.of("subject", "verbose"), query.parameters().stream()
+        assertEquals(List.of("subject", "verbose", "spaces", "pipes", "filter"), query.parameters().stream()
             .map(value -> value.name()).toList());
+        assertEquals("string", query.parameters().getFirst().schema().node().path("type").asText());
+        assertEquals(List.of("FORM", "SPACE_DELIMITED", "PIPE_DELIMITED", "DEEP_OBJECT"),
+            query.parameters().stream().skip(1).map(value -> value.style().name()).toList());
         assertEquals("body", query.requestBody().orElseThrow().sourcePath().orElseThrow());
+        assertFalse(query.requestBody().orElseThrow().schema().node().path("additionalProperties").asBoolean(true));
+        assertFalse(query.requestSchema().node().path("additionalProperties").asBoolean(true));
         assertTrue(imported.discoveryReport().contains("lookupEvidence"));
         assertTrue(imported.resources().stream().filter(value -> value.path().equals(OpenApiImportEngine.PROVENANCE_PATH))
             .findFirst().orElseThrow().content().contains(closure.digest()));
@@ -62,6 +68,20 @@ class OpenApiImportEngineTest {
                 temporary.resolve("openapi-import.yaml"), configuration, closure)));
 
         assertTrue(failure.getMessage().contains("kind"));
+    }
+
+    @Test
+    void rejectsParameterMappingsThatCollapseDistinctWireParametersOntoOneSourcePath() {
+        OpenApiImportConfiguration configuration = configuration();
+        configuration.operations.getFirst().request.parameterSources = Map.of(
+            "subject", "collision", "verbose", "collision", "spaces", "spaces",
+            "pipes", "pipes", "filter", "filter");
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> new OpenApiImportEngine().importContract(new AbstractOpenApiImportMojo.LoadedImport(
+                temporary.resolve("openapi-import.yaml"), configuration, closure)));
+
+        assertTrue(failure.getMessage().contains("duplicate sourcePath"));
     }
 
     @Test
@@ -141,7 +161,9 @@ class OpenApiImportEngineTest {
         configuration.source.closureSha256 = closure.digest();
         var query = selection("lookupEvidence", "/evidence/{subject}/lookup", "evidence.lookup", "QUERY",
             "LookupArguments", "LookupResult", "200", "RESULT");
-        query.request.parameterSources = Map.of("subject", "subject", "verbose", "verbose");
+        query.request.parameterSources = Map.of(
+            "subject", "subject", "verbose", "verbose", "spaces", "spaces",
+            "pipes", "pipes", "filter", "filter");
         query.security.require = Map.of("oauth2", List.of("evidence.read"));
         var empty = response("404", null, "EMPTY");
         empty.code = "not-found";
@@ -204,12 +226,17 @@ class OpenApiImportEngineTest {
             apiKey: { type: apiKey, in: header, name: X-Api-Key }
         paths:
           /evidence/{subject}/lookup:
+            parameters:
+              - { name: subject, in: path, required: true, schema: { type: integer } }
             post:
               operationId: lookupEvidence
               security: [ { oauth2: [ evidence.read ] } ]
               parameters:
                 - { name: subject, in: path, required: true, schema: { type: string } }
                 - { name: verbose, in: query, schema: { type: boolean } }
+                - { name: spaces, in: query, style: spaceDelimited, explode: false, schema: { type: array, items: { type: string } } }
+                - { name: pipes, in: query, style: pipeDelimited, explode: false, schema: { type: array, items: { type: string } } }
+                - { name: filter, in: query, style: deepObject, explode: true, schema: { type: object, additionalProperties: false, properties: { state: { type: string } } } }
               requestBody:
                 required: true
                 content: { application/json: { schema: { $ref: './schemas.yaml#/components/schemas/LookupBody' } } }

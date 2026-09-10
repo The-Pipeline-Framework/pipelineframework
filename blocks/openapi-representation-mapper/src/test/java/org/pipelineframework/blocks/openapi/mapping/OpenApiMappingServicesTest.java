@@ -34,6 +34,20 @@ class OpenApiMappingServicesTest {
     }
 
     @Test
+    void exposesOnlySchemasAndDiagnosticsWhileKeepingOriginalStateForCompletionCarry() {
+        OpenApiMappingState state = OpenApiMappingState.start(
+            "evidence.lookup:response", "RESPONSE", CANONICAL, WIRE, 3);
+
+        OpenApiMappingTurnGate.Ready ready = assertInstanceOf(OpenApiMappingTurnGate.Ready.class,
+            PrepareOpenApiMappingTurnService.prepare(state));
+
+        assertEquals(state, ready.value().state());
+        assertEquals(state.sourceSchemaJson(), ready.value().sourceSchemaJson());
+        assertEquals(state.targetSchemaJson(), ready.value().targetSchemaJson());
+        assertEquals(state.diagnostics(), ready.value().diagnostics());
+    }
+
+    @Test
     void carriesDeterministicDiagnosticsIntoBoundedRecursion() {
         OpenApiMappingState state = OpenApiMappingState.start(
             "evidence.lookup:response", "RESPONSE", CANONICAL, WIRE, 2);
@@ -63,6 +77,16 @@ class OpenApiMappingServicesTest {
             PrepareOpenApiMappingTurnService.prepare(state.retry(List.of("invalid proposal"))));
         assertFalse(complete.value().valid());
         assertEquals(List.of("invalid proposal"), complete.value().diagnostics());
+    }
+
+    @Test
+    void rejectsNonObjectMappingOptionsInACompletedProposal() {
+        OpenApiMappingState state = OpenApiMappingState.start(
+            "evidence.lookup:response", "RESPONSE", CANONICAL, WIRE, 1);
+
+        assertThrows(IllegalArgumentException.class, () -> new OpenApiRepresentationMappingProposal(
+            state.operationIdentity(), state.direction(), state.sourceSchemaFingerprint(),
+            state.targetSchemaFingerprint(), "[]", true, List.of(), 1));
     }
 
 }

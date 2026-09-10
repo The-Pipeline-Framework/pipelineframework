@@ -22,6 +22,18 @@ final class OpenApiMappingJson {
         }
     }
 
+    static String canonicalObject(String json, String label) {
+        try {
+            JsonNode value = PipelineJson.mapper().readTree(require(json, label));
+            if (value == null || !value.isObject()) {
+                throw new IllegalArgumentException(label + " must be a JSON object");
+            }
+            return PipelineJson.mapper().writeValueAsString(value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {
+            throw new IllegalArgumentException(label + " must be valid JSON", failure);
+        }
+    }
+
     static String fingerprint(String json, String label) {
         try {
             byte[] canonical = PipelineJson.mapper().writeValueAsBytes(schema(json, label));

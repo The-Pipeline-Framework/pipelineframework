@@ -96,6 +96,46 @@ class ConnectorOperationProvenanceProjectorTest {
             .project(config, temporary, getClass().getClassLoader(), List.of()));
     }
 
+    @Test
+    void rejectsFractionalAndOutOfRangeVersionNumbers() throws Exception {
+        var config = singleLookupConfig();
+        Path resource = temporary.resolve("src/main/resources")
+            .resolve(ConnectorOperationProvenanceProjector.RESOURCE_PATH);
+        Files.createDirectories(resource.getParent());
+
+        Files.writeString(resource, "{\"schemaVersion\":1.5,\"imports\":[]}");
+        assertThrows(IllegalStateException.class, () -> new ConnectorOperationProvenanceProjector()
+            .project(config, temporary, getClass().getClassLoader(), List.of()));
+
+        Files.writeString(resource, """
+            {"schemaVersion":1,"imports":[{"provider":"http.client","importId":"evidence-api",
+              "operations":[{"kind":"tpf:query","majorVersion":2147483648,"operation":"evidence.lookup"}]}]}
+            """);
+        assertThrows(IllegalStateException.class, () -> new ConnectorOperationProvenanceProjector()
+            .project(config, temporary, getClass().getClassLoader(), List.of()));
+    }
+
+    private org.pipelineframework.config.pipeline.PipelineYamlConfig singleLookupConfig() throws Exception {
+        Path pipeline = temporary.resolve("single-lookup-pipeline.yaml");
+        Files.writeString(pipeline, """
+            version: 3
+            appName: provenance-proof
+            basePackage: example
+            connectors:
+              vendor-http: { provider: http.client, version: 1, config: { connection: vendor } }
+            types: { Input: { fields: [[subject, string]] }, Output: { fields: [[value, string]] } }
+            steps:
+              - name: Lookup
+                kind: query
+                using: vendor-http
+                operation: evidence.lookup
+                operationVersion: 1
+                input: Input
+                output: Output
+            """);
+        return new PipelineYamlConfigLoader().load(pipeline);
+    }
+
     private static String provenance(String... operations) {
         String joined = java.util.Arrays.stream(operations).map(operation -> """
             {"kind":"%s","majorVersion":1,"operation":"%s"}

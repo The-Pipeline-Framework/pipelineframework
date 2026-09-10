@@ -1,7 +1,6 @@
 package org.pipelineframework.blocks.openapi.mapping;
 
 import java.util.List;
-import java.util.Objects;
 
 /** Reviewable authoring result; compilation remains responsible for accepting and generating the mapping. */
 public record OpenApiRepresentationMappingProposal(
@@ -19,8 +18,9 @@ public record OpenApiRepresentationMappingProposal(
         direction = OpenApiMappingJson.require(direction, "OpenAPI proposal direction");
         sourceSchemaFingerprint = OpenApiMappingJson.require(sourceSchemaFingerprint, "OpenAPI source fingerprint");
         targetSchemaFingerprint = OpenApiMappingJson.require(targetSchemaFingerprint, "OpenAPI target fingerprint");
-        mappingOptionsJson = Objects.requireNonNull(mappingOptionsJson, "OpenAPI proposal options must not be null");
-        diagnostics = List.copyOf(Objects.requireNonNull(diagnostics, "OpenAPI proposal diagnostics must not be null"));
+        mappingOptionsJson = OpenApiMappingJson.canonicalObject(mappingOptionsJson, "OpenAPI proposal options");
+        diagnostics = List.copyOf(java.util.Objects.requireNonNull(
+            diagnostics, "OpenAPI proposal diagnostics must not be null"));
         if (turns < 0 || turns > OpenApiMappingState.MAX_TURNS) {
             throw new IllegalArgumentException("OpenAPI proposal turns are invalid");
         }

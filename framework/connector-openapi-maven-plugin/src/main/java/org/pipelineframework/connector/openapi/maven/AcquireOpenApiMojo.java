@@ -1,7 +1,9 @@
 package org.pipelineframework.connector.openapi.maven;
 
 import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -43,11 +45,32 @@ public final class AcquireOpenApiMojo extends org.apache.maven.plugin.AbstractMo
     }
 
     private static byte[] fetch(HttpClient client, URI uri) throws IOException, InterruptedException {
-        HttpResponse<byte[]> response = client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
-            .header("Accept", "application/yaml, application/json").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() != 200 || response.body().length > OpenApiAcquisition.MAX_DOCUMENT_BYTES) {
-            throw new IllegalArgumentException("OpenAPI acquisition failed or exceeded the document limit: " + uri);
+        HttpResponse<InputStream> response = client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
+            .header("Accept", "application/yaml, application/json").GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream body = response.body()) {
+            if (response.statusCode() != 200
+                    || response.headers().firstValueAsLong("Content-Length").stream()
+                        .anyMatch(length -> length > OpenApiAcquisition.MAX_DOCUMENT_BYTES)) {
+                throw new IllegalArgumentException("OpenAPI acquisition failed or exceeded the document limit: " + uri);
+            }
+            return readBounded(body, uri);
         }
-        return response.body();
+    }
+
+    static byte[] readBounded(InputStream body, URI uri) throws IOException {
+        try (ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int read;
+            while ((read = body.read(buffer)) >= 0) {
+                total += read;
+                if (total > OpenApiAcquisition.MAX_DOCUMENT_BYTES) {
+                    throw new IllegalArgumentException(
+                        "OpenAPI acquisition failed or exceeded the document limit: " + uri);
+                }
+                bytes.write(buffer, 0, read);
+            }
+            return bytes.toByteArray();
+        }
     }
 }

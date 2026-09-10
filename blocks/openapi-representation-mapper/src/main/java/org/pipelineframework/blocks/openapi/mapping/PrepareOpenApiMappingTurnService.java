@@ -16,6 +16,6 @@ public final class PrepareOpenApiMappingTurnService
     static OpenApiMappingTurnGate prepare(OpenApiMappingState state) {
         return state.turn() >= state.maxTurns()
             ? new OpenApiMappingTurnGate.Complete(OpenApiRepresentationMappingProposal.exhausted(state))
-            : new OpenApiMappingTurnGate.Ready(new OpenApiMappingTurn(state));
+            : new OpenApiMappingTurnGate.Ready(OpenApiMappingTurn.from(state));
     }
 }

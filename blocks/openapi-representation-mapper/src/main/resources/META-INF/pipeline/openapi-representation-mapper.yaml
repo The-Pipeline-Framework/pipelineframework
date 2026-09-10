@@ -17,6 +17,9 @@ types:
     java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurn
     fields:
       - [state, OpenApiMappingState]
+      - [sourceSchemaJson, string]
+      - [targetSchemaJson, string]
+      - { name: diagnostics, repeated: string }
   OpenApiMappingCandidate:
     java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingCandidate
     fields:
@@ -69,7 +72,12 @@ pipelines:
           input: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurn
           output: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingCandidate
         config:
-          instructions: Propose only bounded http.client representation mapping options. Preserve the supplied operation, direction, schemas, fingerprints, turn, and bound exactly. Use named record paths only; do not emit scripts, expressions, JSONPath, endpoints, credentials, or runtime configuration.
+          instructions: Return only a JSON string containing bounded http.client representation mapping options for the visible source and target schemas. Use named record paths only; do not emit scripts, expressions, JSONPath, endpoints, credentials, or runtime configuration.
+          modelInputExcludes:
+            - state
+          completion:
+            field: mappingOptionsJson
+            state: state
       - name: Validate mapping proposal
         service: org.pipelineframework.blocks.openapi.mapping.ValidateOpenApiMappingProposalService
         cardinality: ONE_TO_ONE

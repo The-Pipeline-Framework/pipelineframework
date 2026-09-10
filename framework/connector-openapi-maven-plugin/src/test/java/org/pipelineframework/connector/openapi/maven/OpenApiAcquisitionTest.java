@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,6 +69,16 @@ class OpenApiAcquisitionTest {
             () -> OpenApiAcquisition.acquire(ROOT, directory.resolve("openapi.yaml"), Set.of(), uri -> root));
 
         assertTrue(failure.getMessage().contains("not explicitly allowed"));
+    }
+
+    @Test
+    void stopsReadingAnAcquiredDocumentAtTheConfiguredLimit() {
+        byte[] oversized = new byte[OpenApiAcquisition.MAX_DOCUMENT_BYTES + 1];
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> AcquireOpenApiMojo.readBounded(new ByteArrayInputStream(oversized), ROOT));
+
+        assertTrue(failure.getMessage().contains("document limit"));
     }
 
     private static byte[] bytes(String value) {
