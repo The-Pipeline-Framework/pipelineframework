@@ -1556,7 +1556,10 @@ public class PipelineTemplateConfigLoader {
                 readTemplateCallables(stepMap, name, version);
             List<String> modelInputExcludes = readModelInputExcludes(stepMap, name);
             Map<String, String> callContext = readCallContext(stepMap, name);
-            Optional<String> deferredOperationOutputTypeName = readDeferredOperationOutputType(stepMap, name);
+            boolean legacyStandaloneAwait = "await".equalsIgnoreCase(readString(stepMap, "kind"));
+            Optional<String> deferredOperationOutputTypeName = legacyStandaloneAwait
+                ? Optional.empty()
+                : readDeferredOperationOutputType(stepMap, name);
             if (version < 2
                 && deferredOperationOutputTypeName.isPresent()
                 && !deferredOperationOutputTypeName.orElseThrow().equals(outputType)) {
