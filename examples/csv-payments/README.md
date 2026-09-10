@@ -27,10 +27,10 @@ The canonical modular flow is:
 
 1. Object Ingest admits matching CSV objects into queue-async executions.
 2. `Process Csv Payments Input` incrementally reads CSV rows from the admitted object reference.
-3. `Await Payment Provider` is an authored `ONE_TO_ONE` await step that creates one durable await interaction per `PaymentRecord` as rows arrive.
+3. `Process Csv Payments Input` is an authored expansion operation with `await:`; every emitted `PaymentRecord` becomes one trusted request and one durable completion interaction.
 4. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
 5. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
-6. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` union variants downstream.
+6. The TPF Kafka completion consumer admits each completion idempotently. A live owner hands admitted item completions directly to downstream status processing as demand permits; durable fallback resumes the owning queue-async execution after the await unit completes and reconstructs the ordered `PaymentStatus` union variants.
 7. `Process Approved Payment Status` and `Process Unapproved Payment Status` handle the two provider outcomes, then `Finalize Payment Output` merges them into the terminal `PaymentOutput`.
 8. Object Publish streams terminal `PaymentOutput` values into grouped CSV output files.
 
@@ -441,7 +441,7 @@ sequenceDiagram
 
 2. **Payment Record Extraction**: Each input file is processed, extracting individual payment records as a stream.
 
-3. **Awaited Provider Processing**: Each payment record is dispatched to the Kafka-backed mock provider through a `ONE_TO_ONE` await step.
+3. **Deferred Provider Completion**: Each payment record is emitted by the authored provider-request operation and dispatched to the Kafka-backed mock provider through its `await:` modifier.
 
 4. **Provider Completion**: The provider returns one `PaymentStatus` completion per payment record.
 

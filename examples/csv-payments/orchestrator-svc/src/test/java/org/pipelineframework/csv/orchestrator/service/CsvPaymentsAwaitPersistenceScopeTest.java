@@ -58,8 +58,8 @@ class CsvPaymentsAwaitPersistenceScopeTest {
                         .find(),
                 "Default pipeline should use object publish");
         assertFalse(
-                pipelineYaml.contains("- Await Payment Provider"),
-                "Persistence should not target the replayable await boundary");
+                pipelineYaml.contains("kind: await"),
+                "Default pipeline must not retain the removed standalone Await syntax");
     }
 
     @Test

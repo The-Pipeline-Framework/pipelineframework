@@ -69,19 +69,15 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest
     inputTypeName: ValidatedRestaurantOrderRequest
-    output: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
-    outputTypeName: PendingRestaurantApproval
-  - name: Await Restaurant Decision
-    kind: await
-    cardinality: ONE_TO_ONE
-    input: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
-    inputTypeName: PendingRestaurantApproval
     output: org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision
     outputTypeName: RestaurantDecision
-    timeout: PT30M
-    idempotencyKeyFields:
-      - orderId
     await:
+      operationOutput:
+        type: PendingRestaurantApproval
+        java: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
+      timeout: PT30M
+      idempotency:
+        fields: [orderId]
       correlation:
         strategy: interactionId
       transport:

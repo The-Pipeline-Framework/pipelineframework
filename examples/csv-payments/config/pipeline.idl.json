@@ -12,12 +12,28 @@
         "number" : 1,
         "name" : "csvFolderPath",
         "protoName" : "csv_folder_path",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "filepath",
         "protoName" : "filepath",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -31,8 +47,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "PaymentRecord" : {
       "name" : "PaymentRecord",
@@ -41,32 +59,80 @@
         "number" : 1,
         "name" : "amount",
         "protoName" : "amount",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "csvId",
         "protoName" : "csv_id",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 3,
         "name" : "csvPaymentsInputFilePath",
         "protoName" : "csv_payments_input_file_path",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "currency",
         "protoName" : "currency",
-        "type" : "currency"
+        "type" : "currency",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "id",
         "protoName" : "id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "recipient",
         "protoName" : "recipient",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -80,8 +146,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "ApprovedPaymentStatus" : {
       "name" : "ApprovedPaymentStatus",
@@ -90,42 +158,106 @@
         "number" : 1,
         "name" : "conversationId",
         "protoName" : "conversation_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "fee",
         "protoName" : "fee",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "message",
         "protoName" : "message",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "paymentRecord",
         "protoName" : "payment_record",
-        "type" : "PaymentRecord"
+        "type" : "PaymentRecord",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "paymentRecordId",
         "protoName" : "payment_record_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 7,
         "name" : "reference",
         "protoName" : "reference",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 8,
         "name" : "status",
         "protoName" : "status",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 9,
         "name" : "statusCode",
         "protoName" : "status_code",
-        "type" : "int64"
+        "type" : "int64",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -139,8 +271,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "UnapprovedPaymentStatus" : {
       "name" : "UnapprovedPaymentStatus",
@@ -149,42 +283,106 @@
         "number" : 1,
         "name" : "conversationId",
         "protoName" : "conversation_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "fee",
         "protoName" : "fee",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "message",
         "protoName" : "message",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "paymentRecord",
         "protoName" : "payment_record",
-        "type" : "PaymentRecord"
+        "type" : "PaymentRecord",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "paymentRecordId",
         "protoName" : "payment_record_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 7,
         "name" : "reference",
         "protoName" : "reference",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 8,
         "name" : "status",
         "protoName" : "status",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 9,
         "name" : "statusCode",
         "protoName" : "status_code",
-        "type" : "int64"
+        "type" : "int64",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -198,8 +396,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "ApprovedPaymentOutput" : {
       "name" : "ApprovedPaymentOutput",
@@ -208,52 +408,132 @@
         "number" : 1,
         "name" : "amount",
         "protoName" : "amount",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "conversationId",
         "protoName" : "conversation_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 3,
         "name" : "csvId",
         "protoName" : "csv_id",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "csvPaymentsInputFilePath",
         "protoName" : "csv_payments_input_file_path",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "csvPaymentsOutputFilename",
         "protoName" : "csv_payments_output_filename",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "currency",
         "protoName" : "currency",
-        "type" : "currency"
+        "type" : "currency",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 7,
         "name" : "fee",
         "protoName" : "fee",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 9,
         "name" : "message",
         "protoName" : "message",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 10,
         "name" : "recipient",
         "protoName" : "recipient",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 11,
         "name" : "status",
         "protoName" : "status",
-        "type" : "int64"
+        "type" : "int64",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -267,8 +547,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "UnapprovedPaymentOutput" : {
       "name" : "UnapprovedPaymentOutput",
@@ -277,52 +559,132 @@
         "number" : 1,
         "name" : "amount",
         "protoName" : "amount",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "conversationId",
         "protoName" : "conversation_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 3,
         "name" : "csvId",
         "protoName" : "csv_id",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "csvPaymentsInputFilePath",
         "protoName" : "csv_payments_input_file_path",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "csvPaymentsOutputFilename",
         "protoName" : "csv_payments_output_filename",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "currency",
         "protoName" : "currency",
-        "type" : "currency"
+        "type" : "currency",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 7,
         "name" : "fee",
         "protoName" : "fee",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 9,
         "name" : "message",
         "protoName" : "message",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 10,
         "name" : "recipient",
         "protoName" : "recipient",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 11,
         "name" : "status",
         "protoName" : "status",
-        "type" : "int64"
+        "type" : "int64",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -336,8 +698,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "PaymentOutput" : {
       "name" : "PaymentOutput",
@@ -346,52 +710,132 @@
         "number" : 1,
         "name" : "amount",
         "protoName" : "amount",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 2,
         "name" : "conversationId",
         "protoName" : "conversation_id",
-        "type" : "uuid"
+        "type" : "uuid",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 3,
         "name" : "csvId",
         "protoName" : "csv_id",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 4,
         "name" : "csvPaymentsInputFilePath",
         "protoName" : "csv_payments_input_file_path",
-        "type" : "path"
+        "type" : "path",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 5,
         "name" : "csvPaymentsOutputFilename",
         "protoName" : "csv_payments_output_filename",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 6,
         "name" : "currency",
         "protoName" : "currency",
-        "type" : "currency"
+        "type" : "currency",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 7,
         "name" : "fee",
         "protoName" : "fee",
-        "type" : "decimal"
+        "type" : "decimal",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 9,
         "name" : "message",
         "protoName" : "message",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 10,
         "name" : "recipient",
         "protoName" : "recipient",
-        "type" : "string"
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       }, {
         "number" : 11,
         "name" : "status",
         "protoName" : "status",
-        "type" : "int64"
+        "type" : "int64",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -405,8 +849,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "PaymentStatus" : {
       "name" : "PaymentStatus",
@@ -434,8 +880,10 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     },
     "PaymentOutputBranch" : {
       "name" : "PaymentOutputBranch",
@@ -463,18 +911,17 @@
         "minimum" : null,
         "minimumExclusive" : null,
         "maximum" : null,
-        "maximumExclusive" : null
-      }
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
     }
   },
   "steps" : [ {
     "name" : "Process Csv Payments Input",
     "inputTypeName" : "CsvPaymentsInputFile",
-    "outputTypeName" : "PaymentRecord"
-  }, {
-    "name" : "Await Payment Provider",
-    "inputTypeName" : "PaymentRecord",
-    "outputTypeName" : "PaymentStatus"
+    "outputTypeName" : "PaymentStatus",
+    "operationOutputTypeName" : "PaymentRecord"
   }, {
     "name" : "Process Approved Payment Status",
     "inputTypeName" : "ApprovedPaymentStatus",

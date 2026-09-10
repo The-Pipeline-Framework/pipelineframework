@@ -39,7 +39,7 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
 
     protected static final String TENANT_ID = "restaurant-demo";
     protected static final String PIPELINE_ID = "org.pipelineframework.restaurantapproval";
-    protected static final String AWAIT_STEP_ID = "ProcessAwaitRestaurantDecisionService";
+    protected static final String DEFERRED_OPERATION_STEP_ID = "ProcessCreatePendingApprovalService";
     protected static final String WORKER_SECRET = "restaurant-transition-worker-secret";
     protected static final String CONTROL_PLANE_ADMIN_TOKEN = "restaurant-control-plane-admin-token";
     private static final String PAYLOAD_ENCODING = "application/tpf-transition+json";
@@ -167,20 +167,21 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
     private static void assertAcceptedFlow(int coordinatorPort, boolean hosted) throws InterruptedException {
         RunAsyncAcceptedDto accepted = submitOrder(coordinatorPort, "Ada Lovelace", "Cafe TPF", hosted);
         ExecutionStatusDto waiting = awaitExecutionStatus(coordinatorPort, accepted.executionId(), ExecutionStatus.WAITING_EXTERNAL, hosted);
-        assertEquals(2, waiting.stepIndex(), "waiting state should point at the await step that suspended execution");
+        assertEquals(2, waiting.stepIndex(),
+            "waiting state should point at the completion modifier after the authored operation");
 
         PendingInteraction pending = awaitPendingInteraction(coordinatorPort, accepted.executionId(), hosted);
-        assertEquals(AWAIT_STEP_ID, pending.stepId());
+        assertEquals(DEFERRED_OPERATION_STEP_ID, pending.stepId());
         assertEquals("interaction-api", pending.transportType());
 
         AwaitCompletionResponseDto completion = completeAccepted(coordinatorPort, pending, hosted);
         assertEquals(pending.interactionId(), completion.interactionId());
-        assertEquals(AWAIT_STEP_ID, completion.stepId());
+        assertEquals(DEFERRED_OPERATION_STEP_ID, completion.stepId());
         assertEquals(AwaitInteractionStatus.COMPLETED, completion.status());
         assertFalse(completion.duplicate(), "first completion should not be marked duplicate");
 
         ExecutionStatusDto succeeded = awaitExecutionStatus(coordinatorPort, accepted.executionId(), ExecutionStatus.SUCCEEDED, hosted);
-        assertEquals(3, succeeded.stepIndex(), "execution should resume at the final step after await completion");
+        assertEquals(3, succeeded.stepIndex(), "execution should resume at the final step after deferred completion");
 
         JsonPath result = resultPayload(coordinatorPort, accepted.executionId(), hosted);
         assertEquals(pending.orderId(), result.getString("orderId"));
@@ -366,7 +367,7 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
             List<Map<String, Object>> interactions = request(port, hosted)
                 .baseUri("http://localhost")
                 .port(port)
-                .queryParam("stepId", AWAIT_STEP_ID)
+                .queryParam("stepId", DEFERRED_OPERATION_STEP_ID)
                 .accept(ContentType.JSON)
                 .when()
                 .get(hostedPath(hosted, "/interactions/pending", "/pipeline/interactions/pending"))
