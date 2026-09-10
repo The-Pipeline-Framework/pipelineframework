@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -51,17 +53,23 @@ public final class HttpOperationCatalog {
             List<URL> ordered = new ArrayList<>();
             while (resources.hasMoreElements()) ordered.add(resources.nextElement());
             ordered.sort(Comparator.comparing(URL::toExternalForm));
-            List<HttpOperationPin> pins = new ArrayList<>();
+            Map<String, HttpOperationPin> pins = new LinkedHashMap<>();
             for (URL resource : ordered) {
                 try (var stream = resource.openStream()) {
                     byte[] bytes = stream.readNBytes(HttpPinnedJson.MAX_RESOURCE_BYTES + 1);
                     if (bytes.length > HttpPinnedJson.MAX_RESOURCE_BYTES) {
                         throw new IllegalArgumentException("HTTP operation pin resource exceeds size limit");
                     }
-                    pins.addAll(read(new String(bytes, StandardCharsets.UTF_8)).operations());
+                    for (HttpOperationPin pin : read(new String(bytes, StandardCharsets.UTF_8)).operations()) {
+                        HttpOperationPin previous = pins.putIfAbsent(pin.identity(), pin);
+                        if (previous != null && !previous.equals(pin)) {
+                            throw new IllegalArgumentException(
+                                "conflicting pinned HTTP operation: " + pin.identity());
+                        }
+                    }
                 }
             }
-            return new HttpOperationCatalog(pins);
+            return new HttpOperationCatalog(List.copyOf(pins.values()));
         } catch (IOException failure) {
             throw new IllegalStateException("unable to load pinned HTTP operations", failure);
         }

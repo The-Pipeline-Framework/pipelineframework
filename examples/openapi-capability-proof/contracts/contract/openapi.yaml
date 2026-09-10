@@ -1,0 +1,52 @@
+openapi: 3.1.2
+info: { title: Evidence API, version: 1.0.0 }
+servers:
+  - url: https://{tenant}.descriptive-only.invalid/v1
+    variables: { tenant: { default: never-runtime-authority } }
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.descriptive-only.invalid/token
+          scopes: { evidence.read: Read evidence }
+    apiKey: { type: apiKey, in: header, name: X-Api-Key }
+paths:
+  /evidence/{subject}/lookup:
+    post:
+      operationId: lookupEvidence
+      security: [ { oauth2: [ evidence.read ] } ]
+      parameters:
+        - { name: subject, in: path, required: true, schema: { type: string } }
+        - { name: verbose, in: query, required: true, schema: { type: boolean } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './schemas.yaml#/components/schemas/LookupBody' }
+      responses:
+        '200':
+          description: Evidence found
+          content:
+            application/json:
+              schema: { $ref: './schemas.yaml#/components/schemas/LookupResponse' }
+        '404': { description: Evidence not found }
+        '429': { description: Rate limited }
+  /evidence:
+    post:
+      operationId: recordEvidence
+      security: [ { apiKey: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './schemas.yaml#/components/schemas/RecordBody' }
+      responses:
+        '202':
+          description: Evidence recorded
+          content:
+            application/json:
+              schema: { $ref: './schemas.yaml#/components/schemas/RecordResponse' }
+        '409': { description: Conflict }
+        '429': { description: Rate limited }

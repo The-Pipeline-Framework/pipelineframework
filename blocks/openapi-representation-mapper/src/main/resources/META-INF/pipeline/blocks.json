@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "namespace": "org.pipelineframework.openapi",
+  "artifact": {
+    "groupId": "org.pipelineframework.blocks",
+    "artifactId": "openapi-representation-mapper",
+    "version": "${project.version}"
+  },
+  "definitions": [
+    {
+      "name": "openapi-representation-mapper",
+      "resource": "META-INF/pipeline/openapi-representation-mapper.yaml",
+      "requires": {
+        "mapping.model": { "kind": "QUERY" }
+      }
+    }
+  ]
+}

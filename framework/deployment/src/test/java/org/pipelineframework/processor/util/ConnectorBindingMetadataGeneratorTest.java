@@ -167,7 +167,7 @@ class ConnectorBindingMetadataGeneratorTest {
 
         JsonObject root = JsonParser.parseString(Files.readString(
             classOutput.resolve(ConnectorBindingMetadataGenerator.RESOURCE_PATH))).getAsJsonObject();
-        assertEquals(2, root.get("schemaVersion").getAsInt());
+        assertEquals(3, root.get("schemaVersion").getAsInt());
         JsonObject payments = root.getAsJsonArray("bindings").asList().stream()
             .map(value -> value.getAsJsonObject())
             .filter(value -> value.get("name").getAsString().equals("payments"))

@@ -42,6 +42,8 @@ authoritative for exact syntax and release support.
 | [0031](./0031-canonical-constraints-own-value-and-collection-semantics.md) | Make canonical v3 own allowed scalar sets and repeated-field cardinality constraints. |
 | [0032](./0032-application-bound-callable-capabilities-in-packaged-blocks.md) | Link packaged callable catalogues, trusted projections, and dynamic Query/Command dispatch without transferring application authority. |
 | [0033](./0033-graphql-agent-packages-semantics-not-authority.md) | Package a bounded GraphQL-aware agent loop while leaving persisted operations and Command authority with the application. |
+| [0034](./0034-pinned-http-operations-execute-as-ordinary-connector-capabilities.md) | Execute immutable HTTP operation pins through ordinary Connector Query and Command support. |
+| [0035](./0035-openapi-imports-release-pinned-capabilities-not-authority.md) | Import selected OpenAPI operations as release-pinned capabilities without importing external authority. |
 
 ## Maintenance
 

@@ -1,0 +1,10 @@
+{
+  "source" : "https://petstore3.swagger.io/api/v3/openapi.yaml",
+  "rootSha256" : "b62c1cec1f087aa2597d56ab492311a125827b14482f8d1cb275701d4bfd018a",
+  "originalClosureSha256" : "b223c466466f8a63c4b2cb115731cbeea5891476d62c07117d155acff0476d01",
+  "documents" : [ {
+    "source" : "https://petstore3.swagger.io/api/v3/openapi.yaml",
+    "sha256" : "b62c1cec1f087aa2597d56ab492311a125827b14482f8d1cb275701d4bfd018a",
+    "localPath" : "petstore3-openapi.yaml"
+  } ]
+}

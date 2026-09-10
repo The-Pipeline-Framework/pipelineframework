@@ -75,7 +75,7 @@ public class ScriptedLlmQueryConnector extends LlmQueryConnectorProvider {
                 case "lookup" -> new LlmToolProposal("lookup", "{\"subject\":\"missing-proof\"}");
                 case "action" -> new LlmToolProposal("record", "{\"action\":\"record-proof\"}");
                 case "complete" -> new LlmToolProposal(
-                    "complete", "{\"summary\":\"query-not-found then command-succeeded\",\"turns\":3}");
+                    "complete", "{\"summary\":\"query then command completed\",\"turns\":3}");
                 default -> throw new IllegalArgumentException("unsupported proof phase: " + phase);
             };
         }

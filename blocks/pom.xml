@@ -18,6 +18,7 @@
         <module>document-text-extraction</module>
         <module>graphql</module>
         <module>graphql-agent</module>
+        <module>openapi-representation-mapper</module>
     </modules>
     <dependencyManagement>
         <dependencies>

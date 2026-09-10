@@ -1,0 +1,31 @@
+components:
+  schemas:
+    LookupBody:
+      type: object
+      additionalProperties: false
+      properties: { key: { type: string } }
+      required: [ key ]
+    LookupResponse:
+      type: object
+      additionalProperties: false
+      discriminator: { propertyName: kind }
+      properties:
+        kind: { type: string, enum: [ found ] }
+        payload:
+          type: object
+          additionalProperties: false
+          properties: { value: { type: string } }
+          required: [ value ]
+      required: [ kind, payload ]
+    RecordBody:
+      type: object
+      additionalProperties: false
+      properties:
+        effect_key: { type: string }
+        value: { type: string }
+      required: [ effect_key, value ]
+    RecordResponse:
+      type: object
+      additionalProperties: false
+      properties: { receipt: { type: string } }
+      required: [ receipt ]

@@ -1,0 +1,83 @@
+version: 3
+appName: OpenAPI Capability Proof
+basePackage: org.pipelineframework.examples.agentproof
+transport: LOCAL
+platform: COMPUTE
+contract: { input: AgentState, output: ApplicationResult }
+
+connectors:
+  model:
+    provider: proof.llm
+    version: 1
+    config: { model: deterministic-openapi-proof }
+  vendor-http:
+    provider: http.client
+    version: 1
+    config:
+      connection: evidence-api
+      maxRequestBytes: 65536
+      maxResponseBytes: 65536
+      requestTimeout: PT5S
+
+blockBindings:
+  org.pipelineframework.examples.callable/callable-loop-proof:
+    decision.model:
+      using: model
+    proof.read:
+      using: vendor-http
+    proof.write:
+      using: vendor-http
+      commandIdGenerator: org.pipelineframework.examples.agentproof.RecordCommandIdGenerator
+      duplicatePolicy: RETURN_RECORDED
+      policy:
+        minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+
+pipelines:
+  openapi-lookup:
+    input: LookupArguments
+    output: LookupResult
+    steps:
+      - name: Execute imported evidence lookup
+        kind: query
+        using: vendor-http
+        operation: evidence.lookup
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: LookupArguments
+        output: LookupResult
+        capture: { keyFields: [subject] }
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.LookupArguments
+          output: org.pipelineframework.examples.agentproof.domain.LookupResult
+        terminal: true
+  openapi-record:
+    input: RecordArguments
+    output: RecordResult
+    steps:
+      - name: Execute imported evidence command
+        kind: command
+        using: vendor-http
+        operation: evidence.record
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: RecordArguments
+        output: RecordResult
+        commandIdGenerator: org.pipelineframework.examples.agentproof.RecordCommandIdGenerator
+        duplicatePolicy: RETURN_RECORDED
+        policy:
+          minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+        java:
+          input: org.pipelineframework.examples.agentproof.domain.RecordArguments
+          output: org.pipelineframework.examples.agentproof.domain.RecordResult
+        terminal: true
+
+steps:
+  - name: Call imported OpenAPI capabilities
+    pipeline: callable-loop-proof
+    cardinality: ONE_TO_ONE
+    input: AgentState
+    output: ApplicationResult
+    terminal: true
+    java:
+      input: org.pipelineframework.examples.agentproof.domain.AgentState
+      output: org.pipelineframework.examples.agentproof.domain.ApplicationResult

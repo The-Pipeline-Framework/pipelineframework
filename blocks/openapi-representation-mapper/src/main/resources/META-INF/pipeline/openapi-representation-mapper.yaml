@@ -1,0 +1,97 @@
+version: 3
+
+types:
+  OpenApiMappingState:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingState
+    fields:
+      - [operationIdentity, string]
+      - [direction, string]
+      - [sourceSchemaJson, string]
+      - [targetSchemaJson, string]
+      - [sourceSchemaFingerprint, string]
+      - [targetSchemaFingerprint, string]
+      - { name: diagnostics, repeated: string }
+      - [turn, int32]
+      - [maxTurns, int32]
+  OpenApiMappingTurn:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurn
+    fields:
+      - [state, OpenApiMappingState]
+  OpenApiMappingCandidate:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingCandidate
+    fields:
+      - [state, OpenApiMappingState]
+      - [mappingOptionsJson, string]
+  OpenApiRepresentationMappingProposal:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiRepresentationMappingProposal
+    fields:
+      - [operationIdentity, string]
+      - [direction, string]
+      - [sourceSchemaFingerprint, string]
+      - [targetSchemaFingerprint, string]
+      - [mappingOptionsJson, string]
+      - [valid, bool]
+      - { name: diagnostics, repeated: string }
+      - [turns, int32]
+  OpenApiMappingTurnGate:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurnGate
+    variants:
+      ready: OpenApiMappingTurn
+      complete: OpenApiRepresentationMappingProposal
+  OpenApiMappingProgress:
+    java: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingProgress
+    variants:
+      recur: OpenApiMappingState
+      complete: OpenApiRepresentationMappingProposal
+
+pipelines:
+  openapi-representation-mapper:
+    input: OpenApiMappingState
+    output: OpenApiRepresentationMappingProposal
+    steps:
+      - name: Prepare mapping turn
+        service: org.pipelineframework.blocks.openapi.mapping.PrepareOpenApiMappingTurnService
+        cardinality: ONE_TO_ONE
+        input: OpenApiMappingState
+        output: OpenApiMappingTurnGate
+        java:
+          input: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingState
+          output: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurnGate
+      - name: Propose HTTP representation mapping
+        kind: query
+        using: mapping.model
+        operation: decide
+        operationVersion: 1
+        cardinality: ONE_TO_ONE
+        input: OpenApiMappingTurn
+        output: OpenApiMappingCandidate
+        java:
+          input: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingTurn
+          output: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingCandidate
+        config:
+          instructions: Propose only bounded http.client representation mapping options. Preserve the supplied operation, direction, schemas, fingerprints, turn, and bound exactly. Use named record paths only; do not emit scripts, expressions, JSONPath, endpoints, credentials, or runtime configuration.
+      - name: Validate mapping proposal
+        service: org.pipelineframework.blocks.openapi.mapping.ValidateOpenApiMappingProposalService
+        cardinality: ONE_TO_ONE
+        input: OpenApiMappingCandidate
+        output: OpenApiMappingProgress
+        java:
+          input: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingCandidate
+          output: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingProgress
+      - name: Recur mapping authoring
+        pipeline: openapi-representation-mapper
+        cardinality: ONE_TO_ONE
+        input: OpenApiMappingState
+        output: OpenApiRepresentationMappingProposal
+        java:
+          input: org.pipelineframework.blocks.openapi.mapping.OpenApiMappingState
+          output: org.pipelineframework.blocks.openapi.mapping.OpenApiRepresentationMappingProposal
+      - name: Finish mapping authoring
+        service: org.pipelineframework.blocks.openapi.mapping.FinishOpenApiRepresentationMappingService
+        cardinality: ONE_TO_ONE
+        input: OpenApiRepresentationMappingProposal
+        output: OpenApiRepresentationMappingProposal
+        terminal: true
+        java:
+          input: org.pipelineframework.blocks.openapi.mapping.OpenApiRepresentationMappingProposal
+          output: org.pipelineframework.blocks.openapi.mapping.OpenApiRepresentationMappingProposal

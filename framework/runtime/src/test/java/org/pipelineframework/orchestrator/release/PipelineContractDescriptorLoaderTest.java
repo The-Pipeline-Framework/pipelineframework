@@ -42,7 +42,8 @@ class PipelineContractDescriptorLoaderTest {
                 new PipelineCompositionContinuation("terminal", PipelineCompositionContinuationKind.ROOT_TERMINAL, "")))));
         PipelineContractDescriptor descriptor = new PipelineContractDescriptor(
             3, "outer", "sha256:contract", "contract", null, null, null, false, null,
-            List.of(), PipelineBundleCapabilities.defaults(), Map.of(), "", composition);
+            List.of(), PipelineBundleCapabilities.defaults(), Map.of(), "", composition, List.of(), List.of(
+                Map.of("sourceKind", "OPENAPI", "operation", "evidence.lookup")));
 
         byte[] json = PipelineJson.mapper().writeValueAsBytes(descriptor);
         PipelineContractDescriptor loaded = new PipelineContractDescriptorLoader().load(
@@ -50,5 +51,6 @@ class PipelineContractDescriptorLoaderTest {
 
         assertEquals(composition, loaded.composition());
         assertEquals("outer", loaded.composition().rootDefinitionId());
+        assertEquals("OPENAPI", loaded.capabilityImports().getFirst().get("sourceKind"));
     }
 }

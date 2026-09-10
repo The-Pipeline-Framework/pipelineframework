@@ -70,10 +70,16 @@ public class PipelineContractMetadataGenerator {
         PipelineCompositionDescriptor composition = ctx.getResolvedPipelineDefinitionGraph()
             .map(graph -> new PipelineCompositionContractProjector().project(graph))
             .orElseGet(PipelineCompositionDescriptor::empty);
+        PipelineYamlConfig effectiveConfig = loadPipelineConfig(ctx);
+        List<Map<String, Object>> capabilityImports = new ConnectorOperationProvenanceProjector().project(
+            effectiveConfig, ctx.getModuleDir(),
+            org.pipelineframework.connector.ConnectorProviderManifestLoader.metadataClassLoader(
+                PipelineContractMetadataGenerator.class), ctx.getResolvedOperationRepresentations());
         boolean hasContributedTypes = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
             && !config.typeModel().contributedTypeIdentities().isEmpty();
         List<Map<String, Object>> importedDefinitions = importedDefinitions(ctx);
         int schemaVersion = composition.present() || hasContributedTypes || !importedDefinitions.isEmpty()
+            || !capabilityImports.isEmpty()
             ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);
@@ -91,6 +97,7 @@ public class PipelineContractMetadataGenerator {
         }
         if (schemaVersion == 3) {
             contractWithoutHash.put("importedDefinitions", importedDefinitions);
+            contractWithoutHash.put("capabilityImports", capabilityImports);
         }
         contractWithoutHash.put("capabilities", capabilities());
 
@@ -113,6 +120,7 @@ public class PipelineContractMetadataGenerator {
         }
         if (schemaVersion == 3) {
             finalContract.put("importedDefinitions", importedDefinitions);
+            finalContract.put("capabilityImports", capabilityImports);
         }
         finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
 

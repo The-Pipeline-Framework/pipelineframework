@@ -24,6 +24,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
+import org.pipelineframework.representation.spi.ResolvedOperationRepresentation;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.parser.ParsedPipelineDefinitionCatalog;
 import org.pipelineframework.processor.block.ImportedPipelineDefinition;
@@ -81,6 +82,8 @@ public class PipelineCompilationContext {
     private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
     @Setter
     private org.pipelineframework.processor.representation.RepresentationProviderRegistry representationProviderRegistry;
+    @Setter
+    private List<ResolvedOperationRepresentation> resolvedOperationRepresentations;
     private final Map<org.pipelineframework.processor.composition.DefinitionLocalLocation,
         org.pipelineframework.processor.representation.ResolvedProviderBoundary> resolvedProviderBoundaries
         = new java.util.LinkedHashMap<>();
@@ -142,6 +145,7 @@ public class PipelineCompilationContext {
         this.localDefinitionStepModels = Map.of();
         this.generatedRootPipelineStepClasses = List.of();
         this.resolvedRepresentationRegistry = new ResolvedRepresentationRegistry();
+        this.resolvedOperationRepresentations = List.of();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;

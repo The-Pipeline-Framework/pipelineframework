@@ -17,19 +17,36 @@ types:
     java: org.pipelineframework.examples.agentproof.domain.LookupArguments
     fields:
       - [subject, string]
+    mappings:
+      http.evidence.lookup.request:
+        options:
+          fields: { subject: subject }
+          constants: { verbose: true, body.key: evidence }
   LookupResult:
     java: org.pipelineframework.examples.agentproof.domain.LookupResult
     fields:
       - [evidence, string]
+    mappings:
+      http.evidence.lookup.response:
+        options:
+          fields: { evidence: payload.value }
   RecordArguments:
     java: org.pipelineframework.examples.agentproof.domain.RecordArguments
     fields:
       - [action, string]
       - [effectKey, string]
+    mappings:
+      http.evidence.record.request:
+        options:
+          fields: { action: value, effectKey: effect_key }
   RecordResult:
     java: org.pipelineframework.examples.agentproof.domain.RecordResult
     fields:
       - [confirmation, string]
+    mappings:
+      http.evidence.record.response:
+        options:
+          fields: { confirmation: receipt }
   AgentDecision:
     java: org.pipelineframework.examples.agentproof.domain.AgentDecision
     variants:
@@ -77,7 +94,6 @@ pipelines:
             input: RecordArguments
             trustedArguments:
               effectKey: nextEffectKey
-            config: { label: proof }
       - name: Invoke proposal
         cardinality: ONE_TO_ONE
         input: <tpf.llm.AgentCall>
