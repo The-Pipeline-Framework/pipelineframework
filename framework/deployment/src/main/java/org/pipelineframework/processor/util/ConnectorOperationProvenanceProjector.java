@@ -73,6 +73,8 @@ final class ConnectorOperationProvenanceProjector {
         Map<String, ResolvedOperationRepresentation> mappings
     ) {
         Map<String, Object> operation = new LinkedHashMap<>(source);
+        operation.put("majorVersion", integer(
+            source.get("majorVersion"), "majorVersion", "operation provenance"));
         Object requestKey = operation.get("requestMappingKey");
         if (requestKey instanceof String key && mappings.containsKey(key)) {
             operation.put("requestMapping", mapping(mappings.get(key)));

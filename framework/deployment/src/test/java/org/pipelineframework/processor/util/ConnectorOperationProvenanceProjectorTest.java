@@ -65,6 +65,7 @@ class ConnectorOperationProvenanceProjectorTest {
         List<Map<String, Object>> operations = (List<Map<String, Object>>) projected.getFirst().get("operations");
         assertEquals(List.of("evidence.record", "evidence.lookup"), operations.stream()
             .map(value -> value.get("operation").toString()).toList());
+        assertEquals(List.of(1, 1), operations.stream().map(value -> value.get("majorVersion")).toList());
     }
 
     @Test
