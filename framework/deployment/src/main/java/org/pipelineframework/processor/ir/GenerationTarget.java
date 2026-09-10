@@ -27,8 +27,6 @@ public enum GenerationTarget {
     BLOCKING_REACTIVE_BRIDGE,
     /** Generated decorator that adds durable deferred completion to an ordinary operation */
     DEFERRED_COMPLETION_STEP,
-    /** Legacy standalone Await adapter retained until authored examples migrate to the modifier. */
-    AWAIT_CLIENT_STEP,
     /** Generated command client step that executes managed external effects */
     COMMAND_CLIENT_STEP,
     /** Generated query client step that invokes a captured query connector */

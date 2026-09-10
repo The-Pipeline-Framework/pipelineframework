@@ -278,9 +278,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case REMOTE -> {
                 yield createRemoteStepModel(ctx, stepDef, ctxWarningLogger);
             }
-            case AWAIT -> {
-                yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
-            }
             case COMMAND -> {
                 yield createCommandStepModel(ctx, definition, stepDef, ctxWarningLogger);
             }
@@ -449,66 +446,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .dynamicOperationSelection(selection)
-            .build();
-    }
-
-    private PipelineStepModel createAwaitStepModel(
-            PipelineCompilationContext ctx,
-            org.pipelineframework.processor.ir.StepDefinition stepDef,
-            Consumer<String> ctxWarningLogger) {
-        boolean v3 = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
-            && config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
-        TypeName inputType;
-        TypeName outputType;
-        if (v3) {
-            Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> resolved =
-                awaitTypeBindings.resolve(ctx, stepDef);
-            if (resolved.isEmpty()) {
-                if (stepDef.inputType() == null && stepDef.outputType() == null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        "Await step '" + stepDef.name()
-                            + "' could not resolve compiler-owned Java input and output bindings.");
-                }
-                return null;
-            }
-            inputType = resolved.orElseThrow().operationOutputType();
-            outputType = resolved.orElseThrow().finalOutputType();
-        } else {
-            if (stepDef.inputType() == null || stepDef.outputType() == null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
-                    "Await step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
-                        + "declare java.input and java.output.");
-                return null;
-            }
-            String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
-                ? config.basePackage()
-                : null;
-            inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
-            outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
-        }
-        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
-            ? stepDef.streamingShapeHint()
-            : StreamingShape.UNARY_UNARY;
-
-        String serviceName = toYamlServiceName(stepDef.name());
-        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
-        return new PipelineStepModel.Builder()
-            .serviceName(serviceName)
-            .generatedName(serviceName)
-            .servicePackage(servicePackage)
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
-            .inputMapping(TypeMapping.withoutMapper(inputType))
-            .outputMapping(TypeMapping.withoutMapper(outputType))
-            .streamingShape(streamingShape)
-            .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
-            .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
-            .sideEffect(false)
-            .cacheKeyGenerator(null)
-            .orderingRequirement(OrderingRequirement.RELAXED)
-            .threadSafety(ThreadSafety.SAFE)
             .build();
     }
 

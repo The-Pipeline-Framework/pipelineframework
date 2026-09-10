@@ -39,12 +39,6 @@ public enum StepKind {
     REMOTE,
 
     /**
-     * Legacy standalone Await step retained only while applications migrate to
-     * operation-owned deferred completion.
-     */
-    AWAIT,
-
-    /**
      * A command step that executes an idempotent external effect through a managed connector.
      */
     COMMAND,

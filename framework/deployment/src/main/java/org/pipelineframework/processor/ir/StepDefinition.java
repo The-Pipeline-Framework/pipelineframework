@@ -108,7 +108,7 @@ public record StepDefinition(
             if (kind == StepKind.QUERY && (queryId == null || queryId.isBlank())) {
                 throw new IllegalArgumentException("queryId cannot be blank for QUERY steps");
             }
-        } else if (kind != StepKind.AWAIT) {
+        } else {
             Objects.requireNonNull(executionClass, "executionClass");
         }
     }
@@ -275,8 +275,10 @@ public record StepDefinition(
             inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
             streamingShapeHint, runOnVirtualThreads, accepts, terminal,
             Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-        if (kind != StepKind.AWAIT) {
-            rejectRemovedAwait(removedAwaitConfig, removedTimeout, removedIdempotencyKeyFields);
+        if ((removedAwaitConfig != null && !removedAwaitConfig.isEmpty())
+            || removedTimeout != null
+            || (removedIdempotencyKeyFields != null && !removedIdempotencyKeyFields.isEmpty())) {
+            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
         }
     }
 
@@ -323,8 +325,7 @@ public record StepDefinition(
     }
 
     private static StepKind requireAuthoredKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND
-            || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
+        if (kind == StepKind.REMOTE || kind == StepKind.COMMAND || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
