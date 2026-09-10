@@ -38,7 +38,7 @@ public class AwaitStepDescriptorFactory {
     private static final int DESCRIPTOR_LOADER_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors());
     private static final int DESCRIPTOR_LOADER_QUEUE_SIZE = 256;
 
-    private final Map<String, AwaitStepDescriptor> descriptors = new ConcurrentHashMap<>();
+    private final Map<String, AwaitCompletionDescriptor> descriptors = new ConcurrentHashMap<>();
     private final AtomicInteger threadCounter = new AtomicInteger();
     private final ExecutorService blockingExecutor = new ThreadPoolExecutor(
         1,
@@ -56,8 +56,8 @@ public class AwaitStepDescriptorFactory {
     /**
      * Resolves the descriptor for a generated await step.
      */
-    public Uni<AwaitStepDescriptor> descriptor(String serviceName, String inputType, String outputType) {
-        AwaitStepDescriptor cached = descriptors.get(serviceName);
+    public Uni<AwaitCompletionDescriptor> descriptor(String serviceName, String inputType, String outputType) {
+        AwaitCompletionDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
             return Uni.createFrom().item(cached)
                 .onItem().invoke(resolved -> ensureCompatible(
@@ -72,14 +72,14 @@ public class AwaitStepDescriptorFactory {
             .runSubscriptionOn(blockingExecutor);
     }
 
-    public Uni<AwaitStepDescriptor> descriptor(
+    public Uni<AwaitCompletionDescriptor> descriptor(
         String serviceName,
         String inputType,
         String outputType,
         String transportInputType,
         String transportOutputType
     ) {
-        AwaitStepDescriptor cached = descriptors.get(serviceName);
+        AwaitCompletionDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
             return Uni.createFrom().item(cached)
                 .onItem().invoke(resolved -> ensureCompatible(
@@ -110,7 +110,7 @@ public class AwaitStepDescriptorFactory {
      * <p>The functions are runtime-only generated adapters. Durable interactions retain only
      * stable type identities; on replay the descriptor is rebuilt by its stable step id.</p>
      */
-    public Uni<AwaitStepDescriptor> descriptor(
+    public Uni<AwaitCompletionDescriptor> descriptor(
         String serviceName,
         String inputType,
         String outputType,
@@ -119,7 +119,7 @@ public class AwaitStepDescriptorFactory {
         Function<Object, Object> inputToTransport,
         Function<Object, Object> outputFromTransport
     ) {
-        AwaitStepDescriptor cached = descriptors.get(serviceName);
+        AwaitCompletionDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
             return Uni.createFrom().item(cached)
                 .onItem().invoke(resolved -> ensureCompatible(
@@ -148,11 +148,11 @@ public class AwaitStepDescriptorFactory {
      * Registers a descriptor constructed by a direct runtime caller so completion and replay can
      * resolve it from the durable interaction's stable step id.
      */
-    public AwaitStepDescriptor register(AwaitStepDescriptor descriptor) {
+    public AwaitCompletionDescriptor register(AwaitCompletionDescriptor descriptor) {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
-        AwaitStepDescriptor existing = descriptors.putIfAbsent(descriptor.stepId(), descriptor);
+        AwaitCompletionDescriptor existing = descriptors.putIfAbsent(descriptor.stepId(), descriptor);
         if (existing == null) {
             return descriptor;
         }
@@ -169,13 +169,13 @@ public class AwaitStepDescriptorFactory {
      * Resolves a descriptor for a durable interaction. The interaction never persisted input
      * identities, so they must come from this rebuilt descriptor rather than be guessed.
      */
-    public Uni<AwaitStepDescriptor> descriptorByStepId(String stepId) {
+    public Uni<AwaitCompletionDescriptor> descriptorByStepId(String stepId) {
         return Uni.createFrom()
             .item(() -> descriptorByStepIdNow(stepId))
             .runSubscriptionOn(blockingExecutor);
     }
 
-    public AwaitStepDescriptor descriptorByStepIdNow(String stepId) {
+    public AwaitCompletionDescriptor descriptorByStepIdNow(String stepId) {
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
         }
@@ -187,7 +187,7 @@ public class AwaitStepDescriptorFactory {
         blockingExecutor.shutdown();
     }
 
-    private AwaitStepDescriptor loadDescriptor(
+    private AwaitCompletionDescriptor loadDescriptor(
         String serviceName,
         String inputType,
         String outputType,
@@ -214,7 +214,7 @@ public class AwaitStepDescriptorFactory {
      * the transport types are identical loses a protobuf union arm before durable completion can
      * be admitted.
      */
-    private AwaitStepDescriptor loadCanonicalDescriptor(String serviceName, String inputType, String outputType) {
+    private AwaitCompletionDescriptor loadCanonicalDescriptor(String serviceName, String inputType, String outputType) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = awaitStep(config, serviceName);
@@ -261,7 +261,7 @@ public class AwaitStepDescriptorFactory {
         }
     }
 
-    private AwaitStepDescriptor loadLegacyDescriptor(String serviceName) {
+    private AwaitCompletionDescriptor loadLegacyDescriptor(String serviceName) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = awaitStep(config, serviceName);
@@ -511,7 +511,7 @@ public class AwaitStepDescriptorFactory {
         return step;
     }
 
-    private static AwaitStepDescriptor descriptorForStep(
+    private static AwaitCompletionDescriptor descriptorForStep(
         String serviceName,
         PipelineYamlStep step,
         String inputType,
@@ -530,11 +530,11 @@ public class AwaitStepDescriptorFactory {
         Optional<PipelineYamlAwaitCompletion> completion = step.awaitConfig().completion();
         AwaitCompletionProjector<Object, Object, Object> completionProjector = completion
             .map(value -> loadCompletionProjector(serviceName, value.projector()))
-            .orElseGet(() -> AwaitStepDescriptor.defaultCompletionProjector(outputFromTransport));
+            .orElseGet(() -> AwaitCompletionDescriptor.defaultCompletionProjector(outputFromTransport));
         String effectiveTransportOutputType = completion
             .map(PipelineYamlAwaitCompletion::type)
             .orElse(transportOutputType);
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             serviceName,
             inputType,
             outputType,
@@ -586,7 +586,7 @@ public class AwaitStepDescriptorFactory {
     }
 
     private static void ensureCompatible(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String inputType,
         String outputType,
         String transportInputType,

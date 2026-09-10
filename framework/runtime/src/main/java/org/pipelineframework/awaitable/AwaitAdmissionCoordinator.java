@@ -77,7 +77,7 @@ public class AwaitAdmissionCoordinator {
     }
 
     public Uni<Optional<AdmissionLease>> acquire(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String unitId,
         Integer itemIndex,

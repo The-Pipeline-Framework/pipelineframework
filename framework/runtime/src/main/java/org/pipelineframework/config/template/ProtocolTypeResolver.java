@@ -58,7 +58,8 @@ final class ProtocolTypeResolver {
                     entry.getValue().commandIdGenerator(), entry.getValue().duplicatePolicy(),
                     entry.getValue().config(), entry.getValue().policy()),
                 (left, right) -> { throw new IllegalStateException("duplicate callable alias: " + left.alias()); },
-                LinkedHashMap::new)), step.modelInputExcludes(), step.callContext());
+                LinkedHashMap::new)), step.modelInputExcludes(), step.callContext(),
+            step.deferredOperationOutputTypeName().map(this::normalizeNullableContract));
     }
 
     private String normalizeNullableContract(String contract) {

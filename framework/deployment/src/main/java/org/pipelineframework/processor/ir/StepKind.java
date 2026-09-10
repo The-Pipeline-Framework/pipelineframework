@@ -39,8 +39,8 @@ public enum StepKind {
     REMOTE,
 
     /**
-     * An await step that dispatches external work, stores durable interaction state,
-     * and resumes from a correlated completion.
+     * Legacy standalone Await step retained only while applications migrate to
+     * operation-owned deferred completion.
      */
     AWAIT,
 

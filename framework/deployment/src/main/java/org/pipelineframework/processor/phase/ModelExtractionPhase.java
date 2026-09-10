@@ -472,8 +472,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 }
                 return null;
             }
-            inputType = resolved.orElseThrow().inputType();
-            outputType = resolved.orElseThrow().outputType();
+            inputType = resolved.orElseThrow().operationOutputType();
+            outputType = resolved.orElseThrow().finalOutputType();
         } else {
             if (stepDef.inputType() == null || stepDef.outputType() == null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
@@ -498,7 +498,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceName(serviceName)
             .generatedName(serviceName)
             .servicePackage(servicePackage)
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .inputMapping(TypeMapping.withoutMapper(inputType))
             .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(streamingShape)
@@ -630,15 +630,34 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (inputType == null) {
             return null;
         }
-        TypeName outputType = resolveInternalDomainType(
-            ctx,
-            definition,
-            stepDef.name(),
-            "output",
-            stepDef.outputType(),
-            annotationBacked ? extractedModel.outboundDomainType() : null,
-            serviceSignature.outputType());
+        Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> completionBinding =
+            stepDef.deferredCompletion().isPresent()
+                ? awaitTypeBindings.resolve(ctx, stepDef)
+                : Optional.empty();
+        if (stepDef.deferredCompletion().isPresent() && completionBinding.isEmpty()) {
+            return null;
+        }
+        TypeName outputType = stepDef.deferredCompletion().isPresent()
+            ? resolveDeferredOperationOutputModelType(
+                ctx, definition, stepDef, completionBinding.orElseThrow())
+            : resolveInternalDomainType(
+                ctx,
+                definition,
+                stepDef.name(),
+                "output",
+                stepDef.outputType(),
+                annotationBacked ? extractedModel.outboundDomainType() : null,
+                serviceSignature.outputType());
         if (outputType == null) {
+            return null;
+        }
+        if (stepDef.deferredCompletion().isPresent()
+            && !serviceSignature.outputType().equals(completionBinding.orElseThrow().operationOutputType())) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepDef.name() + "' service output '" + serviceSignature.outputType()
+                    + "' does not match await.operationOutput '"
+                    + completionBinding.orElseThrow().operationOutputType() + "'.");
             return null;
         }
 
@@ -671,7 +690,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         String serviceName = toYamlServiceName(stepDef.name());
         ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, serviceSignature.apiKind());
-        return extractedModel.toBuilder()
+        PipelineStepModel.Builder builder = extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .serviceClassName(extractedModel.serviceClassName())
@@ -680,8 +699,32 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .streamingShape(serviceSignature.shape())
             .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
-            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
-            .build();
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind());
+        stepDef.deferredCompletion().ifPresent(definitionValue -> builder.deferredCompletionSelection(
+            new DeferredCompletionSelection(
+                completionBinding.orElseThrow().finalOutputType(),
+                completionBinding.orElseThrow().finalOutputCanonicalType(),
+                completionBinding.orElseThrow().completionPayloadCanonicalType(),
+                java.time.Duration.parse(definitionValue.timeout()),
+                definitionValue.idempotencyKeyFields(),
+                definitionValue.correlationStrategy(),
+                definitionValue.transportType(),
+                definitionValue.transportConfig(),
+                completionBinding.orElseThrow().completionPayloadType(),
+                definitionValue.completion().map(DeferredCompletionDefinition.CompletionProjectionDefinition::projector))));
+        return builder.build();
+    }
+
+    TypeName resolveDeferredOperationOutputModelType(
+        PipelineCompilationContext ctx,
+        PipelineReference definition,
+        StepDefinition step,
+        org.pipelineframework.processor.awaitable.AwaitStepTypeBinding completionBinding
+    ) {
+        return ctx.getResolvedProviderBoundary(definition, step.name())
+            .map(boundary -> (TypeName) ClassName.bestGuess(
+                boundary.boundary().outputType().targetTypeName()))
+            .orElseGet(completionBinding::operationOutputType);
     }
 
     private PipelineStepModel createYamlInternalBaseModel(
@@ -741,7 +784,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? config.basePackage()
             : null;
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage, ctx);
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage, ctx);
+        Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> completionBinding =
+            stepDef.deferredCompletion().isPresent()
+                ? awaitTypeBindings.resolveCanonicalBoundary(ctx, stepDef)
+                : Optional.empty();
+        if (stepDef.deferredCompletion().isPresent() && completionBinding.isEmpty()) {
+            return null;
+        }
+        TypeName outputType = completionBinding
+            .map(org.pipelineframework.processor.awaitable.AwaitStepTypeBinding::operationOutputType)
+            .orElseGet(() -> normalizeLegacyDomainType(
+                stepDef.outputType(), stepDef.executionClass(), templateBasePackage, ctx));
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
@@ -772,7 +825,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             : DeploymentRole.ORCHESTRATOR_CLIENT;
 
         ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, null);
-        return new PipelineStepModel.Builder()
+        PipelineStepModel.Builder builder = new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .servicePackage(servicePackage)
@@ -794,8 +847,20 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .sideEffect(false)
             .cacheKeyGenerator(null)
             .orderingRequirement(OrderingRequirement.RELAXED)
-            .threadSafety(ThreadSafety.SAFE)
-            .build();
+            .threadSafety(ThreadSafety.SAFE);
+        stepDef.deferredCompletion().ifPresent(definitionValue -> builder.deferredCompletionSelection(
+            new DeferredCompletionSelection(
+                completionBinding.orElseThrow().finalOutputType(),
+                completionBinding.orElseThrow().finalOutputCanonicalType(),
+                completionBinding.orElseThrow().completionPayloadCanonicalType(),
+                java.time.Duration.parse(definitionValue.timeout()),
+                definitionValue.idempotencyKeyFields(),
+                definitionValue.correlationStrategy(),
+                definitionValue.transportType(),
+                definitionValue.transportConfig(),
+                completionBinding.orElseThrow().completionPayloadType(),
+                definitionValue.completion().map(DeferredCompletionDefinition.CompletionProjectionDefinition::projector))));
+        return builder.build();
     }
 
     private TypeName normalizeLegacyDomainType(

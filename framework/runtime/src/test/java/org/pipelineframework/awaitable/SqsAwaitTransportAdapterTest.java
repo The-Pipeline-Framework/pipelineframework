@@ -26,7 +26,7 @@ class SqsAwaitTransportAdapterTest {
 
     @Test
     void supportsLiveAwaitWindowOnlyWhenTheLocalPollerOwnsTheResponseQueue() {
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -50,7 +50,7 @@ class SqsAwaitTransportAdapterTest {
                 true,
                 Optional.of("http://sqs.local/responses"));
         });
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -62,7 +62,7 @@ class SqsAwaitTransportAdapterTest {
 
     @Test
     void normalizesRequestQueueForAdmissionScope() {
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -74,7 +74,7 @@ class SqsAwaitTransportAdapterTest {
     void dispatchPublishesFrameworkEnvelope() throws Exception {
         SqsClient client = mock(SqsClient.class);
         SqsAwaitTransportAdapter adapter = adapter(client);
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -106,7 +106,7 @@ class SqsAwaitTransportAdapterTest {
     @Test
     void dispatchRejectsMissingRequestQueueUrl() {
         SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class));
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of(),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -122,7 +122,7 @@ class SqsAwaitTransportAdapterTest {
     @Test
     void dispatchRejectsMissingResponseQueueUrl() {
         SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class));
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests"),
             "response", Map.of()));
 
@@ -138,7 +138,7 @@ class SqsAwaitTransportAdapterTest {
     @Test
     void dispatchRejectsFifoQueueUrl() {
         SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class));
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests.fifo"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -154,7 +154,7 @@ class SqsAwaitTransportAdapterTest {
     @Test
     void dispatchRejectsNormalizedFifoQueueUrl() {
         SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class));
-        AwaitStepDescriptor descriptor = descriptor(Map.of(
+        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("queueUrl", "http://sqs.local/requests.fifo?ignored=true#fragment"),
             "response", Map.of("queueUrl", "http://sqs.local/responses")));
 
@@ -191,8 +191,8 @@ class SqsAwaitTransportAdapterTest {
         return config;
     }
 
-    private static AwaitStepDescriptor descriptor(Map<String, Object> config) {
-        return new AwaitStepDescriptor(
+    private static AwaitCompletionDescriptor descriptor(Map<String, Object> config) {
+        return new AwaitCompletionDescriptor(
             "PaymentProvider",
             "com.example.PaymentRecord",
             "com.example.PaymentStatus",

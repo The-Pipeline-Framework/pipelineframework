@@ -24,6 +24,7 @@ import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Generates a META-INF/pipeline/order.json resource containing the resolved pipeline order.
@@ -121,7 +122,8 @@ public class PipelineOrderMetadataGenerator {
             .filter(model -> model.deploymentRole() == DeploymentRole.ORCHESTRATOR_CLIENT)
             .filter(model -> "$root".equals(model.definition().logicalId()))
             .toList();
-        if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)) {
+        if (clientModels.stream().noneMatch(PipelineStepModel::sideEffect)
+            && clientModels.stream().noneMatch(this::hasDeferredCompletion)) {
             return List.of();
         }
         Map<String, Deque<GeneratedStepGroup>> groupsByFunctionalStep = new LinkedHashMap<>();
@@ -137,12 +139,17 @@ public class PipelineOrderMetadataGenerator {
                     current.after().add(sideEffect);
                 }
             } else {
-                String functionalStep = ctx.isOrchestratorGenerated()
+                String orderIdentity = ctx.isOrchestratorGenerated()
                     ? ClientStepClassNames.className(model, ctx.getTransportMode())
                     : localExecutionStepName(model);
-                current = new GeneratedStepGroup(List.copyOf(pendingBefore), functionalStep, new ArrayList<>());
+                String operationStep = hasDeferredCompletion(model)
+                    ? ordinaryOperationClientStepName(model, ctx.getTransportMode())
+                    : orderIdentity;
+                String completionStep = hasDeferredCompletion(model) ? orderIdentity : "";
+                current = new GeneratedStepGroup(
+                    List.copyOf(pendingBefore), operationStep, new ArrayList<>(), completionStep);
                 pendingBefore.clear();
-                groupsByFunctionalStep.computeIfAbsent(functionalStep, ignored -> new ArrayDeque<>()).add(current);
+                groupsByFunctionalStep.computeIfAbsent(orderIdentity, ignored -> new ArrayDeque<>()).add(current);
             }
         }
         if (!pendingBefore.isEmpty()) {
@@ -166,13 +173,31 @@ public class PipelineOrderMetadataGenerator {
             }
             GeneratedStepGroup group = groups.removeFirst();
             expanded.addAll(group.before());
-            expanded.add(group.functional());
+            expanded.add(group.operation());
             expanded.addAll(group.after());
+            if (!group.completion().isBlank()) {
+                expanded.add(group.completion());
+            }
         }
         return List.copyOf(new LinkedHashSet<>(expanded));
     }
 
-    private record GeneratedStepGroup(List<String> before, String functional, List<String> after) {
+    private record GeneratedStepGroup(
+        List<String> before,
+        String operation,
+        List<String> after,
+        String completion
+    ) {
+    }
+
+    private boolean hasDeferredCompletion(PipelineStepModel model) {
+        return model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP);
+    }
+
+    private String ordinaryOperationClientStepName(PipelineStepModel model, PipelineTransport transport) {
+        PipelineTransport effectiveTransport = transport == null ? PipelineTransport.GRPC : transport;
+        return model.servicePackage() + ".pipeline."
+            + stripTrailingService(model.generatedName()) + effectiveTransport.clientStepSuffix();
     }
 
     /**
@@ -335,8 +360,8 @@ public class PipelineOrderMetadataGenerator {
     }
 
     private String localExecutionStepName(PipelineStepModel model) {
-        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-            return specialLocalClientStepName(model, "AwaitClientStep");
+        if (model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)) {
+            return specialLocalClientStepName(model, "DeferredCompletionStep");
         }
         if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
             return specialLocalClientStepName(model, "CommandClientStep");
@@ -356,8 +381,17 @@ public class PipelineOrderMetadataGenerator {
 
     private Set<String> resolveGeneratedOrderSteps(PipelineCompilationContext ctx) {
         if (!ctx.isOrchestratorGenerated()) {
-            return resolveLocalExecutionSteps(ctx).stream()
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            Set<String> generated = new LinkedHashSet<>();
+            for (PipelineStepModel model : ctx.getStepModels()) {
+                if (model.sideEffect() || model.serviceClassName() == null) {
+                    continue;
+                }
+                if (hasDeferredCompletion(model)) {
+                    generated.add(ordinaryOperationClientStepName(model, ctx.getTransportMode()));
+                }
+                generated.add(localExecutionStepName(model));
+            }
+            return generated;
         }
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
@@ -367,9 +401,10 @@ public class PipelineOrderMetadataGenerator {
         String suffix = ctx.getTransportMode().clientStepSuffix();
         Set<String> generated = new LinkedHashSet<>();
         for (PipelineStepModel model : models) {
-            if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+            if (model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)) {
+                generated.add(ordinaryOperationClientStepName(model, ctx.getTransportMode()));
                 generated.add(model.servicePackage() + ".pipeline."
-                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                    + stripTrailingService(model.generatedName()) + "DeferredCompletionStep");
                 continue;
             }
             if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
@@ -407,8 +442,8 @@ public class PipelineOrderMetadataGenerator {
     }
 
     private String specialClientSuffix(PipelineStepModel model, String defaultSuffix) {
-        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-            return "AwaitClientStep";
+        if (model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)) {
+            return "DeferredCompletionStep";
         }
         if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
             return "CommandClientStep";
@@ -505,7 +540,7 @@ public class PipelineOrderMetadataGenerator {
      *
      * @param className the fully-qualified or simple class name of the step
      * @return the normalized alphanumeric token derived from the class's simple name with known
-     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep, AwaitClientStep,
+     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep, DeferredCompletionStep,
      *         CommandClientStep, QueryClientStep and optional _Subclass)
      *         removed; returns an empty string if the result contains no alphanumeric characters
      */
@@ -515,7 +550,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|CommandClientStep|QueryClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|DeferredCompletionStep|CommandClientStep|QueryClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

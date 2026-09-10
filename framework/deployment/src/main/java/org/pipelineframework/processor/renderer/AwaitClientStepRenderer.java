@@ -62,7 +62,7 @@ public class AwaitClientStepRenderer {
         TypeName inputType = boundary.stepInputType();
         TypeName outputType = boundary.stepOutputType();
 
-        FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "AwaitStepSupport"), "support")
+        FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
             .build();
         FieldSpec descriptorFactory = FieldSpec.builder(

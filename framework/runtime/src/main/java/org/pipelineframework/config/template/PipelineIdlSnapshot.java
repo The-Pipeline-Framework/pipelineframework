@@ -95,7 +95,8 @@ public record PipelineIdlSnapshot(
         }
         List<StepSnapshot> steps = new ArrayList<>();
         for (PipelineTemplateStep step : configSteps) {
-            steps.add(new StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName()));
+            steps.add(new StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName(),
+                step.deferredOperationOutputTypeName()));
         }
         Map<String, TypeSnapshot> types = config.dialect() == PipelineTemplateDialect.V3
             ? toTypeSnapshots(config.typeModel()) : Map.of();
@@ -429,7 +430,15 @@ public record PipelineIdlSnapshot(
     public record StepSnapshot(
         String name,
         String inputTypeName,
-        String outputTypeName
+        String outputTypeName,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) Optional<String> operationOutputTypeName
     ) {
+        public StepSnapshot {
+            operationOutputTypeName = operationOutputTypeName == null ? Optional.empty() : operationOutputTypeName;
+        }
+
+        public StepSnapshot(String name, String inputTypeName, String outputTypeName) {
+            this(name, inputTypeName, outputTypeName, Optional.empty());
+        }
     }
 }

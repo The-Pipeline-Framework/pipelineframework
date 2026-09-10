@@ -36,6 +36,7 @@ import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -219,13 +220,15 @@ class PipelineTelemetryMetadataGeneratorTest {
               - name: Process Folder
                 input: com.example.InputFolder
                 output: com.example.InputFile
-              - name: Await Payment Provider
-                kind: await
-                cardinality: MANY_TO_MANY
+              - name: Request Payment Provider
+                service: com.example.RequestPaymentProvider
+                cardinality: ONE_TO_ONE
                 input: com.example.PaymentRecord
                 output: com.example.PaymentStatus
-                timeout: PT5M
                 await:
+                  operationOutput:
+                    type: PaymentRecord
+                  timeout: PT5M
                   correlation:
                     strategy: signedResumeToken
                   transport:
@@ -244,6 +247,7 @@ class PipelineTelemetryMetadataGeneratorTest {
 
         List<PipelineStepModel> models = List.of(
             step("ProcessFolderService", "com.example.pipeline", type("InputFolder"), type("InputFile"), false),
+            step("RequestPaymentProviderService", "com.example.pipeline", type("PaymentRecord"), type("PaymentRecord"), false),
             step("ProcessPaymentStatusService", "com.example.pipeline", type("PaymentStatus"), type("PaymentOutput"), false)
         );
         ctx.setStepModels(models);
@@ -252,9 +256,10 @@ class PipelineTelemetryMetadataGeneratorTest {
 
         JsonObject topology = readReplayTopologyJson();
         assertEquals(5, topology.getAsJsonArray("steps").size());
-        JsonObject awaitStep = findStep(topology, "AwaitPaymentProvider");
-        assertEquals("AwaitPaymentProvider", awaitStep.get("step").getAsString());
-        assertEquals("await", awaitStep.get("renderRole").getAsString());
+        JsonObject awaitStep = findStep(topology, "RequestPaymentProvider");
+        assertEquals("RequestPaymentProvider", awaitStep.get("step").getAsString());
+        assertEquals("primary", awaitStep.get("renderRole").getAsString());
+        assertTrue(awaitStep.get("deferredCompletion").getAsBoolean());
         assertEquals("kafka", awaitStep.get("actorKind").getAsString());
         JsonObject broker = findStepByRole(topology, "broker");
         assertEquals("broker", broker.get("renderRole").getAsString());
@@ -264,9 +269,9 @@ class PipelineTelemetryMetadataGeneratorTest {
         assertEquals("provider", provider.get("actorKind").getAsString());
         assertEquals("PaymentProvider", provider.get("step").getAsString());
         assertEquals(6, topology.getAsJsonArray("transitions").size());
-        JsonObject requestTransition = findTransition(topology, "AwaitPaymentProvider", broker.get("step").getAsString());
+        JsonObject requestTransition = findTransition(topology, "RequestPaymentProvider", broker.get("step").getAsString());
         assertEquals("await-request", requestTransition.get("relationKind").getAsString());
-        JsonObject completionTransition = findTransition(topology, broker.get("step").getAsString(), "AwaitPaymentProvider");
+        JsonObject completionTransition = findTransition(topology, broker.get("step").getAsString(), "RequestPaymentProvider");
         assertEquals("await-completion", completionTransition.get("relationKind").getAsString());
     }
 
@@ -391,11 +396,6 @@ class PipelineTelemetryMetadataGeneratorTest {
                 cardinality: NOT_A_REAL_CARDINALITY
                 input: com.example.InputFolder
                 output: com.example.PaymentRecord
-              - name: Await Payment Provider
-                kind: await
-                cardinality: MANY_TO_MANY
-                input: com.example.PaymentRecord
-                output: com.example.PaymentStatus
               - name: Process Payment Status
                 input: com.example.PaymentStatus
                 output: com.example.PaymentOutput

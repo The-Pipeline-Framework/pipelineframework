@@ -42,7 +42,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor = factory.descriptor(
+            AwaitCompletionDescriptor descriptor = factory.descriptor(
                 "ProcessAwaitPaymentProviderService",
                 "org.example.PaymentRecord",
                 "org.example.PaymentStatus").await().indefinitely();
@@ -66,7 +66,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+            AwaitCompletionDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
 
             assertEquals("org.pipelineframework.awaitable.fixture.domain.PaymentRecord", descriptor.inputType());
             assertEquals("org.pipelineframework.awaitable.fixture.domain.PaymentStatus", descriptor.outputType());
@@ -94,7 +94,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+            AwaitCompletionDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
 
             assertEquals(
                 "org.pipelineframework.awaitable.authoredfixture.domain.PaymentRecord",
@@ -156,7 +156,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor =
+            AwaitCompletionDescriptor descriptor =
                 factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
 
             assertEquals("org.example.PaymentRecord", descriptor.inputType());
@@ -197,7 +197,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor = factory.descriptor(
+            AwaitCompletionDescriptor descriptor = factory.descriptor(
                 "ProcessAwaitPaymentProviderService",
                 String.class.getName(),
                 String.class.getName()).await().indefinitely();
@@ -242,7 +242,7 @@ class AwaitStepDescriptorFactoryTest {
 
         AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
         try {
-            AwaitStepDescriptor descriptor =
+            AwaitCompletionDescriptor descriptor =
                 factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
 
             assertEquals(

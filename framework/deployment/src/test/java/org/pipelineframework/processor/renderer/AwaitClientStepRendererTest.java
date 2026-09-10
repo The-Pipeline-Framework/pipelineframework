@@ -39,7 +39,7 @@ class AwaitClientStepRendererTest {
             .serviceName("FraudCheck")
             .generatedName("FraudCheckService")
             .servicePackage("com.example.fraud")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
@@ -57,8 +57,8 @@ class AwaitClientStepRendererTest {
         assertTrue(source.contains("AwaitStreamOneToOneStep<FraudCheckRequest, FraudCheckDecision>"));
         assertTrue(source.matches(
             "(?s).*class FraudCheckAwaitClientStep.*?implements\\s+[^\\{]*\\bCacheReadBypass\\b[^\\{]*\\{.*"));
-        assertTrue(source.contains("AwaitStepSupport support"));
-        assertTrue(source.contains("AwaitStepDescriptorFactory descriptorFactory"));
+        assertTrue(source.contains("AwaitCompletionSupport support"));
+        assertTrue(source.contains("AwaitCompletionDescriptorFactory descriptorFactory"));
         assertTrue(source.contains("support.awaitOneToOne(descriptorFactory.descriptor(\"FraudCheck\", "
             + "\"com.example.fraud.FraudCheckRequest\", \"com.example.fraud.FraudCheckDecision\")"
             + ", input)"));
@@ -73,7 +73,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitPaymentProvider")
             .generatedName("AwaitPaymentProviderService")
             .servicePackage("com.example.payment")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.STREAMING_STREAMING)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(ClassName.get("com.example.payment", "PaymentRecord"), null, false))
@@ -103,7 +103,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitPaymentProvider")
             .generatedName("AwaitPaymentProviderService")
             .servicePackage("com.example.payment")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(
@@ -141,7 +141,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitPaymentProvider")
             .generatedName("AwaitPaymentProviderService")
             .servicePackage("com.example.payment")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(TypeMapping.withoutMapper(ClassName.get("com.example.payment.domain", "PaymentRecord")))
@@ -169,7 +169,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitPaymentProvider")
             .generatedName("AwaitPaymentProviderService")
             .servicePackage("com.example.payment")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.STREAMING_STREAMING)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(
@@ -208,7 +208,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitRestaurantDecision")
             .generatedName("AwaitRestaurantDecisionService")
             .servicePackage("org.pipelineframework.pipeline.service")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(ClassName.get("", "PendingRestaurantApproval"), null, false))
@@ -242,7 +242,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitRestaurantDecision")
             .generatedName("AwaitRestaurantDecisionService")
             .servicePackage("org.pipelineframework.pipeline.service")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(ClassName.get("com.example.restaurantapproval.common.domain", "PendingRestaurantApproval"), null, false))
@@ -277,7 +277,7 @@ class AwaitClientStepRendererTest {
             .serviceName("ProcessAwaitOrderApprovalService")
             .generatedName("ProcessAwaitOrderApprovalService")
             .servicePackage("org.pipelineframework.tpfgo.consumer.validation.service")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(new TypeMapping(ClassName.get("org.pipelineframework.tpfgo.common.domain", "OrderApproved"), null, false))
@@ -306,7 +306,7 @@ class AwaitClientStepRendererTest {
             .serviceName("AwaitPaymentProvider")
             .generatedName("AwaitPaymentProviderService")
             .servicePackage("com.example.payment")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .executionMode(ExecutionMode.DEFAULT)
             .inputMapping(TypeMapping.withoutMapper(ClassName.get("com.example.payment.domain", "PaymentRecord")))
