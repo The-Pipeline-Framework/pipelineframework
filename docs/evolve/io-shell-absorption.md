@@ -16,7 +16,7 @@ This keeps TPF out of direct competition with Spring, Quarkus, and ordinary Java
 
 | I/O shell concern | TPF facility or capability | TPF posture | Adoption ROI | Why |
 | --- | --- | --- | --- | --- |
-| Deferred external completion: human approval, webhook callback, brokered provider result | Await step, await unit store, completion API, Kafka/webhook/interaction adapters | Runtime primitive and DSL step | Very high | Absorbs correlation, continuation, durable wait state, timeout, duplicate completion, replay shape, and observability. |
+| Deferred external completion: human approval, webhook callback, brokered provider result | `await:` operation modifier, await unit store, completion API, Kafka/webhook/interaction adapters | Orthogonal operation lifecycle and runtime primitive | Very high | Absorbs correlation, continuation, durable wait state, timeout, duplicate completion, replay shape, and observability. |
 | DB/API reads that affect business decisions | Captured query step: `LoadX -> CapturedX`, then pure decision step | DSL step, first-party connector, and guardrails | Very high | Makes mutable external state explicit, replayable, auditable, and cacheable. |
 | Long-running external jobs: submit job, poll/status, callback, final result | Job-await primitive or specialised await transport | Runtime primitive and DSL step | Very high | Removes polling loops, status stores, timeout handling, correlation, and resume plumbing. |
 | Idempotent external commands: payments, emails, tickets, provisioning | Command/outbox step with command id, effect log, retry/DLQ, duplicate policy | Runtime primitive and DSL step | Very high | Targets one of the highest-cost reliability patterns in distributed applications. |
@@ -139,7 +139,7 @@ Guardrails:
 
 ### Deferred External Completion
 
-Await is the benchmark capability. A `kind: await` step parks a `QUEUE_ASYNC` execution, creates durable interaction records, dispatches work through an adapter, admits a correlated completion, and resumes the owning execution from a typed payload.
+Await is the benchmark capability. An ordinary authored operation with `await:` produces trusted request state, parks a `QUEUE_ASYNC` execution, creates durable interaction records, dispatches through an adapter, admits a correlated completion, and resumes the owning execution from a typed final value.
 
 Benefits to the user:
 
@@ -151,7 +151,7 @@ Benefits to the user:
 
 Capability design:
 
-- The authored await boundary remains a step in `pipeline.yaml`.
+- The authored semantic operation remains the step in `pipeline.yaml`; `await:` decorates its completion lifecycle.
 - The await unit is the durable completion contract.
 - The await interaction is the transport-facing record.
 - Transports handle dispatch/admission shape; they do not redefine resume semantics.
@@ -162,14 +162,18 @@ DSL illustration:
 
 ```yaml
 steps:
-  - name: "Await Payment Provider"
-    kind: "await"
+  - name: "Request Payment Provider"
+    service: "com.example.CreatePaymentProviderRequestService"
     cardinality: "ONE_TO_ONE"
     input: "com.example.PaymentRequest"
     output: "com.example.PaymentDecision"
-    timeout: "PT5M"
-    idempotencyKeyFields: ["paymentId", "amount", "currency"]
     await:
+      operationOutput:
+        type: "com.example.PaymentProviderRequest"
+        java: "com.example.PaymentProviderRequest"
+      timeout: "PT5M"
+      idempotency:
+        fields: ["paymentId", "amount", "currency"]
       correlation:
         strategy: "signedResumeToken"
       transport:
@@ -196,7 +200,7 @@ Estimated effort:
 MCP-friendliness:
 
 - Very high. The shape is schema-first and template-friendly.
-- A generator can ask for external actor type, timeout, idempotency fields, transport, and completion payload, then produce a valid await step plus provider/client stubs.
+- A generator can ask for the authored operation, its immediate result, external actor type, timeout, idempotency fields, transport, and completion payload, then produce a valid `await:` modifier plus provider/client stubs.
 
 Third-party integration priorities:
 

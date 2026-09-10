@@ -136,7 +136,7 @@ Coding guardrails:
 
 - New code should not use `return null`; use `Optional`, empty collections, explicit result records, or exceptions. Existing legacy/null-heavy code is not a precedent for new work.
 - Prefer explicit result types and immutable records for new internal state. Avoid hidden mutable globals, broad static utility accretion, and "God classes".
-- New semantic step kinds (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells) must update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer rendering/legend, and affected examples or generator paths together.
+- New semantic step kinds (`kind: command`, query steps, object I/O, or future DSL-owned I/O shells) and orthogonal lifecycle modifiers such as `await:` must update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer rendering/legend, and affected examples or generator paths together.
 - When troubleshooting, provide a focused regression coverage along with the fix.
 
 ## Persistence Plugin Notes
@@ -225,7 +225,7 @@ TPF-specific scoping rules:
   - `evolve`: internals, design notes, and backlog-oriented material
 - Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/evolve/` or external issue trackers.
 - When changing operator or mapper semantics, update code + tests + docs together in the same change set.
-- When adding or changing a semantic step kind (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells), update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer node rendering/legend, and any affected example replay datasets or generation paths in the same change set.
+- When adding or changing a semantic step kind (`kind: command`, query steps, object I/O, or future DSL-owned I/O shells), or changing an orthogonal lifecycle modifier such as `await:`, update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer node rendering/legend, and any affected example replay datasets or generation paths in the same change set.
 - Do not write procedural code that leads to "God classes" e.g. with 'static' methods.
 - Use available Java FP patterns and language features whenever possible
 - Do not `return null` or pass null values as parameters (use Optional<> instead)

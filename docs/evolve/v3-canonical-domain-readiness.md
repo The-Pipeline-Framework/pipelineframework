@@ -36,14 +36,14 @@ The mapping conformance tests cover declared and absent lookup, optional class n
 
 ## Representation identity versus contract identity
 
-An await step carries two deliberately separate type identities:
+A deferred-completion decorator carries deliberately separate canonical and transport identities for both its immediate operation result and final completion:
 
 - **Contract identity** (`inputType` and `outputType`) is the canonical generated-domain type used by pipeline applicability, business-step signatures, branch routing, terminal merge, replayed pipeline values, and business-facing diagnostics.
 - **Representation identity** (`transportInputType` and `transportOutputType`) is the transport serialization type used for protobuf parser selection, Kafka/SQS/webhook payload conversion, await envelopes, and transport-facing diagnostics.
 
 The canonical model makes this distinction explicit: generated records, wrappers, and unions are canonical domain contracts, while generated protobuf messages are the representation that crosses a gRPC or await transport boundary. Reusing one descriptor field for both meanings would cause protobuf union wrappers to escape into branch execution and make durable completion validation ambiguous.
 
-Await is the hardest boundary because it persists work across a dispatch, an external interaction, a completion, and a later resume or replay. New interaction records therefore persist the canonical `outputType` and its `transportOutputType`. Input identities are reconstructed from the stable `stepId` by rebuilding the `AwaitStepDescriptor`; legacy records without a transport output type default it to the stored canonical output type. A rebuilt descriptor whose canonical output type differs from the durable record is a release-compatibility failure, not a value to guess.
+Await is the hardest boundary because it persists work across a dispatch, an external interaction, a completion, and a later resume or replay. New interaction records therefore persist the canonical final `outputType` and its `transportOutputType`. Input identities are reconstructed from the stable semantic `stepId` through the generated `AwaitCompletionDescriptor`. A descriptor whose canonical output differs from the durable record is a release-compatibility failure, not a value to guess.
 
 The rule is intentional: protobuf may appear in transport metadata and immediately around serialization/deserialization, but it must not become a resumed pipeline value or a canonical business-step value. Generated adapters convert canonical-to-protobuf immediately before dispatch and protobuf-to-canonical immediately after transport decoding. This keeps the wire contract durable without making protobuf part of canonical business execution.
 

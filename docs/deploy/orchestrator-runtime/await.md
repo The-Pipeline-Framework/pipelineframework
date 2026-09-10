@@ -1,6 +1,6 @@
 # Await Runtime Setup
 
-Await steps model external boundaries inside `QUEUE_ASYNC` execution. TPF persists the interaction, dispatches through the configured adapter, and admits correlated completions back into the owning execution. Scalar and recovery paths suspend as `WAITING_EXTERNAL`; brokered itemized streams can also flow through a live await session while the transition is active.
+The `await:` modifier gives an ordinary authored operation durable deferred completion inside `QUEUE_ASYNC` execution. TPF persists the operation's immediate result, dispatches through the configured adapter, and admits a correlated final completion back into the owning execution. Scalar and recovery paths suspend as `WAITING_EXTERNAL`; brokered itemized streams can also flow through a live await session while the transition is active.
 
 ## Single-process LOCAL execution
 
@@ -12,41 +12,45 @@ For modeling guidance, start with [Await Boundaries](/architecture/await-boundar
 
 ## Version 3 completion representation
 
-Version 3 generated await steps keep business code on canonical domain types while their adapter
+Version 3 generated completion modifiers keep business code on canonical domain types while their adapter
 boundary can use protobuf. At completion, TPF validates the transport value first and invokes the
 generated domain/protobuf adapter before it resumes the canonical pipeline. This preserves a
 concrete union arm across a durable handoff instead of asking JSON conversion to instantiate an
 abstract domain union.
 
 This is generated wiring, not a transport-mode exception: LOCAL, REST, and GRPC pipeline
-contracts all use the same canonical/transport distinction when a v3 await has a representation
-boundary. Runtime compatibility also reconstructs the boundary from `pipeline.yaml` for older
-generated await clients.
+contracts all use the same canonical/transport distinction when deferred completion has a representation
+boundary. The generated descriptor pins that boundary; runtime does not reconstruct it from
+`pipeline.yaml`.
 
 ## Supported Runtime Shapes
 
-| Cardinality | Interaction unit | Replay shape | App guidance |
-| --- | --- | --- | --- |
-| `ONE_TO_ONE` | one input unit, one external interaction | one output unit | Use for human approval, webhook callback, or brokered request/reply that returns one result. |
-| `ONE_TO_ONE` over a stream | one owning unit with one item interaction per input item | completion order is unspecified unless `parallelism=SEQUENTIAL` | Use when each stream item has its own external decision; choose sequential execution when source order matters. |
-| `ONE_TO_MANY` | one input unit, one external interaction | one materialized multi-item output unit replayed as a stream | Keep completion payloads bounded. |
-| `MANY_TO_ONE` | one materialized input unit, one external interaction | one output unit | Use when the external system decides on the whole batch. |
-| `MANY_TO_MANY` | one materialized input unit, one external interaction | one materialized multi-item output unit replayed as a stream | Keep input and completion payloads bounded. |
+| Authored operation cardinality | Immediate operation results | Deferred completion |
+| --- | --- | --- |
+| `ONE_TO_ONE` | one result | one interaction for that result |
+| `ONE_TO_MANY` / `EXPANSION` | zero or more emitted results | one interaction per emitted result |
+| `MANY_TO_ONE` / `REDUCTION` | one reduced result | one interaction for that result |
+| `MANY_TO_MANY` | zero or more emitted results | one interaction per emitted result |
 
-`csv-payments` uses authored `ONE_TO_ONE` await over a stream of `PaymentRecord` items. That is a stream of unary await interactions, not a hidden dispatch mode.
+There is no aggregate Await cardinality. Model a provider-visible batch as an explicit
+bounded canonical collection and use ordinary expansion or reduction around it.
+
+`csv-payments` uses an authored `EXPANSION` operation that emits `PaymentRecord`
+results. Each record receives one unary completion interaction; the framework does
+not materialize the stream into an aggregate Await request.
 
 ## Itemized Queue-Async Mechanics
 
-When `ONE_TO_ONE` await receives a stream, TPF creates one owning await unit and one interaction per input item. The unit gives the whole boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and item index.
+When a decorated operation emits a stream, TPF creates one owning await unit and one interaction per operation result. The unit gives the whole boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and item index.
 
-For brokered await transports such as Kafka, the normal path is a live await session:
+For brokered completion transports such as Kafka, the normal path is a live await session:
 
 1. the source stream dispatches item interactions up to the configured live in-flight window,
 2. each provider completion is recorded against its interaction before it is emitted,
 3. the live session emits completed items to the resumed segment only as downstream requests them,
 4. the source parser receives more demand as accepted completions free capacity.
 
-This is still durable await, not a plain in-memory request/reply stream. If the worker crashes, the live session is cancelled, or a completion arrives with no live session, the queue-async coordinator falls back to durable item continuation:
+This is still durable completion, not a plain in-memory request/reply stream. If the worker crashes, the live session is cancelled, or a completion arrives with no live session, the queue-async coordinator falls back to durable item continuation:
 
 1. the source stream must finish dispatching the unit and persist `dispatchComplete`,
 2. the parent execution must be durably parked as `WAITING_EXTERNAL` for the same await unit,
@@ -55,14 +59,14 @@ This is still durable await, not a plain in-memory request/reply stream. If the 
 
 This handles crash recovery, fast providers, and broker redelivery safely. A completion that cannot be accepted by a live session is recorded, then released through durable continuation only when the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
 
-The live path does not write `dispatchComplete` or update item aggregate state merely to deliver a completed item. Those are fallback-only facts, rebuilt from the durable interaction rows when a live owner has been lost. The eligible portable shape is intentionally narrow: a streaming producer, an immediate scalar `await`, and a terminal scalar-only suffix. It does not promise transparent resurrection of an in-memory stream after process loss.
+The live path does not write `dispatchComplete` or update item aggregate state merely to deliver a completed item. Those are fallback-only facts, rebuilt from durable interaction rows when a live owner has been lost. Nested and recursive deferred completion remains unsupported until invocation-instance identity can preserve the exact continuation position.
 
-For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, the approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` performs the terminal merge before Object Publish writes `PaymentOutput` objects.
+For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally and dispatches each trusted result through its deferred-completion overlay. The approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` performs the terminal merge before Object Publish writes `PaymentOutput` objects.
 
 ```mermaid
 sequenceDiagram
     participant Input as "Input stream"
-    participant Await as "AwaitStepSupport"
+    participant Await as "AwaitCompletionSupport"
     participant Interaction as "Await interaction store"
     participant Unit as "Await unit / fallback state"
     participant Kafka as "Kafka/provider"
@@ -94,14 +98,12 @@ For runnable examples, use [`examples/restaurant-approval`](https://github.com/T
 
 Await has the same side-effect rule as the rest of `QUEUE_ASYNC`: orchestrator state transitions are guarded, but external dispatch and external side effects are at-least-once. Use stable business idempotency keys at the external boundary.
 
-Aggregate await shapes materialize input and/or output units in the current runtime. Do not use unbounded payloads for `ONE_TO_MANY`, `MANY_TO_ONE`, or `MANY_TO_MANY` await boundaries. If replay of a materialized multi-item output fails halfway through downstream execution, TPF restarts that output unit as a whole; it does not claim exactly-once partial stream progress inside the unit.
+Deferred completion applies once to each result emitted by the authored operation. It does not define aggregate Await cardinalities. Model whole-batch requests or completions as explicit bounded canonical collection types and use ordinary expansion or reduction steps around them.
 
 The runtime also enforces aggregate materialization guardrails:
 
 | Config key | Default | Applies to |
 | --- | --- | --- |
-| `pipeline.orchestrator.await-aggregate-max-input-items` | `10000` | materialized input units for `MANY_TO_ONE` and `MANY_TO_MANY` await steps |
-| `pipeline.orchestrator.await-aggregate-max-output-items` | `10000` | materialized output units for `ONE_TO_MANY` and `MANY_TO_MANY` await steps |
 
 Set either value to `0` only when the application has its own upstream size control and storage budget. Prefer stable business limits at the API/file/broker boundary rather than relying on these guards as the first line of defense.
 
@@ -117,7 +119,7 @@ pipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
 pipeline.max-concurrency=250
 ```
 
-TPF derives one shared budget scope from the logical pipeline, await step, and request endpoint. It acquires a conditional Dynamo slot before creating the interaction and holds it until durable completion handoff or a terminal transition. Use the in-memory store only for local development and tests; it cannot coordinate replicas.
+TPF derives one shared budget scope from the logical pipeline, decorated operation, and request endpoint. It acquires a conditional Dynamo slot before creating the interaction and holds it until durable completion handoff or a terminal transition. Use the in-memory store only for local development and tests; it cannot coordinate replicas.
 
 Replay records `await_admission_acquired`, `await_admission_reused`, `await_admission_reconciled`, and `await_admission_released` before the normal provider-completion lifecycle. This separates admission pressure from an await unit that is already waiting for an external completion.
 
@@ -130,13 +132,17 @@ That matters for plugin-style side effects after an await boundary. A resumed qu
 ```yaml
 steps:
   - name: "Fraud Check"
-    kind: "await"
+    service: "com.example.CreateFraudCheckRequestService"
     cardinality: "ONE_TO_ONE"
     input: "com.example.FraudCheckRequest"
     output: "com.example.FraudCheckDecision"
-    timeout: "PT10M"
-    idempotencyKeyFields: ["orderId"]
     await:
+      operationOutput:
+        type: "com.example.FraudCheckRequest"
+        java: "com.example.FraudCheckRequest"
+      timeout: "PT10M"
+      idempotency:
+        fields: ["orderId"]
       correlation:
         strategy: "signedResumeToken"
       transport:
@@ -154,13 +160,17 @@ Webhook dispatch sends an envelope containing the interaction id, correlation id
 ```yaml
 steps:
   - name: "Brokered Fraud Check"
-    kind: "await"
+    service: "com.example.CreateFraudCheckRequestService"
     cardinality: "ONE_TO_ONE"
     input: "com.example.FraudCheckRequest"
     output: "com.example.FraudCheckDecision"
-    timeout: "PT10M"
-    idempotencyKeyFields: ["orderId"]
     await:
+      operationOutput:
+        type: "com.example.FraudCheckRequest"
+        java: "com.example.FraudCheckRequest"
+      timeout: "PT10M"
+      idempotency:
+        fields: ["orderId"]
       correlation:
         strategy: "signedResumeToken"
       transport:
@@ -180,14 +190,18 @@ Kafka dispatch sends a framework-owned JSON envelope containing tenant id, execu
 
 ```yaml
 steps:
-  - name: "Await Payment Provider"
-    kind: "await"
+  - name: "Process Csv Payments Input"
+    service: "org.pipelineframework.csv.orchestrator.service.RequestPaymentProviderService"
     cardinality: "ONE_TO_ONE"
     input: "org.pipelineframework.csv.common.domain.PaymentRecord"
     output: "org.pipelineframework.csv.common.domain.PaymentStatus"
-    timeout: "PT5M"
-    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
     await:
+      operationOutput:
+        type: "org.pipelineframework.csv.common.domain.PaymentRecord"
+        java: "org.pipelineframework.csv.common.domain.PaymentRecord"
+      timeout: "PT5M"
+      idempotency:
+        fields: ["csvId", "recipient", "amount", "currency"]
       correlation:
         strategy: "signedResumeToken"
       transport:
@@ -215,13 +229,17 @@ mp.messaging.incoming.tpf-await-kafka-responses.value.deserializer=org.apache.ka
 ```yaml
 steps:
   - name: "Brokered Fraud Check"
-    kind: "await"
+    service: "com.example.CreateFraudCheckRequestService"
     cardinality: "ONE_TO_ONE"
     input: "com.example.FraudCheckRequest"
     output: "com.example.FraudCheckDecision"
-    timeout: "PT10M"
-    idempotencyKeyFields: ["orderId"]
     await:
+      operationOutput:
+        type: "com.example.FraudCheckRequest"
+        java: "com.example.FraudCheckRequest"
+      timeout: "PT10M"
+      idempotency:
+        fields: ["orderId"]
       correlation:
         strategy: "signedResumeToken"
       transport:

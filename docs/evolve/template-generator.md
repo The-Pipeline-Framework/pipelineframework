@@ -85,7 +85,7 @@ You can determine that version with `template-generator --version`, by checking 
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
-Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. Runtime supports `interaction-api`, `webhook`, Kafka await, and SQS await; scaffold support for Kafka and SQS must emit the matching Quarkus dependencies, channel or poller properties, and queue/topic configuration rather than assuming generic await wiring is enough.
+Deferred completion is part of the template schema as `await:` on an ordinary authored service. CI and automation validate the immediate `operationOutput`, timeout, correlation, transport, and optional completion projector independently from the operation's final output. Runtime supports `interaction-api`, webhook, Kafka, and SQS completion; scaffold support for Kafka and SQS must emit the matching Quarkus dependencies, channel or poller properties, and queue/topic configuration rather than assuming generic wiring is enough.
 
 ## Semantic Types and Derived Bindings
 
