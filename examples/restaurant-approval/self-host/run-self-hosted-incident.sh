@@ -8,7 +8,7 @@ MONOLITH_DIR="${EXAMPLE_DIR}/monolith-svc"
 
 TPF_TENANT_ID="${TPF_TENANT_ID:-restaurant-demo}"
 TPF_PIPELINE_ID="${TPF_PIPELINE_ID:-org.pipelineframework.restaurantapproval}"
-TPF_AWAIT_STEP_ID="${TPF_AWAIT_STEP_ID:-ProcessCreatePendingApprovalService}"
+TPF_AWAIT_STEP_ID="${TPF_AWAIT_STEP_ID:-ProcessAwaitRestaurantDecisionService}"
 TPF_COORDINATOR_PORT="${TPF_COORDINATOR_PORT:-8081}"
 TPF_CONTROL_PLANE_TOKEN="${TPF_CONTROL_PLANE_TOKEN:-restaurant-control-plane-admin-token}"
 TPF_ADMIN_TOKEN="${TPF_ADMIN_TOKEN:-restaurant-control-plane-admin-token}"

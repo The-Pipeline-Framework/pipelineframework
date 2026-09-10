@@ -21,7 +21,7 @@ With `parallelism=AUTO` or parallel execution, TPF uses bounded merge at that sa
 
 ### Durable provider admission
 
-Durable admission is enabled by default for deferred completions whose adapter exposes a provider endpoint, such as Kafka and SQS in `QUEUE_ASYNC` mode. It makes the concurrency value a durable pending-interaction budget. The budget is scoped to the logical pipeline, decorated operation, and normalised provider endpoint, so it is shared across tenants and runtime replicas rather than multiplied by each worker. A full budget pauses source admission; it is framework-enforced backpressure, not a dispatch-rate limiter or a provider-side quota. Durable-only adapters without a provider endpoint, including interaction API and webhook completion, do not acquire a reservation. Set `pipeline.await-admission.enabled=false` only for a deliberate compatibility or recovery override.
+Durable admission is enabled by default for `ONE_TO_ONE` awaits whose adapter exposes a provider endpoint, such as Kafka and SQS in `QUEUE_ASYNC` mode. It makes that same value a durable pending-interaction budget. The budget is scoped to the logical pipeline, await step, and normalized provider endpoint, so it is shared across tenants and runtime replicas rather than multiplied by each worker. A full budget pauses source admission; it is framework-enforced backpressure, not a dispatch-rate limiter or a provider-side quota. Durable-only adapters without a provider endpoint, including interaction API and webhook awaits, do not acquire a reservation. Set `pipeline.await-admission.enabled=false` only for a deliberate compatibility or recovery override.
 
 Use `pipeline.await-admission.store=dynamo` for multi-replica deployment and provision `tpf_await_admission` with `scope_key` (string) and `slot` (number) as its composite key. The in-memory store is intended for tests and single-process development. Reservations survive dispatch retries and are released only after durable completion handoff, terminal failure, timeout, cancellation, or expiry.
 
@@ -99,7 +99,7 @@ In connector-first CSV Payments, Object Ingest controls source-object admission,
 ```mermaid
 flowchart LR
     A["Object Ingest<br/>source object"] --> B["CSV parser<br/>demand-driven iterator"]
-    B --> C["Process CSV Payments Input<br/>deferred-completion budget"]
+    B --> C["Await Payment Provider<br/>max in-flight interactions"]
     C --> D["Kafka/provider<br/>external latency"]
     D -. "active eligible live owner<br/>in-process or portable REST/gRPC worker" .-> E["Live await session<br/>completion admitted first"]
     E --> F["Process Approved Payment Status"]
@@ -113,13 +113,12 @@ flowchart LR
 ```
 
 The repo proof run for the built-in CSV Payments replay used execution max concurrency `250` and
-a deterministic `0.08` provider-rejection rule. It processed 1k records in `14.732s` of replay
-time and showed both status paths starting at `1.642s`, before parser emission finished at
-`11.901s`. The capture records completion admission and interaction-dispatch events on the
-decorated `Process CSV Payments Input` operation, with no standalone Await node and no durable
+a deterministic `0.08` provider-rejection rule. It processed 1k records in `17.047s` of replay
+time and showed both status paths starting at `1.635s`, before parser emission finished at
+`9.962s`. The capture records live admission and interaction-dispatch events, with no durable
 await-unit completion or resume events. That overlap is the backpressure signal to look for: the
-parser, brokered completion, status steps, terminal merge, and Object Publish are moving as
-connected live segments, with durable fallback available for recovery.
+parser, brokered await, status steps, terminal merge, and Object Publish are moving as connected
+live segments, with durable fallback available for recovery.
 
 ### HA scale fixture budgets
 

@@ -9,7 +9,6 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
-import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
@@ -218,9 +217,7 @@ public final class PipelineBranchRoutingPlanner {
         List<BranchVariantIdentity> producedVariants = expandVariantIdentities(templateConfig, templateStep.outputTypeName());
 
         boolean oneToOneCardinality = "ONE_TO_ONE".equalsIgnoreCase(templateStep.cardinality());
-        boolean perItemDeferredExpansion = stepDefinition.deferredCompletion().isPresent()
-            && isOneToMany(templateStep.cardinality());
-        if (!oneToOneCardinality && !perItemDeferredExpansion
+        if (!oneToOneCardinality
             && (templateStep.terminal()
                 || !templateStep.accepts().isEmpty()
                 || inputLeafTypes.size() != 1
@@ -293,14 +290,6 @@ public final class PipelineBranchRoutingPlanner {
             inputVariants,
             acceptedVariants,
             producedVariants));
-    }
-
-    private static boolean isOneToMany(String cardinality) {
-        try {
-            return CardinalitySemantics.ONE_TO_MANY == CardinalitySemantics.fromString(cardinality);
-        } catch (IllegalArgumentException ignored) {
-            return false;
-        }
     }
 
     private Map<String, ClassName> indexContractRuntimeTypes(

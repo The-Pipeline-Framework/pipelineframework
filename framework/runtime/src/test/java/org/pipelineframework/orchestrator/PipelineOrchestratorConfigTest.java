@@ -45,6 +45,8 @@ class PipelineOrchestratorConfigTest {
         assertFalse(config.queueUrl().isPresent());
         assertFalse(config.dlqUrl().isPresent());
         assertFalse(config.resumeTokenSecret().isPresent());
+        assertEquals(10000, config.awaitAggregateMaxInputItems());
+        assertEquals(10000, config.awaitAggregateMaxOutputItems());
         assertEquals(List.of("org.pipelineframework."), config.worker().allowedPayloadPrefixes());
         assertFalse(config.workerRest().sharedSecret().isPresent());
         assertFalse(config.workerRest().sharedSecretRef().isPresent());
@@ -195,6 +197,16 @@ class PipelineOrchestratorConfigTest {
                     assertTrue(secret.isPresent());
                     assertEquals("test-secret", secret.get());
                 }),
+            Arguments.of(
+                "pipeline.orchestrator.await-aggregate-max-input-items",
+                "500",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(500, config.awaitAggregateMaxInputItems())),
+            Arguments.of(
+                "pipeline.orchestrator.await-aggregate-max-output-items",
+                "250",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(250, config.awaitAggregateMaxOutputItems())),
             Arguments.of(
                 "pipeline.orchestrator.control-plane.enabled",
                 "true",

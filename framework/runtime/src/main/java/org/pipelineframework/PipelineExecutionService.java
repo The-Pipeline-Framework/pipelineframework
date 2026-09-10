@@ -414,7 +414,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   }
 
   /**
-   * Keeps portable itemized deferred completion live only for the narrow generated shape that can complete its
+   * Keeps a portable itemized await live only for the narrow generated shape that can complete its
    * scalar suffix in this transition worker. Every missing, malformed, or ineligible contract
    * remains on the durable handoff path.
    */
@@ -441,26 +441,34 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     int stopBeforeStepIndex = command.stopBeforeStepIndex() < 0 ? steps.size() : command.stopBeforeStepIndex();
     if (producerIndex < 0
         || stopBeforeStepIndex != steps.size()
-        || producerIndex + 1 >= stopBeforeStepIndex) {
+        || producerIndex + 2 >= stopBeforeStepIndex) {
       return false;
     }
 
     PipelineBundleStepDescriptor producer = steps.get(producerIndex);
+    PipelineBundleStepDescriptor await = steps.get(producerIndex + 1);
     if (producer.index() != producerIndex
+        || await.index() != producerIndex + 1
         || !hasCardinality(producer, CardinalitySemantics.ONE_TO_MANY)
-        || producer.deferredCompletion().isEmpty()) {
+        || !"await".equalsIgnoreCase(await.kind())
+        || !hasCardinality(await, CardinalitySemantics.ONE_TO_ONE)
+        || !sameCanonicalType(producer.outputTypeId(), await.inputTypeId())) {
       return false;
     }
 
-    for (int index = producerIndex + 1; index < stopBeforeStepIndex; index++) {
+    for (int index = producerIndex + 2; index < stopBeforeStepIndex; index++) {
       PipelineBundleStepDescriptor suffix = steps.get(index);
       if (suffix.index() != index
           || !hasCardinality(suffix, CardinalitySemantics.ONE_TO_ONE)
-          || !suffix.deferredCompletion().isEmpty()) {
+          || "await".equalsIgnoreCase(suffix.kind())) {
         return false;
       }
     }
     return true;
+  }
+
+  private static boolean sameCanonicalType(String left, String right) {
+    return left != null && !left.isBlank() && left.equals(right);
   }
 
   private static boolean hasCardinality(

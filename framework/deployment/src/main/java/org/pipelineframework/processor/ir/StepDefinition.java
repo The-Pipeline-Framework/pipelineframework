@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2026 Mariano Barcia
+ * Copyright (c) 2023-2025 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,277 +21,48 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import javax.annotation.Nullable;
-
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 
-/** Immutable semantic definition of one authored pipeline operation. */
+/**
+ * Represents a step definition parsed from YAML configuration.
+ * This model drives the generation of step clients based on YAML declarations.
+ *
+ * @param name The name of the step
+ * @param kind The kind of step (INTERNAL, DELEGATED, REMOTE, AWAIT, COMMAND, or QUERY)
+ * @param executionClass The class that provides the execution implementation
+ * @param delegatedMethodName Optional delegated/operator method name when YAML uses Class::method syntax
+ * @param remoteExecution remote execution metadata for REMOTE steps
+ * @param awaitConfig raw await configuration for AWAIT steps
+ * @param timeout await timeout string for AWAIT steps
+ * @param idempotencyKeyFields fields used to derive await idempotency keys
+ * @param command command connector name for COMMAND steps
+ * @param commandIdGenerator command id generator class for COMMAND steps
+ * @param duplicatePolicy duplicate policy for COMMAND steps
+ * @param commandConfig connector config for COMMAND steps
+ * @param queryId referenced query id for QUERY steps
+ * @param queryConfig raw capture configuration for QUERY steps
+ * @param queryKeyFields fields used to derive captured query keys
+ * @param inboundMapper The inbound mapper class for internal service steps (nullable)
+ * @param outboundMapper The outbound mapper class for internal service steps (nullable)
+ * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
+ * @param mapperFallback mapper fallback strategy when no mapper matches (never null)
+ * @param inputType The input type for the step
+ * @param outputType The output type for the step
+ * @param streamingShapeHint Optional streaming shape hint parsed from YAML cardinality
+ * @param runOnVirtualThreads Whether blocking execution should use virtual threads
+ * @param accepts Optional concrete contract types accepted by this step for branch-aware routing
+ * @param terminal Whether this step is the mandatory terminal merge for a branch-aware pipeline
+ */
 public record StepDefinition(
-    String name,
-    StepKind kind,
-    @Nullable ClassName executionClass,
-    Optional<String> delegatedMethodName,
-    @Nullable PipelineTemplateStepExecution remoteExecution,
-    @Nullable String command,
-    @Nullable ClassName commandIdGenerator,
-    @Nullable String duplicatePolicy,
-    Map<String, Object> commandConfig,
-    @Nullable String queryId,
-    Map<String, Object> queryConfig,
-    List<String> queryKeyFields,
-    @Nullable ClassName inboundMapper,
-    @Nullable ClassName outboundMapper,
-    @Nullable ClassName externalMapper,
-    MapperFallbackMode mapperFallback,
-    @Nullable ClassName inputType,
-    @Nullable ClassName outputType,
-    @Nullable StreamingShape streamingShapeHint,
-    boolean runOnVirtualThreads,
-    List<String> accepts,
-    boolean terminal,
-    Optional<String> pipelineReference,
-    Optional<String> dynamicOperationSource,
-    Optional<ConnectorOperationSelection> connectorOperationSelection,
-    Optional<DeferredCompletionDefinition> deferredCompletion
-) {
-    public StepDefinition {
-        Objects.requireNonNull(name, "name");
-        if (name.isBlank()) {
-            throw new IllegalArgumentException("name must not be blank");
-        }
-        Objects.requireNonNull(kind, "kind");
-        delegatedMethodName = normalized(delegatedMethodName);
-        pipelineReference = normalized(pipelineReference);
-        dynamicOperationSource = normalized(dynamicOperationSource);
-        connectorOperationSelection = connectorOperationSelection == null ? Optional.empty() : connectorOperationSelection;
-        deferredCompletion = deferredCompletion == null ? Optional.empty() : deferredCompletion;
-        commandConfig = commandConfig == null ? Map.of() : Map.copyOf(commandConfig);
-        queryConfig = queryConfig == null ? Map.of() : Map.copyOf(queryConfig);
-        queryKeyFields = queryKeyFields == null ? List.of() : List.copyOf(queryKeyFields);
-        accepts = accepts == null ? List.of() : List.copyOf(accepts);
-        mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
-
-        if (runOnVirtualThreads && (kind != StepKind.INTERNAL || dynamicOperationSource.isPresent())) {
-            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
-        }
-        if (executionClass != null && remoteExecution != null) {
-            throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
-        }
-        if (deferredCompletion.isPresent() && kind != StepKind.INTERNAL) {
-            throw new IllegalArgumentException("deferred completion currently supports only INTERNAL authored operations");
-        }
-
-        if (kind == StepKind.REMOTE) {
-            Objects.requireNonNull(remoteExecution, "remoteExecution");
-        } else if (dynamicOperationSource.isPresent()) {
-            if (kind != StepKind.INTERNAL || executionClass != null || remoteExecution != null) {
-                throw new IllegalArgumentException(
-                    "dynamic operation bindings use INTERNAL semantics without authored execution");
-            }
-            Objects.requireNonNull(inputType, "inputType");
-            Objects.requireNonNull(outputType, "outputType");
-        } else if (kind == StepKind.COMMAND || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
-            if (executionClass != null || remoteExecution != null) {
-                throw new IllegalArgumentException(kind + " steps cannot declare authored execution");
-            }
-            Objects.requireNonNull(inputType, "inputType");
-            Objects.requireNonNull(outputType, "outputType");
-            if (kind == StepKind.PIPELINE && pipelineReference.isEmpty()) {
-                throw new IllegalArgumentException("pipelineReference cannot be blank for PIPELINE steps");
-            }
-            if (kind == StepKind.COMMAND) {
-                if (command == null || command.isBlank()) {
-                    throw new IllegalArgumentException("command cannot be blank for COMMAND steps");
-                }
-                Objects.requireNonNull(commandIdGenerator, "commandIdGenerator");
-            }
-            if (kind == StepKind.QUERY && (queryId == null || queryId.isBlank())) {
-                throw new IllegalArgumentException("queryId cannot be blank for QUERY steps");
-            }
-        } else {
-            Objects.requireNonNull(executionClass, "executionClass");
-        }
-    }
-
-    public static StepDefinition pipeline(
-        String name,
-        ClassName inputType,
-        ClassName outputType,
-        StreamingShape streamingShapeHint,
-        List<String> accepts,
-        boolean terminal,
-        String pipelineReference
-    ) {
-        return new StepDefinition(name, StepKind.PIPELINE, null, Optional.empty(), null,
-            null, null, null, Map.of(), null, Map.of(), List.of(), null, null, null,
-            MapperFallbackMode.NONE, inputType, outputType, streamingShapeHint, false, accepts, terminal,
-            Optional.ofNullable(pipelineReference), Optional.empty(), Optional.empty(), Optional.empty());
-    }
-
-    public StepDefinition withConnectorOperationSelection(ConnectorOperationSelection selection) {
-        return new StepDefinition(name, kind, executionClass, delegatedMethodName, remoteExecution,
-            command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig, queryKeyFields,
-            inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
-            Optional.of(Objects.requireNonNull(selection, "selection")), deferredCompletion);
-    }
-
-    public StepDefinition withDeferredCompletion(DeferredCompletionDefinition completion) {
-        return new StepDefinition(name, kind, executionClass, delegatedMethodName, remoteExecution,
-            command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig, queryKeyFields,
-            inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
-            connectorOperationSelection, Optional.of(Objects.requireNonNull(completion, "completion")));
-    }
-
-    /** Convenience constructor for ordinary authored operations used by compiler tests. */
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        ClassName executionClass,
-        @Nullable ClassName externalMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint
-    ) {
-        this(name, kind, executionClass, null, null, externalMapper, mapperFallback,
-            inputType, outputType, streamingShapeHint);
-    }
-
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        ClassName executionClass,
-        @Nullable ClassName inboundMapper,
-        @Nullable ClassName outboundMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint
-    ) {
-        this(name, kind, executionClass, inboundMapper, outboundMapper, null, mapperFallback,
-            inputType, outputType, streamingShapeHint);
-    }
-
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        ClassName executionClass,
-        @Nullable ClassName inboundMapper,
-        @Nullable ClassName outboundMapper,
-        @Nullable ClassName externalMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint
-    ) {
-        this(name, requireAuthoredKind(kind), executionClass, Optional.empty(), null,
-            null, null, null, Map.of(), null, Map.of(), List.of(), inboundMapper, outboundMapper,
-            externalMapper, mapperFallback, inputType, outputType, streamingShapeHint, false, List.of(), false,
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-    }
-
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        ClassName executionClass,
-        Optional<String> delegatedMethodName,
-        @Nullable ClassName inboundMapper,
-        @Nullable ClassName outboundMapper,
-        @Nullable ClassName externalMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint,
-        boolean runOnVirtualThreads,
-        List<String> accepts,
-        boolean terminal
-    ) {
-        this(name, requireAuthoredKind(kind), executionClass, delegatedMethodName, null,
-            null, null, null, Map.of(), null, Map.of(), List.of(), inboundMapper, outboundMapper,
-            externalMapper, mapperFallback, inputType, outputType, streamingShapeHint, runOnVirtualThreads,
-            accepts, terminal, Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-    }
-
-    /** Internal constructor shape for legacy Query parser and focused compiler fixtures. */
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        @Nullable ClassName executionClass,
-        @Nullable PipelineTemplateStepExecution remoteExecution,
-        Map<?, ?> removedAwaitConfig,
-        @Nullable String removedTimeout,
-        List<?> removedIdempotencyKeyFields,
-        @Nullable String queryId,
-        Map<?, ?> queryConfig,
-        List<?> queryKeyFields,
-        @Nullable ClassName inboundMapper,
-        @Nullable ClassName outboundMapper,
-        @Nullable ClassName externalMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint,
-        boolean runOnVirtualThreads
-    ) {
-        this(name, kind, executionClass, Optional.empty(), remoteExecution,
-            null, null, null, Map.of(), queryId, copyObjectMap(queryConfig), copyStringList(queryKeyFields),
-            inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, List.of(), false,
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-        rejectRemovedAwait(removedAwaitConfig, removedTimeout, removedIdempotencyKeyFields);
-    }
-
-    /** Internal constructor shape retained while parser call sites migrate off standalone Await fields. */
-    public StepDefinition(
-        String name,
-        StepKind kind,
-        @Nullable ClassName executionClass,
-        @Nullable PipelineTemplateStepExecution remoteExecution,
-        Map<String, Object> removedAwaitConfig,
-        @Nullable String removedTimeout,
-        List<String> removedIdempotencyKeyFields,
-        @Nullable String command,
-        @Nullable ClassName commandIdGenerator,
-        @Nullable String duplicatePolicy,
-        Map<String, Object> commandConfig,
-        @Nullable String queryId,
-        Map<String, Object> queryConfig,
-        List<String> queryKeyFields,
-        @Nullable ClassName inboundMapper,
-        @Nullable ClassName outboundMapper,
-        @Nullable ClassName externalMapper,
-        MapperFallbackMode mapperFallback,
-        @Nullable ClassName inputType,
-        @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint,
-        boolean runOnVirtualThreads,
-        List<String> accepts,
-        boolean terminal
-    ) {
-        this(name, kind, executionClass, Optional.empty(), remoteExecution,
-            command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig, queryKeyFields,
-            inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, accepts, terminal,
-            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-        if ((removedAwaitConfig != null && !removedAwaitConfig.isEmpty())
-            || removedTimeout != null
-            || (removedIdempotencyKeyFields != null && !removedIdempotencyKeyFields.isEmpty())) {
-            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
-        }
-    }
-
-    /** Internal constructor shape retained while dynamic-operation parsing migrates. */
-    public StepDefinition(
         String name,
         StepKind kind,
         @Nullable ClassName executionClass,
         Optional<String> delegatedMethodName,
         @Nullable PipelineTemplateStepExecution remoteExecution,
-        Map<String, Object> removedAwaitConfig,
-        @Nullable String removedTimeout,
-        List<String> removedIdempotencyKeyFields,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
         @Nullable String command,
         @Nullable ClassName commandIdGenerator,
         @Nullable String duplicatePolicy,
@@ -310,51 +81,592 @@ public record StepDefinition(
         List<String> accepts,
         boolean terminal,
         Optional<String> pipelineReference,
-        Optional<String> dynamicOperationSource
+        Optional<String> dynamicOperationSource,
+        Optional<ConnectorOperationSelection> connectorOperationSelection
+) {
+
+    /** Creates the typed immutable state for a statically linked pipeline invocation step. */
+    public static StepDefinition pipeline(
+        String name,
+        ClassName inputType,
+        ClassName outputType,
+        StreamingShape streamingShapeHint,
+        List<String> accepts,
+        boolean terminal,
+        String pipelineReference
     ) {
-        this(name, kind, executionClass, delegatedMethodName, remoteExecution,
-            command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig, queryKeyFields,
-            inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
-            streamingShapeHint, runOnVirtualThreads, accepts, terminal,
-            pipelineReference, dynamicOperationSource, Optional.empty(), Optional.empty());
-        if ((removedAwaitConfig != null && !removedAwaitConfig.isEmpty())
-            || removedTimeout != null
-            || (removedIdempotencyKeyFields != null && !removedIdempotencyKeyFields.isEmpty())) {
-            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
-        }
+        return new StepDefinition(
+            name, StepKind.PIPELINE, null, Optional.empty(), null, Map.of(), null, List.of(), null, null,
+            null, Map.of(), null, Map.of(), List.of(), null, null, null, MapperFallbackMode.NONE,
+            inputType, outputType, streamingShapeHint, false, accepts, terminal,
+            Optional.ofNullable(pipelineReference), Optional.empty(), Optional.empty());
     }
 
-    private static StepKind requireAuthoredKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.COMMAND || kind == StepKind.QUERY || kind == StepKind.PIPELINE) {
+    /** Backward-compatible canonical constructor shape before typed connector selections were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal, Optional<String> pipelineReference,
+        Optional<String> dynamicOperationSource
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
+            Optional.empty());
+    }
+
+    /** Backward-compatible canonical constructor shape before dynamic operation bindings were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal, Optional<String> pipelineReference
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, Optional.empty(),
+            Optional.empty());
+    }
+
+    /** Returns this definition with its normalized operation-first connector selection. */
+    public StepDefinition withConnectorOperationSelection(ConnectorOperationSelection selection) {
+        return new StepDefinition(
+            name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, pipelineReference, dynamicOperationSource,
+            Optional.of(Objects.requireNonNull(selection, "connector operation selection must not be null")));
+    }
+
+    /** Backward-compatible canonical constructor shape before pipeline references were added. */
+    public StepDefinition(
+        String name, StepKind kind, @Nullable ClassName executionClass, Optional<String> delegatedMethodName,
+        @Nullable PipelineTemplateStepExecution remoteExecution, Map<String, Object> awaitConfig, @Nullable String timeout,
+        List<String> idempotencyKeyFields, @Nullable String command, @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy, Map<String, Object> commandConfig, @Nullable String queryId,
+        Map<String, Object> queryConfig, List<String> queryKeyFields, @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper, @Nullable ClassName externalMapper, MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType, @Nullable ClassName outputType, @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads, List<String> accepts, boolean terminal
+    ) {
+        this(name, kind, executionClass, delegatedMethodName, remoteExecution, awaitConfig, timeout,
+            idempotencyKeyFields, command, commandIdGenerator, duplicatePolicy, commandConfig, queryId, queryConfig,
+            queryKeyFields, inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
+            streamingShapeHint, runOnVirtualThreads, accepts, terminal, Optional.empty());
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
+        @Nullable String command,
+        @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy,
+        Map<String, Object> commandConfig,
+        @Nullable String queryId,
+        Map<String, Object> queryConfig,
+        List<String> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            awaitConfig,
+            timeout,
+            idempotencyKeyFields,
+            command,
+            commandIdGenerator,
+            duplicatePolicy,
+            commandConfig,
+            queryId,
+            queryConfig,
+            queryKeyFields,
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<?, ?> awaitConfig,
+        @Nullable String timeout,
+        List<?> idempotencyKeyFields,
+        @Nullable String command,
+        @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy,
+        Map<?, ?> commandConfig,
+        @Nullable String queryId,
+        Map<?, ?> queryConfig,
+        List<?> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads,
+        List<String> accepts,
+        boolean terminal
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            copyObjectMap(awaitConfig),
+            timeout,
+            copyStringList(idempotencyKeyFields),
+            command,
+            commandIdGenerator,
+            duplicatePolicy,
+            copyObjectMap(commandConfig),
+            queryId,
+            copyObjectMap(queryConfig),
+            copyStringList(queryKeyFields),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            accepts,
+            terminal);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            awaitConfig,
+            timeout,
+            idempotencyKeyFields,
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            false,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<?, ?> awaitConfig,
+        @Nullable String timeout,
+        List<?> idempotencyKeyFields,
+        @Nullable String queryId,
+        Map<?, ?> queryConfig,
+        List<?> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            copyObjectMap(awaitConfig),
+            timeout,
+            copyStringList(idempotencyKeyFields),
+            null,
+            null,
+            null,
+            Map.of(),
+            queryId,
+            copyObjectMap(queryConfig),
+            copyStringList(queryKeyFields),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            Optional.empty(),
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            null,
+            null,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            false,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            Optional.empty(),
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            null,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            false,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        Optional<String> delegatedMethodName,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            delegatedMethodName,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            Optional.empty(),
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            false,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        Optional<String> delegatedMethodName,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads,
+        List<String> accepts,
+        boolean terminal
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            delegatedMethodName,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            accepts,
+            terminal);
+    }
+
+    public StepDefinition {
+        Objects.requireNonNull(name, "Name cannot be null");
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("Name cannot be blank");
+        }
+        Objects.requireNonNull(kind, "Kind cannot be null");
+        dynamicOperationSource = normalizeOptionalString(dynamicOperationSource);
+        connectorOperationSelection = connectorOperationSelection == null
+            ? Optional.empty() : connectorOperationSelection;
+        if (runOnVirtualThreads && (kind != StepKind.INTERNAL || dynamicOperationSource.isPresent())) {
+            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
+        }
+        if (executionClass != null && remoteExecution != null) {
+            throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
+        }
+        delegatedMethodName = normalizeOptionalString(delegatedMethodName);
+        pipelineReference = normalizeOptionalString(pipelineReference);
+        accepts = accepts == null ? List.of() : List.copyOf(accepts);
+        if (kind == StepKind.REMOTE) {
+            Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
+        } else if (dynamicOperationSource.isPresent()) {
+            if (kind != StepKind.INTERNAL || executionClass != null || remoteExecution != null) {
+                throw new IllegalArgumentException(
+                    "dynamic operation bindings use ordinary INTERNAL step semantics without authored execution");
+            }
+            Objects.requireNonNull(inputType, "Input type cannot be null for dynamic operation steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for dynamic operation steps");
+        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY
+            || kind == StepKind.PIPELINE) {
+            if (executionClass != null || remoteExecution != null) {
+                throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
+            }
+            if (kind != StepKind.AWAIT) {
+                Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
+                Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            } else if ((inputType == null) != (outputType == null)) {
+                Objects.requireNonNull(inputType,
+                    "AWAIT input and output Java types must either both be declared or both be compiler-resolved");
+                Objects.requireNonNull(outputType,
+                    "AWAIT input and output Java types must either both be declared or both be compiler-resolved");
+            }
+            if (kind == StepKind.PIPELINE && pipelineReference.isEmpty()) {
+                throw new IllegalArgumentException("pipelineReference cannot be blank for PIPELINE steps");
+            }
+            if (kind == StepKind.COMMAND) {
+                if (command == null || command.isBlank()) {
+                    throw new IllegalArgumentException("Command cannot be blank for COMMAND steps");
+                }
+                Objects.requireNonNull(commandIdGenerator, "Command id generator cannot be null for COMMAND steps");
+            }
+            if (kind == StepKind.QUERY) {
+                Objects.requireNonNull(queryId, "Query id cannot be null for QUERY steps");
+                if (queryId.isBlank()) {
+                    throw new IllegalArgumentException("Query id cannot be blank for QUERY steps");
+                }
+            }
+        } else {
+            Objects.requireNonNull(executionClass, "Execution class cannot be null");
+        }
+        mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
+        awaitConfig = awaitConfig == null ? Map.of() : Map.copyOf(awaitConfig);
+        idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
+        commandConfig = commandConfig == null ? Map.of() : Map.copyOf(commandConfig);
+        queryConfig = queryConfig == null ? Map.of() : Map.copyOf(queryConfig);
+        queryKeyFields = queryKeyFields == null ? List.of() : List.copyOf(queryKeyFields);
+    }
+
+    private static StepKind requireNonRemoteKind(StepKind kind) {
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY
+            || kind == StepKind.PIPELINE) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
     }
 
+    private static Optional<String> normalizeOptionalString(Optional<String> value) {
+        if (value == null || value.isEmpty()) {
+            return Optional.empty();
+        }
+        String normalized = value.get().trim();
+        return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
+    }
+
     private static Map<String, Object> copyObjectMap(Map<?, ?> values) {
-        if (values == null || values.isEmpty()) {
+        if (values == null) {
             return Map.of();
         }
         java.util.LinkedHashMap<String, Object> copy = new java.util.LinkedHashMap<>();
-        values.forEach((key, value) -> copy.put(String.valueOf(key), value));
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            copy.put(entry.getKey() == null ? null : entry.getKey().toString(), entry.getValue());
+        }
         return Map.copyOf(copy);
     }
 
     private static List<String> copyStringList(List<?> values) {
-        return values == null ? List.of() : values.stream().map(String::valueOf).toList();
-    }
-
-    private static void rejectRemovedAwait(Map<?, ?> config, String timeout, List<?> idempotency) {
-        if ((config != null && !config.isEmpty()) || timeout != null || (idempotency != null && !idempotency.isEmpty())) {
-            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
+        if (values == null) {
+            return List.of();
         }
-    }
-
-    private static Optional<String> normalized(Optional<String> value) {
-        if (value == null || value.isEmpty()) {
-            return Optional.empty();
-        }
-        String normalized = value.orElseThrow().trim();
-        return normalized.isEmpty() ? Optional.empty() : Optional.of(normalized);
+        return values.stream()
+            .map(value -> value == null ? null : value.toString())
+            .toList();
     }
 }

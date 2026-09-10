@@ -10,7 +10,7 @@ test("normalizePendingInteraction keeps execution and request details", () => {
   const normalized = normalizePendingInteraction({
     interactionId: "interaction-1",
     executionId: "execution-1",
-    stepId: "ProcessCreatePendingApprovalService",
+    stepId: "ProcessAwaitRestaurantDecisionService",
     status: "WAITING",
     transportType: "interaction-api",
     deadlineEpochMs: 12345,

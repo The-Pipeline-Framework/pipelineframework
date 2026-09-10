@@ -34,7 +34,7 @@ class AwaitDurablePayloadResolverTest {
     void resolvesThePinnedReleaseBindingAndRestoresTheExactCanonicalType() {
         ExecutionStateStore executionStore = mock(ExecutionStateStore.class);
         PipelineReleaseRegistry releases = mock(PipelineReleaseRegistry.class);
-        AwaitCompletionDescriptorRegistry descriptors = mock(AwaitCompletionDescriptorRegistry.class);
+        AwaitStepDescriptorFactory descriptors = mock(AwaitStepDescriptorFactory.class);
         @SuppressWarnings("unchecked")
         ExecutionRecord<Object, Object> execution = mock(ExecutionRecord.class);
         when(execution.pipelineId()).thenReturn("payments");
@@ -184,8 +184,8 @@ class AwaitDurablePayloadResolverTest {
         when(executionStore.getExecution(any(), any())).thenReturn(Uni.createFrom().item(Optional.of(execution)));
         PipelineContractDescriptor contract = new PipelineContractDescriptor(
             2, "payments", "3", "contract-hash", null, null, null, false, null,
-            java.util.List.of(new PipelineBundleStepDescriptor(2, "decision", "internal", "ONE_TO_ONE",
-                "Request", "Decision", null, null, Map.of("transportType", "kafka"))),
+            java.util.List.of(new PipelineBundleStepDescriptor(2, "await", "await", "ONE_TO_ONE",
+                "Request", "Decision", null, null, "kafka")),
             PipelineBundleCapabilities.defaults(),
             Map.of("Decision", binding(Decision.class, "decision-fingerprint"), "Request", binding(Request.class, "request-fingerprint")),
             "catalog-fingerprint");
@@ -195,7 +195,7 @@ class AwaitDurablePayloadResolverTest {
         AwaitDurablePayloadResolver resolver = new AwaitDurablePayloadResolver();
         resolver.executionStateStore = executionStore;
         resolver.releaseRegistry = releases;
-        resolver.descriptors = mock(AwaitCompletionDescriptorRegistry.class);
+        resolver.descriptors = mock(AwaitStepDescriptorFactory.class);
         when(resolver.descriptors.descriptorByStepIdNow("await")).thenReturn(descriptor());
         resolver.codec = new JsonDurablePayloadCodec();
         return resolver;
@@ -211,8 +211,8 @@ class AwaitDurablePayloadResolverTest {
             null, "kafka", Map.of(), 100_000L, 1L, 1L, 1_000L, Decision.class.getName());
     }
 
-    private static AwaitCompletionDescriptor descriptor() {
-        return new AwaitCompletionDescriptor("await", Request.class.getName(), Decision.class.getName(),
+    private static AwaitStepDescriptor descriptor() {
+        return new AwaitStepDescriptor("await", Request.class.getName(), Decision.class.getName(),
             "ONE_TO_ONE", Duration.ofSeconds(30), "correlation", "kafka", Map.of(), java.util.List.of());
     }
 

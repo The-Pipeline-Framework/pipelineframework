@@ -31,7 +31,7 @@ Use [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) before relyi
 
 For latency and topology tradeoffs between `SYNC`, compute-first `QUEUE_ASYNC`, current `FUNCTION`, and future all-serverless HA, see [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance).
 
-`await:` and `kind: command` are framework-owned I/O shells on top of `QUEUE_ASYNC`, but they are different axes. `await:` decorates an ordinary operation with durable deferred completion. Command owns idempotent external effects that should be recorded, retried, replayed, or dead-lettered as part of the pipeline lifecycle.
+`kind: await` and `kind: command` are framework-owned I/O shells on top of `QUEUE_ASYNC`. Await owns suspend/resume around a deferred external result. Command owns idempotent external effects that should be recorded, retried, replayed, or dead-lettered as part of the pipeline lifecycle.
 
 ## Generated Transport Entry Points
 

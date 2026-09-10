@@ -37,7 +37,6 @@ import org.pipelineframework.config.pipeline.PipelineYamlCallable;
  * @param execution optional execution metadata for local/remote step invocation
  * @param accepts optional concrete contract types accepted by this step for branch-aware routing
  * @param terminal whether this step is the mandatory terminal merge for a branch-aware pipeline
- * @param deferredOperationOutputTypeName immediate authored-operation output when final completion is deferred
  */
 public record PipelineTemplateStep(
     String name,
@@ -54,8 +53,7 @@ public record PipelineTemplateStep(
     Optional<String> pipelineReference,
     Map<String, PipelineYamlCallable> callables,
     List<String> modelInputExcludes,
-    Map<String, String> callContext,
-    Optional<String> deferredOperationOutputTypeName
+    Map<String, String> callContext
 ) {
     public PipelineTemplateStep {
         accepts = accepts == null ? List.of() : List.copyOf(accepts);
@@ -66,10 +64,6 @@ public record PipelineTemplateStep(
         modelInputExcludes = List.copyOf(Objects.requireNonNull(
             modelInputExcludes, "modelInputExcludes must not be null"));
         callContext = Map.copyOf(Objects.requireNonNull(callContext, "callContext must not be null"));
-        deferredOperationOutputTypeName = Objects.requireNonNull(
-            deferredOperationOutputTypeName, "deferredOperationOutputTypeName must not be null")
-            .map(String::trim)
-            .filter(type -> !type.isEmpty());
     }
 
     public PipelineTemplateStep(
@@ -130,8 +124,7 @@ public record PipelineTemplateStep(
             pipelineReference,
             callables,
             modelInputExcludes,
-            callContext,
-            deferredOperationOutputTypeName);
+            callContext);
     }
 
     /** Backward-compatible constructor shape before pipeline invocation references were added. */
@@ -151,22 +144,5 @@ public record PipelineTemplateStep(
             Optional<String> pipelineReference) {
         this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields,
             outboundMapper, execution, accepts, terminal, pipelineReference, Map.of(), List.of(), Map.of());
-    }
-
-    /** Convenience constructor for an operation without deferred completion. */
-    public PipelineTemplateStep(String name, String cardinality, String inputTypeName,
-            List<PipelineTemplateField> inputFields, String inboundMapper, String outputTypeName,
-            List<PipelineTemplateField> outputFields, String outboundMapper,
-            PipelineTemplateStepExecution execution, List<String> accepts, boolean terminal,
-            Optional<String> pipelineReference, Map<String, PipelineYamlCallable> callables,
-            List<String> modelInputExcludes, Map<String, String> callContext) {
-        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields,
-            outboundMapper, execution, accepts, terminal, pipelineReference, callables, modelInputExcludes,
-            callContext, Optional.empty());
-    }
-
-    /** The type emitted by the authored operation before deferred completion is registered. */
-    public String operationOutputTypeName() {
-        return deferredOperationOutputTypeName.orElse(outputTypeName);
     }
 }

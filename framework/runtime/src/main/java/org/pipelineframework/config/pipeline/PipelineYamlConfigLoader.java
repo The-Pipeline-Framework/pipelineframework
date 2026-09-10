@@ -262,9 +262,9 @@ public class PipelineYamlConfigLoader {
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outputType = firstNonBlank(readString(stepMap, "outputTypeName"), readString(stepMap, "output"));
             String outboundMapper = readString(stepMap, "outboundMapper");
+            String timeout = readString(stepMap, "timeout");
+            List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
             PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
-            String timeout = readAwaitTimeout(stepMap, name);
-            List<String> idempotencyKeyFields = readAwaitIdempotencyFields(stepMap, name);
             String command = readString(stepMap, "command");
             String commandIdGenerator = readString(stepMap, "commandIdGenerator");
             String duplicatePolicy = readString(stepMap, "duplicatePolicy");
@@ -842,35 +842,6 @@ public class PipelineYamlConfigLoader {
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
         Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
         return new PipelineYamlAwaitConfig(correlation, transport, completion);
-    }
-
-    private String readAwaitTimeout(Map<?, ?> stepMap, String stepName) {
-        Object awaitObj = stepMap.get("await");
-        if (awaitObj == null) {
-            return null;
-        }
-        if (!(awaitObj instanceof Map<?, ?> awaitMap)) {
-            throw new IllegalArgumentException("step '" + stepName + "' await must be defined as a map");
-        }
-        return readString(awaitMap, "timeout");
-    }
-
-    private List<String> readAwaitIdempotencyFields(Map<?, ?> stepMap, String stepName) {
-        Object awaitObj = stepMap.get("await");
-        if (awaitObj == null) {
-            return List.of();
-        }
-        if (!(awaitObj instanceof Map<?, ?> awaitMap)) {
-            throw new IllegalArgumentException("step '" + stepName + "' await must be defined as a map");
-        }
-        Object idempotencyObj = awaitMap.get("idempotency");
-        if (idempotencyObj == null) {
-            return List.of();
-        }
-        if (!(idempotencyObj instanceof Map<?, ?> idempotency)) {
-            throw new IllegalArgumentException("step '" + stepName + "' await.idempotency must be defined as a map");
-        }
-        return readStringList(idempotency, "fields");
     }
 
     private Optional<PipelineYamlAwaitCompletion> readAwaitCompletion(Map<?, ?> awaitMap, String stepName) {

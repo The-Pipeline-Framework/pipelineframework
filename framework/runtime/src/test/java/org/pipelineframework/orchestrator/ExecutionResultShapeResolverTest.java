@@ -92,7 +92,7 @@ class ExecutionResultShapeResolverTest {
             "org.example.Output" + index,
             "org.example.Step" + index,
             "org.example.StepClient" + index,
-            java.util.Map.of());
+            "");
     }
 
     private static String pipelineYaml(String terminalCardinality) {

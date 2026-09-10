@@ -129,7 +129,7 @@ The service uses the following configuration properties:
 This service is typically invoked by the Orchestrator Service as part of the payment processing workflow:
 
 1. Orchestrator receives payment records from the Input CSV File Processing Service
-2. The deferred-completion transport publishes one broker dispatch per payment record emitted by `Process Csv Payments Input`
+2. The await step publishes one broker dispatch per payment record
 3. The mock provider processes each record and publishes one `PaymentStatus` completion through Kafka or SQS
 4. The orchestrator resumes the stream and forwards payment statuses to the Payment Status Service
 

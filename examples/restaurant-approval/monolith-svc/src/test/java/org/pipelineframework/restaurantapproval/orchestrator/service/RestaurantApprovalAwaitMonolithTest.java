@@ -24,28 +24,27 @@ import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 class RestaurantApprovalAwaitMonolithTest {
 
     private static final String TENANT_ID = "restaurant-demo";
-    private static final String DEFERRED_OPERATION_STEP_ID = "ProcessCreatePendingApprovalService";
+    private static final String AWAIT_STEP_ID = "ProcessAwaitRestaurantDecisionService";
     private static final Duration POLL_TIMEOUT = Duration.ofSeconds(15);
 
     @Test
     void acceptedDecisionResumesExecutionToApprovedTerminalState() throws InterruptedException {
         RunAsyncAcceptedDto accepted = submitOrder("Ada Lovelace", "Cafe TPF");
         ExecutionStatusDto waiting = awaitExecutionStatus(accepted.executionId(), ExecutionStatus.WAITING_EXTERNAL);
-        assertEquals(2, waiting.stepIndex(),
-            "waiting state should point at the completion modifier after the authored operation");
+        assertEquals(2, waiting.stepIndex(), "waiting state should point at the await step that suspended execution");
 
         PendingInteraction pending = awaitPendingInteraction(accepted.executionId());
-        assertEquals(DEFERRED_OPERATION_STEP_ID, pending.stepId());
+        assertEquals(AWAIT_STEP_ID, pending.stepId());
         assertEquals("interaction-api", pending.transportType());
 
         AwaitCompletionResponseDto completion = completeAccepted(pending);
         assertEquals(pending.interactionId(), completion.interactionId());
-        assertEquals(DEFERRED_OPERATION_STEP_ID, completion.stepId());
+        assertEquals(AWAIT_STEP_ID, completion.stepId());
         assertEquals(AwaitInteractionStatus.COMPLETED, completion.status());
         assertFalse(completion.duplicate(), "first completion should not be marked duplicate");
 
         ExecutionStatusDto succeeded = awaitExecutionStatus(accepted.executionId(), ExecutionStatus.SUCCEEDED);
-        assertEquals(3, succeeded.stepIndex(), "execution should resume at the final step after deferred completion");
+        assertEquals(3, succeeded.stepIndex(), "execution should resume at the final step after await completion");
 
         JsonPath result = resultPayload(accepted.executionId());
         assertEquals(pending.orderId(), result.getString("orderId"));
@@ -128,7 +127,7 @@ class RestaurantApprovalAwaitMonolithTest {
         while (Instant.now().isBefore(deadline)) {
             List<Map<String, Object>> interactions = given()
                 .header("x-tenant-id", TENANT_ID)
-                .queryParam("stepId", DEFERRED_OPERATION_STEP_ID)
+                .queryParam("stepId", AWAIT_STEP_ID)
                 .accept(ContentType.JSON)
                 .when()
                 .get("/pipeline/interactions/pending")

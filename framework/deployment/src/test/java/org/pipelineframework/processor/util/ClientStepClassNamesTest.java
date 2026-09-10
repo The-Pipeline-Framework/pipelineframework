@@ -21,7 +21,7 @@ class ClientStepClassNamesTest {
         PipelineStepModel awaitCommandQuery = model(
             "ReserveStockService",
             Set.of(
-                GenerationTarget.DEFERRED_COMPLETION_STEP,
+                GenerationTarget.AWAIT_CLIENT_STEP,
                 GenerationTarget.COMMAND_CLIENT_STEP,
                 GenerationTarget.QUERY_CLIENT_STEP));
         PipelineStepModel commandQuery = model(
@@ -32,7 +32,7 @@ class ClientStepClassNamesTest {
             Set.of(GenerationTarget.QUERY_CLIENT_STEP));
         PipelineStepModel plainClient = model("ReserveStockService", Set.of(GenerationTarget.CLIENT_STEP));
 
-        assertEquals("DeferredCompletionStep", ClientStepClassNames.suffix(awaitCommandQuery, "GrpcClientStep"));
+        assertEquals("AwaitClientStep", ClientStepClassNames.suffix(awaitCommandQuery, "GrpcClientStep"));
         assertEquals("CommandClientStep", ClientStepClassNames.suffix(commandQuery, "GrpcClientStep"));
         assertEquals("QueryClientStep", ClientStepClassNames.suffix(queryOnly, "GrpcClientStep"));
         assertEquals("GrpcClientStep", ClientStepClassNames.suffix(plainClient, "GrpcClientStep"));

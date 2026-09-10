@@ -34,7 +34,7 @@ class WebhookAwaitTransportAdapterTest {
         AtomicReference<String> bodyRef = new AtomicReference<>();
         server = startServer(202, bodyRef);
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("url", serverUrl()),
             "callback", Map.of("baseUrl", "https://orchestrator.example")));
         AwaitInteractionRecord interaction = interaction();
@@ -60,7 +60,7 @@ class WebhookAwaitTransportAdapterTest {
         AtomicReference<String> bodyRef = new AtomicReference<>();
         server = startServer(503, bodyRef);
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of("request", Map.of("url", serverUrl())));
+        AwaitStepDescriptor descriptor = descriptor(Map.of("request", Map.of("url", serverUrl())));
 
         assertThrows(IllegalStateException.class, () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
             descriptor,
@@ -71,7 +71,7 @@ class WebhookAwaitTransportAdapterTest {
     @Test
     void dispatchRequiresWebhookUrl() {
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of());
+        AwaitStepDescriptor descriptor = descriptor(Map.of());
 
         assertThrows(IllegalArgumentException.class, () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
             descriptor,
@@ -82,7 +82,7 @@ class WebhookAwaitTransportAdapterTest {
     @Test
     void dispatchFailsOnInvalidUrl() {
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of("request", Map.of("url", "http://[bad")));
+        AwaitStepDescriptor descriptor = descriptor(Map.of("request", Map.of("url", "http://[bad")));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
@@ -96,7 +96,7 @@ class WebhookAwaitTransportAdapterTest {
     @Test
     void dispatchFailsOnInvalidTimeout() {
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("url", "https://partner.example/await"),
             "timeout", "not-a-duration"));
 
@@ -114,7 +114,7 @@ class WebhookAwaitTransportAdapterTest {
         AtomicReference<String> bodyRef = new AtomicReference<>();
         server = startServer(202, bodyRef);
         WebhookAwaitTransportAdapter adapter = adapter();
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("url", serverUrl()),
             "callback", Map.of(
                 "baseUrl", "https://orchestrator.example/",
@@ -153,8 +153,8 @@ class WebhookAwaitTransportAdapterTest {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/await";
     }
 
-    private static AwaitCompletionDescriptor descriptor(Map<String, Object> config) {
-        return new AwaitCompletionDescriptor(
+    private static AwaitStepDescriptor descriptor(Map<String, Object> config) {
+        return new AwaitStepDescriptor(
             "FraudCheck",
             "com.example.Request",
             "com.example.Decision",

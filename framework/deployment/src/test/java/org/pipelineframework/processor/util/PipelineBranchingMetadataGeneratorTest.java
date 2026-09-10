@@ -11,10 +11,8 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -34,7 +32,6 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.AspectPosition;
 import org.pipelineframework.processor.ir.AspectScope;
 import org.pipelineframework.processor.ir.DeploymentRole;
-import org.pipelineframework.processor.ir.DeferredCompletionSelection;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -179,12 +176,12 @@ class PipelineBranchingMetadataGeneratorTest {
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setStepModels(List.of(
-            deferredStepModel(
+            stepModel(
                 "AwaitProvider",
                 "com.example.order.awaiting",
-                "ApprovalRequest",
                 "ApprovalPending",
-                "ApprovalResult"),
+                "ApprovalResult",
+                Set.of(GenerationTarget.AWAIT_CLIENT_STEP)),
             stepModel(
                 "LookupOrder",
                 "com.example.order.query",
@@ -198,11 +195,11 @@ class PipelineBranchingMetadataGeneratorTest {
                 new PipelineBranchingPlan.BranchStep(
                     0,
                     "Await Provider",
-                    "ApprovalRequest",
+                    "ApprovalPending",
                     "ApprovalResult",
-                    List.of("ApprovalRequest"),
+                    List.of("ApprovalPending"),
                     List.of("ApprovalResult"),
-                    List.of(ClassName.get("com.example.common.domain", "ApprovalRequest")),
+                    List.of(ClassName.get("com.example.common.domain", "ApprovalPending")),
                     false),
                 new PipelineBranchingPlan.BranchStep(
                     1,
@@ -228,21 +225,13 @@ class PipelineBranchingMetadataGeneratorTest {
         Path metadataFile = classOutput.resolve("META-INF/pipeline/branching.json");
         JsonObject metadata = new Gson().fromJson(Files.readString(metadataFile), JsonObject.class);
         assertEquals(1, metadata.get("terminalStepIndex").getAsInt());
-        assertEquals(3, metadata.getAsJsonArray("steps").size());
+        assertEquals(2, metadata.getAsJsonArray("steps").size());
         assertEquals(
-            "com.example.order.awaiting.pipeline.AwaitProviderGrpcClientStep",
+            "com.example.order.awaiting.pipeline.AwaitProviderAwaitClientStep",
             metadata.getAsJsonArray("steps").get(0).getAsJsonObject().get("runtimeStepClass").getAsString());
-        assertFalse(metadata.getAsJsonArray("steps").get(0).getAsJsonObject().get("terminal").getAsBoolean());
-        assertEquals(
-            "com.example.order.awaiting.pipeline.AwaitProviderDeferredCompletionStep",
-            metadata.getAsJsonArray("steps").get(1).getAsJsonObject().get("runtimeStepClass").getAsString());
-        assertEquals(
-            "ApprovalPending",
-            metadata.getAsJsonArray("steps").get(1).getAsJsonObject()
-                .getAsJsonArray("acceptedContracts").get(0).getAsString());
         assertEquals(
             "com.example.order.query.pipeline.LookupOrderQueryClientStep",
-            metadata.getAsJsonArray("steps").get(2).getAsJsonObject().get("runtimeStepClass").getAsString());
+            metadata.getAsJsonArray("steps").get(1).getAsJsonObject().get("runtimeStepClass").getAsString());
     }
 
     @Test
@@ -332,39 +321,6 @@ class PipelineBranchingMetadataGeneratorTest {
             .enabledTargets(enabledTargets)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
-            .build();
-    }
-
-    private static PipelineStepModel deferredStepModel(
-        String serviceName,
-        String servicePackage,
-        String inputType,
-        String operationOutputType,
-        String finalOutputType
-    ) {
-        return new PipelineStepModel.Builder()
-            .serviceName(serviceName)
-            .generatedName(serviceName + "Service")
-            .servicePackage(servicePackage)
-            .serviceClassName(ClassName.get(servicePackage, serviceName + "Service"))
-            .inputMapping(new TypeMapping(ClassName.get("com.example.common.domain", inputType), null, false))
-            .outputMapping(new TypeMapping(
-                ClassName.get("com.example.common.domain", operationOutputType), null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP))
-            .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
-            .deferredCompletionSelection(new DeferredCompletionSelection(
-                ClassName.get("com.example.common.domain", finalOutputType),
-                finalOutputType,
-                Optional.empty(),
-                Duration.ofMinutes(5),
-                List.of(),
-                "interactionId",
-                "interaction-api",
-                Map.of(),
-                Optional.empty(),
-                Optional.empty()))
             .build();
     }
 

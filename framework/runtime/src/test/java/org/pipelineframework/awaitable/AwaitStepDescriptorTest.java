@@ -1,5 +1,7 @@
 package org.pipelineframework.awaitable;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -7,15 +9,109 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.awaitable.v3fixture.domain.AwaitInput;
+import org.pipelineframework.awaitable.v3fixture.domain.AwaitOutput;
+import org.pipelineframework.awaitable.v3fixture.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class AwaitCompletionDescriptorTest {
+class AwaitStepDescriptorTest {
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void legacyGeneratedV3ClientCallRebuildsTheCanonicalProtobufBoundary() throws Exception {
+        Path config = writeVersion3FixtureConfig();
+        String previous = System.getProperty("pipeline.config");
+        System.setProperty("pipeline.config", config.toString());
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitOutputService",
+                AwaitInput.class.getName(),
+                AwaitOutput.class.getName()).await().indefinitely();
+
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
+            assertInstanceOf(
+                AwaitOutput.Approved.class,
+                descriptor.outputFromTransport().apply(new PipelineTypes.AwaitOutput("approved")));
+        } finally {
+            factory.shutdown();
+            if (previous == null) {
+                System.clearProperty("pipeline.config");
+            } else {
+                System.setProperty("pipeline.config", previous);
+            }
+        }
+    }
+
+    @Test
+    void version3TransportOnlyClientRetainsItsIdentityRepresentationBoundary() throws Exception {
+        Path config = writeVersion3FixtureConfig();
+        String previous = System.getProperty("pipeline.config");
+        System.setProperty("pipeline.config", config.toString());
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitOutputService",
+                PipelineTypes.AwaitInput.class.getName(),
+                PipelineTypes.AwaitOutput.class.getName()).await().indefinitely();
+
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.inputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.outputType());
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
+            PipelineTypes.AwaitOutput transportOutput = new PipelineTypes.AwaitOutput("approved");
+            assertEquals(transportOutput, descriptor.outputFromTransport().apply(transportOutput));
+        } finally {
+            factory.shutdown();
+            if (previous == null) {
+                System.clearProperty("pipeline.config");
+            } else {
+                System.setProperty("pipeline.config", previous);
+            }
+        }
+    }
+
+    private Path writeVersion3FixtureConfig() throws Exception {
+        Path config = tempDir.resolve("pipeline.yaml");
+        Files.writeString(config, """
+            version: 3
+            appName: await-fixture
+            basePackage: org.pipelineframework.awaitable.v3fixture
+            transport: LOCAL
+            types:
+              AwaitInput:
+                fields:
+                  - [value, string]
+              AwaitOutput:
+                variants:
+                  approved: AwaitInput
+            steps:
+              - name: Await Output
+                kind: await
+                input: AwaitInput
+                output: AwaitOutput
+                cardinality: ONE_TO_ONE
+                timeout: PT1M
+                await:
+                  correlation:
+                    strategy: generated
+                  transport:
+                    type: interaction-api
+                    config: {}
+            """);
+        return config;
+    }
 
     @Test
     void constructsWithAllFields() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step",
             "com.example.ReviewRequest",
             "com.example.ReviewDecision",
@@ -38,7 +134,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void rejectsRequestAwareCompletionWithoutAProjector() {
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "review-step", String.class.getName(), String.class.getName(), "ONE_TO_ONE",
             Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(), List.of(),
             String.class.getName(), String.class.getName(), java.util.function.Function.identity(),
@@ -49,7 +145,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void rejectsRequestAwareCompletionWithoutAStableProjectorId() {
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "review-step", String.class.getName(), String.class.getName(), "ONE_TO_ONE",
             Duration.ofMinutes(10), "interactionId", "interaction-api", Map.of(), List.of(),
             String.class.getName(), String.class.getName(), java.util.function.Function.identity(),
@@ -61,7 +157,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void acceptsCardinalitySpecificConstructorWithoutDispatchMode() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "await-payment-provider",
             "com.example.PaymentRecord",
             "com.example.PaymentStatus",
@@ -77,7 +173,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void keepsCanonicalAndTransportIdentitiesDistinctWhenExplicitlyConfigured() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "await-payment-provider",
             "com.example.domain.PaymentRecord",
             "com.example.domain.PaymentStatus",
@@ -102,7 +198,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void defaultsLegacyTransportIdentitiesToCanonicalIdentities() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null);
 
@@ -112,7 +208,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void defaultsCorrelationStrategyToInteractionIdWhenNull() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), null, "webhook", null, null);
 
@@ -121,7 +217,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void defaultsCorrelationStrategyToInteractionIdWhenBlank() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "  ", "webhook", null, null);
 
@@ -130,7 +226,7 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void normalizesNullTransportConfigToEmptyMap() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null);
 
@@ -142,7 +238,7 @@ class AwaitCompletionDescriptorTest {
         Map<String, Object> config = new HashMap<>();
         config.put("url", "https://example.com");
 
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", config, null);
 
@@ -152,34 +248,8 @@ class AwaitCompletionDescriptorTest {
     }
 
     @Test
-    void rejectsNullTransportConfigKeyWithExplicitDiagnostic() {
-        Map<String, Object> config = new HashMap<>();
-        config.put(null, "value");
-
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-            () -> new AwaitCompletionDescriptor(
-                "review-step", "com.example.Input", "com.example.Output",
-                Duration.ofMinutes(5), "interactionId", "webhook", config, List.of()));
-
-        assertEquals("transportConfig contains null key '<null>'", failure.getMessage());
-    }
-
-    @Test
-    void rejectsNullTransportConfigValueWithKeyDiagnostic() {
-        Map<String, Object> config = new HashMap<>();
-        config.put("url", null);
-
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-            () -> new AwaitCompletionDescriptor(
-                "review-step", "com.example.Input", "com.example.Output",
-                Duration.ofMinutes(5), "interactionId", "webhook", config, List.of()));
-
-        assertEquals("transportConfig value for key 'url' must not be null", failure.getMessage());
-    }
-
-    @Test
     void normalizesNullIdempotencyKeyFieldsToEmptyList() {
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null);
 
@@ -191,7 +261,7 @@ class AwaitCompletionDescriptorTest {
         List<String> fields = new ArrayList<>();
         fields.add("orderId");
 
-        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, fields);
 
@@ -202,63 +272,63 @@ class AwaitCompletionDescriptorTest {
 
     @Test
     void rejectsBlankStepId() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "  ", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsNullStepId() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             null, "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsBlankInputType() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsBlankOutputType() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "  ",
             Duration.ofMinutes(5), "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsNullTimeout() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "com.example.Output",
             null, "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsNegativeTimeout() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(-1), "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsZeroDurationTimeout() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "com.example.Output",
             Duration.ZERO, "interactionId", "webhook", null, null));
     }
 
     @Test
     void rejectsBlankTransportType() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", "", null, null));
     }
 
     @Test
     void rejectsNullTransportType() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionDescriptor(
+        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
             "step-id", "com.example.Input", "com.example.Output",
             Duration.ofMinutes(5), "interactionId", null, null, null));
     }

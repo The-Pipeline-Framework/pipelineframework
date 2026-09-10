@@ -6,7 +6,7 @@ It shows a compact human decision flow:
 
 1. validate an order request
 2. create a pending approval
-3. suspend durably after the pending-approval operation
+3. suspend durably at an await step
 4. resume from a later human decision
 5. finalize a terminal order state
 
@@ -14,7 +14,7 @@ The backend is generator-backed. The UI is a small handwritten Next.js app that 
 
 ## What This Example Proves
 
-- an authored pending-approval service decorated with `await.transport.type: interaction-api`
+- `kind: await` with `transport.type: interaction-api`
 - queue-async suspend/resume with durable wait state
 - pending interaction query through `GET /pipeline/interactions/pending`
 - completion admission through `POST /pipeline/interactions/complete`
@@ -40,7 +40,7 @@ Use `examples/csv-payments` for the canonical Kafka await example. Use this exam
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-This proves the monolith path runs the pending-approval operation once, pauses for completion through the interaction API, and resumes at the following step.
+This proves the monolith path pauses at the await step, completes through the interaction API, and resumes into the final step.
 
 ## Run The Demo
 
@@ -70,7 +70,7 @@ Default UI environment:
 
 - `TPF_BASE_URL=http://localhost:8081`
 - `TPF_TENANT_ID=restaurant-demo`
-- `TPF_AWAIT_STEP_ID=ProcessCreatePendingApprovalService`
+- `TPF_AWAIT_STEP_ID=ProcessAwaitRestaurantDecisionService`
 
 Override them before `npm run dev` if you need a different runtime target.
 
@@ -98,13 +98,12 @@ The script packages `monolith-svc`, starts the coordinator, creates a local `pip
 
 See [Self-Hosted Coordinator Runbook](./self-host/README.md) for manual commands, environment defaults, and the current local/dev limits.
 
-## Deferred-Completion Contract
+## Await Contract
 
-The `Create pending approval` operation in `config/pipeline.yaml` declares:
+The await step in `config/pipeline.yaml` is:
 
-- `service: CreatePendingApprovalService`
+- `kind: await`
 - `cardinality: ONE_TO_ONE`
-- `await.operationOutput: PendingRestaurantApproval`
 - `await.transport.type: interaction-api`
 - `await.correlation.strategy: interactionId`
 - `pipeline.orchestrator.mode=QUEUE_ASYNC`

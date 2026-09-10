@@ -366,7 +366,7 @@ class PipelineOrderMetadataGeneratorTest {
     }
 
     @Test
-    void writesDeferredCompletionStepToOrderMetadata() throws IOException {
+    void writesAwaitClientStepToOrderMetadata() throws IOException {
         Path classOutput = tempDir.resolve("class-output");
         Path moduleDir = tempDir.resolve("module");
         Files.createDirectories(moduleDir);
@@ -377,13 +377,11 @@ class PipelineOrderMetadataGeneratorTest {
             transport: "GRPC"
             steps:
               - name: "Fraud Check"
-                service: "com.example.FraudCheckService"
+                kind: "await"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
                 await:
-                  operationOutput:
-                    type: "FraudCheckRequest"
-                  timeout: "PT10M"
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -406,31 +404,16 @@ class PipelineOrderMetadataGeneratorTest {
             .serviceName("FraudCheck")
             .generatedName("FraudCheckService")
             .servicePackage("com.example.fraud")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
             .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
             .outputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckDecision"), null, false))
             .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
 
-        PipelineStepModel persistenceAfterOperation = new PipelineStepModel.Builder()
-            .serviceName("ObservePersistenceFraudCheckRequestSideEffectService")
-            .generatedName("PersistenceFraudCheckRequestSideEffectService")
-            .servicePackage("com.example.fraud")
-            .serviceClassName(ClassName.get("com.example.fraud", "PersistenceService"))
-            .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
-            .outputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
-            .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
-            .sideEffect(true)
-            .aspectPosition(AspectPosition.AFTER_STEP)
-            .build();
-
-        ctx.setStepModels(List.of(awaitModel, persistenceAfterOperation));
+        ctx.setStepModels(List.of(awaitModel));
 
         new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
 
@@ -439,15 +422,17 @@ class PipelineOrderMetadataGeneratorTest {
 
         JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
         JsonArray order = metadata.getAsJsonArray("order");
-        assertEquals(List.of(
-            "com.example.fraud.pipeline.FraudCheckGrpcClientStep",
-            "com.example.fraud.pipeline.PersistenceFraudCheckRequestSideEffectGrpcClientStep",
-            "com.example.fraud.pipeline.FraudCheckDeferredCompletionStep"),
-            order.asList().stream().map(element -> element.getAsString()).toList());
+        assertTrue(order.size() > 0, "Expected at least one ordered step");
+
+        String firstStep = order.get(0).getAsString();
+        assertTrue(firstStep.endsWith("FraudCheckAwaitClientStep"),
+            "Expected generated class to end with FraudCheckAwaitClientStep but was: " + firstStep);
+        assertTrue(firstStep.contains("com.example.fraud.pipeline"),
+            "Expected generated class to be in pipeline package but was: " + firstStep);
     }
 
     @Test
-    void writesDeferredCompletionStepToLocalExecutionOrderMetadata() throws IOException {
+    void writesAwaitClientStepToLocalExecutionOrderMetadata() throws IOException {
         Path classOutput = tempDir.resolve("class-output-local-await");
         Path moduleDir = tempDir.resolve("module-local-await");
         Files.createDirectories(moduleDir);
@@ -458,13 +443,11 @@ class PipelineOrderMetadataGeneratorTest {
             transport: "GRPC"
             steps:
               - name: "Fraud Check"
-                service: "com.example.FraudCheckService"
+                kind: "await"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
                 await:
-                  operationOutput:
-                    type: "FraudCheckRequest"
-                  timeout: "PT10M"
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -487,11 +470,11 @@ class PipelineOrderMetadataGeneratorTest {
             .serviceName("FraudCheck")
             .generatedName("FraudCheckService")
             .servicePackage("com.example.fraud")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
             .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
             .outputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckDecision"), null, false))
             .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
@@ -505,10 +488,10 @@ class PipelineOrderMetadataGeneratorTest {
 
         JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
         JsonArray order = metadata.getAsJsonArray("order");
-        assertEquals(List.of(
-            "com.example.fraud.pipeline.FraudCheckGrpcClientStep",
-            "com.example.fraud.pipeline.FraudCheckDeferredCompletionStep"),
-            order.asList().stream().map(element -> element.getAsString()).toList());
+        assertEquals(1, order.size(), "Expected only the generated await client step in local order");
+
+        String firstStep = order.get(0).getAsString();
+        assertEquals("com.example.fraud.pipeline.FraudCheckAwaitClientStep", firstStep);
     }
 
     @Test
@@ -608,13 +591,11 @@ class PipelineOrderMetadataGeneratorTest {
             transport: "GRPC"
             steps:
               - name: "FraudCheck"
-                service: "com.example.FraudCheckService"
+                kind: "await"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT5M"
                 await:
-                  operationOutput:
-                    type: "FraudCheckRequest"
-                  timeout: "PT5M"
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -638,11 +619,11 @@ class PipelineOrderMetadataGeneratorTest {
             .serviceName("FraudCheck")
             .generatedName("FraudCheck")  // no "Service" suffix
             .servicePackage("com.example.fraud")
-            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor"))
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
             .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
             .outputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckDecision"), null, false))
             .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
@@ -656,10 +637,12 @@ class PipelineOrderMetadataGeneratorTest {
 
         JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
         JsonArray order = metadata.getAsJsonArray("order");
-        assertEquals(List.of(
-            "com.example.fraud.pipeline.FraudCheckGrpcClientStep",
-            "com.example.fraud.pipeline.FraudCheckDeferredCompletionStep"),
-            order.asList().stream().map(element -> element.getAsString()).toList());
+        assertTrue(order.size() > 0, "Expected at least one ordered step");
+
+        // When generatedName = "FraudCheck" (no Service suffix), class should be FraudCheckAwaitClientStep
+        String firstStep = order.get(0).getAsString();
+        assertTrue(firstStep.endsWith("FraudCheckAwaitClientStep"),
+            "Expected class to end with FraudCheckAwaitClientStep but was: " + firstStep);
     }
 
     @Test

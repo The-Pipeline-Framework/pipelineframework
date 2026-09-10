@@ -307,7 +307,7 @@ public class PipelineTemplateConfigLoader {
             }
             if (containsAwait(definition.get("steps"))) {
                 throw new IllegalStateException("Pipeline definition '" + id
-                    + "' contains deferred completion; nested pipeline definitions do not support await: yet.");
+                    + "' contains kind: await; nested Await is not supported in this slice.");
             }
             if (parsed.putIfAbsent(normalizedId, new PipelineTemplateDefinition(input, output, steps)) != null) {
                 throw new IllegalStateException("Duplicate pipeline definition ID '" + id + "'.");
@@ -339,8 +339,7 @@ public class PipelineTemplateConfigLoader {
             return false;
         }
         for (Object rawStep : steps) {
-            if (rawStep instanceof Map<?, ?> step
-                && (step.containsKey("await") || "await".equalsIgnoreCase(readString(step, "kind")))) {
+            if (rawStep instanceof Map<?, ?> step && "await".equalsIgnoreCase(readString(step, "kind"))) {
                 return true;
             }
         }
@@ -1424,12 +1423,7 @@ public class PipelineTemplateConfigLoader {
                 step.outboundMapper(),
                 step.execution(),
                 step.accepts(),
-                step.terminal(),
-                step.pipelineReference(),
-                step.callables(),
-                step.modelInputExcludes(),
-                step.callContext(),
-                step.deferredOperationOutputTypeName()));
+                step.terminal()));
         }
         return resolved;
     }
@@ -1556,14 +1550,6 @@ public class PipelineTemplateConfigLoader {
                 readTemplateCallables(stepMap, name, version);
             List<String> modelInputExcludes = readModelInputExcludes(stepMap, name);
             Map<String, String> callContext = readCallContext(stepMap, name);
-            Optional<String> deferredOperationOutputTypeName = readDeferredOperationOutputType(stepMap, name);
-            if (version < 2
-                && deferredOperationOutputTypeName.isPresent()
-                && !deferredOperationOutputTypeName.orElseThrow().equals(outputType)) {
-                throw new IllegalStateException("Step '" + name
-                    + "' declares distinct await.operationOutput and output types, but pipeline template version 1 "
-                    + "has no separate operation-output field schema; use version 2 or later");
-            }
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
@@ -1583,8 +1569,7 @@ public class PipelineTemplateConfigLoader {
                 pipelineReference,
                 callables,
                 modelInputExcludes,
-                callContext,
-                deferredOperationOutputTypeName));
+                callContext));
         }
         return stepInfos;
     }
@@ -1655,27 +1640,6 @@ public class PipelineTemplateConfigLoader {
             result.add(value.trim());
         }
         return List.copyOf(result);
-    }
-
-    private Optional<String> readDeferredOperationOutputType(Map<?, ?> stepMap, String stepName) {
-        Object rawAwait = stepMap.get("await");
-        if (rawAwait == null) {
-            return Optional.empty();
-        }
-        if (!(rawAwait instanceof Map<?, ?> await)) {
-            throw new IllegalStateException("Step '" + stepName + "' await must be a map");
-        }
-        Object rawOperationOutput = await.get("operationOutput");
-        if (!(rawOperationOutput instanceof Map<?, ?> operationOutput)) {
-            throw new IllegalStateException("Step '" + stepName
-                + "' await.operationOutput must declare a typed operation result");
-        }
-        String type = readString(operationOutput, "type");
-        if (type == null || type.isBlank()) {
-            throw new IllegalStateException("Step '" + stepName
-                + "' await.operationOutput.type must be a non-blank canonical type");
-        }
-        return Optional.of(type.trim());
     }
 
     private Map<String, String> readCallContext(Map<?, ?> stepMap, String stepName) {

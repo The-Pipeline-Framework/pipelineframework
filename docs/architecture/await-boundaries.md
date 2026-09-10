@@ -1,226 +1,216 @@
-# Deferred Completion And Await Boundaries
+# Await Boundaries
 
-Deferred completion models external reality without pretending that waiting is an
-operation. An ordinary authored operation produces a trusted immediate result. The
-`await:` modifier then pauses the same execution until a correlated external
-observation can be projected into that operation's final output.
+Await boundaries model external reality inside a typed pipeline without turning the external actor into a pipeline step. Use `kind: await` when the business flow must pause, wait for a correlated completion, and then resume the same execution with an explicit output type.
 
-```text
-authored operation: Input → OperationOutput
-deferred completion: OperationOutput + Completion → FinalOutput
-```
+Typical awaits include:
 
-Typical completions include human approvals, webhook callbacks, brokered provider
-replies, and long-running jobs. The pipeline owns the operation and continuation. The
-external participant owns only the fact or decision it submits.
+- human approvals,
+- webhook callbacks,
+- provider decisions,
+- brokered request/reply over Kafka or SQS,
+- long-running jobs that return a business result later.
 
-## When To Use Deferred Completion
+The important design choice is ownership. The pipeline still owns the business flow and the continuation. The external actor owns the real-world decision or effect.
 
-Use `await:` when the operation can start now but its final business result arrives
-after the current execution turn.
+## When To Use Await
+
+Use await when the request leaves the current execution turn and the final business result arrives later.
 
 | External shape | Model as |
 | --- | --- |
-| Local computation returning now | Authored service |
-| Inline HTTP/gRPC call returning now | Query, Command, Connector, or remote operator |
-| Authored request followed by a human decision | Authored service with `await:` |
-| Provider accepts now and calls back later | Command with deferred completion (planned) |
-| Independent event starts a new business flow | Inbound admission, not deferred completion |
-| Another pipeline should own the next lifecycle | Checkpoint handoff |
+| Inline HTTP/gRPC call returning now | Operator or remote execution |
+| Provider accepts now and decides later | Await boundary |
+| Broker request with later correlated response | Await boundary |
+| Webhook callback later | Await boundary |
+| UI or human approval | Await boundary |
 
-Await is not a `StepKind`, and “interaction” is not another operation category. A
-human UI, callback provider, webhook, Kafka topic, or SQS queue participates through
-the completion transport.
+If a remote system returns `accepted` now and the final decision comes back later, do not model that as a remote operator. Model the later result as an await completion.
 
-## Shape The Operation
+## Shape The Contract
 
-The step's top-level `input` and `output` remain its pipeline-visible contract. The
-authored service returns `await.operationOutput`, which becomes trusted context for
-the completion lifecycle.
+Await is still a typed step. The request and completion should be ordinary business types, not loose transport envelopes.
 
 ```yaml
 steps:
-  - name: Create pending approval
-    service: com.example.CreatePendingApprovalService
-    cardinality: ONE_TO_ONE
-    input: ValidatedOrder
-    output: RestaurantDecision
+  - name: "Fraud Check"
+    kind: "await"
+    cardinality: "ONE_TO_ONE"
+    input: "com.example.FraudCheckRequest"
+    output: "com.example.FraudCheckDecision"
+    timeout: "PT10M"
+    idempotencyKeyFields: ["orderId"]
+```
 
+The input type is what the pipeline sends to external reality. The output type is what the pipeline expects before it can continue. TPF handles the interaction identity, correlation, persistence, replay, and transport adapter around that contract.
+
+### Constructing output from the suspended request
+
+Human interfaces and external providers should submit only the facts they own. When
+the canonical Await output also needs trusted fields from the suspended request,
+declare a smaller completion type and a pure projector:
+
+```yaml
+steps:
+  - name: Confirm Property
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PendingConfirmation
+    output: ConfirmedInvoice
+    timeout: PT8H
     await:
-      operationOutput:
-        type: PendingRestaurantApproval
-        java: com.example.PendingRestaurantApproval
-      timeout: PT30M
-      idempotency:
-        fields: [orderId]
       correlation:
         strategy: interactionId
+      completion:
+        type: com.example.PropertyChoice
+        projector: com.example.ConfirmedInvoiceProjector
       transport:
         type: interaction-api
+```
+
+The projector implements `AwaitCompletionProjector<PendingConfirmation,
+PropertyChoice, ConfirmedInvoice>`. It receives the canonical request, the admitted
+actor payload, and framework-authored completion metadata such as `completedAt`.
+It must be public, have a public no-argument constructor, and remain deterministic
+and side-effect free.
+
+TPF persists the request and projected completion as canonical values. Recovery
+therefore rebuilds the descriptor and resumes from the already projected output;
+it does not ask the browser to echo trusted invoice state and does not call the
+projector again for normally admitted canonical completions.
+
+### Await on a union alternative
+
+In v3, `accepts` selects the union alternatives that invoke an Await step, just as it
+selects the alternatives that invoke an ordinary step:
+
+```yaml
+steps:
+  - name: Clarify
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: PreparationDecision
+    accepts: [ClarificationRequired]
+    output: Prepared
+    timeout: PT8H
+    await:
+      correlation: { strategy: interactionId }
       completion:
-        type: RestaurantDecisionSubmission
-        projector: com.example.RestaurantDecisionProjector
+        type: com.example.ClarificationAnswer
+        projector: com.example.ClarificationProjector
+      transport: { type: interaction-api }
 ```
 
-The service has the ordinary authored signature:
+Here the projector implements `AwaitCompletionProjector<ClarificationRequired,
+ClarificationAnswer, Prepared>`. The compiler proves all three generic arguments and
+generates the Await boundary with `ClarificationRequired` as its request type. If the
+step accepts multiple variants, or omits `accepts`, the projector input remains the
+declared `PreparationDecision` union.
 
-```text
-ValidatedOrder → PendingRestaurantApproval
-```
-
-The whole step has the pipeline contract:
-
-```text
-ValidatedOrder → RestaurantDecision
-```
-
-The projector implements
-`AwaitCompletionProjector<PendingRestaurantApproval,
-RestaurantDecisionSubmission, RestaurantDecision>`. It receives the trusted
-operation output, the untrusted submitted payload, and framework-authored completion
-metadata such as `completedAt`. It must be public, constructible, deterministic, and
-side-effect free.
-
-When no projector is needed, `await.completion.type` may be omitted and defaults to
-the top-level output. Idempotency paths resolve against `operationOutput`, not the
-original step input or submitted completion.
-
-TPF persists the operation output and projected completion as canonical values.
-Recovery resumes from the admitted final output; it does not invoke the authored
-operation or projector again for an already projected canonical completion.
-
-## Branching And Unions
-
-`accepts` still controls whether the semantic operation runs for a union alternative.
-It does not create Await-specific routing. The operation's immediate output is the
-trusted projector input, so the standalone Await-step narrowing described by older
-releases no longer exists.
-
-Alternatives not accepted by the decorated operation continue through ordinary v3
-branch routing. There is no completion-specific pass-through mapper and no implicit
+Alternatives not accepted by the Await do not invoke it and continue unchanged through
+the ordinary v3 pipeline flow. There is no Await-specific pass-through mapper and no implicit
 collection-to-stream or stream-to-collection conversion.
 
-## Cardinality
+## Cardinality Shapes
 
-The authored operation retains its ordinary cardinality. Each result it emits gets
-exactly one deferred completion:
+Cardinality defines what the pipeline is waiting for and what must be replayable after completion.
 
-| Operation cardinality | Deferred-completion meaning |
-| --- | --- |
-| `ONE_TO_ONE` | one operation result receives one completion |
-| `ONE_TO_MANY` | every emitted result receives its own completion |
-| `MANY_TO_ONE` | the operation emits one result, which receives one completion |
-| `MANY_TO_MANY` | every emitted result receives its own completion |
+| Cardinality | Design meaning | Use when |
+| --- | --- | --- |
+| `ONE_TO_ONE` | one request produces one completion | a single approval, callback, or provider decision |
+| `ONE_TO_ONE` over a stream | each item gets its own external decision | each input row, payment, or document needs an independent completion |
+| `ONE_TO_MANY` | one request produces a bounded set of output items | an external job expands one request into several typed results |
+| `MANY_TO_ONE` | a bounded batch produces one completion | the external system decides on the whole batch |
+| `MANY_TO_MANY` | a bounded batch produces a bounded result set | the external system transforms a batch into another batch |
 
-Deferred completion does not introduce aggregate Await cardinality. If an external
-participant decides on a whole batch or returns a collection, model that batch or
-collection as an explicit bounded canonical type. Use ordinary expansion and
-reduction steps when individual items must re-enter a stream.
+Keep aggregate await payloads bounded. If the design needs unbounded streaming, split the flow into smaller await boundaries or hand off to another pipeline with its own lifecycle.
 
-For brokered per-result completion, the configured in-flight window bounds unresolved
-interactions. This is provider-facing backpressure, not a hidden batch or a circuit
-boundary.
+## Flow Across Await
 
-## Durable Lifecycle
+Await separates a pipeline into live reactive segments and durable recovery state.
 
-The generated completion modifier reuses the existing durable Await runtime. The
-compiler orders its technical adapters as:
+Inside a live segment, normal reactive demand and backpressure can apply between adjacent steps. A streaming input step can slow down when the downstream step cannot accept more items, and terminal Object Publish can accept each output chunk before the runtime advances.
 
-```text
-ordinary operation adapter
-→ operation-scoped aspects
-→ deferred completion modifier
-```
+For brokered `ONE_TO_ONE` await over a stream, `QUEUE_ASYNC` can keep a live await session open while the parent transition is still running. The session is keyed by the durable await unit. Each input item creates a durable interaction and is dispatched through the await transport; each completion is recorded durably before it is offered to the live resumed segment. Source parsing then advances by demand and the configured in-flight window, not by a forced sleep or demand pacer.
 
-The modifier consumes the trusted operation result; it never invokes the operation
-again. Its durable lifecycle is:
+This provider-facing admission budget is backpressure: it bounds unresolved interactions. It does not make outbound provider dispatch a circuit boundary. Circuit admission currently protects generated remote calls and eligible shared transition-worker dispatch; it is complementary to await admission, not a replacement for it. See [Execution Safety](/architecture/execution-safety).
 
-```text
-OPERATION_INVOKED
-→ OPERATION_COMPLETED(OperationOutput)
-→ COMPLETION_REGISTERED
-→ REQUEST_DISPATCHING
-→ COMPLETION_PENDING / WAITING_EXTERNAL
-→ COMPLETION_OBSERVED
-→ PROJECTED
-→ STEP_COMPLETED(FinalOutput)
-```
+The durable await model still matters. If the process restarts, the worker lease is lost, or a completion arrives after the live session is gone, TPF falls back to durable coordination:
 
-For an active brokered stream, admitted item completions can continue through the
-live reactive segment. If the live owner disappears, TPF falls back to durable
-coordination:
+1. record dispatched interactions and dispatch completion for the await unit,
+2. park the parent execution as `WAITING_EXTERNAL` when the transition suspends,
+3. admit completions by correlation/idempotency,
+4. resume item continuations from durable state when no live session accepted the completion,
+5. release the parent execution when the itemized unit is complete,
+6. publish terminal output before the execution is marked successful.
 
-1. persist each interaction and dispatch state;
-2. park the parent execution as `WAITING_EXTERNAL` when the transition suspends;
-3. admit completion by signed token or configured correlation;
-4. resume the continuation from the persisted final output;
-5. release the execution when every emitted occurrence has completed;
-6. publish terminal output before marking the execution successful.
+This fallback reconstructs an immutable completed MANY result for the parent continuation. It is intentionally more conservative than the healthy live segment; TPF does not claim to resume the same in-memory `Multi` at its prior demand position after owner loss.
 
-The durable identity combines the root execution, qualified semantic step, and item
-occurrence. Nested and recursive deferred completion additionally needs a stable
-invocation path and is not supported yet.
+For portable transition workers, durable fallback applies only when the contract is ineligible for the live itemized shape or no live session accepts the completion. Eligible portable workers retain the live session and terminal stream while the worker remains active.
+
+That is why `ONE_TO_ONE` await over a stream is not a hidden batch mode. It is a stream of item interactions owned by one durable await unit. The external provider is not a pipeline step; it is external reality behind a framework-owned I/O shell.
 
 ```mermaid
 sequenceDiagram
-    participant Source as Previous step
-    participant Operation as Authored operation + completion overlay
-    participant Interaction as Await interaction
-    participant External as External participant
-    participant Store as Durable coordinator
-    participant Continue as Following step
+    participant Source as "Live source segment"
+    participant Await as "Await step"
+    participant Interaction as "Await interaction"
+    participant Unit as "Await unit / fallback state"
+    participant Live as "Live await session"
+    participant External as "External actor"
+    participant Coordinator as "Coordinator"
+    participant Continue as "Continuation segment"
+    participant Publish as "Object Publish"
+    participant Store as "Execution store"
 
-    Source->>Operation: typed input
-    Operation->>Operation: produce trusted operationOutput
-    Operation->>Interaction: register durable completion
-    Interaction->>External: dispatch completion request
-    Operation-->>Store: WAITING_EXTERNAL when suspended
-    External-->>Interaction: correlated completion payload
-    Interaction->>Interaction: validate and project final output
-    Interaction-->>Continue: resume after the semantic operation
+    Source->>Await: emit typed item(s)
+    Await->>Interaction: create durable item interaction(s)
+    Await->>External: dispatch request(s)
+    External-->>Interaction: admit correlated completion(s)
+    alt active eligible live owner (in-process or portable)
+      Interaction-->>Live: signal admitted completion
+      Live-->>Continue: emit typed output when downstream requests
+      Continue-->>Publish: terminal domain output
+      Publish-->>Store: worker publishes before markSucceeded
+    else interaction/webhook, no live session, or ineligible portable shape
+      Await-->>Store: suspend parent execution
+      Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
+      Unit-->>Coordinator: completion is admitted
+      Coordinator-->>Continue: schedule canonical continuation
+    end
 ```
 
-Replay and topology metadata show one semantic operation with a deferred-completion
-overlay. Broker and external-provider actors may still appear because they are
-participants, not pipeline operations.
+The await unit is the durable identity for the boundary. For itemized `ONE_TO_ONE` over a stream, it groups item interactions for ordering, dedupe, recovery, and fallback release; it does not turn the provider call into a batch request. For aggregate cardinalities, the unit is the durable batch shape: input and/or output is materialized as one replayable unit.
 
-## Deferred Completion Versus Checkpoint Handoff
+## Await Versus Checkpoint Handoff
 
-| Concern | Deferred completion | Checkpoint handoff |
+Await and checkpoint handoff both cross a process boundary, but they assign ownership differently.
+
+| Concern | Await | Checkpoint handoff |
 | --- | --- | --- |
 | Execution ownership | same execution parks and resumes | another pipeline admits independent work |
-| Boundary | lifecycle attached to one operation | publication/admission between pipelines |
-| Completion | correlated external observation | downstream checkpoint admission |
-| Retry and DLQ | owning execution remains responsible | downstream orchestrator owns them after admission |
-| Use when | the final result belongs to this operation | another flow should own the next lifecycle |
+| Boundary | mid-pipeline external wait | terminal or named publication boundary |
+| Completion | correlated interaction completion | downstream checkpoint admission |
+| Retry and DLQ | owning execution remains responsible | downstream orchestrator owns retry and DLQ after admission |
+| Use when | the external result belongs to the same business flow | another flow should own the next lifecycle |
 
-## Current Support Boundary
-
-Authored internal services are supported first. Commands need completion registration
-before effect dispatch and are a separate implementation slice. Query, nested
-pipeline invocation, remote/delegated operators, dynamic operation dispatch, and
-packaged Blocks do not yet accept `await:`. Object admission, publication, and
-checkpoint handoff keep their existing ownership models.
-
-Existing deployments with executions waiting on the former standalone Await topology
-must let those releases finish or cancel them before retiring the old deployment.
-They are not remapped to the new step identity.
+Use await for human approvals, webhook callbacks, and provider decisions that must resume the same business flow. Use checkpoint handoff when the next workflow has separate ownership, scaling, or operational responsibility.
 
 ## Design Responsibilities
 
-For every decorated operation, choose:
+Design each await boundary with:
 
-1. an immediate operation-output type containing only trusted request state;
-2. a stable business idempotency key over that output;
-3. an explicit, minimal completion payload owned by the external participant;
-4. a deterministic projector when final output combines trusted and untrusted facts;
-5. a timeout and a policy for late, expired, or duplicate completion;
-6. a transport adapter appropriate for UI, webhook, Kafka, or SQS delivery.
+1. a stable business idempotency key,
+2. explicit request and completion types,
+3. a timeout that matches the business expectation,
+4. duplicate-safe external effects,
+5. a clear owner for late or rejected completions.
+
+The transport can be `interaction-api`, `webhook`, Kafka, or SQS, but that is not the core modeling decision. The core decision is that the pipeline pauses at an explicit business boundary and resumes only when a typed completion is admitted.
 
 ## Where To Go Next
 
-- [Await runtime setup](/deploy/orchestrator-runtime/await) covers adapters and runtime configuration.
-- [Await operations](/operate/await-boundaries) covers admission, timeout, replay, and diagnostics.
-- [Concurrency and backpressure sizing](/deploy/concurrency-and-backpressure) covers unresolved-work budgets.
-- [Await Unit Runtime](/evolve/await-unit-runtime/) covers the durable implementation.
-- [Operators](/architecture/operators) covers immediate remote computation.
+- [Await runtime setup](/deploy/orchestrator-runtime/await) covers adapters, runtime mode, and configuration.
+- [Concurrency and backpressure sizing](/deploy/concurrency-and-backpressure) explains how backpressure changes at durable boundaries.
+- [Await operations](/operate/await-boundaries) covers pending interactions, duplicate completions, replay events, and operational checks.
+- [Await Unit Runtime](/evolve/await-unit-runtime/) covers the internal durable model.
+- [Operators](/architecture/operators) covers immediate external calls that do not suspend and resume later.

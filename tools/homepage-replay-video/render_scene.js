@@ -136,7 +136,7 @@ function addLights() {
   scene.add(fill);
 }
 
-function createPrimaryNode(role, scale, deferredCompletion) {
+function createPrimaryNode(role, scale) {
   const colors = palette[role];
   const group = new THREE.Group();
   const slab = new THREE.Mesh(
@@ -208,16 +208,6 @@ function createPrimaryNode(role, scale, deferredCompletion) {
     notch.rotation.x = Math.PI / 2;
     notch.position.set(0, 0.02, 0.19);
     group.add(notch);
-  }
-
-  if (deferredCompletion === true && role !== "await") {
-    const completionRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.62, 0.055, 18, 52),
-      makeLayeredMaterial(palette.await.glow, palette.await.glow)
-    );
-    completionRing.rotation.x = Math.PI / 2;
-    completionRing.position.set(0, 0, 0.29);
-    group.add(completionRing);
   }
 
   group.scale.setScalar(scale);
@@ -322,7 +312,7 @@ function createNode(node) {
   if (node.tier === "connector") {
     group = createConnectorNode(node.role, node.scale);
   } else if (node.tier === "primary") {
-    group = createPrimaryNode(node.role, node.scale, node.deferredCompletion);
+    group = createPrimaryNode(node.role, node.scale);
   } else if (node.tier === "support") {
     group = createSupportNode(node.role, node.scale);
   } else {

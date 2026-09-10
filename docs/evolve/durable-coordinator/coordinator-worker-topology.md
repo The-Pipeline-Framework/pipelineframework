@@ -115,7 +115,7 @@ flowchart LR
     User["Demo client<br/>submit/status/await"] --> Coord["Restaurant coordinator<br/>monolith-svc image"]
     Coord --> LocalStack["LocalStack<br/>DynamoDB + SQS + S3"]
     Coord --> Worker["Restaurant REST worker<br/>same monolith-svc image"]
-    Worker --> Await["Pending approval operation<br/>deferred completion"]
+    Worker --> Await["Restaurant decision await step"]
 ```
 
 The same `monolith-svc` image runs twice:

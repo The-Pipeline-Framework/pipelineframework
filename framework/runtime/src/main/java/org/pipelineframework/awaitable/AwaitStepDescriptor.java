@@ -25,7 +25,7 @@ import java.util.function.Function;
  * @param completionProjector optional pure request-plus-completion projection
  * @param requestAwareCompletion whether completionProjector owns canonical output construction
  */
-public record AwaitCompletionDescriptor(
+public record AwaitStepDescriptor(
     String stepId,
     String inputType,
     String outputType,
@@ -43,7 +43,7 @@ public record AwaitCompletionDescriptor(
     AwaitCompletionProjector<Object, Object, Object> completionProjector,
     boolean requestAwareCompletion
 ) {
-    public AwaitCompletionDescriptor(
+    public AwaitStepDescriptor(
         String stepId,
         String inputType,
         String outputType,
@@ -63,7 +63,7 @@ public record AwaitCompletionDescriptor(
             inputToTransport, outputFromTransport, null, defaultCompletionProjector(outputFromTransport), false);
     }
 
-    public AwaitCompletionDescriptor(
+    public AwaitStepDescriptor(
         String stepId,
         String inputType,
         String outputType,
@@ -78,7 +78,7 @@ public record AwaitCompletionDescriptor(
             transportConfig, idempotencyKeyFields, inputType, outputType, Function.identity(), Function.identity());
     }
 
-    public AwaitCompletionDescriptor(
+    public AwaitStepDescriptor(
         String stepId,
         String inputType,
         String outputType,
@@ -104,7 +104,7 @@ public record AwaitCompletionDescriptor(
             Function.identity());
     }
 
-    public AwaitCompletionDescriptor(
+    public AwaitStepDescriptor(
         String stepId,
         String inputType,
         String outputType,
@@ -133,7 +133,7 @@ public record AwaitCompletionDescriptor(
             Function.identity());
     }
 
-    public AwaitCompletionDescriptor {
+    public AwaitStepDescriptor {
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
         }
@@ -153,20 +153,7 @@ public record AwaitCompletionDescriptor(
         correlationStrategy = correlationStrategy == null || correlationStrategy.isBlank()
             ? "interactionId"
             : correlationStrategy;
-        if (transportConfig == null) {
-            transportConfig = Map.of();
-        } else {
-            for (Map.Entry<String, Object> entry : transportConfig.entrySet()) {
-                if (entry.getKey() == null) {
-                    throw new IllegalArgumentException("transportConfig contains null key '<null>'");
-                }
-                if (entry.getValue() == null) {
-                    throw new IllegalArgumentException(
-                        "transportConfig value for key '" + entry.getKey() + "' must not be null");
-                }
-            }
-            transportConfig = Map.copyOf(transportConfig);
-        }
+        transportConfig = transportConfig == null ? Map.of() : Map.copyOf(transportConfig);
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
         transportInputType = transportInputType == null || transportInputType.isBlank() ? inputType : transportInputType;
         transportOutputType = transportOutputType == null || transportOutputType.isBlank() ? outputType : transportOutputType;

@@ -25,7 +25,7 @@ class KafkaAwaitTransportAdapterTest {
 
     @Test
     void normalizesRequestTopicForAdmissionScope() {
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("topic", "fraud-check.requests"),
             "response", Map.of("topic", "fraud-check.decisions")));
 
@@ -40,7 +40,7 @@ class KafkaAwaitTransportAdapterTest {
             publishRef.set(request);
             return Uni.createFrom().voidItem();
         });
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of(
                 "topic", "fraud-check.requests",
                 "key", "correlationId"),
@@ -78,7 +78,7 @@ class KafkaAwaitTransportAdapterTest {
             publishRef.set(request);
             return Uni.createFrom().voidItem();
         });
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("topic", "requests"),
             "response", Map.of("topic", "responses")));
 
@@ -94,7 +94,7 @@ class KafkaAwaitTransportAdapterTest {
     void dispatchFailsWhenPublisherFails() {
         KafkaAwaitTransportAdapter adapter = adapter(request ->
             Uni.createFrom().failure(new IllegalStateException("broker unavailable")));
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("topic", "requests"),
             "response", Map.of("topic", "responses")));
 
@@ -111,7 +111,7 @@ class KafkaAwaitTransportAdapterTest {
     void dispatchFailsWithoutPublisherProvider() {
         KafkaAwaitTransportAdapter adapter = new KafkaAwaitTransportAdapter();
         adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("topic", "requests"),
             "response", Map.of("topic", "responses")));
 
@@ -127,7 +127,7 @@ class KafkaAwaitTransportAdapterTest {
     @Test
     void dispatchRejectsInvalidKeyStrategy() {
         KafkaAwaitTransportAdapter adapter = adapter(request -> Uni.createFrom().voidItem());
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of(
                 "topic", "requests",
                 "key", "orderId"),
@@ -147,7 +147,7 @@ class KafkaAwaitTransportAdapterTest {
             publishRef.set(request);
             return Uni.createFrom().voidItem();
         });
-        AwaitCompletionDescriptor descriptor = descriptor(Map.of(
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
             "request", Map.of("topic", "requests"),
             "response", Map.of("topic", "responses")));
         DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
@@ -171,8 +171,8 @@ class KafkaAwaitTransportAdapterTest {
         return adapter;
     }
 
-    private static AwaitCompletionDescriptor descriptor(Map<String, Object> config) {
-        return new AwaitCompletionDescriptor(
+    private static AwaitStepDescriptor descriptor(Map<String, Object> config) {
+        return new AwaitStepDescriptor(
             "FraudCheck",
             "com.example.Request",
             "com.example.Decision",

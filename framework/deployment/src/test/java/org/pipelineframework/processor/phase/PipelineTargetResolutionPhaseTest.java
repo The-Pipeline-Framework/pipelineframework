@@ -487,7 +487,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void awaitStepDescriptorClassNameIsAccessibleAndDistinctFromQueryStepDescriptor() {
         assertEquals(
-            "org.pipelineframework.awaitable.AwaitCompletionDescriptor",
+            "org.pipelineframework.awaitable.AwaitStepDescriptor",
             PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS);
         assertFalse(
             PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS.equals(

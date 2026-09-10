@@ -1,6 +1,6 @@
 # Await Boundary Operations
 
-Deferred completion is operationally different from an ordinary remote call. An operation decorated with `await:` produces its trusted immediate result, dispatches a completion request, and admits only correlated final observations. Some paths park a `QUEUE_ASYNC` execution as `WAITING_EXTERNAL`; brokered itemised streams can keep a live session open and use the parked state as the recovery fallback.
+Await boundaries are operationally different from ordinary remote calls. A `kind: await` step dispatches work to an external actor and admits only correlated completions. Some paths park a `QUEUE_ASYNC` execution as `WAITING_EXTERNAL`; brokered itemized streams can keep a live await session open and use the parked state as the recovery fallback.
 
 Use this page with [Await Boundaries](/architecture/await-boundaries) for application design, [Await runtime setup](/deploy/orchestrator-runtime/await) for adapter configuration, and [Replay & Live Topology](/operate/observability/replay) for replay inspection.
 
@@ -53,11 +53,11 @@ Late or duplicate completions can be dropped when the target interaction is alre
 
 ## Runtime Signals
 
-In `QUEUE_ASYNC`, itemised deferred completion has a live path and a durable fallback path.
+In `QUEUE_ASYNC`, itemized await has a live path and a durable fallback path.
 
-In the live path, a brokered operation stream keeps an in-memory await session open while the parent transition is alive. A completion is still recorded durably first, then the live session emits it to the resumed segment when downstream requests it. This is the normal connector-first CSV Payments path.
+In the live path, a brokered `ONE_TO_ONE` stream keeps an in-memory await session open while the parent transition is alive. A completion is still recorded durably first, then the live session emits it to the resumed segment when downstream requests it. This is the normal connector-first CSV Payments path.
 
-For the eligible portable shape, the transition worker is the live owner. Durable interaction admission and retry state remain framework-owned; the coordinator does not need to take ownership of the live `Multi` simply because the completion transport is remote.
+For the eligible portable shape (stream producer, immediate scalar await, scalar-only suffix), the transition worker is the live owner. Durable interaction admission and retry state remain framework-owned; the coordinator does not need to take ownership of the live `Multi` simply because the await transport is remote.
 
 The durable fallback path is used when the live session is unavailable, after worker loss, or when a later claim must resume from stored state. In that path, the runtime uses durable coordination gates:
 
@@ -105,7 +105,7 @@ Replay and trace events expose the durable-fallback lifecycle of the await unit:
 - `await_resume_released`
 - `await_unit_terminal`
 
-Use these events to separate durable fallback from viewer interpretation. A healthy live itemised handoff is instead visible through interaction completion and downstream step events; it does not synthesise await-unit item-completion or resume-release events. For example, in `csv-payments`, `Process Csv Payments Input` emits one pending `PaymentRecord` per row and decorates each with deferred completion, so downstream progress should begin as provider responses are admitted. Replay shows a completion overlay on that semantic operation rather than a separate Await node.
+Use these events to separate durable fallback from viewer interpretation. A healthy live itemized handoff is instead visible through interaction completion and downstream step events; it does not synthesize await-unit item-completion or resume-release events. For example, in `csv-payments`, `Await Payment Provider` is `ONE_TO_ONE` over a stream, so downstream progress should begin as provider responses are admitted. The replay viewer should show those real lifecycle events rather than inventing smoothed timing.
 
 ## Troubleshooting Runbook
 
@@ -119,7 +119,7 @@ In a healthy connector-first stream, the parser can be ahead of the provider, bu
 4. last parser event,
 5. last await completion.
 
-If downstream status processing starts while parser and completion dispatch are still active, the live path is working. If every parser event happens before the first downstream event, check `pipeline.max-concurrency`, admission wait and pending signals, step buffer metrics, and whether the decorated operation is running through the live brokered path or durable fallback only. Interpret `pipeline.max-concurrency` as the shared unresolved-work budget for the external provider, not as a target for local CPU utilisation.
+If downstream status processing starts while parser and await dispatch are still active, the live path is working. If every parser event happens before the first downstream event, check `pipeline.max-concurrency`, admission wait and pending signals, step buffer metrics, and whether the await step is running through the live brokered path or durable fallback only. For an enabled durable `ONE_TO_ONE` await, interpret `pipeline.max-concurrency` as the shared unresolved-work budget for the external provider, not as a target for local CPU utilization.
 
 ### Await Stays Hot Or Red In Replay
 
@@ -163,13 +163,16 @@ If local behavior disagrees with source changes, rebuild with a worktree-local M
 
 When the control-plane journal is enabled, due-work and timeout behavior depend on journal writes and indexes as well as the existing projections. If executions stop sweeping or timeouts do not fire, verify journal append success, projection version conflicts, due-work index configuration, and timeout index configuration before redriving executions.
 
-## Cardinality And Limits
+## Aggregate Limits
 
-Deferred completion applies once to every result emitted by the authored operation.
-There is no aggregate Await cardinality. If a provider acts on a whole batch, represent
-that batch with an explicit bounded canonical collection type. Existing concurrency,
-payload-size, deadline, and transport limits still apply to each interaction and its
-completion.
+`ONE_TO_ONE` over a stream is itemized. Aggregate await shapes materialize input and/or output units in the current runtime:
+
+| Config key | Default | Applies to |
+| --- | --- | --- |
+| `pipeline.orchestrator.await-aggregate-max-input-items` | `10000` | materialized input units for `MANY_TO_ONE` and `MANY_TO_MANY` await steps |
+| `pipeline.orchestrator.await-aggregate-max-output-items` | `10000` | materialized output units for `ONE_TO_MANY` and `MANY_TO_MANY` await steps |
+
+Do not use unbounded aggregate await payloads. If replay of a materialized output unit fails halfway through downstream execution, TPF restarts that output unit as a whole.
 
 ## Await Versus Checkpoint Handoff
 
