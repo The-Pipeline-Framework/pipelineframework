@@ -419,7 +419,7 @@ def run_one(args, decision, customer_name, restaurant_name, expected_outcome):
     wait_status(args, execution_id, "WAITING_EXTERNAL")
     interaction = pending_interaction(args, execution_id)
     if interaction.get("stepId") != args.await_step_id:
-        raise RuntimeError(f"Unexpected deferred-completion operation: {interaction.get('stepId')}")
+        raise RuntimeError(f"Unexpected await step: {interaction.get('stepId')}")
     complete(args, interaction, decision)
     wait_status(args, execution_id, "SUCCEEDED")
     result = result_payload(args, execution_id)

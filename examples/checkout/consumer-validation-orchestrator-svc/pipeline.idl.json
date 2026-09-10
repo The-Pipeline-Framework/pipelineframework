@@ -197,11 +197,13 @@
     }
   },
   "unions" : { },
-  "types" : { },
   "steps" : [ {
     "name" : "Consumer Validate Order",
     "inputTypeName" : "OrderPending",
-    "outputTypeName" : "OrderApproved",
-    "operationOutputTypeName" : "OrderApproved"
+    "outputTypeName" : "OrderApproved"
+  }, {
+    "name" : "Await Order Approval",
+    "inputTypeName" : "OrderApproved",
+    "outputTypeName" : "OrderApproved"
   } ]
 }

@@ -48,19 +48,19 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
     }
 
     @Override
-    public boolean supportsLiveAwaitWindow(AwaitCompletionDescriptor descriptor) {
+    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
         return true;
     }
 
     @Override
-    public Optional<String> admissionEndpoint(AwaitCompletionDescriptor descriptor) {
+    public Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
         return Optional.of("kafka://" + KafkaConfig.from(descriptor.transportConfig()).requestTopic());
     }
 
     @Override
     public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
         Objects.requireNonNull(request, "request must not be null");
-        AwaitCompletionDescriptor descriptor = request.descriptor();
+        AwaitStepDescriptor descriptor = request.descriptor();
         AwaitInteractionRecord interaction = request.interaction();
         KafkaConfig config = KafkaConfig.from(descriptor.transportConfig());
         String resumeToken = resumeTokenService.sign(interaction, System.currentTimeMillis());

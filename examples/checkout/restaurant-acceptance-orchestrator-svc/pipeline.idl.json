@@ -209,11 +209,13 @@
     }
   },
   "unions" : { },
-  "types" : { },
   "steps" : [ {
     "name" : "Restaurant Accept Order",
     "inputTypeName" : "OrderApproved",
-    "outputTypeName" : "OrderAcceptedByRestaurant",
-    "operationOutputTypeName" : "OrderAcceptedByRestaurant"
+    "outputTypeName" : "OrderAcceptedByRestaurant"
+  }, {
+    "name" : "Await Restaurant Acceptance",
+    "inputTypeName" : "OrderAcceptedByRestaurant",
+    "outputTypeName" : "OrderAcceptedByRestaurant"
   } ]
 }

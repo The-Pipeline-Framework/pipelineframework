@@ -10,4 +10,4 @@ Recommended path is staged neutrality: keep current Mutiny contracts and add Rea
 
 For core store/contract boundaries, prefer `CompletionStage<T>` for unary and reactive-streams `Publisher<T>` for streams.
 
-The adaptation cost is significant because core execution classes are built around Mutiny operators (`retry`, `transform`, subscription, backpressure, failure handling). `PipelineStepExecutor`, `QueueAsyncCoordinator`, `AwaitCompletionSupport`, and telemetry paths need explicit semantics before adaptation.
+The adaptation cost is significant because core execution classes are built around Mutiny operators (`retry`, `transform`, subscription, backpressure, failure handling). `PipelineStepExecutor`, `QueueAsyncCoordinator`, `AwaitStepSupport`, and telemetry paths need explicit semantics before adaptation.

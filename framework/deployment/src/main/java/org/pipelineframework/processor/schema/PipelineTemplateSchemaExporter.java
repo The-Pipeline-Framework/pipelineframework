@@ -1722,9 +1722,6 @@ public final class PipelineTemplateSchemaExporter {
           "type": "boolean",
           "description": "Whether this YAML-declared internal blocking step should use virtual-thread offload."
         },
-        "await": {
-          "$ref": "#/$defs/awaitConfig"
-        },
         "accepts": {
           "type": "array",
           "items": { "$ref": "#/$defs/logicalContractReference" }
@@ -1812,13 +1809,6 @@ public final class PipelineTemplateSchemaExporter {
               "operatorMapper",
               "externalMapper"
             ]
-          }
-        },
-        {
-          "if": { "required": ["await"] },
-          "then": {
-            "required": ["service"],
-            "not": { "anyOf": [{ "required": ["operator"] }, { "required": ["delegate"] }] }
           }
         }
       ],
@@ -1926,29 +1916,6 @@ public final class PipelineTemplateSchemaExporter {
     "awaitConfig": {
       "type": "object",
       "properties": {
-        "operationOutput": {
-          "type": "object",
-          "properties": {
-            "type": { "$ref": "#/$defs/logicalContractReference" },
-            "java": { "$ref": "#/$defs/javaClassName" }
-          },
-          "required": ["type"],
-          "additionalProperties": false
-        },
-        "timeout": {
-          "type": "string",
-          "minLength": 1
-        },
-        "idempotency": {
-          "type": "object",
-          "properties": {
-            "fields": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 }
-            }
-          },
-          "additionalProperties": false
-        },
         "correlation": {
           "$ref": "#/$defs/awaitCorrelation"
         },
@@ -1971,15 +1938,17 @@ public final class PipelineTemplateSchemaExporter {
           },
           "required": ["type", "projector"],
           "additionalProperties": false
+        },
+        "dispatch": {
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "required": [
-        "operationOutput",
-        "timeout",
         "correlation",
         "transport"
       ],
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "commandPolicy": {
       "type": "object",
@@ -2203,6 +2172,157 @@ public final class PipelineTemplateSchemaExporter {
         "name",
         "kind",
         "commandIdGenerator"
+      ]
+    },
+    "awaitTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "await"
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": [
+            "ONE_TO_ONE",
+            "EXPANSION",
+            "REDUCTION",
+            "COLLAPSE",
+            "SIDE_EFFECT",
+            "MANY_TO_MANY",
+            "ONE_TO_MANY",
+            "MANY_TO_ONE"
+          ]
+        },
+        "inputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "inboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "outputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "outboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "input": {
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "output": {
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotency": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "idempotencyKeyFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "await": {
+          "$ref": "#/$defs/awaitConfig"
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parallel": {
+          "type": "boolean"
+        },
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flowBoundaryRationale": {
+          "type": "string"
+        },
+        "accepts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/logicalContractReference" }
+        },
+        "terminal": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "idempotency",
+              "idempotencyKeyFields"
+            ]
+          }
+        },
+        {
+          "anyOf": [
+            {
+              "required": [
+                "inputTypeName",
+                "outputTypeName"
+              ]
+            },
+            {
+              "required": [
+                "input",
+                "output"
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "name",
+        "kind",
+        "cardinality",
+        "timeout",
+        "await"
       ]
     },
     "llmCallable": {
@@ -2625,6 +2745,9 @@ public final class PipelineTemplateSchemaExporter {
                   "$ref": "#/$defs/dynamicOperationTemplateStep"
                 },
                 {
+                  "$ref": "#/$defs/awaitTemplateStep"
+                },
+                {
                   "$ref": "#/$defs/commandTemplateStep"
                 },
                 {
@@ -2685,6 +2808,7 @@ public final class PipelineTemplateSchemaExporter {
                   "oneOf": [
                     { "$ref": "#/$defs/queryTemplateStep" },
                     { "$ref": "#/$defs/dynamicOperationTemplateStep" },
+                    { "$ref": "#/$defs/awaitTemplateStep" },
                     { "$ref": "#/$defs/commandTemplateStep" },
                     { "$ref": "#/$defs/v2TemplateStep" },
                     { "$ref": "#/$defs/delegatedOrInternalStep" }

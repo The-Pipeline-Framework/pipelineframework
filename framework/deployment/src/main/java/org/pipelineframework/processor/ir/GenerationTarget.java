@@ -25,8 +25,8 @@ public enum GenerationTarget {
     REMOTE_OPERATOR_ADAPTER,
     /** Generated reactive bridge for blocking-authored internal services */
     BLOCKING_REACTIVE_BRIDGE,
-    /** Generated decorator that adds durable deferred completion to an ordinary operation */
-    DEFERRED_COMPLETION_STEP,
+    /** Generated await client step that suspends queue-async execution */
+    AWAIT_CLIENT_STEP,
     /** Generated command client step that executes managed external effects */
     COMMAND_CLIENT_STEP,
     /** Generated query client step that invokes a captured query connector */

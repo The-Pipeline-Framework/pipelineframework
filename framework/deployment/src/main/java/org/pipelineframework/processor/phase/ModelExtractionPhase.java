@@ -278,6 +278,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case REMOTE -> {
                 yield createRemoteStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case AWAIT -> {
+                yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
+            }
             case COMMAND -> {
                 yield createCommandStepModel(ctx, definition, stepDef, ctxWarningLogger);
             }
@@ -449,6 +452,66 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
+    private PipelineStepModel createAwaitStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        boolean v3 = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            && config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
+        TypeName inputType;
+        TypeName outputType;
+        if (v3) {
+            Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> resolved =
+                awaitTypeBindings.resolve(ctx, stepDef);
+            if (resolved.isEmpty()) {
+                if (stepDef.inputType() == null && stepDef.outputType() == null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        "Await step '" + stepDef.name()
+                            + "' could not resolve compiler-owned Java input and output bindings.");
+                }
+                return null;
+            }
+            inputType = resolved.orElseThrow().inputType();
+            outputType = resolved.orElseThrow().outputType();
+        } else {
+            if (stepDef.inputType() == null || stepDef.outputType() == null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Await step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                        + "declare java.input and java.output.");
+                return null;
+            }
+            String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+                ? config.basePackage()
+                : null;
+            inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+            outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .inputMapping(TypeMapping.withoutMapper(inputType))
+            .outputMapping(TypeMapping.withoutMapper(outputType))
+            .streamingShape(streamingShape)
+            .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
     private PipelineStepModel createRemoteStepModel(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
@@ -567,34 +630,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (inputType == null) {
             return null;
         }
-        Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> completionBinding =
-            stepDef.deferredCompletion().isPresent()
-                ? awaitTypeBindings.resolve(ctx, stepDef)
-                : Optional.empty();
-        if (stepDef.deferredCompletion().isPresent() && completionBinding.isEmpty()) {
-            return null;
-        }
-        TypeName outputType = stepDef.deferredCompletion().isPresent()
-            ? resolveDeferredOperationOutputModelType(
-                ctx, definition, stepDef, completionBinding.orElseThrow())
-            : resolveInternalDomainType(
-                ctx,
-                definition,
-                stepDef.name(),
-                "output",
-                stepDef.outputType(),
-                annotationBacked ? extractedModel.outboundDomainType() : null,
-                serviceSignature.outputType());
+        TypeName outputType = resolveInternalDomainType(
+            ctx,
+            definition,
+            stepDef.name(),
+            "output",
+            stepDef.outputType(),
+            annotationBacked ? extractedModel.outboundDomainType() : null,
+            serviceSignature.outputType());
         if (outputType == null) {
-            return null;
-        }
-        if (stepDef.deferredCompletion().isPresent()
-            && !serviceSignature.outputType().equals(completionBinding.orElseThrow().operationOutputType())) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Internal step '" + stepDef.name() + "' service output '" + serviceSignature.outputType()
-                    + "' does not match await.operationOutput '"
-                    + completionBinding.orElseThrow().operationOutputType() + "'.");
             return null;
         }
 
@@ -627,7 +671,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         String serviceName = toYamlServiceName(stepDef.name());
         ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, serviceSignature.apiKind());
-        PipelineStepModel.Builder builder = extractedModel.toBuilder()
+        return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .serviceClassName(extractedModel.serviceClassName())
@@ -636,32 +680,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .streamingShape(serviceSignature.shape())
             .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
-            .reactiveReturnKind(serviceSignature.reactiveReturnKind());
-        stepDef.deferredCompletion().ifPresent(definitionValue -> builder.deferredCompletionSelection(
-            new DeferredCompletionSelection(
-                completionBinding.orElseThrow().finalOutputType(),
-                completionBinding.orElseThrow().finalOutputCanonicalType(),
-                completionBinding.orElseThrow().completionPayloadCanonicalType(),
-                java.time.Duration.parse(definitionValue.timeout()),
-                definitionValue.idempotencyKeyFields(),
-                definitionValue.correlationStrategy(),
-                definitionValue.transportType(),
-                definitionValue.transportConfig(),
-                completionBinding.orElseThrow().completionPayloadType(),
-                definitionValue.completion().map(DeferredCompletionDefinition.CompletionProjectionDefinition::projector))));
-        return builder.build();
-    }
-
-    TypeName resolveDeferredOperationOutputModelType(
-        PipelineCompilationContext ctx,
-        PipelineReference definition,
-        StepDefinition step,
-        org.pipelineframework.processor.awaitable.AwaitStepTypeBinding completionBinding
-    ) {
-        return ctx.getResolvedProviderBoundary(definition, step.name())
-            .map(boundary -> (TypeName) ClassName.bestGuess(
-                boundary.boundary().outputType().targetTypeName()))
-            .orElseGet(completionBinding::operationOutputType);
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
+            .build();
     }
 
     private PipelineStepModel createYamlInternalBaseModel(
@@ -721,17 +741,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? config.basePackage()
             : null;
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage, ctx);
-        Optional<org.pipelineframework.processor.awaitable.AwaitStepTypeBinding> completionBinding =
-            stepDef.deferredCompletion().isPresent()
-                ? awaitTypeBindings.resolveCanonicalBoundary(ctx, stepDef)
-                : Optional.empty();
-        if (stepDef.deferredCompletion().isPresent() && completionBinding.isEmpty()) {
-            return null;
-        }
-        TypeName outputType = completionBinding
-            .map(org.pipelineframework.processor.awaitable.AwaitStepTypeBinding::operationOutputType)
-            .orElseGet(() -> normalizeLegacyDomainType(
-                stepDef.outputType(), stepDef.executionClass(), templateBasePackage, ctx));
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage, ctx);
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
@@ -762,7 +772,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             : DeploymentRole.ORCHESTRATOR_CLIENT;
 
         ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, null);
-        PipelineStepModel.Builder builder = new PipelineStepModel.Builder()
+        return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .servicePackage(servicePackage)
@@ -784,20 +794,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .sideEffect(false)
             .cacheKeyGenerator(null)
             .orderingRequirement(OrderingRequirement.RELAXED)
-            .threadSafety(ThreadSafety.SAFE);
-        stepDef.deferredCompletion().ifPresent(definitionValue -> builder.deferredCompletionSelection(
-            new DeferredCompletionSelection(
-                completionBinding.orElseThrow().finalOutputType(),
-                completionBinding.orElseThrow().finalOutputCanonicalType(),
-                completionBinding.orElseThrow().completionPayloadCanonicalType(),
-                java.time.Duration.parse(definitionValue.timeout()),
-                definitionValue.idempotencyKeyFields(),
-                definitionValue.correlationStrategy(),
-                definitionValue.transportType(),
-                definitionValue.transportConfig(),
-                completionBinding.orElseThrow().completionPayloadType(),
-                definitionValue.completion().map(DeferredCompletionDefinition.CompletionProjectionDefinition::projector))));
-        return builder.build();
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
     }
 
     private TypeName normalizeLegacyDomainType(

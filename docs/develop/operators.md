@@ -92,7 +92,7 @@ Proto generation emits an external step-host contract pack beside the generated 
 - `EXTERNAL-STEP-HOSTS.md` for implementers.
 - `pipeline-types.proto` and each remote step service proto for language-specific codegen.
 
-Remote operators are still immediate request/response steps. The remote implementation may use async I/O internally, but the pipeline execution remains on the same invocation lease and expects the reply inline. If an operation starts now and its final answer arrives later through a broker, webhook, or human task, attach `await:` to that semantic operation instead.
+Remote operators are still immediate request/response steps. The remote implementation may use async I/O internally, but the pipeline execution remains on the same invocation lease and expects the reply inline. If the external system returns `accepted` and the final answer arrives later through a broker, webhook, or human task, model that boundary as `kind: await` instead.
 
 ## Operator vs Await
 
@@ -101,11 +101,11 @@ Use this rule to pick the step model:
 | External shape | Use |
 | --- | --- |
 | Inline HTTP/gRPC call returning now | Operator / remote execution |
-| Broker request/reply with later correlated message | Operation with `await:` |
-| Webhook callback later | Operation with `await:` |
-| UI/human approval | Authored service with `await:` |
+| Broker request/reply with later correlated message | Await step |
+| Webhook callback later | Await step |
+| UI/human approval | Await step |
 
-Anti-pattern: if the remote system acknowledges the request now and produces the real business result later, do not model that as an immediate remote operator. Operators are for immediate replies; `await:` decorates an operation whose final result is deferred.
+Anti-pattern: if the remote system acknowledges the request now and produces the real business result later, do not model that as a remote operator. Remote operators are for immediate replies; await steps are for deferred durable completion.
 
 ## Method Contract Checklist
 

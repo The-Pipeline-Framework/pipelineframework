@@ -117,10 +117,6 @@ final class TransportBoundaryResolver {
             return inputAdapter.isPresent() && outputAdapter.isPresent();
         }
 
-        boolean outputConvertsAtBoundary() {
-            return outputAdapter.isPresent();
-        }
-
         ClassName inputAdapterOrThrow() {
             return inputAdapter.orElseThrow(() -> new IllegalStateException(
                 "A generated representation boundary requires an input protobuf adapter class"));

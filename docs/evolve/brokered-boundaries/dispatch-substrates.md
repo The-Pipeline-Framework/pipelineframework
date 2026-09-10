@@ -23,23 +23,15 @@ REST and gRPC are immediate call transports. Kafka and SQS are brokered dispatch
 Prefer boundary-specific configuration shapes:
 
 ```yaml
-service: com.example.CreateProviderRequestService
-input: RequestInput
-output: ProviderDecision
+kind: await
 await:
-  operationOutput: { type: ProviderRequest, java: com.example.ProviderRequest }
-  timeout: PT10M
   transport:
     type: kafka
 ```
 
 ```yaml
-service: com.example.CreateProviderRequestService
-input: RequestInput
-output: ProviderDecision
+kind: await
 await:
-  operationOutput: { type: ProviderRequest, java: com.example.ProviderRequest }
-  timeout: PT10M
   transport:
     type: sqs
 ```

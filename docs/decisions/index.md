@@ -23,7 +23,7 @@ authoritative for exact syntax and release support.
 | [0012](./0012-failure-recovery-and-handoff.md) | Keep business outcomes, item rejection, runtime recovery, effects, and handoff ownership distinct. |
 | [0013](./0013-change-the-semantic-owner-boldly.md) | Change the owning abstraction coherently; impact determines rigor, not semantic placement. |
 | [0014](./0014-remote-transition-outcome-uncertainty.md) | Keep remote caller timeout ambiguity under durable coordinator authority. |
-| [0015](./0015-branch-routing-owns-await-projector-input.md) | Deprecated: standalone Await-step routing; superseded by ADR-0036. |
+| [0015](./0015-branch-routing-owns-await-projector-input.md) | Let v3 branch routing determine the typed request passed to an Await completion projector. |
 | [0016](./0016-field-presence-nullability-and-compatibility.md) | Keep field presence and value nullability independent and classify evolution per compatibility surface. |
 | [0017](./0017-structural-connector-execution-and-binding-serialization.md) | Declare blocking and serialized connector execution structurally and enforce serialization per binding and operation. |
 | [0018](./0018-command-effects-use-immutable-durable-revisions.md) | Persist Command effect authority as immutable conditional revisions with lossless typed replay. |
@@ -44,7 +44,6 @@ authoritative for exact syntax and release support.
 | [0033](./0033-graphql-agent-packages-semantics-not-authority.md) | Package a bounded GraphQL-aware agent loop while leaving persisted operations and Command authority with the application. |
 | [0034](./0034-pinned-http-operations-execute-as-ordinary-connector-capabilities.md) | Execute immutable HTTP operation pins through ordinary Connector Query and Command support. |
 | [0035](./0035-openapi-imports-release-pinned-capabilities-not-authority.md) | Import selected OpenAPI operations as release-pinned capabilities without importing external authority. |
-| [0036](./0036-await-is-orthogonal-deferred-completion.md) | Model Await as deferred completion on an ordinary operation, not as an operation kind. |
 
 ## Maintenance
 

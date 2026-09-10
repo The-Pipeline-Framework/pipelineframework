@@ -451,15 +451,14 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Fraud Check"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 cardinality: "ONE_TO_ONE"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                idempotency:
+                  fields: ["orderId"]
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
-                  idempotency:
-                    fields: ["orderId"]
                   correlation:
                     strategy: "interactionId"
                   completion:
@@ -473,20 +472,20 @@ class StepDefinitionParserTest {
 
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
-        assertEquals(StepKind.INTERNAL, step.kind());
-        assertEquals(ClassName.get("com.example", "AwaitOperationService"), step.executionClass());
+        assertEquals(StepKind.AWAIT, step.kind());
+        assertNull(step.executionClass());
         assertEquals(ClassName.get("com.example", "FraudCheckRequest"), step.inputType());
         assertEquals(ClassName.get("com.example", "FraudCheckDecision"), step.outputType());
-        assertEquals("PT10M", step.deferredCompletion().orElseThrow().timeout());
-        assertEquals(List.of("orderId"), step.deferredCompletion().orElseThrow().idempotencyKeyFields());
-        assertEquals("webhook", step.deferredCompletion().orElseThrow().transportType());
-        assertEquals("interactionId", step.deferredCompletion().orElseThrow().correlationStrategy());
+        assertEquals("PT10M", step.timeout());
+        assertEquals(List.of("orderId"), step.idempotencyKeyFields());
+        assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
+        assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
         assertEquals("com.example.FraudCheckAnswer",
-            step.deferredCompletion().orElseThrow().completion().orElseThrow().type());
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("type"));
         assertEquals("com.example.FraudCheckProjector",
-            step.deferredCompletion().orElseThrow().completion().orElseThrow().projector().canonicalName());
+            ((java.util.Map<?, ?>) step.awaitConfig().get("completion")).get("projector"));
         assertEquals("https://partner.example/check",
-            ((java.util.Map<?, ?>) step.deferredCompletion().orElseThrow().transportConfig().get("request")).get("url"));
+            ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
     }
@@ -503,13 +502,12 @@ class StepDefinitionParserTest {
               Result: { fields: [[id, string]] }
             steps:
               - name: Clarify
-                service: "com.example.AwaitOperationService"
+                kind: await
                 cardinality: ONE_TO_ONE
                 input: Decision
                 output: Result
+                timeout: PT10M
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation: { strategy: interactionId }
                   transport: { type: interaction-api }
             """, diagnostics);
@@ -521,7 +519,7 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void v3DeferredCompletionKeepsOrdinaryServiceJavaBindingRules() throws IOException {
+    void v3AwaitRejectsPartialExplicitJavaBinding() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 3
@@ -532,20 +530,20 @@ class StepDefinitionParserTest {
               Result: { fields: [[id, string]] }
             steps:
               - name: Clarify
-                service: "com.example.AwaitOperationService"
+                kind: await
                 cardinality: ONE_TO_ONE
                 input: Decision
                 output: Result
                 java: { input: com.example.domain.Decision }
+                timeout: PT10M
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation: { strategy: interactionId }
                   transport: { type: interaction-api }
             """, diagnostics);
 
-        assertEquals(1, steps.size(), diagnostics.toString());
-        assertEquals(ClassName.get("com.example.domain", "Decision"), steps.getFirst().inputType());
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "await steps must declare both java.input and java.output together")), diagnostics.toString());
     }
 
     @Test
@@ -565,13 +563,12 @@ class StepDefinitionParserTest {
                 basePackage: com.example
                 steps:
                   - name: Fraud Check
-                    service: "com.example.AwaitOperationService"
+                    kind: await
                     cardinality: ONE_TO_ONE
                     input: com.example.Request
                     output: com.example.Decision
+                    timeout: PT10M
                     await:
-                      operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                      timeout: PT10M
                       correlation:
                         strategy: interactionId
                       %s
@@ -581,7 +578,7 @@ class StepDefinitionParserTest {
 
             assertTrue(steps.isEmpty(), completion);
             assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
-                "await.completion must contain only non-blank type and projector fields")),
+                "await.completion must contain only non-blank string type and projector fields")),
                 completion + ": " + diagnostics);
         }
     }
@@ -589,6 +586,11 @@ class StepDefinitionParserTest {
     @Test
     void rejectsInvalidAwaitIdempotencyConfigurations() throws IOException {
         for (String idempotencyConfig : List.of(
+            """
+                idempotency:
+                  fields: [\"orderId\"]
+                idempotencyKeyFields: null
+                """,
             "idempotency: orderId",
             "idempotency: null",
             """
@@ -602,18 +604,17 @@ class StepDefinitionParserTest {
                 basePackage: "com.example"
                 steps:
                   - name: "Invalid Idempotency"
-                    service: "com.example.AwaitOperationService"
+                    kind: "await"
                     input: "com.example.Input"
                     output: "com.example.Output"
+                    timeout: "PT5M"
+                    %s
                     await:
-                      operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                      timeout: PT10M
-                      %s
                       correlation:
                         strategy: "interactionId"
                       transport:
                         type: "interaction-api"
-                """.formatted(idempotencyConfig.replace("\n", "\n      ")), diagnostics);
+                """.formatted(idempotencyConfig.replace("\n", "\n    ")), diagnostics);
 
             assertTrue(steps.isEmpty(), idempotencyConfig);
             assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
@@ -650,13 +651,12 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Fraud Check"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 cardinality: "ONE_TO_MANY"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1474,13 +1474,12 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Await Payment Provider"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 cardinality: "MANY_TO_MANY"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   dispatch:
                     mode: "per-item"
                   correlation:
@@ -1495,12 +1494,12 @@ class StepDefinitionParserTest {
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await contains unsupported fields: dispatch")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.dispatch is not supported")),
             diagnostics.toString());
     }
 
     @Test
-    void acceptsAwaitModifierOnAuthoredService() throws IOException {
+    void rejectsAwaitStepWithServiceField() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -1508,20 +1507,19 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Bad Await"
+                kind: "await"
                 service: "com.example.SomeService"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
-                  correlation:
-                    strategy: interactionId
                   transport:
                     type: "interaction-api"
             """, diagnostics);
 
-        assertEquals(1, steps.size(), diagnostics.toString());
-        assertEquals(ClassName.get("com.example", "SomeService"), steps.getFirst().executionClass());
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
     }
 
     @Test
@@ -1533,11 +1531,10 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "No Timeout Await"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1550,7 +1547,7 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsRemovedAwaitKindWithMigrationDiagnostic() throws IOException {
+    void rejectsAwaitStepWithoutAwaitMap() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -1558,14 +1555,14 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "No Await Map"
-                kind: await
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
-            "kind: await was removed in v3; attach await: to an ordinary authored operation")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
             diagnostics.toString());
     }
 
@@ -1578,12 +1575,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Missing Transport Type"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1604,12 +1600,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Webhook Missing Url"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1630,12 +1625,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Kafka Fraud Check"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1649,9 +1643,9 @@ class StepDefinitionParserTest {
 
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
-        assertEquals(StepKind.INTERNAL, step.kind());
-        java.util.Map<?, ?> transport = step.deferredCompletion().orElseThrow().transportConfig();
-        assertEquals("kafka", step.deferredCompletion().orElseThrow().transportType());
+        assertEquals(StepKind.AWAIT, step.kind());
+        java.util.Map<?, ?> transport = (java.util.Map<?, ?>) step.awaitConfig().get("transport");
+        assertEquals("kafka", transport.get("type"));
         assertEquals("fraud-check.requests", ((java.util.Map<?, ?>) transport.get("request")).get("topic"));
         assertEquals("fraud-check.decisions", ((java.util.Map<?, ?>) transport.get("response")).get("topic"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
@@ -1666,12 +1660,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Kafka Missing Request Topic"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1696,12 +1689,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Kafka Missing Response Topic"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1725,12 +1717,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Kafka Invalid Key"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -1756,12 +1747,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Sqs Fraud Check"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1774,9 +1764,9 @@ class StepDefinitionParserTest {
 
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
-        assertEquals(StepKind.INTERNAL, step.kind());
-        java.util.Map<?, ?> transport = step.deferredCompletion().orElseThrow().transportConfig();
-        assertEquals("sqs", step.deferredCompletion().orElseThrow().transportType());
+        assertEquals(StepKind.AWAIT, step.kind());
+        java.util.Map<?, ?> transport = (java.util.Map<?, ?>) step.awaitConfig().get("transport");
+        assertEquals("sqs", transport.get("type"));
         assertEquals("http://localhost:4566/000000000000/fraud-check-requests",
             ((java.util.Map<?, ?>) transport.get("request")).get("queueUrl"));
         assertEquals("http://localhost:4566/000000000000/fraud-check-decisions",
@@ -1793,12 +1783,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Sqs Missing Request Queue"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1822,12 +1811,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Sqs Missing Response Queue"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1851,12 +1839,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Sqs Fifo Queue"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1881,12 +1868,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Sqs Fifo Queue"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "signedResumeToken"
                   transport:
@@ -1911,12 +1897,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Missing Correlation"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   transport:
                     type: "interaction-api"
             """, diagnostics);
@@ -1935,12 +1920,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Unsupported Correlation"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "custom"
                   transport:
@@ -1961,12 +1945,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Bad Correlation"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation: "signedResumeToken"
                   transport:
                     type: "interaction-api"
@@ -1986,11 +1969,10 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "No Input Await"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -2013,13 +1995,12 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Await With Operator"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 operator: "com.example.Operator::process"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -2028,7 +2009,8 @@ class StepDefinitionParserTest {
 
         assertTrue(steps.isEmpty());
         String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
-        assertTrue(errorSummary.contains("'service' and delegated execution"), errorSummary);
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("use operators/remote execution for immediate replies"), errorSummary);
     }
 
     @Test
@@ -2040,9 +2022,10 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Await With Remote Execution"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 inputTypeName: "Input"
                 outputTypeName: "Output"
+                timeout: "PT10M"
                 execution:
                   mode: "REMOTE"
                   operatorId: "fraud-check"
@@ -2050,8 +2033,6 @@ class StepDefinitionParserTest {
                   target:
                     url: "https://operators.example/check"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -2060,11 +2041,12 @@ class StepDefinitionParserTest {
 
         assertTrue(steps.isEmpty());
         String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
-        assertTrue(errorSummary.contains("remote execution is mutually exclusive"), errorSummary);
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("kind: await"), errorSummary);
     }
 
     @Test
-    void acceptsDeferredCompletionOnExplicitService() throws IOException {
+    void rejectsAwaitStepWhenServiceIsAlsoDeclared() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -2072,20 +2054,22 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Await With Service"
+                kind: "await"
                 service: "com.example.Service"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT10M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
 
-        assertEquals(1, steps.size(), diagnostics.toString());
-        assertEquals(ClassName.get("com.example", "Service"), steps.getFirst().executionClass());
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("correlated later completion"), errorSummary);
     }
 
     @Test
@@ -2119,14 +2103,12 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Multi Key Await"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.MultiKeyRequest"
                 output: "com.example.MultiKeyResult"
+                timeout: "PT30M"
+                idempotencyKeyFields: ["orderId", "customerId", "amount"]
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
-                  idempotency:
-                    fields: ["orderId", "customerId", "amount"]
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -2135,13 +2117,13 @@ class StepDefinitionParserTest {
 
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
-        assertEquals(StepKind.INTERNAL, step.kind());
-        assertEquals(List.of("orderId", "customerId", "amount"), step.deferredCompletion().orElseThrow().idempotencyKeyFields());
+        assertEquals(StepKind.AWAIT, step.kind());
+        assertEquals(List.of("orderId", "customerId", "amount"), step.idempotencyKeyFields());
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 
     @Test
-    void rejectsAwaitModifierWithEmptyIdempotencyKeyFields() throws IOException {
+    void acceptsAwaitStepWithEmptyIdempotencyKeyFields() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -2149,23 +2131,22 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "Empty Keys Await"
-                service: "com.example.AwaitOperationService"
+                kind: "await"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT5M"
+                idempotencyKeyFields: []
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
-                  idempotency:
-                    fields: []
                   correlation:
                     strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
 
-        assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())
-            && message.contains("await.idempotency.fields must contain at least one non-blank field")));
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(List.of(), step.idempotencyKeyFields());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 
     @Test
@@ -2177,12 +2158,11 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "AWAIT Step"
-                service: "com.example.AwaitOperationService"
+                kind: "AWAIT"
                 input: "com.example.Input"
                 output: "com.example.Output"
+                timeout: "PT5M"
                 await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
                   correlation:
                     strategy: "interactionId"
                   transport:
@@ -2190,7 +2170,7 @@ class StepDefinitionParserTest {
             """, diagnostics);
 
         assertEquals(1, steps.size());
-        assertEquals(StepKind.INTERNAL, steps.getFirst().kind());
+        assertEquals(StepKind.AWAIT, steps.getFirst().kind());
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 

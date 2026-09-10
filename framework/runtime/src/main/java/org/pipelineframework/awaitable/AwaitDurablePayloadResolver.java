@@ -35,7 +35,7 @@ public class AwaitDurablePayloadResolver {
     @Inject Instance<ExecutionStateStore> executionStateStores;
     @Inject PipelineOrchestratorConfig orchestratorConfig;
     @Inject PipelineReleaseRegistry releaseRegistry;
-    @Inject AwaitCompletionDescriptorRegistry descriptors;
+    @Inject AwaitStepDescriptorFactory descriptors;
     @Inject JsonDurablePayloadCodec codec;
 
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
@@ -129,7 +129,7 @@ public class AwaitDurablePayloadResolver {
     private CompiledDurablePayloadPlan resolve(AwaitInteractionRecord interaction, Slot slot) {
         PinnedExecution execution = owningExecution(interaction);
         PipelineReleaseRecord release = pinnedRelease(interaction.tenantId(), execution);
-        AwaitCompletionDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
+        AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
         String requestedTypeId = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
         var resolvedDefinition = CanonicalPayloadBindingLookup.resolve(
             release.contract().canonicalTypes(), requestedTypeId);

@@ -399,25 +399,21 @@ steps:
 
 TPF records the union name, declared discriminator, and payload contract in generated branching, replay, and checkpoint-handoff metadata. This makes an observed alternative identifiable without exposing protobuf field numbers. Routing remains payload-type based: if two declared variants intentionally share a payload type, they route together under `accepts`; discriminators are not accepted as routing predicates.
 
-### Deferred completion with unions
+### Await projector typing with unions
 
-An operation decorated with `await:` uses the same branch plan as every other step.
-`accepts` determines which union alternatives invoke the authored operation. The
-operation's immediate `await.operationOutput`—not the original union input—is the
-trusted request and projector input:
+A v3 Await step uses the same branch plan as every other step. When `accepts` names one
+union alternative, the compiler narrows the generated Await request and projector input
+to that alternative:
 
 ```yaml
 - name: Clarify
-  service: com.example.CreateClarificationRequestService
+  kind: await
   cardinality: ONE_TO_ONE
   input: PreparationDecision
   accepts: [ClarificationRequired]
   output: Prepared
+  timeout: PT8H
   await:
-    operationOutput:
-      type: PendingClarification
-      java: com.example.PendingClarification
-    timeout: PT8H
     correlation: { strategy: interactionId }
     completion:
       type: com.example.ClarificationAnswer
@@ -426,18 +422,20 @@ trusted request and projector input:
 ```
 
 `ClarificationProjector` must implement
-`AwaitCompletionProjector<PendingClarification, ClarificationAnswer, Prepared>`.
-The projector must be a public concrete class
+`AwaitCompletionProjector<ClarificationRequired, ClarificationAnswer, Prepared>`.
+For multiple accepted alternatives, or all alternatives when `accepts` is omitted, its
+input type remains `PreparationDecision`. The projector must be a public concrete class
 with a public no-argument constructor. Raw, wildcard, unresolved, or incompatible
 generic arguments fail compilation.
 
 When `accepts` selects only some union alternatives, the omitted alternatives do not
-invoke the decorated operation. They bypass it and continue unchanged through ordinary v3
+invoke the Await step. They bypass it and continue unchanged through the ordinary v3
 pipeline flow.
 
-`await.operationOutput.java` is required when the canonical operation-output type does
-not otherwise provide the authored service binding. A Java binding is always a
-compiler-checked representation; it never requests an implicit conversion.
+The `java` block is optional for a v3 Await boundary because these Java types are
+inferred from the compiler-owned semantic model and projector. If supplied, both
+`java.input` and `java.output` are required and must agree with that inference. A Java
+binding never requests an implicit conversion.
 
 ## Wire identity and compatibility
 
@@ -720,7 +718,7 @@ Step `input` and `output` always name logical pipeline contracts. For an inspect
     output: com.example.domain.PaymentOutcome
 ```
 
-For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding. For deferred completion, the compiler separately validates the service's immediate `await.operationOutput` and the step's final top-level `output`.
+For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding. V3 Await is the exception: its generated boundary is inferred from its semantic input/output types, `accepts`, and typed completion projector as described above.
 
 ::: tip Compilation visibility is topology-scoped
 Java-type and mapper discovery runs in the annotation-processing compilation unit currently being built. It sees only services and mappers on that module's compile classpath; sibling modules in the same repository are not automatically visible.

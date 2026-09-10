@@ -20,15 +20,15 @@ package org.pipelineframework.config.pipeline;
  * Pipeline step entry parsed from pipeline.yaml.
  *
  * @param name the step name
- * @param kind the semantic operation kind, for example internal, delegated, remote, command, or query
+ * @param kind the step kind, for example internal, delegated, remote, await, command, or query
  * @param cardinality the declared cardinality
  * @param inputType the input type name
  * @param inboundMapper the optional inbound mapper class name
  * @param outputType the output type name
  * @param outboundMapper the optional outbound mapper class name
- * @param timeout the deferred-completion timeout, if this operation declares {@code await:}
- * @param idempotencyKeyFields fields used to derive deferred-completion idempotency keys
- * @param awaitConfig deferred-completion configuration decorating this operation
+ * @param timeout the await timeout, if this is an await step
+ * @param idempotencyKeyFields fields used to derive await idempotency keys
+ * @param awaitConfig await-step configuration, if this is an await step
  * @param command command connector name, if this is a command step
  * @param commandIdGenerator command id generator class, if this is a command step
  * @param duplicatePolicy duplicate handling policy, if this is a command step

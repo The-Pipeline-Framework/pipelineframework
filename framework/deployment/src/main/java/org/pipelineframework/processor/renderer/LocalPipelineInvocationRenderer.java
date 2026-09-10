@@ -179,7 +179,7 @@ public final class LocalPipelineInvocationRenderer {
 
     private boolean hasGeneratedClient(PipelineStepModel model) {
         return model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)
-            || model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)
+            || model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);

@@ -6,11 +6,11 @@ For the separate self-hosted coordinator + worker reference path, use [Self-Host
 
 ## Story
 
-Restaurant Approval shows the interaction API path for an authored operation with deferred completion:
+Restaurant Approval shows the interaction API path for an await step:
 
 1. the pipeline validates an order request
 2. it creates a pending approval payload
-3. `await:` on `Create Pending Approval` registers the interaction and parks the execution durably
+3. the execution parks durably at `Await Restaurant Decision`
 4. the UI lists the pending interaction through the generated query API
 5. a human accepts or declines the order
 6. TPF resumes the execution with a typed `RestaurantDecision` payload
@@ -52,7 +52,7 @@ Default UI settings:
 
 - `TPF_BASE_URL=http://localhost:8081`
 - `TPF_TENANT_ID=restaurant-demo`
-- `TPF_AWAIT_STEP_ID=ProcessCreatePendingApprovalService`
+- `TPF_AWAIT_STEP_ID=ProcessAwaitRestaurantDecisionService`
 
 ## Demo Beats
 
@@ -66,7 +66,7 @@ Default UI settings:
 ## APIs To Mention
 
 - `POST /pipeline/run-async`
-- `GET /pipeline/interactions/pending?stepId=ProcessCreatePendingApprovalService`
+- `GET /pipeline/interactions/pending?stepId=ProcessAwaitRestaurantDecisionService`
 - `POST /pipeline/interactions/complete`
 - `GET /pipeline/executions/{executionId}`
 - `GET /pipeline/executions/{executionId}/result`

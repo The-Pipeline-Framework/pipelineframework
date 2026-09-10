@@ -24,7 +24,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
  * and decides client/server roles for each step.
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
-    public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitCompletionDescriptor";
+    public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitStepDescriptor";
     public static final String COMMAND_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.command.CommandStepDescriptor";
     public static final String QUERY_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.query.QueryStepDescriptor";
     public static final String DYNAMIC_OPERATION_DESCRIPTOR_CLASS =
@@ -79,12 +79,6 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
             Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode, springRestEntrypoint);
-            if (model.deferredCompletionSelection().isPresent()) {
-                LinkedHashSet<GenerationTarget> decoratedTargets = new LinkedHashSet<>(targets);
-                decoratedTargets.add(operationClientTarget(transportMode));
-                decoratedTargets.add(GenerationTarget.DEFERRED_COMPLETION_STEP);
-                targets = Collections.unmodifiableSet(decoratedTargets);
-            }
             if (transportMode == PipelineTransport.LOCAL
                 && localDefinitionServices.contains(serviceIdentity(model))
                 && usesOrdinaryLocalClient(targets)) {
@@ -106,16 +100,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         ctx.setResolvedTargets(resolvedTargets);
     }
 
-    private GenerationTarget operationClientTarget(PipelineTransport transportMode) {
-        return switch (transportMode) {
-            case GRPC -> GenerationTarget.CLIENT_STEP;
-            case REST -> GenerationTarget.REST_CLIENT_STEP;
-            case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
-        };
-    }
-
     private boolean usesOrdinaryLocalClient(Set<GenerationTarget> targets) {
-        return !targets.contains(GenerationTarget.DEFERRED_COMPLETION_STEP)
+        return !targets.contains(GenerationTarget.AWAIT_CLIENT_STEP)
             && !targets.contains(GenerationTarget.COMMAND_CLIENT_STEP)
             && !targets.contains(GenerationTarget.QUERY_CLIENT_STEP)
             && !targets.contains(GenerationTarget.DYNAMIC_OPERATION_CLIENT_STEP);
@@ -178,7 +164,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             Optional<PipelineStepModel> springRestEntrypoint) {
         if (model.serviceClassName() != null
             && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
-            return Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP);
+            return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
         }
         if (model.serviceClassName() != null
             && COMMAND_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {

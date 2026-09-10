@@ -3122,7 +3122,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             PipelineReplayDocument replayDocument, boolean requireUnapprovedBranch) {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
-        assertNoReplayStepEvents(replayDocument, "AwaitPaymentProvider");
+        assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
         boolean approvedBranchSeen = hasReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
         boolean unapprovedBranchSeen =
                 hasReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
@@ -3147,18 +3147,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertNoReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessCsvPaymentsInput".equals(event.from())
-                                && ("ProcessApprovedPaymentStatus".equals(event.to())
-                                        || "ProcessUnapprovedPaymentStatus".equals(event.to()))),
-                "Expected deferred completion output to flow from the decorated operation into a status branch.");
+                        "ProcessCsvPaymentsInput".equals(event.step())
+                                && "emit".equals(event.event())
+                                && "AwaitPaymentProvider".equals(event.to())),
+                "Expected merged replay to contain input-to-await flow events.");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessCsvPaymentsInput".equals(event.step())
-                                && "ProcessCsvPaymentsInput".equals(event.from())
-                                && "ProcessCsvPaymentsInput".equals(event.to())
-                                && event.event() != null
-                                && event.event().startsWith("await_")),
-                "Expected deferred-completion lifecycle events to overlay the decorated operation.");
+                        ("ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
+                                && "AwaitPaymentProvider".equals(event.from())),
+                "Expected merged replay to contain await-resume flow events.");
 
         PipelineReplayTopology topology = replayDocument.topology();
         assertTrue(topology.transitions().stream().anyMatch(transition ->
@@ -3180,10 +3178,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .filter(event -> AWAIT_INTERACTION_DISPATCHED.equals(event.event()))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(
-                "ProcessCsvPaymentsInput",
-                interactionDispatched.step(),
-                "Expected deferred-completion lifecycle events to use the semantic operation identity.");
         Map<String, String> attributes = interactionDispatched.attributes();
         assertTrue(
                 attributes != null
@@ -3226,7 +3220,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .orElseThrow(() -> new AssertionError("Expected input parser replay events."));
         assertTrue(
                 playbackOrder.compare(firstPaymentStatusEvent, lastSourceEmit) < 0,
-                "Expected per-item Kafka deferred completion to process completed items through the live session before source exhaustion.");
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before source exhaustion.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {

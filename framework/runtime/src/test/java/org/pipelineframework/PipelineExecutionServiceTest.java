@@ -473,13 +473,13 @@ class PipelineExecutionServiceTest {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
         service.transitionPayloadCodec = codec;
-        List<Object> steps = List.of(new Object(), new Object());
+        List<Object> steps = List.of(new Object(), new Object(), new Object());
         AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
         AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
         when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
-        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("EXPANSION", true));
+        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("EXPANSION", "ONE_TO_ONE"));
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
-        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(2)))
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(3)))
             .thenAnswer(invocation -> {
                 var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
                 continuationMode.set(context.continuationMode());
@@ -500,13 +500,13 @@ class PipelineExecutionServiceTest {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
         service.transitionPayloadCodec = codec;
-        List<Object> steps = List.of(new Object());
+        List<Object> steps = List.of(new Object(), new Object());
         AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
         AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
         when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
         when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContractWithoutSuffix());
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
-        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(1)))
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(2)))
             .thenAnswer(invocation -> {
                 var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
                 continuationMode.set(context.continuationMode());
@@ -527,13 +527,13 @@ class PipelineExecutionServiceTest {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
         service.transitionPayloadCodec = codec;
-        List<Object> steps = List.of(new Object(), new Object());
+        List<Object> steps = List.of(new Object(), new Object(), new Object());
         AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
         AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
         when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
-        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("ONE_TO_MANY", false));
+        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("ONE_TO_MANY", "MANY_TO_ONE"));
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
-        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(2)))
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(3)))
             .thenAnswer(invocation -> {
                 var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
                 continuationMode.set(context.continuationMode());
@@ -698,7 +698,7 @@ class PipelineExecutionServiceTest {
 
     private static PipelineContractDescriptor portableLiveItemizedContract(
         String producerCardinality,
-        boolean deferredCompletion) {
+        String awaitCardinality) {
         return new PipelineContractDescriptor(
             2,
             "payments",
@@ -711,10 +711,11 @@ class PipelineExecutionServiceTest {
             null,
             List.of(
                 new PipelineBundleStepDescriptor(0, "source", "service", producerCardinality,
-                    "CsvInput", "PaymentStatus", null, null,
-                    deferredCompletion ? Map.of("transportType", "SQS") : Map.of()),
-                new PipelineBundleStepDescriptor(1, "suffix", "service", "ONE_TO_ONE",
-                    "PaymentStatus", "PaymentOutput", null, null, Map.of())),
+                    "CsvInput", "PaymentRecord", null, null, null),
+                new PipelineBundleStepDescriptor(1, "await", "await", awaitCardinality,
+                    "PaymentRecord", "PaymentStatus", null, null, "SQS"),
+                new PipelineBundleStepDescriptor(2, "suffix", "service", "ONE_TO_ONE",
+                    "PaymentStatus", "PaymentOutput", null, null, null)),
             PipelineBundleCapabilities.defaults(),
             Map.of(),
             "");
@@ -733,7 +734,9 @@ class PipelineExecutionServiceTest {
             null,
             List.of(
                 new PipelineBundleStepDescriptor(0, "source", "service", "ONE_TO_MANY",
-                    "CsvInput", "PaymentStatus", null, null, Map.of("transportType", "SQS"))),
+                    "CsvInput", "PaymentRecord", null, null, null),
+                new PipelineBundleStepDescriptor(1, "await", "await", "ONE_TO_ONE",
+                    "PaymentRecord", "PaymentStatus", null, null, "SQS")),
             PipelineBundleCapabilities.defaults(),
             Map.of(),
             "");

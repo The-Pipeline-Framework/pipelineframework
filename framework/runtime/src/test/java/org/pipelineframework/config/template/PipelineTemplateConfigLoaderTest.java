@@ -579,8 +579,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("org.pipelineframework.csv.common.domain.PaymentOutput", mapping.representationType().orElseThrow());
         assertEquals("org.pipelineframework.csv.common.mapper.PaymentOutputPersistenceMapper", mapping.mapperType().orElseThrow());
         assertEquals("CsvPaymentsInputFile", config.steps().getFirst().inputTypeName());
-        assertEquals("PaymentStatus", config.steps().getFirst().outputTypeName());
-        assertEquals("PaymentRecord", config.steps().getFirst().operationOutputTypeName());
+        assertEquals("PaymentRecord", config.steps().getFirst().outputTypeName());
     }
 
     @Test
@@ -1014,67 +1013,6 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("FooOutput", config.steps().getFirst().outputTypeName());
         assertEquals("decide", operation.operation());
         assertEquals("model", operation.using());
-    }
-
-    @Test
-    void preservesDeferredOperationOutputSeparatelyFromFinalStepOutput() throws Exception {
-        Path configPath = tempDir.resolve("pipeline-config-deferred-completion.yaml");
-        Files.writeString(configPath, """
-            version: 3
-            appName: Deferred completion
-            basePackage: com.example.deferred
-            transport: GRPC
-            types:
-              Request: { fields: [[id, string]] }
-              Pending: { fields: [[id, string]] }
-              Decision: { fields: [[status, string]] }
-            steps:
-              - name: Create pending request
-                service: com.example.CreatePendingRequest
-                cardinality: ONE_TO_ONE
-                input: Request
-                output: Decision
-                await:
-                  operationOutput:
-                    type: Pending
-                  timeout: PT5M
-                  correlation: { strategy: signedResumeToken }
-                  transport: { type: interaction-api }
-                  completion: { type: Decision }
-            """);
-
-        PipelineTemplateStep step = new PipelineTemplateConfigLoader().load(configPath).steps().getFirst();
-
-        assertEquals("Decision", step.outputTypeName());
-        assertEquals("Pending", step.operationOutputTypeName());
-        assertEquals(java.util.Optional.of("Pending"), step.deferredOperationOutputTypeName());
-    }
-
-    @Test
-    void rejectsDistinctDeferredOperationOutputForVersionOneTemplates() throws Exception {
-        Path configPath = tempDir.resolve("pipeline-config-deferred-completion-v1.yaml");
-        Files.writeString(configPath, """
-            appName: Deferred completion
-            basePackage: com.example.deferred
-            transport: GRPC
-            steps:
-              - name: Create pending request
-                cardinality: ONE_TO_ONE
-                inputTypeName: Request
-                inputFields: [[1, id, string]]
-                outputTypeName: Decision
-                outputFields: [[2, status, string]]
-                await:
-                  operationOutput: { type: Pending }
-                  timeout: PT5M
-                  correlation: { strategy: signedResumeToken }
-                  transport: { type: interaction-api }
-            """);
-
-        IllegalStateException failure = assertThrows(IllegalStateException.class,
-            () -> new PipelineTemplateConfigLoader().load(configPath));
-
-        assertTrue(failure.getMessage().contains("version 1 has no separate operation-output field schema"));
     }
 
     @Test

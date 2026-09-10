@@ -1,14 +1,9 @@
 ---
 title: Branch routing owns Await projector input
-status: deprecated
+status: accepted
 ---
 
 # ADR-0015: Branch routing owns Await projector input
-
-Superseded by [ADR-0036](./0036-await-is-orthogonal-deferred-completion.md), which
-removes the standalone Await step and makes `await:` an orthogonal modifier on an
-ordinary authored operation. Branch routing still owns operation applicability, but
-the immediate `await.operationOutput` now supplies the projector's trusted input.
 
 ## Context
 

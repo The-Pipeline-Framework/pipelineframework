@@ -216,26 +216,6 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
-    void changingDeferredOperationOutputMessageIsIncompatible() {
-        PipelineIdlSnapshot baseline = snapshotWith(
-            Map.of(
-                "ApprovalRequest", message("ApprovalRequest", List.of(), List.of(), List.of()),
-                "PendingApproval", message("PendingApproval", List.of(), List.of(), List.of()),
-                "ApprovalDecision", message("ApprovalDecision", List.of(), List.of(), List.of())),
-            List.of(new PipelineIdlSnapshot.StepSnapshot(
-                "Create Approval", "ApprovalRequest", "ApprovalDecision", Optional.of("PendingApproval"))));
-        PipelineIdlSnapshot current = snapshotWith(
-            baseline.messages(),
-            List.of(new PipelineIdlSnapshot.StepSnapshot(
-                "Create Approval", "ApprovalRequest", "ApprovalDecision", Optional.of("AlternatePendingApproval"))));
-
-        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
-
-        assertEquals(1, errors.size());
-        assertTrue(errors.getFirst().contains("changed deferred operation output"));
-    }
-
-    @Test
     void removingStepIsIncompatible() {
         PipelineIdlSnapshot baseline = snapshot(List.of(simpleField(1, "paymentId", "uuid")));
         PipelineIdlSnapshot current = snapshotWith(baseline.messages(), List.of());
