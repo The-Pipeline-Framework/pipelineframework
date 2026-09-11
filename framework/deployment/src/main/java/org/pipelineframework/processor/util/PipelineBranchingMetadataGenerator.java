@@ -232,7 +232,7 @@ public final class PipelineBranchingMetadataGenerator {
             List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
                 .map(type -> runtimeAcceptedType(type, ctx, transportMappedRuntime))
                 .toList();
-            if (model.deferredCompletionSelection().isPresent()) {
+            if (model.deferredCompletionSelection().filter(selection -> selection.callback().isEmpty()).isPresent()) {
                 appendDeferredCompletionMetadata(
                     ctx,
                     definitionId,
