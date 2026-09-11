@@ -16,7 +16,7 @@ flowchart TB
 | --- | --- | --- |
 | Object ingest | `object-ingest` | [Object ingest and publish](/architecture/object-ingest) |
 | Hibernate/JPA Query | `query-jpa`, `query-hibernate-reactive`, `query-hibernate-common` | [JPA Query Connector](/architecture/jpa-query-connector/) |
-| Pinned outbound HTTP Query and Command | `http-contract`, `http-connector`, `representation-provider-http` | [Pinned HTTP Connector capabilities](/develop/extension/pinned-http-connector) |
+| `http.client`: pinned HTTP Query, Command, and Command completion callbacks | `http-contract`, `http-connector`, `representation-provider-http` | [Pinned HTTP Connector capabilities](/develop/extension/pinned-http-connector) |
 | OpenAPI capability import | `connector-openapi-maven-plugin`, `openapi-representation-mapper`; executes through the pinned HTTP modules | [Import OpenAPI operations](/develop/connectors/openapi-import) |
 | GraphQL Query and Command | `graphql-connector`, `graphql-smallrye-connector` | [GraphQL Connector](/develop/extension/graphql-connector) |
 | MCP Query and Command | `mcp`; internal pin model in `mcp-contract` | [Import MCP tools](/develop/extension/mcp-connector-import) |
@@ -33,7 +33,9 @@ application-selected providers.
 The pinned HTTP Connector turns immutable, release-generated HTTP operation descriptions into
 ordinary Query and Command capabilities. The host supplies the HTTP client, base URI and resolved
 authorisation material—including any OAuth tokens—through its connection boundary; the Connector
-does not own credentials or the OAuth lifecycle.
+does not own credentials or the OAuth lifecycle. For a selected Command completion callback,
+the host also owns the public base URI and raw-request authentication policy; TPF's Quarkus
+ingress validates the pinned contract and admits completion through ordinary Await.
 
 The OpenAPI importer is the release-time front door for generic SaaS REST integration. It discovers
 from a vendored contract, imports only author-selected operations with explicit Query or Command

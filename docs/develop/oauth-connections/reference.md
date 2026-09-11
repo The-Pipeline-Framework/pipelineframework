@@ -15,11 +15,16 @@ flowchart TB
     S --> E[Connector calls external system]
 ```
 
-The Connector runtime does not authenticate application users, run OAuth/OIDC flows, handle callbacks,
+The Connector runtime does not authenticate application users, run OAuth/OIDC flows, handle OAuth redirects,
 store or refresh tokens, or replace Spring Security, Quarkus security, Keycloak, Auth0, IAM, or a
 connection broker. The optional [Quarkus OIDC connection support](#durable-connections-through-quarkus-oidc)
 assembles platform authorization, dedicated encrypted storage and bounded provider client factories
 behind this same runtime boundary.
+
+Provider completion callbacks are a separate boundary. For release-pinned HTTP Commands, the host
+supplies `ProviderCallbackEndpointResolver` and `ProviderCallbackAuthenticator`; TPF owns ingress,
+schema validation, mapping, and Await admission. OAuth lifecycle and callback signing credentials
+remain host-owned. See [Command callbacks](/develop/connectors/openapi-import#command-completion-callbacks).
 
 > **Do not use `SecretRef` or `SecretResolver` for connector authentication.** Those legacy,
 > context-free APIs are deprecated for removal. They receive no tenant, execution, connector, or

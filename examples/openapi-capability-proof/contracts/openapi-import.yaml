@@ -2,8 +2,40 @@ schemaVersion: 1
 importId: evidence-api
 source:
   snapshot: contract/openapi.yaml
-  closureSha256: 15c5db59b139a7d34bf2c678c5f36065a8453c93c78d3c4de64890ece1fce4a6
+  closureSha256: d51b3fa4db429e915ce527f92e3e908a5bcaeb1cbecab026f8067310383f7b45
 operations:
+  - source: { operationId: startJob, method: POST, path: /jobs }
+    operation: job.start
+    version: 1
+    kind: COMMAND
+    input: StartJobRequest
+    output: JobAccepted
+    server: APPLICATION_BOUND
+    security: { none: true }
+    request:
+      mediaType: application/json
+      representation: http.job.start.request
+    providerIdempotencyKey: { location: HEADER, name: Idempotency-Key }
+    responses:
+      - status: '202'
+        mediaType: application/json
+        outcome: SUCCEEDED
+        representation: http.job.accepted
+        confirmation: PROVIDER_ACKNOWLEDGED
+    callbacks:
+      - source:
+          name: jobStatus
+          expression: '{$request.body#/callbackUrl}'
+          method: POST
+          operationId: jobCompleted
+        callback: job.completed
+        input: JobCallback
+        request:
+          mediaType: application/json
+          representation: http.job.completed.request
+        acknowledgement: { status: '202' }
+        security:
+          require: { callbackSignature: [] }
   - source: { operationId: lookupEvidence, method: POST, path: "/evidence/{subject}/lookup" }
     operation: evidence.lookup
     version: 1

@@ -5,6 +5,7 @@ servers:
     variables: { tenant: { default: never-runtime-authority } }
 components:
   securitySchemes:
+    callbackSignature: { type: apiKey, in: header, name: X-Callback-Signature }
     oauth2:
       type: oauth2
       flows:
@@ -13,6 +14,34 @@ components:
           scopes: { evidence.read: Read evidence }
     apiKey: { type: apiKey, in: header, name: X-Api-Key }
 paths:
+  /jobs:
+    post:
+      operationId: startJob
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './schemas.yaml#/components/schemas/StartJobRequest' }
+      responses:
+        '202':
+          description: Job accepted; completion arrives through the callback
+          content:
+            application/json:
+              schema: { $ref: './schemas.yaml#/components/schemas/JobAccepted' }
+      callbacks:
+        jobStatus:
+          '{$request.body#/callbackUrl}':
+            post:
+              operationId: jobCompleted
+              security: [ { callbackSignature: [] } ]
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema: { $ref: './schemas.yaml#/components/schemas/JobCallback' }
+              responses:
+                '202': { description: 'Completion recorded, including a valid duplicate' }
   /evidence/{subject}/lookup:
     post:
       operationId: lookupEvidence

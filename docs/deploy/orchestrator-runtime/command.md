@@ -114,8 +114,10 @@ The application provides the public endpoint resolver and asynchronous callback
 authenticator. Callback URIs require HTTPS; `pipeline.callback.allow-http=true`
 explicitly permits HTTP for local tests. The URI and signed token are passed only
 through the native `CommandInvocation.callbackContext()` and must not be logged or
-copied into configuration or effect evidence. Generic HTTP/OpenAPI ingress is a
-separate integration; a provider callback descriptor alone does not install a route.
+copied into configuration or effect evidence. The Quarkus runtime provides the
+[release-pinned HTTP callback ingress](/develop/connectors/openapi-import#command-completion-callbacks).
+It authenticates the raw request before mapping and ordinary Await admission; the
+provider manifest, HTTP pins, and compiled representation bindings must agree.
 
 The durable interaction exists before provider dispatch. Early callbacks are
 acknowledged without advancing the execution until the effect outcome is recorded.
@@ -123,6 +125,10 @@ Success and ambiguity wait for the callback; known retryable non-acceptance reta
 the same interaction and deadline for deliberate Command retry. A callback followed
 by a definite rejection fails closed. Timeout and cancellation retain their normal
 Await semantics. See [deferred completion](/architecture/await-boundaries#command-callback-completion).
+
+The [OpenAPI callback proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof/jobs)
+demonstrates early completion, ambiguity, deliberate retry, and a packaged restart. After a retried
+Command completes, continuation past that step no longer carries its consumed retry authority.
 
 ## Required Runtime Pieces
 

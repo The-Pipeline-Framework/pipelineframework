@@ -1,0 +1,10 @@
+schemaVersion: 1
+runtimes:
+  openapi-callback-proof:
+    runtime: openapi-callback-proof
+    module: openapi-callback-proof
+modules:
+  openapi-callback-proof:
+    runtime: openapi-callback-proof
+    steps:
+      - start-provider-job

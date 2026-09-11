@@ -1,5 +1,27 @@
 components:
   schemas:
+    StartJobRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        jobId: { type: string }
+        value: { type: string }
+        callbackUrl: { type: string, format: uri }
+      required: [ jobId, value, callbackUrl ]
+    JobAccepted:
+      type: object
+      additionalProperties: false
+      properties:
+        jobId: { type: string }
+        accepted: { type: boolean }
+      required: [ jobId, accepted ]
+    JobCallback:
+      type: object
+      additionalProperties: false
+      properties:
+        jobId: { type: string }
+        status: { type: string }
+      required: [ jobId, status ]
     LookupBody:
       type: object
       additionalProperties: false

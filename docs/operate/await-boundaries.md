@@ -21,6 +21,12 @@ Provider retries may receive the pinned success acknowledgement after duplicate 
 early callback cannot advance execution until Command dispatch settles; a late callback resumes
 through ordinary Await admission. See [callback setup](/develop/connectors/openapi-import#command-completion-callbacks).
 
+For restart recovery, retain the execution state, Await state, Command effect history, deployed
+release, and resume-token secret. The [packaged callback proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof/jobs)
+restarts the JVM against the same Dynamo tables and admits the original callback without another
+provider dispatch. A successful callback after ambiguous dispatch does not turn the effect history
+into a confirmed provider acknowledgement.
+
 Await requires `QUEUE_ASYNC`. The owning execution must be stored before it can wait on an external result.
 
 At minimum:
