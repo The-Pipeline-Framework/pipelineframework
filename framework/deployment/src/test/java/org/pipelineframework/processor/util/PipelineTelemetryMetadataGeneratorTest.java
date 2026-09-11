@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.processing.Filer;
@@ -62,6 +64,36 @@ class PipelineTelemetryMetadataGeneratorTest {
         assertEquals(
             "com.example.pipeline.ProcessItemLocalClientStep",
             topology.getAsJsonArray("steps").get(0).getAsJsonObject().get("runtimeStepClass").getAsString());
+    }
+
+    @Test
+    void modelLevelDeferredCompletionSurvivesWithoutMatchingYamlStep() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        ctx.setOrchestratorGenerated(false);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setPipelineTemplateConfig(templateConfig("model-replay", "LOCAL"));
+        writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");
+        PipelineStepModel model = localStep(
+            "ProcessItemService", "com.example", type("ItemIn"), type("PendingItem"))
+            .toBuilder()
+            .deferredCompletionSelection(new DeferredCompletionSelection(
+                type("ItemOut"),
+                "ItemOut",
+                Optional.empty(),
+                java.time.Duration.ofMinutes(5),
+                List.of(),
+                "interactionId",
+                "interaction-api",
+                Map.of(),
+                Optional.empty(),
+                Optional.empty()))
+            .build();
+        ctx.setStepModels(List.of(model));
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        assertTrue(readReplayTopologyJson().getAsJsonArray("steps").get(0).getAsJsonObject()
+            .get("deferredCompletion").getAsBoolean());
     }
 
     @Test

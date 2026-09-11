@@ -236,6 +236,20 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
+    void explicitDeferredOperationOutputEqualToPipelineOutputIsCompatible() {
+        PipelineIdlSnapshot baseline = snapshotWith(
+            Map.of("ApprovalDecision", message("ApprovalDecision", List.of(), List.of(), List.of())),
+            List.of(new PipelineIdlSnapshot.StepSnapshot(
+                "Create Approval", "ApprovalDecision", "ApprovalDecision")));
+        PipelineIdlSnapshot current = snapshotWith(
+            baseline.messages(),
+            List.of(new PipelineIdlSnapshot.StepSnapshot(
+                "Create Approval", "ApprovalDecision", "ApprovalDecision", Optional.of("ApprovalDecision"))));
+
+        assertTrue(new PipelineIdlCompatibilityChecker().compare(baseline, current).isEmpty());
+    }
+
+    @Test
     void removingStepIsIncompatible() {
         PipelineIdlSnapshot baseline = snapshot(List.of(simpleField(1, "paymentId", "uuid")));
         PipelineIdlSnapshot current = snapshotWith(baseline.messages(), List.of());

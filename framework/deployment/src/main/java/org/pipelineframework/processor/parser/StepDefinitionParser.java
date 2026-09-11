@@ -2189,6 +2189,13 @@ public class StepDefinitionParser {
         }
 
         Map<String, Object> normalizedTransport = new LinkedHashMap<>(normalizeMap(transportMap));
+        if (containsNullValue(normalizedTransport)) {
+            String message = "Skipping step '" + stepName
+                + "': await transport config must not contain null values";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         normalizedTransport.remove("type");
         return new DeferredCompletionDefinition(
             operationOutputType,

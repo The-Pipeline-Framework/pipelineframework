@@ -224,6 +224,12 @@ public class AwaitCoordinator {
 
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitCompletionDescriptor descriptor, AwaitInteractionRecord interaction) {
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> dispatchRegistered(interaction));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Uni<AwaitInteractionRecord> dispatchRegistered(AwaitInteractionRecord interaction) {
         AwaitCompletionDescriptor registered = descriptorFor(interaction);
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         long nowEpochMs = System.currentTimeMillis();
@@ -272,6 +278,12 @@ public class AwaitCoordinator {
      */
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatchLive(AwaitCompletionDescriptor descriptor, AwaitInteractionRecord interaction) {
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> dispatchLiveRegistered(interaction));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Uni<AwaitInteractionRecord> dispatchLiveRegistered(AwaitInteractionRecord interaction) {
         AwaitCompletionDescriptor registered = descriptorFor(interaction);
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         Uni<AwaitInteractionRecord> intended = interaction.status() == AwaitInteractionStatus.WAITING
@@ -1154,12 +1166,17 @@ public class AwaitCoordinator {
 
     private Uni<AwaitCompletionDescriptor> registerDescriptor(AwaitCompletionDescriptor descriptor) {
         return Uni.createFrom().item(() -> {
-            AwaitCompletionDescriptor registered = directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
-            registered = registered == null ? descriptor : registered;
+            AwaitCompletionDescriptor registered = descriptor;
             if (descriptorFactory != null) {
                 registered = descriptorFactory.register(registered);
             }
-            return registered;
+            AwaitCompletionDescriptor existing = directDescriptors.putIfAbsent(registered.stepId(), registered);
+            if (existing != null && descriptorFactory == null && !existing.equals(registered)) {
+                throw new IllegalStateException(
+                    "Conflicting deferred-completion descriptors were registered for step '"
+                        + registered.stepId() + "'");
+            }
+            return existing == null ? registered : existing;
         });
     }
 

@@ -200,7 +200,7 @@ public class AwaitCompletionSupport {
                     }
                 })
                 .onTermination().invoke((failure, wasCancelled) -> {
-                    if (wasCancelled) {
+                    if (wasCancelled || failure != null) {
                         cancellationRequested.set(true);
                         Cancellable active = dispatchSubscription.get();
                         if (active != null) {

@@ -275,11 +275,7 @@ public record StepDefinition(
             inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
             streamingShapeHint, runOnVirtualThreads, accepts, terminal,
             Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
-        if ((removedAwaitConfig != null && !removedAwaitConfig.isEmpty())
-            || removedTimeout != null
-            || (removedIdempotencyKeyFields != null && !removedIdempotencyKeyFields.isEmpty())) {
-            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
-        }
+        rejectRemovedAwait(removedAwaitConfig, removedTimeout, removedIdempotencyKeyFields);
     }
 
     /** Internal constructor shape retained while dynamic-operation parsing migrates. */
@@ -317,11 +313,7 @@ public record StepDefinition(
             inboundMapper, outboundMapper, externalMapper, mapperFallback, inputType, outputType,
             streamingShapeHint, runOnVirtualThreads, accepts, terminal,
             pipelineReference, dynamicOperationSource, Optional.empty(), Optional.empty());
-        if ((removedAwaitConfig != null && !removedAwaitConfig.isEmpty())
-            || removedTimeout != null
-            || (removedIdempotencyKeyFields != null && !removedIdempotencyKeyFields.isEmpty())) {
-            throw new IllegalArgumentException("standalone Await fields were removed; use deferredCompletion");
-        }
+        rejectRemovedAwait(removedAwaitConfig, removedTimeout, removedIdempotencyKeyFields);
     }
 
     private static StepKind requireAuthoredKind(StepKind kind) {

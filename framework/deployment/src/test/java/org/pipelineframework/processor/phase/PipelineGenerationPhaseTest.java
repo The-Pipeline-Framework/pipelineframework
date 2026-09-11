@@ -272,6 +272,87 @@ class PipelineGenerationPhaseTest {
     }
 
     @Test
+    void legacyObjectPublishRejectsDistinctDeferredFinalOutput(@TempDir Path tempDir) throws Exception {
+        Path config = tempDir.resolve("pipeline-object-publish.yaml");
+        Files.writeString(config, """
+            version: 2
+            basePackage: com.example
+            transport: REST
+            publish:
+              output-files:
+                kind: object
+                provider: filesystem
+                location:
+                  root: /tmp/output
+            output:
+              to: output-files
+              consumes:
+                type: com.example.Decision
+                typeName: Decision
+                mapper: com.example.DecisionMapper
+            steps: []
+            """);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of("pipeline.config", config.toString()));
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        context.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.REST);
+        com.squareup.javapoet.ClassName pending = com.squareup.javapoet.ClassName.get("com.example", "PendingApproval");
+        org.pipelineframework.processor.ir.PipelineStepModel terminal =
+            new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
+                .serviceName("CreateApprovalService")
+                .generatedName("CreateApprovalService")
+                .servicePackage("com.example")
+                .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", "CreateApprovalService"))
+                .inputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                    com.squareup.javapoet.ClassName.get("com.example", "Request")))
+                .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
+                    pending,
+                    java.util.Optional.of(com.squareup.javapoet.ClassName.get("com.example", "PendingApprovalMapper")),
+                    true,
+                    pending))
+                .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of())
+                .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
+                .deploymentRole(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT)
+                .deferredCompletionSelection(new org.pipelineframework.processor.ir.DeferredCompletionSelection(
+                    com.squareup.javapoet.ClassName.get("com.example", "ApprovalDecision"),
+                    "ApprovalDecision",
+                    java.util.Optional.empty(),
+                    java.time.Duration.ofMinutes(5),
+                    List.of(),
+                    "interactionId",
+                    "interaction-api",
+                    java.util.Map.of(),
+                    java.util.Optional.empty(),
+                    java.util.Optional.empty()))
+                .build();
+        context.setStepModels(List.of(terminal));
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "generateObjectPublishTerminalAdapter",
+            org.pipelineframework.processor.PipelineCompilationContext.class,
+            org.pipelineframework.processor.renderer.TerminalOutputAdapterRenderer.class,
+            org.pipelineframework.processor.util.RoleMetadataGenerator.class,
+            com.squareup.javapoet.ClassName.class,
+            com.google.protobuf.DescriptorProtos.FileDescriptorSet.class);
+        method.setAccessible(true);
+
+        java.lang.reflect.InvocationTargetException failure = assertThrows(
+            java.lang.reflect.InvocationTargetException.class,
+            () -> method.invoke(
+                new PipelineGenerationPhase(),
+                context,
+                new org.pipelineframework.processor.renderer.TerminalOutputAdapterRenderer(),
+                new org.pipelineframework.processor.util.RoleMetadataGenerator(processingEnv),
+                null,
+                null));
+
+        assertEquals(
+            "Object Publish with deferred completion requires v3 canonical output types",
+            failure.getCause().getMessage());
+    }
+
+    @Test
     void externalAdapterGenerationContextPropagatesEnabledAspects() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =

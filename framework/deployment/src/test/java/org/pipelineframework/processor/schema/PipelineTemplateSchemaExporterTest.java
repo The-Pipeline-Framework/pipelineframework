@@ -424,6 +424,16 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(awaitConfig.getAsJsonObject("properties").has("idempotency"));
         assertTrue(awaitConfig.getAsJsonObject("properties").has("completion"));
         assertFalse(awaitConfig.getAsJsonObject("properties").has("dispatch"));
+        JsonObject awaitProperties = awaitConfig.getAsJsonObject("properties");
+        assertEquals(
+            "#/$defs/contractOrJavaType",
+            awaitProperties.getAsJsonObject("operationOutput")
+                .getAsJsonObject("properties").getAsJsonObject("type").get("$ref").getAsString());
+        assertEquals("duration", awaitProperties.getAsJsonObject("timeout").get("format").getAsString());
+        JsonObject idempotency = awaitProperties.getAsJsonObject("idempotency");
+        assertContains(idempotency.getAsJsonArray("required"), "fields");
+        assertEquals(1, idempotency.getAsJsonObject("properties")
+            .getAsJsonObject("fields").get("minItems").getAsInt());
 
         JsonObject correlation = definitions.getAsJsonObject("awaitCorrelation");
         assertContains(correlation.getAsJsonArray("required"), "strategy");

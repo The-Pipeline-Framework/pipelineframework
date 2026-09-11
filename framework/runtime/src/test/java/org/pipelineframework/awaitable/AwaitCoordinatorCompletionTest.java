@@ -691,7 +691,7 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
-    void createUsesThePreviouslyRegisteredProjectorForRepeatedStepIds() {
+    void createRejectsAChangedProjectorForRepeatedStepIds() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AwaitCompletionDescriptor original = requestAwareDescriptor(
@@ -702,22 +702,15 @@ class AwaitCoordinatorCompletionTest {
         coordinator.createOrGet(
             original, "tenant-1", "exec-1", 1, "cause-1",
             new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
-        AwaitCreateResult created = coordinator.createOrGet(
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> coordinator.createOrGet(
             replacement, "tenant-1", "exec-2", 1, "cause-2",
-            new PendingSelection("invoice-2", "property-b"), "alice", "property-review").await().indefinitely();
+            new PendingSelection("invoice-2", "property-b"), "alice", "property-review").await().indefinitely());
 
-        assertEquals("selection-projector-v1",
-            created.record().transportMetadata().get("tpf.await.completion.projector"));
-        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
-            "tenant-1", created.record().interactionId(), created.record().correlationId(), "completion-1",
-            Map.of("propertyId", "property-c"), "alice", 11_000L)).await().indefinitely();
-        assertEquals(new ConfirmedSelection(
-            "invoice-2", "property-b", "property-c", java.time.Instant.ofEpochMilli(11_000L)),
-            completed.record().responsePayload());
+        assertTrue(failure.getMessage().contains("Conflicting deferred-completion descriptors"));
     }
 
     @Test
-    void dispatchPathsUseThePreviouslyRegisteredDescriptorForMappingAndTransport() {
+    void dispatchPathsRejectAnIncompatibleDescriptor() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AtomicReference<Object> dispatchedPayload = new AtomicReference<>();
@@ -741,15 +734,15 @@ class AwaitCoordinatorCompletionTest {
         AwaitCreateResult regular = coordinator.createOrGet(
             original, "tenant-1", "exec-1", 1, "cause-1",
             new PendingSelection("invoice-1", "property-a"), "alice", "property-review").await().indefinitely();
-        coordinator.dispatch(replacement, regular.record()).await().indefinitely();
-        assertEquals("original", dispatchedPayload.get());
+        IllegalStateException dispatchFailure = assertThrows(IllegalStateException.class,
+            () -> coordinator.dispatch(replacement, regular.record()).await().indefinitely());
+        assertTrue(dispatchFailure.getMessage().contains("Conflicting deferred-completion descriptors"));
+        assertNull(dispatchedPayload.get());
 
-        AwaitCreateResult live = coordinator.createOrGet(
-            replacement, "tenant-1", "exec-2", 1, "cause-2",
-            new PendingSelection("invoice-2", "property-b"), "alice", "property-review").await().indefinitely();
-        dispatchedPayload.set(null);
-        coordinator.dispatchLive(replacement, live.record()).await().indefinitely();
-        assertEquals("original", dispatchedPayload.get());
+        IllegalStateException liveFailure = assertThrows(IllegalStateException.class,
+            () -> coordinator.dispatchLive(replacement, regular.record()).await().indefinitely());
+        assertTrue(liveFailure.getMessage().contains("Conflicting deferred-completion descriptors"));
+        assertNull(dispatchedPayload.get());
     }
 
     @Test

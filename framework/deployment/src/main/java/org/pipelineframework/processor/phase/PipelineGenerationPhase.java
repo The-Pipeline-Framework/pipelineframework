@@ -397,6 +397,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (!v3GeneratedDomainTypes && terminalModel.isEmpty()) {
             throw new IllegalStateException("Object Publish requires a terminal business step with an outbound mapper");
         }
+        if (!v3GeneratedDomainTypes
+            && terminalModel.orElseThrow().deferredCompletionSelection().isPresent()) {
+            throw new IllegalStateException(
+                "Object Publish with deferred completion requires v3 canonical output types");
+        }
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectPublishType(ctx)
             : terminalModel.orElseThrow().pipelineOutputType();

@@ -1929,7 +1929,7 @@ public final class PipelineTemplateSchemaExporter {
         "operationOutput": {
           "type": "object",
           "properties": {
-            "type": { "$ref": "#/$defs/logicalContractReference" },
+            "type": { "$ref": "#/$defs/contractOrJavaType" },
             "java": { "$ref": "#/$defs/javaClassName" }
           },
           "required": ["type"],
@@ -1937,6 +1937,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "timeout": {
           "type": "string",
+          "format": "duration",
           "minLength": 1
         },
         "idempotency": {
@@ -1944,9 +1945,11 @@ public final class PipelineTemplateSchemaExporter {
           "properties": {
             "fields": {
               "type": "array",
+              "minItems": 1,
               "items": { "type": "string", "minLength": 1 }
             }
           },
+          "required": ["fields"],
           "additionalProperties": false
         },
         "correlation": {

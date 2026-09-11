@@ -1017,6 +1017,37 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsNullAwaitTransportConfigurationValues() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Request approval"
+                service: "com.example.RequestApprovalService"
+                input: "com.example.Request"
+                output: "com.example.Decision"
+                await:
+                  operationOutput:
+                    type: "com.example.PendingApproval"
+                    java: "com.example.PendingApproval"
+                  timeout: PT10M
+                  correlation:
+                    strategy: interactionId
+                  transport:
+                    type: interaction-api
+                    config:
+                      channel:
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.equals(
+            "ERROR:Skipping step 'Request approval': await transport config must not contain null values")),
+            diagnostics.toString());
+    }
+
+    @Test
     void validatesNegativeCacheTtlAgainstStaticQueryCapabilities() throws IOException {
         Path metadataRoot = tempDir.resolve("query-cache-metadata");
         Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
@@ -1558,7 +1589,7 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "No Await Map"
-                kind: await
+                kind: AWAIT
                 input: "com.example.Input"
                 output: "com.example.Output"
             """, diagnostics);
@@ -2166,32 +2197,6 @@ class StepDefinitionParserTest {
         assertTrue(steps.isEmpty());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())
             && message.contains("await.idempotency.fields must contain at least one non-blank field")));
-    }
-
-    @Test
-    void awaitKindIsCaseInsensitive() throws IOException {
-        List<String> diagnostics = new ArrayList<>();
-        List<StepDefinition> steps = parse("""
-            version: 2
-            appName: "Test"
-            basePackage: "com.example"
-            steps:
-              - name: "AWAIT Step"
-                service: "com.example.AwaitOperationService"
-                input: "com.example.Input"
-                output: "com.example.Output"
-                await:
-                  operationOutput: { type: "com.example.PendingCompletion", java: "com.example.PendingCompletion" }
-                  timeout: PT10M
-                  correlation:
-                    strategy: "interactionId"
-                  transport:
-                    type: "interaction-api"
-            """, diagnostics);
-
-        assertEquals(1, steps.size());
-        assertEquals(StepKind.INTERNAL, steps.getFirst().kind());
-        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 
     @Test

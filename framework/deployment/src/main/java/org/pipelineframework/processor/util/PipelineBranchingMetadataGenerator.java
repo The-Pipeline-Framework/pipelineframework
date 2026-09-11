@@ -28,6 +28,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.AspectExpansionProcessor;
 import org.pipelineframework.processor.ResolvedStep;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.DeferredCompletionSelection;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StepDefinition;
@@ -278,15 +279,17 @@ public final class PipelineBranchingMetadataGenerator {
             false,
             false));
 
-        TypeName operationOutputType = model.outboundDomainType();
-        if (!(operationOutputType instanceof ClassName operationOutputClass)) {
-            throw new IllegalStateException("Deferred-completion operation output for step '"
+        DeferredCompletionSelection completion = model.deferredCompletionSelection().orElseThrow();
+        TypeName completionInputType = completion.completionPayloadType()
+            .orElse(completion.finalOutputType());
+        if (!(completionInputType instanceof ClassName completionInputClass)) {
+            throw new IllegalStateException("Deferred-completion input for step '"
                 + step.stepName() + "' must resolve to a declared canonical class, but was '"
-                + operationOutputType + "'.");
+                + completionInputType + "'.");
         }
         boolean transportMappedRuntime = usesTransportMappedRuntime(model, ctx);
         String completionInputRuntimeClass = runtimeAcceptedType(
-            operationOutputClass, ctx, transportMappedRuntime);
+            completionInputClass, ctx, transportMappedRuntime);
         steps.add(new StepMetadata(
             definitionId,
             plan.terminalStepIndex(),
@@ -294,7 +297,7 @@ public final class PipelineBranchingMetadataGenerator {
             step.stepName(),
             clientClass(model, ctx),
             completionInputRuntimeClass,
-            List.of(operationOutputClass.simpleName()),
+            List.of(completionInputClass.simpleName()),
             List.of(completionInputRuntimeClass),
             List.of(),
             List.of(),

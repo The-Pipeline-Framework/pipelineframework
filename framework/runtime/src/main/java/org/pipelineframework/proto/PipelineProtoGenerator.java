@@ -485,7 +485,7 @@ public class PipelineProtoGenerator {
                 typesProtoName,
                 step.cardinality(),
                 step.inputTypeName(),
-                step.outputTypeName(),
+                step.operationOutputTypeName(),
                 execution.operatorId(),
                 execution.protocol(),
                 execution.timeoutMs(),

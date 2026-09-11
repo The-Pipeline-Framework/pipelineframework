@@ -747,7 +747,8 @@ public class PipelineTelemetryMetadataGenerator {
             null,
             resolveBaseRenderRole(configStep, logicalStep),
             resolveBaseActorKind(configStep),
-            configStep != null && configStep.awaitConfig() != null);
+            model.deferredCompletionSelection().isPresent()
+                || (configStep != null && configStep.awaitConfig() != null));
     }
 
     private ReplayTopologyStep baseReplayStepFromConfig(String logicalStep, PipelineYamlStep configStep, int index) {

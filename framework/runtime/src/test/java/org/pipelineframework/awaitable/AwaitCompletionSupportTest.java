@@ -675,6 +675,29 @@ class AwaitCompletionSupportTest {
     }
 
     @Test
+    void failedLiveSessionCancelsDispatchSubscription() {
+        AwaitCompletionSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+        AwaitCompletionDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
+
+        AtomicBoolean dispatchCancelled = new AtomicBoolean();
+        when(awaitCoordinator.preloadDurablePayloads("tenant1", "exec123"))
+            .thenReturn(Uni.createFrom().emitter(emitter ->
+                emitter.onTermination(() -> dispatchCancelled.set(true))));
+
+        AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
+                testDescriptor, Multi.createFrom().item("first"))
+            .subscribe().withSubscriber(AssertSubscriber.create(1));
+        assertThrows(IllegalStateException.class, () -> support.liveCompletionRegistry.signal(
+            itemRecord(0, AwaitInteractionStatus.FAILED, "first", null)).await().indefinitely());
+
+        subscriber.awaitFailure(Duration.ofSeconds(5));
+        waitUntil(dispatchCancelled::get);
+    }
+
+    @Test
     void sqsOneToOneStreamUsesTheSameLivePendingWindow() {
         AwaitCompletionSupport support = support();
         support.pipelineConfig.maxConcurrency(1);

@@ -6,6 +6,12 @@ import java.util.Optional;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.connector.ConnectorBindingName;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
+import org.pipelineframework.connector.QueryCapabilities;
+import org.pipelineframework.connector.QueryOperationCardinality;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -72,10 +78,29 @@ class StepDefinitionTest {
 
     @Test
     void connectorSelectionCopyRetainsDeferredCompletion() {
-        StepDefinition step = authored().withDeferredCompletion(new DeferredCompletionDefinition(
+        DeferredCompletionDefinition completion = new DeferredCompletionDefinition(
             "<PendingApproval>", Optional.empty(), "PT30M", List.of(), "interactionId",
-            "interaction-api", Map.of(), Optional.empty()));
-        assertTrue(step.deferredCompletion().isPresent());
+            "interaction-api", Map.of(), Optional.empty());
+        ConnectorOperationSelection selection = ConnectorOperationSelection.query(
+            "Lookup",
+            ConnectorBindingName.of("work"),
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of("example.provider"), "lookup", ConnectorOperationKind.QUERY, 1),
+            1,
+            Map.of(),
+            new ConnectorOperationSelection.QuerySelection(
+                QueryOperationCardinality.ONE_TO_ONE,
+                QueryCapabilities.conservative(),
+                Optional.empty(),
+                Map.of(),
+                List.of()));
+
+        StepDefinition step = authored()
+            .withDeferredCompletion(completion)
+            .withConnectorOperationSelection(selection);
+
+        assertEquals(completion, step.deferredCompletion().orElseThrow());
+        assertEquals(selection, step.connectorOperationSelection().orElseThrow());
     }
 
     private StepDefinition authored() {
