@@ -32,6 +32,7 @@ public record HttpOperationPin(
     HttpWireSchema requestSchema,
     String requestMappingKey,
     Optional<HttpProviderIdempotencyKeyTarget> providerIdempotencyKey,
+    List<HttpCallbackPin> callbacks,
     String sourceFingerprint,
     String operationFingerprint
 ) {
@@ -57,7 +58,29 @@ public record HttpOperationPin(
     ) {
         this(operation, kind, majorVersion, inputType, outputType, method, relativePathTemplate, parameters,
             requestBody, responses, security, requestSchema, requestMappingKey, providerIdempotencyKey,
-            sourceFingerprint, fingerprint(
+            List.of(), sourceFingerprint);
+    }
+
+    public HttpOperationPin(String operation, ConnectorOperationKind kind, int majorVersion,
+        String inputType, String outputType, String method, String relativePathTemplate,
+        List<HttpParameterPin> parameters, Optional<HttpRequestBodyPin> requestBody,
+        List<HttpResponsePin> responses, HttpSecurityConstraint security, HttpWireSchema requestSchema,
+        String requestMappingKey, Optional<HttpProviderIdempotencyKeyTarget> providerIdempotencyKey,
+        String sourceFingerprint, String operationFingerprint) {
+        this(operation, kind, majorVersion, inputType, outputType, method, relativePathTemplate, parameters,
+            requestBody, responses, security, requestSchema, requestMappingKey, providerIdempotencyKey,
+            List.of(), sourceFingerprint, operationFingerprint);
+    }
+
+    public HttpOperationPin(String operation, ConnectorOperationKind kind, int majorVersion,
+        String inputType, String outputType, String method, String relativePathTemplate,
+        List<HttpParameterPin> parameters, Optional<HttpRequestBodyPin> requestBody,
+        List<HttpResponsePin> responses, HttpSecurityConstraint security, HttpWireSchema requestSchema,
+        String requestMappingKey, Optional<HttpProviderIdempotencyKeyTarget> providerIdempotencyKey,
+        List<HttpCallbackPin> callbacks, String sourceFingerprint) {
+        this(operation, kind, majorVersion, inputType, outputType, method, relativePathTemplate, parameters,
+            requestBody, responses, security, requestSchema, requestMappingKey, providerIdempotencyKey,
+            callbacks, sourceFingerprint, fingerprint(
                 ConnectorProviderId.of(operation).value(), kind, majorVersion,
                 HttpParameterPin.requireText(inputType, "canonical HTTP input type"),
                 HttpParameterPin.requireText(outputType, "canonical HTTP output type"),
@@ -70,6 +93,7 @@ public record HttpOperationPin(
                 Objects.requireNonNull(requestSchema, "HTTP request wire schema must not be null"),
                 ConnectorProviderId.of(requestMappingKey).value(),
                 Objects.requireNonNull(providerIdempotencyKey, "provider idempotency-key target must not be null"),
+                Objects.requireNonNull(callbacks, "HTTP callbacks must not be null"),
                 digest(sourceFingerprint, "HTTP source fingerprint")));
     }
 
@@ -93,6 +117,27 @@ public record HttpOperationPin(
         requestMappingKey = ConnectorProviderId.of(requestMappingKey).value();
         providerIdempotencyKey = Objects.requireNonNull(providerIdempotencyKey,
             "provider idempotency-key target must not be null");
+        callbacks = Objects.requireNonNull(callbacks, "HTTP callbacks must not be null").stream()
+            .sorted(java.util.Comparator.comparing(HttpCallbackPin::id)).toList();
+        if (!callbacks.isEmpty() && !kind.equals(ConnectorOperationKind.COMMAND)) {
+            throw new IllegalArgumentException("HTTP callbacks require a Command operation");
+        }
+        if (callbacks.size() > 16 || callbacks.stream().map(HttpCallbackPin::id).distinct().count() != callbacks.size()
+            || callbacks.stream().map(callback -> callback.target().pointer()).distinct().count() != callbacks.size()) {
+            throw new IllegalArgumentException("HTTP callbacks must have bounded, unique IDs and targets");
+        }
+        if (callbacks.stream().filter(HttpCallbackPin::required).count() > 1) {
+            throw new IllegalArgumentException("HTTP Command supports at most one required callback");
+        }
+        if (callbacks.stream().anyMatch(callback -> !callback.required())) {
+            throw new IllegalArgumentException("HTTP callback pins require completion; optional callback injection is unsupported");
+        }
+        for (HttpCallbackPin callback : callbacks) {
+            if (!callback.operation().equals(operation) || callback.majorVersion() != majorVersion) {
+                throw new IllegalArgumentException("HTTP callback belongs to a different Command");
+            }
+            callback.target().validate(parameters, requestBody, requestSchema, security, providerIdempotencyKey);
+        }
         sourceFingerprint = digest(sourceFingerprint, "HTTP source fingerprint");
         operationFingerprint = digest(operationFingerprint, "HTTP operation fingerprint");
         validateParameters(relativePathTemplate, parameters, security, providerIdempotencyKey);
@@ -102,7 +147,7 @@ public record HttpOperationPin(
         }
         String expected = fingerprint(operation, kind, majorVersion, inputType, outputType, method,
             relativePathTemplate, parameters, requestBody, responses, security, requestSchema, requestMappingKey,
-            providerIdempotencyKey, sourceFingerprint);
+            providerIdempotencyKey, callbacks, sourceFingerprint);
         if (!expected.equals(operationFingerprint)) {
             throw new IllegalArgumentException("HTTP operation fingerprint mismatch");
         }
@@ -112,10 +157,31 @@ public record HttpOperationPin(
         return kind.value() + ":" + operation + ":" + majorVersion;
     }
 
+    public List<String> runtimeSuppliedPaths() {
+        return callbacks.stream().map(callback -> callback.target().pointer()).sorted().toList();
+    }
+
+    public Optional<HttpCallbackPin> selectCallback(
+        Optional<org.pipelineframework.connector.ConnectorCallbackContext> context) {
+        Objects.requireNonNull(context, "HTTP callback context");
+        if (context.isEmpty()) {
+            if (callbacks.stream().anyMatch(HttpCallbackPin::required)) {
+                throw new IllegalArgumentException("HTTP Command requires its selected callback context");
+            }
+            return Optional.empty();
+        }
+        HttpCallbackPin selected = callbacks.stream().filter(callback -> callback.id().equals(context.orElseThrow().callbackId()))
+            .findFirst().orElseThrow(() -> new IllegalArgumentException("HTTP Command callback context is not pinned"));
+        if (callbacks.stream().anyMatch(callback -> callback.required() && !callback.id().equals(selected.id()))) {
+            throw new IllegalArgumentException("HTTP Command has another required callback context");
+        }
+        return Optional.of(selected);
+    }
+
     public ObjectNode toJson() {
         ObjectNode node = fields(operation, kind, majorVersion, inputType, outputType, method, relativePathTemplate,
             parameters, requestBody, responses, security, requestSchema, requestMappingKey,
-            providerIdempotencyKey, sourceFingerprint);
+            providerIdempotencyKey, callbacks, sourceFingerprint);
         node.put("operationFingerprint", operationFingerprint);
         return node;
     }
@@ -217,11 +283,12 @@ public record HttpOperationPin(
         HttpWireSchema requestSchema,
         String requestMappingKey,
         Optional<HttpProviderIdempotencyKeyTarget> providerIdempotencyKey,
+        List<HttpCallbackPin> callbacks,
         String sourceFingerprint
     ) {
         return HttpPinnedJson.sha256(HttpPinnedJson.canonicalize(fields(operation, kind, majorVersion, inputType,
             outputType, method, path, parameters, body, responses, security, requestSchema, requestMappingKey,
-            providerIdempotencyKey, sourceFingerprint)));
+            providerIdempotencyKey, callbacks, sourceFingerprint)));
     }
 
     private static ObjectNode fields(
@@ -239,6 +306,7 @@ public record HttpOperationPin(
         HttpWireSchema requestSchema,
         String requestMappingKey,
         Optional<HttpProviderIdempotencyKeyTarget> providerIdempotencyKey,
+        List<HttpCallbackPin> callbacks,
         String sourceFingerprint
     ) {
         ObjectNode node = JsonNodeFactory.instance.objectNode();
@@ -254,22 +322,12 @@ public record HttpOperationPin(
         body.ifPresent(value -> node.set("requestBody", bodyJson(value)));
         ArrayNode responseNodes = node.putArray("responses");
         responses.forEach(response -> responseNodes.add(responseJson(response)));
-        ArrayNode securityNodes = node.putArray("security");
-        security.requirements().forEach(requirement -> {
-            ObjectNode requirementNode = securityNodes.addObject();
-            requirementNode.put("scheme", requirement.scheme());
-            ArrayNode scopes = requirementNode.putArray("scopes");
-            requirement.scopes().stream().sorted().forEach(scopes::add);
-            ArrayNode targets = requirementNode.putArray("targets");
-            requirement.targets().stream()
-                .sorted(java.util.Comparator.comparing((HttpAuthorizationTarget target) -> target.location().name())
-                    .thenComparing(HttpAuthorizationTarget::name))
-                .forEach(target -> {
-                    ObjectNode targetNode = targets.addObject();
-                    targetNode.put("location", target.location().name());
-                    targetNode.put("name", target.name());
-                });
-        });
+        node.set("security", security.toJson());
+        if (!callbacks.isEmpty()) {
+            ArrayNode callbackNodes = node.putArray("callbacks");
+            callbacks.stream().sorted(java.util.Comparator.comparing(HttpCallbackPin::id))
+                .forEach(callback -> callbackNodes.add(callback.toJson()));
+        }
         node.set("requestSchema", requestSchema.node());
         node.put("requestSchemaFingerprint", requestSchema.sha256());
         node.put("requestMapping", requestMappingKey);

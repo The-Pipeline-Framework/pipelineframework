@@ -65,3 +65,7 @@ vendor-specific adapters without weakening host or Command ownership.
   schema-3 pipeline contract hash without exposing documents or secrets.
 - OpenAPI callbacks are not redefined here. A later decision may map suitable correlated callbacks
   onto existing Command and Await semantics.
+
+The callback deferral above is succeeded by
+[ADR-0038](./0038-openapi-callbacks-are-pinned-connector-completion-contracts.md); the capability and
+authority distinctions in this decision remain accepted.

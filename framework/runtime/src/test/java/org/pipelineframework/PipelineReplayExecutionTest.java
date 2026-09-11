@@ -920,6 +920,9 @@ class PipelineReplayExecutionTest {
     }
 
     static class ReplayEnabledPipelineStepConfig implements PipelineStepConfig {
+        @Override
+        public CallbackConfig callback() { return () -> false; }
+
 
         @Override
         public Integer maxRecursiveDepth() {

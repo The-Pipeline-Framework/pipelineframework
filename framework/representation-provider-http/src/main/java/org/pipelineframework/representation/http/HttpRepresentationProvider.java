@@ -78,16 +78,22 @@ public final class HttpRepresentationProvider implements RepresentationProvider 
             .map(response -> new OperationBoundaryClaim.WireBoundary(response.mappingKey().orElseThrow(),
                 response.schema().orElseThrow().canonicalJson(), response.schema().orElseThrow().sha256()))
             .distinct().toList();
-        return Optional.of(new OperationBoundaryClaim(KEY, request, responses));
+        List<OperationBoundaryClaim.CallbackBoundary> callbacks = pin.callbacks().stream().map(callback ->
+            new OperationBoundaryClaim.CallbackBoundary(callback.id(), callback.inputType(),
+                new OperationBoundaryClaim.WireBoundary(callback.requestMappingKey(),
+                    callback.requestSchema().canonicalJson(), callback.requestSchema().sha256()))).toList();
+        return Optional.of(new OperationBoundaryClaim(KEY, request, responses, callbacks));
     }
 
     @Override
     public Optional<ResolvedOperationRepresentation> resolveOperation(OperationRepresentationRequest request) {
         if (!KEY.equals(request.claim().providerKey())) return Optional.empty();
+        String authorableWireSchema = new org.pipelineframework.connector.http.HttpWireSchema(
+            request.wireBoundary().schemaJson()).withoutRuntimeSuppliedPaths(request.runtimeSuppliedPaths()).canonicalJson();
         Optional<RepresentationMappingRequest> authored = request.authoredMapping();
         if (authored.isEmpty() || direct(authored.orElseThrow())) {
             if (!HttpSchemaCompatibility.equivalent(request.canonicalSchemaJson(),
-                request.wireBoundary().schemaJson())) {
+                authorableWireSchema)) {
                 throw new IllegalStateException("HTTP operation mapping '" + request.wireBoundary().mappingKey()
                     + "' is not direct; add deterministic options or an explicit representation type and Mapper");
             }
@@ -108,14 +114,14 @@ public final class HttpRepresentationProvider implements RepresentationProvider 
                 mapping.representationType(), mapping.mapperType(), Map.of()));
         }
         HttpRepresentationMappingOptions options = HttpRepresentationMappingOptions.from(mapping.options());
-        HttpSchemaCompatibility.validate(request.canonicalSchemaJson(), request.wireBoundary().schemaJson(), options);
+        HttpSchemaCompatibility.validate(request.canonicalSchemaJson(), authorableWireSchema, options);
         String fingerprint = fingerprint(request, HttpRepresentationMode.GENERATED, mapping.options());
         String mapperType = "org.pipelineframework.generated.http.HttpMapping_"
             + sanitize(mapping.key()) + "_" + fingerprint.substring(0, 12);
         return Optional.of(new ResolvedOperationRepresentation(KEY, request.boundary().boundaryIdentity(), request.role(),
             mapping.key(), request.canonicalType(), HttpRepresentationMode.GENERATED.name(),
             Optional.of("com.fasterxml.jackson.databind.JsonNode"), Optional.of(mapperType), fingerprint,
-            mapping.options()));
+            mapping.options(), canonicalFingerprint(request)));
     }
 
     @Override
@@ -149,7 +155,7 @@ public final class HttpRepresentationProvider implements RepresentationProvider 
 
     private static OperationBoundaryClaim.WireBoundary requestBoundary(HttpOperationPin pin) {
         return new OperationBoundaryClaim.WireBoundary(pin.requestMappingKey(),
-            pin.requestSchema().canonicalJson(), pin.requestSchema().sha256());
+            pin.requestSchema().canonicalJson(), pin.requestSchema().sha256(), pin.runtimeSuppliedPaths());
     }
 
     private static ResolvedOperationRepresentation resolved(
@@ -161,7 +167,16 @@ public final class HttpRepresentationProvider implements RepresentationProvider 
     ) {
         return new ResolvedOperationRepresentation(KEY, request.boundary().boundaryIdentity(), request.role(),
             request.wireBoundary().mappingKey(), request.canonicalType(), mode.name(), representationType, mapperType,
-            fingerprint(request, mode, options), options);
+            fingerprint(request, mode, options), options, canonicalFingerprint(request));
+    }
+
+    private static Optional<String> canonicalFingerprint(OperationRepresentationRequest request) {
+        if (request.runtimeSuppliedPaths().isEmpty()
+            && request.role() != org.pipelineframework.representation.spi.OperationRepresentationRole.CALLBACK) {
+            return Optional.empty();
+        }
+        return Optional.of(HttpPinnedJson.sha256(HttpPinnedJson.canonicalize(
+            HttpPinnedJson.parse(request.canonicalSchemaJson()))));
     }
 
     private static String fingerprint(
@@ -177,6 +192,9 @@ public final class HttpRepresentationProvider implements RepresentationProvider 
         node.put("wireSchemaFingerprint", request.wireBoundary().schemaFingerprint());
         node.put("mode", mode.name());
         node.set("options", JSON.valueToTree(options));
+        if (!request.runtimeSuppliedPaths().isEmpty()) {
+            node.set("runtimeSuppliedPaths", JSON.valueToTree(request.runtimeSuppliedPaths()));
+        }
         request.authoredMapping().flatMap(RepresentationMappingRequest::representationType)
             .ifPresent(value -> node.put("representationType", value));
         request.authoredMapping().flatMap(RepresentationMappingRequest::mapperType)

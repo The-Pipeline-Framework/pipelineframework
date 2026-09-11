@@ -110,6 +110,57 @@ class PipelineTelemetryMetadataGeneratorTest {
     }
 
     @Test
+    void authoredCommandNameResolvesToItsGeneratedReplayNodeWithoutSyntheticDuplicate() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        ctx.setOrchestratorGenerated(true);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setPipelineTemplateConfig(templateConfig("command-callback", "LOCAL"));
+        writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");
+        writePipelineYaml("""
+            connectors:
+              jobs:
+                provider: test.jobs
+                version: 1
+            steps:
+              - name: Start job
+                kind: command
+                using: jobs
+                operation: job.start
+                commandIdGenerator: com.example.IdGenerator
+                duplicatePolicy: RETURN_RECORDED
+                cardinality: ONE_TO_ONE
+                input: com.example.ItemIn
+                output: com.example.ItemOut
+                await:
+                  operationOutput:
+                    type: Pending
+                  timeout: PT1M
+                  correlation:
+                    strategy: signedResumeToken
+                  callback:
+                    name: job.completed
+                    endpointResolver: com.example.Endpoint
+                    authenticator: com.example.Authenticator
+                  completion:
+                    type: Callback
+                    projector: com.example.Projector
+            """);
+        ctx.setStepModels(List.of(localStep("ProcessStartJobService", "com.example", type("ItemIn"), type("ItemOut"))
+            .toBuilder().enabledTargets(Set.of(GenerationTarget.COMMAND_CLIENT_STEP)).build()));
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        JsonObject topology = readReplayTopologyJson();
+        assertEquals(1, topology.getAsJsonArray("steps").size());
+        JsonObject step = topology.getAsJsonArray("steps").get(0).getAsJsonObject();
+        assertEquals("com.example.pipeline.ProcessStartJobCommandClientStep", step.get("runtimeStepClass").getAsString());
+        assertEquals("StartJob", step.get("step").getAsString());
+        assertEquals("command", step.get("renderRole").getAsString());
+        assertTrue(step.get("deferredCompletion").getAsBoolean());
+        assertEquals(0, topology.getAsJsonArray("transitions").size());
+    }
+
+    @Test
     void writesTelemetryMetadataWithFirstConsumerAndLastProducer() throws IOException {
         PipelineCompilationContext ctx = buildContext();
         writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");

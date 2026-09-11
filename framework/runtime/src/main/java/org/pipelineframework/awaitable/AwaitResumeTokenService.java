@@ -123,6 +123,25 @@ public class AwaitResumeTokenService {
         return value.trim();
     }
 
+    /** Untrusted hints for durable lookup only; validation must follow before using the record. */
+    public LookupHints lookupHints(String token) {
+        if (token == null || token.length() > 8192) {
+            throw new AwaitResumeTokenRejectedException("Invalid resume token size");
+        }
+        Map<?, ?> values = payload(token);
+        if (!(values.get("tenantId") instanceof String tenant) || tenant.isBlank() || tenant.length() > 1024
+            || !(values.get("interactionId") instanceof String interaction) || interaction.isBlank()
+            || interaction.length() > 1024) {
+            throw new AwaitResumeTokenRejectedException("Invalid resume token lookup hints");
+        }
+        return new LookupHints(tenant, interaction);
+    }
+
+    public record LookupHints(String tenantId, String interactionId) {
+        @Override
+        public String toString() { return "LookupHints[redacted]"; }
+    }
+
     private Map<?, ?> payload(String token) {
         if (token == null || token.isBlank()) {
             throw new AwaitResumeTokenRejectedException("resumeToken must not be blank");

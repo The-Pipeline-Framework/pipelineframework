@@ -246,6 +246,42 @@ class PipelineBranchingMetadataGeneratorTest {
     }
 
     @Test
+    void commandCallbackKeepsOneRuntimeNodeAcceptingOriginalInput() throws IOException {
+        Path classOutput = tempDir.resolve("command-callback-output");
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setOrchestratorGenerated(true);
+        var completion = new DeferredCompletionSelection(
+            ClassName.get("com.example.common.domain", "JobResult"), "JobResult", Optional.of("JobCallback"),
+            Duration.ofMinutes(1), List.of(), "signedResumeToken", "", Map.of(),
+            Optional.of(ClassName.get("com.example.common.domain", "JobCallback")),
+            Optional.of(ClassName.get("com.example", "JobProjector")),
+            Optional.of(mock(DeferredCompletionSelection.ResolvedConnectorCallback.class)));
+        var model = deferredStepModel("StartJob", "com.example.jobs", "StartJobRequest", "JobAccepted", "JobResult")
+            .toBuilder().enabledTargets(Set.of(GenerationTarget.COMMAND_CLIENT_STEP))
+            .deferredCompletionSelection(completion).build();
+        ctx.setStepModels(List.of(model));
+        ctx.setBranchingPlan(new PipelineBranchingPlan(true, 0, List.of(
+            new PipelineBranchingPlan.BranchStep(0, "Start Job", "StartJobRequest", "JobResult",
+                List.of("StartJobRequest"), List.of("JobResult"),
+                List.of(ClassName.get("com.example.common.domain", "StartJobRequest")), true))));
+
+        new PipelineBranchingMetadataGenerator(processingEnv).writeBranchingMetadata(ctx);
+
+        JsonObject metadata = new Gson().fromJson(Files.readString(
+            classOutput.resolve("META-INF/pipeline/branching.json")), JsonObject.class);
+        assertEquals(1, metadata.getAsJsonArray("steps").size());
+        JsonObject step = metadata.getAsJsonArray("steps").get(0).getAsJsonObject();
+        assertEquals("com.example.jobs.pipeline.StartJobCommandClientStep", step.get("runtimeStepClass").getAsString());
+        assertEquals("com.example.common.domain.StartJobRequest", step.get("inputRuntimeClass").getAsString());
+        assertEquals("StartJobRequest", step.getAsJsonArray("acceptedContracts").get(0).getAsString());
+        assertTrue(step.get("terminal").getAsBoolean());
+    }
+
+    @Test
     void writesApplicabilityMetadataForConcreteAspectObservers() throws IOException {
         Path classOutput = tempDir.resolve("class-output-aspects");
 

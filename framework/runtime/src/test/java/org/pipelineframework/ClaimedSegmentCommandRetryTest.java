@@ -3,7 +3,8 @@ package org.pipelineframework;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.Optional;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
@@ -14,8 +15,9 @@ import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 
 class ClaimedSegmentCommandRetryTest {
 
-    @Test
-    void carriesFailedRootAndExactLogicalEffectIntoPortableTransition() {
+    @ParameterizedTest
+    @ValueSource(ints = {2, 5, 6})
+    void scopesRetryAuthorityToSegmentsBeforeOrAtTheFailedRoot(int stepIndex) {
         ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
             "tenant-a",
             "exec-1",
@@ -26,7 +28,7 @@ class ClaimedSegmentCommandRetryTest {
             ExecutionResultShape.SINGLE,
             ExecutionStatus.RUNNING,
             8L,
-            2,
+            stepIndex,
             3,
             "worker-a",
             100L,
@@ -51,11 +53,16 @@ class ClaimedSegmentCommandRetryTest {
             .transitionCommand("input", new JsonTransitionPayloadCodec());
         TransitionWorkerCommand decoded = envelope.toCommand(new JsonTransitionPayloadCodec());
 
-        assertEquals(2, envelope.currentStepIndex());
-        assertEquals(5, envelope.redriveStepIndex());
-        assertEquals(Optional.of("archive:confirmation-7"), envelope.redriveCommandId());
-        assertEquals(2, decoded.currentStepIndex());
-        assertEquals(5, decoded.redriveStepIndex());
-        assertEquals(Optional.of("archive:confirmation-7"), decoded.redriveCommandId());
+        boolean completed = stepIndex > 5;
+        assertEquals(stepIndex, envelope.currentStepIndex());
+        assertEquals(completed ? ExecutionRedriveIntent.REPLAY : ExecutionRedriveIntent.RETRY_FAILED_COMMAND,
+            envelope.redriveIntent());
+        assertEquals(completed ? -1 : 5, envelope.redriveStepIndex());
+        assertEquals(completed ? Optional.empty() : Optional.of("archive:confirmation-7"), envelope.redriveCommandId());
+        assertEquals(stepIndex, decoded.currentStepIndex());
+        assertEquals(envelope.redriveIntent(), decoded.redriveIntent());
+        assertEquals(envelope.redriveStepIndex(), decoded.redriveStepIndex());
+        assertEquals(envelope.redriveCommandId(), decoded.redriveCommandId());
+        assertEquals(ExecutionRedriveIntent.RETRY_FAILED_COMMAND, record.redriveIntent(), "preserve persisted audit history");
     }
 }

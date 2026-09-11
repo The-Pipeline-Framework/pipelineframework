@@ -36,6 +36,7 @@ final class ConnectorOperationProvenanceProjector {
     ) {
         if (config == null || config.connectors().isEmpty()) return List.of();
         Set<Reference> references = references(config);
+        Map<Reference, Set<String>> callbackReferences = callbackReferences(config);
         if (references.isEmpty()) return List.of();
         Map<String, ResolvedOperationRepresentation> mappings = new LinkedHashMap<>();
         Objects.requireNonNull(resolvedRepresentations, "resolved operation representations must not be null")
@@ -51,7 +52,8 @@ final class ConnectorOperationProvenanceProjector {
                 String provider = string(imported.get("provider"), "provider", document.source());
                 List<Map<String, Object>> selected = maps(imported.get("operations"), "operations", document.source())
                     .stream().filter(operation -> references.contains(reference(provider, operation, document.source())))
-                    .map(operation -> withMappings(operation, mappings))
+                    .map(operation -> withMappings(operation, mappings, callbackReferences.getOrDefault(
+                        reference(provider, operation, document.source()), Set.of())))
                     .sorted(Comparator.comparing(ConnectorOperationProvenanceProjector::operationKey))
                     .toList();
                 if (selected.isEmpty()) continue;
@@ -70,7 +72,8 @@ final class ConnectorOperationProvenanceProjector {
 
     private static Map<String, Object> withMappings(
         Map<String, Object> source,
-        Map<String, ResolvedOperationRepresentation> mappings
+        Map<String, ResolvedOperationRepresentation> mappings,
+        Set<String> referencedCallbacks
     ) {
         Map<String, Object> operation = new LinkedHashMap<>(source);
         operation.put("majorVersion", integer(
@@ -89,6 +92,28 @@ final class ConnectorOperationProvenanceProjector {
             }
         }
         if (!responses.isEmpty()) operation.put("responseMappings", immutableSortedMap(responses));
+        if (operation.containsKey("callbacks")) {
+            List<Map<String, Object>> callbacks = maps(operation.get("callbacks"), "callbacks", "operation provenance")
+                .stream().filter(value -> referencedCallbacks.contains(value.get("callback"))).map(value -> {
+                    Map<String, Object> callback = new LinkedHashMap<>(value);
+                    Object key = callback.get("requestMappingKey");
+                    if (!(key instanceof String mappingKey) || !mappings.containsKey(mappingKey)) {
+                        throw new IllegalStateException("Selected callback provenance has no resolved representation");
+                    }
+                    var resolved = mappings.get(mappingKey);
+                    callback.put("mapping", mapping(resolved));
+                    callback.put("canonicalInputFingerprint", resolved.canonicalSchemaFingerprint().orElseThrow(() ->
+                        new IllegalStateException("Selected callback has no canonical schema fingerprint")));
+                    return immutableSortedMap(callback);
+                }).sorted(Comparator.comparing(value -> value.get("callback").toString())).toList();
+            if (callbacks.size() != referencedCallbacks.size()) {
+                throw new IllegalStateException("Selected callback is missing from operation provenance");
+            }
+            if (callbacks.isEmpty()) operation.remove("callbacks");
+            else operation.put("callbacks", callbacks);
+        } else if (!referencedCallbacks.isEmpty()) {
+            throw new IllegalStateException("Selected callback is missing from operation provenance");
+        }
         return immutableSortedMap(operation);
     }
 
@@ -96,6 +121,7 @@ final class ConnectorOperationProvenanceProjector {
         Map<String, Object> mapping = new LinkedHashMap<>();
         mapping.put("mode", value.mode());
         mapping.put("mappingFingerprint", value.mappingFingerprint());
+        value.canonicalSchemaFingerprint().ifPresent(fingerprint -> mapping.put("canonicalSchemaFingerprint", fingerprint));
         value.representationType().ifPresent(type -> mapping.put("representationType", type));
         value.mapperType().ifPresent(type -> mapping.put("mapperType", type));
         return immutableSortedMap(mapping);
@@ -118,6 +144,21 @@ final class ConnectorOperationProvenanceProjector {
             }
         }
         return Set.copyOf(references);
+    }
+
+    private static Map<Reference, Set<String>> callbackReferences(PipelineYamlConfig config) {
+        Map<Reference, Set<String>> result = new LinkedHashMap<>();
+        config.stepDefinitions().values().forEach(steps -> steps.forEach(step ->
+            step.operationSelection().ifPresent(selection -> {
+                PipelineYamlConnectorBinding binding = config.connectors().get(selection.using());
+                if (binding == null) return;
+                java.util.Optional.ofNullable(step.awaitConfig()).flatMap(value -> value.callback()).ifPresent(callback -> {
+                    Reference reference = new Reference(binding.provider(), step.kind().toLowerCase(java.util.Locale.ROOT),
+                        selection.operation(), selection.operationVersion());
+                    result.computeIfAbsent(reference, ignored -> new LinkedHashSet<>()).add(callback.name());
+                });
+            })));
+        return result;
     }
 
     private static Reference reference(String provider, Map<String, Object> operation, String source) {

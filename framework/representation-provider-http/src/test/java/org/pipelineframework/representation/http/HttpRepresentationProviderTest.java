@@ -60,6 +60,58 @@ class HttpRepresentationProviderTest {
     }
 
     @Test
+    void keepsRuntimeCallbackFieldsOutOfAllAuthoringRoutesAndUsesExistingInboundBindings() {
+        var wire = (com.fasterxml.jackson.databind.node.ObjectNode)
+            org.pipelineframework.connector.http.HttpPinnedJson.parse(INPUT_SCHEMA);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) wire.path("properties"))
+            .putObject("callbackUrl").put("type", "string").put("format", "uri");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) wire.path("required")).add("callbackUrl");
+        var wireSchema = new HttpWireSchema(wire.toString());
+        var callback = new org.pipelineframework.connector.http.HttpCallbackPin("job.completed", "job.start", 1,
+            new org.pipelineframework.connector.http.HttpCallbackInjectionTarget(
+                org.pipelineframework.connector.http.HttpCallbackInjectionTarget.Location.BODY,
+                List.of("callbackUrl"), Optional.empty()), "POST", "application/json", new HttpWireSchema(OUTPUT_SCHEMA),
+            "http.job.callback", "Callback", HttpSecurityConstraint.none(), 202, true, SOURCE);
+        var pin = new HttpOperationPin("job.start", ConnectorOperationKind.COMMAND, 1, "Input", "Output",
+            "POST", "/jobs", List.of(), Optional.of(new HttpRequestBodyPin(
+                "application/json", Optional.empty(), true, wireSchema)),
+            List.of(new HttpResponsePin("202", Optional.of("application/json"), HttpResponseOutcome.SUCCEEDED,
+                Optional.of("http.job.accepted"), Optional.empty(),
+                Optional.of(org.pipelineframework.connector.CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED),
+                Optional.of(new HttpWireSchema(OUTPUT_SCHEMA)))),
+            HttpSecurityConstraint.none(), wireSchema, "http.job.request", Optional.empty(), List.of(callback), SOURCE);
+        var provider = new HttpRepresentationProvider(new HttpOperationCatalog(List.of(pin)));
+        var boundary = new OperationBoundaryRequest("proof:job", "http.client", 1, "job.start",
+            ConnectorOperationKind.COMMAND.value(), 1, INPUT, OUTPUT);
+        var claim = provider.claimOperation(boundary).orElseThrow();
+        assertEquals(List.of("/callbackUrl"), claim.request().runtimeSuppliedPaths());
+        var direct = new OperationRepresentationRequest(boundary, claim, OperationRepresentationRole.REQUEST,
+            INPUT, INPUT_SCHEMA, claim.request(), Optional.empty());
+        assertEquals("DIRECT", provider.resolveOperation(direct).orElseThrow().mode());
+        var generated = new RepresentationMappingRequest("http.job.request", INPUT, Optional.empty(), Optional.empty(),
+            Map.of("fields", Map.of("subject", "subject")));
+        assertEquals("GENERATED", provider.resolveOperation(new OperationRepresentationRequest(boundary, claim,
+            OperationRepresentationRole.REQUEST, INPUT, INPUT_SCHEMA, claim.request(), Optional.of(generated)))
+            .orElseThrow().mode());
+        var curated = new RepresentationMappingRequest("http.job.request", INPUT,
+            Optional.of("example.JobWire"), Optional.of("example.JobMapper"), Map.of());
+        assertEquals("CURATED", provider.resolveOperation(new OperationRepresentationRequest(boundary, claim,
+            OperationRepresentationRole.REQUEST, INPUT, INPUT_SCHEMA, claim.request(), Optional.of(curated)))
+            .orElseThrow().mode());
+        var forged = new RepresentationMappingRequest("http.job.request", INPUT, Optional.empty(), Optional.empty(),
+            Map.of("constants", Map.of("callbackUrl", "https://untrusted.test")));
+        assertThrows(IllegalArgumentException.class, () -> provider.resolveOperation(new OperationRepresentationRequest(
+            boundary, claim, OperationRepresentationRole.REQUEST, INPUT, INPUT_SCHEMA, claim.request(), Optional.of(forged))));
+        var inbound = claim.callbacks().getFirst();
+        var resolved = provider.resolveOperation(new OperationRepresentationRequest(boundary, claim,
+            OperationRepresentationRole.CALLBACK, new CanonicalType("Callback", "example.Callback", CanonicalTypeShape.RECORD),
+            OUTPUT_SCHEMA, inbound.wire(), Optional.empty())).orElseThrow();
+        var bindings = provider.describeOperationArtifacts(new OperationProviderGenerationRequest(List.of(resolved)))
+            .stream().filter(artifact -> artifact.kind() == ArtifactKind.RESOURCE).findFirst().orElseThrow();
+        assertTrue(HttpOperationBindingCatalog.read(bindings.content()).find("http.job.callback").isPresent());
+    }
+
+    @Test
     void resolvesDirectMappingsOnlyForEquivalentShapes() {
         HttpRepresentationProvider provider = provider(INPUT_SCHEMA);
         OperationBoundaryClaim claim = provider.claimOperation(boundary()).orElseThrow();

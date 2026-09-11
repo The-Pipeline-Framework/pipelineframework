@@ -1,4 +1,5 @@
 package org.pipelineframework.connector.http;
+import org.pipelineframework.representation.http.HttpRepresentationBindings;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -244,6 +245,9 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         @Override public String id() { return pin.operation(); }
         @Override public int majorVersion() { return pin.majorVersion(); }
         @Override public CommandCapabilities capabilities() { return capabilities; }
+        @Override public List<org.pipelineframework.connector.ConnectorOperationCallbackDescriptor> callbacks() {
+            return pin.callbacks().stream().map(HttpCallbackPin::descriptor).toList();
+        }
         @Override public Optional<ConnectorConfigSchema<HttpOperationConfiguration>> configurationSchema() {
             return Optional.of(OPERATION_SCHEMA);
         }
@@ -252,6 +256,11 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         public CompletionStage<CommandOutcome<Object>> dispatch(
             CommandInvocation<Object, HttpOperationConfiguration> invocation
         ) {
+            try {
+                pin.selectCallback(invocation.callbackContext());
+            } catch (IllegalArgumentException invalid) {
+                return completedTerminal("http-invalid-callback-context");
+            }
             final HttpProviderConfiguration runtimeConfiguration;
             try {
                 runtimeConfiguration = configuration();
@@ -271,7 +280,7 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
                     HttpRequest request;
                     try {
                         request = HttpRequestProjector.project(pin, wire, connection, material,
-                            runtimeConfiguration, invocation.dispatchIdentity());
+                            runtimeConfiguration, invocation.dispatchIdentity(), invocation.callbackContext());
                     } catch (RuntimeException invalid) {
                         return completedTerminal("http-invalid-request");
                     }
@@ -351,6 +360,7 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
         HttpOperationBindingCatalog bindings,
         ConnectorProviderManifestCatalog manifests
     ) {
+        pins.validateCallbacks(manifests);
         Optional<ConnectorProviderArtifactDescriptor> imported = manifests.providers().stream()
             .filter(provider -> provider.provider().id().equals(PROVIDER_ID)).findFirst();
         if (pins.operations().isEmpty() && imported.isEmpty()) return;
@@ -387,6 +397,7 @@ public final class HttpConnector implements ConnectorProvider<HttpProviderConfig
             referencedMappings.add(pin.requestMappingKey());
             pin.responses().stream().map(HttpResponsePin::mappingKey).flatMap(Optional::stream)
                 .forEach(referencedMappings::add);
+            pin.callbacks().stream().map(HttpCallbackPin::requestMappingKey).forEach(referencedMappings::add);
         }
         if (!descriptors.isEmpty()) {
             throw new IllegalStateException("Connector metadata contains an HTTP operation absent from private pins: "

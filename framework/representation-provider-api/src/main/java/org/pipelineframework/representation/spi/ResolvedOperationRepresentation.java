@@ -17,8 +17,16 @@ public record ResolvedOperationRepresentation(
     Optional<String> representationType,
     Optional<String> mapperType,
     String mappingFingerprint,
-    Map<String, Object> generationConfiguration
+    Map<String, Object> generationConfiguration,
+    Optional<String> canonicalSchemaFingerprint
 ) {
+    public ResolvedOperationRepresentation(String providerKey, String boundaryIdentity, OperationRepresentationRole role,
+        String mappingKey, CanonicalType canonicalType, String mode, Optional<String> representationType,
+        Optional<String> mapperType, String mappingFingerprint, Map<String, Object> generationConfiguration) {
+        this(providerKey, boundaryIdentity, role, mappingKey, canonicalType, mode, representationType, mapperType,
+            mappingFingerprint, generationConfiguration, Optional.empty());
+    }
+
     public ResolvedOperationRepresentation {
         providerKey = text(providerKey, "representation provider key");
         boundaryIdentity = text(boundaryIdentity, "operation boundary identity");
@@ -33,6 +41,10 @@ public record ResolvedOperationRepresentation(
             throw new IllegalArgumentException("operation mapping fingerprint must be SHA-256 hex");
         }
         generationConfiguration = immutableMap(generationConfiguration);
+        canonicalSchemaFingerprint = optionalText(canonicalSchemaFingerprint, "canonical schema fingerprint");
+        canonicalSchemaFingerprint.ifPresent(value -> {
+            if (!value.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("canonical schema fingerprint must be SHA-256 hex");
+        });
     }
 
     private static Map<String, Object> immutableMap(Map<String, Object> value) {

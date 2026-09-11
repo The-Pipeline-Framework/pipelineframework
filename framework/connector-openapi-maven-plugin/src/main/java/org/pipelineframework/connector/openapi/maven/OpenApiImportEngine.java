@@ -140,9 +140,96 @@ final class OpenApiImportEngine {
         List<HttpResponsePin> responses = responses(source, selection.responses, kind, operation);
         HttpSecurityConstraint security = security(contract, source, selection.security);
         Optional<HttpProviderIdempotencyKeyTarget> idempotency = idempotency(selection.providerIdempotencyKey, kind);
+        List<org.pipelineframework.connector.http.HttpCallbackPin> callbacks = callbacks(
+            contract, closure, source, selection, request);
         return new HttpOperationPin(operation, kind, selection.version, input, output, method, path,
             request.parameters(), request.body(), responses, security, request.schema(), request.mappingKey(),
-            idempotency, closure.digest());
+            idempotency, callbacks, closure.digest());
+    }
+
+    private static List<org.pipelineframework.connector.http.HttpCallbackPin> callbacks(
+        OpenAPI contract, OpenApiContractClosure.Resolved closure, Operation initiating,
+        OpenApiImportConfiguration.OperationSelection selection, Request request) {
+        List<OpenApiImportConfiguration.CallbackSelection> selections = Optional.ofNullable(selection.callbacks).orElse(List.of());
+        require(selections.size() <= 1, "initial OpenAPI completion supports one selected callback per Command");
+        if (selections.isEmpty()) return List.of();
+        require(kind(selection.kind).equals(ConnectorOperationKind.COMMAND), "OpenAPI callbacks require a Command");
+        var selected = selections.getFirst();
+        require(selected != null && selected.source != null, "callback selection requires source guards");
+        String name = text(selected.source.name, "source callback name");
+        String expression = text(selected.source.expression, "source callback expression");
+        var callback = Optional.ofNullable(initiating.getCallbacks()).map(values -> values.get(name))
+            .orElseThrow(() -> new IllegalArgumentException("selected callback was not discovered: " + name));
+        PathItem item = Optional.ofNullable(callback.get(expression)).orElseThrow(() ->
+            new IllegalArgumentException("selected callback expression does not match the source"));
+        require("POST".equals(text(selected.source.method, "callback method").toUpperCase(Locale.ROOT)),
+            "initial OpenAPI callbacks require POST");
+        require(item.readOperationsMap().size() == 1 && item.getPost() != null,
+            "callback expression must select one POST operation");
+        Operation operation = item.getPost();
+        require(text(selected.source.operationId, "callback operationId").equals(operation.getOperationId()),
+            "callback operationId does not match its source guard");
+        require(Optional.ofNullable(item.getParameters()).orElse(List.of()).isEmpty()
+            && Optional.ofNullable(operation.getParameters()).orElse(List.of()).isEmpty(),
+            "initial callback payloads use the JSON body; inbound parameters are not supported");
+        require(selected.request != null && operation.getRequestBody() != null,
+            "callback requires an explicit request selection and body schema");
+        require(selected.request.bodyPath == null
+            && Optional.ofNullable(selected.request.parameterSources).orElse(Map.of()).isEmpty(),
+            "callback request mappings describe the complete body");
+        String mediaType = text(selected.request.mediaType, "callback request media type").toLowerCase(Locale.ROOT);
+        HttpWireSchema schema = new HttpWireSchema(HttpPinnedJson.canonicalize(schema(
+            media(operation.getRequestBody().getContent(), mediaType, "callback request").getSchema(), "callback request")));
+        require(selected.acknowledgement != null, "callback acknowledgement selection is required");
+        String status = text(selected.acknowledgement.status, "callback acknowledgement status");
+        require(status.matches("2[0-9]{2}") && operation.getResponses() != null
+            && operation.getResponses().containsKey(status), "callback acknowledgement must select an advertised exact 2xx status");
+        HttpSecurityConstraint security = security(contract, operation, selected.security);
+        ObjectNode source = JSON.createObjectNode();
+        source.put("name", name);
+        source.put("expression", expression);
+        source.put("closure", closure.digest());
+        source.set("operation", JSON.valueToTree(operation));
+        return List.of(new org.pipelineframework.connector.http.HttpCallbackPin(
+            text(selected.callback, "callback capability identity"), selection.operation, selection.version,
+            callbackTarget(expression, request), "POST", mediaType, schema,
+            text(selected.request.representation, "callback request representation"),
+            text(selected.input, "callback canonical input"), security, Integer.parseInt(status), true,
+            HttpPinnedJson.sha256(HttpPinnedJson.canonicalize(source))));
+    }
+
+    private static org.pipelineframework.connector.http.HttpCallbackInjectionTarget callbackTarget(
+        String expression, Request request) {
+        require(expression.startsWith("{") && expression.endsWith("}"), "callback requires an injectable runtime expression");
+        String value = expression.substring(1, expression.length() - 1);
+        if (value.startsWith("$request.body#/")) {
+            String pointer = value.substring("$request.body#".length());
+            require(!pointer.matches(".*~(?![01]).*"), "callback JSON Pointer contains an invalid escape");
+            List<String> fields = java.util.Arrays.stream(pointer.substring(1).split("/", -1))
+                .map(field -> field.replace("~1", "/").replace("~0", "~")).toList();
+            require(fields.stream().noneMatch(field -> field.isEmpty() || field.matches("[0-9]+")
+                || field.contains("*") || field.contains("[") || field.contains("]")),
+                "callback body expression supports object fields only");
+            var body = request.body().orElseThrow(() -> new IllegalArgumentException("callback expression requires a request body"));
+            List<String> path = new ArrayList<>();
+            body.sourcePath().ifPresent(prefix -> path.addAll(List.of(prefix.split("\\."))));
+            path.addAll(fields);
+            return new org.pipelineframework.connector.http.HttpCallbackInjectionTarget(
+                org.pipelineframework.connector.http.HttpCallbackInjectionTarget.Location.BODY, path, Optional.empty());
+        }
+        for (HttpParameterLocation location : List.of(HttpParameterLocation.QUERY, HttpParameterLocation.HEADER)) {
+            String prefix = "$request." + location.name().toLowerCase(Locale.ROOT) + ".";
+            if (!value.startsWith(prefix)) continue;
+            String name = value.substring(prefix.length());
+            var parameter = request.parameters().stream().filter(candidate -> candidate.location() == location
+                && (location == HttpParameterLocation.HEADER ? candidate.name().equalsIgnoreCase(name)
+                    : candidate.name().equals(name))).findFirst().orElseThrow(() ->
+                new IllegalArgumentException("callback expression does not select a declared request parameter"));
+            return new org.pipelineframework.connector.http.HttpCallbackInjectionTarget(
+                org.pipelineframework.connector.http.HttpCallbackInjectionTarget.Location.valueOf(location.name()),
+                List.of(parameter.sourcePath().split("\\.")), Optional.of(parameter.name()));
+        }
+        throw new IllegalArgumentException("callback expression is not injectable before dispatch");
     }
 
     private static Request request(
@@ -295,7 +382,7 @@ final class OpenApiImportEngine {
         ConnectorOperationKind kind
     ) {
         if (selected == null) return Optional.empty();
-        require(kind == ConnectorOperationKind.COMMAND,
+        require(kind.equals(ConnectorOperationKind.COMMAND),
             "provider idempotency-key projection requires explicit COMMAND classification");
         return Optional.of(new HttpProviderIdempotencyKeyTarget(
             HttpParameterLocation.valueOf(text(selected.location, "idempotency-key location").toUpperCase(Locale.ROOT)),
@@ -308,16 +395,17 @@ final class OpenApiImportEngine {
             .flatMap(Optional::stream)
             .max(Comparator.comparingInt(Enum::ordinal))
             .orElse(CommandMachineConfirmation.NONE);
-        Optional<CommandCapabilities> command = pin.kind() == ConnectorOperationKind.COMMAND
+        Optional<CommandCapabilities> command = pin.kind().equals(ConnectorOperationKind.COMMAND)
             ? Optional.of(new CommandCapabilities(true, pin.providerIdempotencyKey().isPresent(), false,
                 CommandExecutionPosture.UNSPECIFIED, maximumConfirmation, false, Set.of()))
             : Optional.empty();
-        Optional<QueryCapabilities> query = pin.kind() == ConnectorOperationKind.QUERY
+        Optional<QueryCapabilities> query = pin.kind().equals(ConnectorOperationKind.QUERY)
             ? Optional.of(QueryCapabilities.conservative()) : Optional.empty();
         return new ConnectorOperationDescriptor(pin.operation(), pin.kind(), pin.majorVersion(), Optional.empty(),
-            command, query, pin.kind() == ConnectorOperationKind.QUERY
+            command, query, pin.kind().equals(ConnectorOperationKind.QUERY)
                 ? Optional.of(QueryOperationCardinality.ONE_TO_ONE) : Optional.empty(),
-            Optional.of(new ConnectorOperationTypeContract(pin.inputType(), Optional.of(pin.outputType()))));
+            Optional.of(new ConnectorOperationTypeContract(pin.inputType(), Optional.of(pin.outputType()))),
+            pin.callbacks().stream().map(org.pipelineframework.connector.http.HttpCallbackPin::descriptor).toList());
     }
 
     private static String discovery(OpenAPI contract, OpenApiContractClosure.Resolved closure) {
@@ -336,6 +424,19 @@ final class OpenApiImportEngine {
                         operation.put("operationId", entry.getValue().getOperationId());
                     }
                 }));
+        if (contract.getWebhooks() != null && !contract.getWebhooks().isEmpty()) {
+            ArrayNode webhooks = root.putArray("webhooks");
+            contract.getWebhooks().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(webhook ->
+                webhook.getValue().readOperationsMap().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        ObjectNode operation = webhooks.addObject();
+                        operation.put("name", webhook.getKey());
+                        operation.put("method", entry.getKey().name());
+                        if (entry.getValue().getOperationId() != null) {
+                            operation.put("operationId", entry.getValue().getOperationId());
+                        }
+                    }));
+        }
         return HttpPinnedJson.canonicalize(root) + "\n";
     }
 
@@ -400,6 +501,29 @@ final class OpenApiImportEngine {
             operation.put("vendorExtensionsFingerprint", HttpPinnedJson.sha256(HttpPinnedJson.canonicalize(
                 JSON.valueToTree(Optional.ofNullable(sourceOperation.getExtensions()).orElse(Map.of())))));
             operation.put("httpOperationPinFingerprint", pin.operationFingerprint());
+            if (!pin.callbacks().isEmpty()) {
+                ArrayNode callbacks = operation.putArray("callbacks");
+                pin.callbacks().forEach(callback -> {
+                    var selected = selection.callbacks.stream().filter(value -> callback.id().equals(value.callback))
+                        .findFirst().orElseThrow();
+                    ObjectNode value = callbacks.addObject();
+                    value.put("callback", callback.id());
+                    value.put("sourceName", selected.source.name);
+                    value.put("sourceExpression", selected.source.expression);
+                    value.put("sourceOperationId", selected.source.operationId);
+                    value.put("method", callback.method());
+                    value.put("mediaType", callback.mediaType());
+                    value.put("wireFingerprint", callback.requestSchema().sha256());
+                    value.put("canonicalInput", callback.inputType());
+                    value.put("requestMappingKey", callback.requestMappingKey());
+                    value.put("acknowledgementStatus", callback.acknowledgementStatus());
+                    value.put("securityConstraintFingerprint", HttpPinnedJson.sha256(
+                        HttpPinnedJson.canonicalize(callback.security().toJson())));
+                    value.put("injectionTargetFingerprint", HttpPinnedJson.sha256(
+                        HttpPinnedJson.canonicalize(callback.target().toJson())));
+                    value.put("sourceCallbackFingerprint", callback.sourceFingerprint());
+                });
+            }
         });
         return HttpPinnedJson.canonicalize(root) + "\n";
     }

@@ -29,13 +29,29 @@ final class HttpRequestProjector {
         HttpProviderConfiguration configuration,
         Optional<CommandDispatchIdentity> dispatchIdentity
     ) {
-        HttpWireValueValidator.validate(wireInput, pin.requestSchema());
+        return project(pin, wireInput, connection, authorization, configuration, dispatchIdentity, Optional.empty());
+    }
+
+    static HttpRequest project(HttpOperationPin pin, JsonNode wireInput, HttpClientConnection connection,
+        HttpAuthorizationMaterial authorization, HttpProviderConfiguration configuration,
+        Optional<CommandDispatchIdentity> dispatchIdentity,
+        Optional<org.pipelineframework.connector.ConnectorCallbackContext> callbackContext) {
+        var selectedCallback = pin.selectCallback(callbackContext);
+        if (selectedCallback.isPresent() && !"https".equalsIgnoreCase(connection.baseUri().getScheme())
+            && callbackContext.orElseThrow().uriPolicy()
+                != org.pipelineframework.connector.ConnectorCallbackContext.UriPolicy.LOCAL_HTTP) {
+            throw new IllegalArgumentException("HTTP callback tokens require an HTTPS provider endpoint or explicit local HTTP policy");
+        }
+        JsonNode requestInput = selectedCallback
+            .map(callback -> callback.target().inject(wireInput, callbackContext.orElseThrow()))
+            .orElse(wireInput);
+        HttpWireValueValidator.validate(requestInput, pin.requestSchema());
         String path = pin.relativePathTemplate();
         List<QueryValue> query = new ArrayList<>();
         Map<String, List<String>> headers = new LinkedHashMap<>();
         List<QueryValue> cookies = new ArrayList<>();
         for (HttpParameterPin parameter : pin.parameters()) {
-            Optional<JsonNode> selected = select(wireInput, parameter.sourcePath());
+            Optional<JsonNode> selected = select(requestInput, parameter.sourcePath());
             if (selected.isEmpty() || selected.orElseThrow().isNull()) {
                 if (parameter.required()) {
                     throw new IllegalArgumentException("required HTTP parameter is absent: " + parameter.name());
@@ -62,7 +78,7 @@ final class HttpRequestProjector {
         URI uri = requestUri(connection.baseUri(), path, queryString);
         String cookieHeader = cookies.stream().map(value -> encode(value.name(), false) + "="
             + encode(value.value(), false)).reduce((left, right) -> left + "; " + right).orElse("");
-        byte[] body = pin.requestBody().map(requestBody -> body(requestBody, wireInput)).orElseGet(() -> new byte[0]);
+        byte[] body = pin.requestBody().map(requestBody -> body(requestBody, requestInput)).orElseGet(() -> new byte[0]);
         if (!cookieHeader.isEmpty()) putHeader(headers, "Cookie", List.of(cookieHeader));
         if (body.length > 0) pin.requestBody().ifPresent(value ->
             putHeader(headers, "Content-Type", List.of(value.mediaType())));

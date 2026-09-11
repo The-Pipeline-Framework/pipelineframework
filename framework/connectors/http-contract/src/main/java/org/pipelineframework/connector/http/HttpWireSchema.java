@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -47,6 +48,49 @@ public final class HttpWireSchema {
     /** Returns an isolated tree so callers cannot mutate the release-pinned schema. */
     public JsonNode node() {
         return parsed.deepCopy();
+    }
+
+    /** Authorable request shape; the complete pin remains authoritative after runtime injection. */
+    public HttpWireSchema withoutRuntimeSuppliedPaths(List<String> pointers) {
+        JsonNode copy = node();
+        for (String pointer : pointers) {
+            if (!pointer.startsWith("/") || pointer.matches(".*~(?![01]).*")) {
+                throw new IllegalArgumentException("runtime-supplied field must use a JSON Pointer");
+            }
+            List<String> fields = java.util.Arrays.stream(pointer.substring(1).split("/", -1))
+                .map(field -> field.replace("~1", "/").replace("~0", "~")).toList();
+            removeRuntimeField(copy, fields, 0);
+        }
+        return new HttpWireSchema(HttpPinnedJson.canonicalize(copy));
+    }
+
+    private boolean removeRuntimeField(JsonNode schema, List<String> fields, int index) {
+        if (!(schema instanceof com.fasterxml.jackson.databind.node.ObjectNode object)
+            || !"object".equals(schema.path("type").asText())
+            || !(schema.path("properties") instanceof com.fasterxml.jackson.databind.node.ObjectNode properties)) {
+            throw new IllegalArgumentException("runtime-supplied field must traverse object schemas");
+        }
+        String field = fields.get(index);
+        if (!properties.has(field)) throw new IllegalArgumentException("runtime-supplied field is not declared");
+        if (index == fields.size() - 1 || removeRuntimeField(properties.get(field), fields, index + 1)) {
+            properties.remove(field);
+            if (object.path("required") instanceof com.fasterxml.jackson.databind.node.ArrayNode required) {
+                var remaining = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+                required.forEach(value -> { if (!field.equals(value.asText())) remaining.add(value); });
+                object.set("required", remaining);
+            }
+            for (String bound : List.of("minProperties", "maxProperties")) {
+                if (object.has(bound)) {
+                    var adjusted = object.get(bound).bigIntegerValue().subtract(java.math.BigInteger.ONE);
+                    if (bound.equals("maxProperties") && adjusted.signum() < 0) {
+                        throw new IllegalArgumentException("runtime-supplied field exceeds object property limit");
+                    }
+                    object.put(bound, adjusted.max(java.math.BigInteger.ZERO));
+                }
+            }
+        }
+        return properties.isEmpty() && object.has("additionalProperties")
+            && object.path("additionalProperties").isBoolean() && !object.path("additionalProperties").asBoolean();
     }
 
     boolean matchesPattern(String expression, String value) {

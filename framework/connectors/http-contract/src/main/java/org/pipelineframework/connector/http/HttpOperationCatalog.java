@@ -22,7 +22,7 @@ import org.pipelineframework.connector.ConnectorOperationKind;
 /** Strict multi-resource loader for immutable HTTP operation pins. */
 public final class HttpOperationCatalog {
     public static final String RESOURCE_PATH = "META-INF/pipeline/http-operations.json";
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     public static final int MAX_OPERATIONS = 512;
 
     private final List<HttpOperationPin> operations;
@@ -69,7 +69,9 @@ public final class HttpOperationCatalog {
                     }
                 }
             }
-            return new HttpOperationCatalog(List.copyOf(pins.values()));
+            HttpOperationCatalog catalogue = new HttpOperationCatalog(List.copyOf(pins.values()));
+            catalogue.validateCallbacks(org.pipelineframework.connector.ConnectorProviderManifestLoader.load(classLoader));
+            return catalogue;
         } catch (IOException failure) {
             throw new IllegalStateException("unable to load pinned HTTP operations", failure);
         }
@@ -84,10 +86,34 @@ public final class HttpOperationCatalog {
         return HttpPinnedJson.canonicalize(root) + "\n";
     }
 
+    public void validateCallbacks(org.pipelineframework.connector.ConnectorProviderManifestCatalog manifests) {
+        var providerId = org.pipelineframework.connector.ConnectorProviderId.of("http.client");
+        for (HttpOperationPin pin : operations) {
+            var identity = new org.pipelineframework.connector.ConnectorOperationIdentity(
+                providerId, pin.operation(), pin.kind(), pin.majorVersion());
+            var descriptor = Optional.ofNullable(manifests.operations().get(identity));
+            if (descriptor.isEmpty() && !pin.callbacks().isEmpty()) {
+                throw new IllegalArgumentException("HTTP callback pin requires a provider-manifest operation");
+            }
+            if (descriptor.isPresent() && !descriptor.orElseThrow().callbacks().equals(
+                pin.callbacks().stream().map(HttpCallbackPin::descriptor).toList())) {
+                throw new IllegalArgumentException("HTTP callback pin and provider manifest disagree");
+            }
+        }
+        manifests.operations().forEach((identity, descriptor) -> {
+            if (identity.providerId().equals(providerId) && !descriptor.callbacks().isEmpty()
+                && operations.stream().noneMatch(pin -> pin.operation().equals(identity.operationId())
+                    && pin.kind().equals(identity.kind()) && pin.majorVersion() == identity.majorVersion())) {
+                throw new IllegalArgumentException("provider callback operation has no HTTP pin");
+            }
+        });
+    }
+
     public static HttpOperationCatalog read(String json) {
         JsonNode root = HttpPinnedJson.parse(json);
         fields(root, Set.of("schemaVersion", "provider", "operations"), "HTTP operation catalogue");
-        if (!root.path("schemaVersion").isInt() || root.path("schemaVersion").intValue() != SCHEMA_VERSION
+        int version = root.path("schemaVersion").asInt();
+        if (!root.path("schemaVersion").isInt() || (version != 1 && version != SCHEMA_VERSION)
             || !"http.client".equals(requiredText(root, "provider"))) {
             throw new IllegalArgumentException("unsupported pinned HTTP operation catalogue");
         }
@@ -96,21 +122,40 @@ public final class HttpOperationCatalog {
             throw new IllegalArgumentException("pinned HTTP operations must be a bounded array");
         }
         List<HttpOperationPin> result = new ArrayList<>();
-        operations.forEach(node -> result.add(operation(node)));
+        operations.forEach(node -> result.add(operation(node, version)));
         return new HttpOperationCatalog(result);
     }
 
-    private static HttpOperationPin operation(JsonNode node) {
+    private static HttpOperationPin operation(JsonNode node, int version) {
         fields(node, Set.of("operation", "kind", "majorVersion", "input", "output", "method", "path",
             "parameters", "requestBody", "responses", "security", "requestSchema", "requestSchemaFingerprint",
             "requestMapping",
-            "providerIdempotencyKey", "sourceFingerprint", "operationFingerprint"), "HTTP operation pin");
+            "providerIdempotencyKey", "callbacks", "sourceFingerprint", "operationFingerprint"), "HTTP operation pin");
+        if (version == 1 && node.has("callbacks")) {
+            throw new IllegalArgumentException("HTTP callbacks require pin schema 2");
+        }
         List<HttpParameterPin> parameters = new ArrayList<>();
         array(node, "parameters").forEach(parameter -> parameters.add(parameter(parameter)));
         List<HttpResponsePin> responses = new ArrayList<>();
         array(node, "responses").forEach(response -> responses.add(response(response)));
+        List<HttpCallbackPin> callbacks = new ArrayList<>();
+        if (node.has("callbacks")) array(node, "callbacks").forEach(value -> callbacks.add(callback(value)));
+        Optional<HttpRequestBodyPin> body = node.has("requestBody")
+            ? Optional.of(body(node.get("requestBody"))) : Optional.empty();
+        Optional<HttpProviderIdempotencyKeyTarget> idempotency = node.has("providerIdempotencyKey")
+            ? Optional.of(idempotency(node.get("providerIdempotencyKey"))) : Optional.empty();
+        return new HttpOperationPin(
+            requiredText(node, "operation"), ConnectorOperationKind.of(requiredText(node, "kind")),
+            requiredInt(node, "majorVersion"), requiredText(node, "input"), requiredText(node, "output"),
+            requiredText(node, "method"), requiredText(node, "path"), parameters, body, responses,
+            security(array(node, "security")), schema(node, "requestSchema", "requestSchemaFingerprint"),
+            requiredText(node, "requestMapping"), idempotency, callbacks,
+            requiredText(node, "sourceFingerprint"), requiredText(node, "operationFingerprint"));
+    }
+
+    private static HttpSecurityConstraint security(JsonNode values) {
         List<HttpSecurityRequirement> security = new ArrayList<>();
-        array(node, "security").forEach(requirement -> {
+        values.forEach(requirement -> {
             fields(requirement, Set.of("scheme", "scopes", "targets"), "HTTP security requirement");
             List<String> scopes = new ArrayList<>();
             array(requirement, "scopes").forEach(scope -> scopes.add(text(scope, "HTTP security scope")));
@@ -122,18 +167,25 @@ public final class HttpOperationCatalog {
             });
             security.add(new HttpSecurityRequirement(requiredText(requirement, "scheme"), scopes, targets));
         });
-        Optional<HttpRequestBodyPin> body = node.has("requestBody")
-            ? Optional.of(body(node.get("requestBody"))) : Optional.empty();
-        Optional<HttpProviderIdempotencyKeyTarget> idempotency = node.has("providerIdempotencyKey")
-            ? Optional.of(idempotency(node.get("providerIdempotencyKey"))) : Optional.empty();
-        return new HttpOperationPin(
-            requiredText(node, "operation"), ConnectorOperationKind.of(requiredText(node, "kind")),
-            requiredInt(node, "majorVersion"), requiredText(node, "input"), requiredText(node, "output"),
-            requiredText(node, "method"), requiredText(node, "path"), parameters, body, responses,
-            new HttpSecurityConstraint(security), schema(node, "requestSchema", "requestSchemaFingerprint"),
-            requiredText(node, "requestMapping"),
-            idempotency, requiredText(node, "sourceFingerprint"),
-            requiredText(node, "operationFingerprint"));
+        return new HttpSecurityConstraint(security);
+    }
+
+    private static HttpCallbackPin callback(JsonNode node) {
+        fields(node, Set.of("id", "operation", "majorVersion", "target", "method", "mediaType",
+            "requestSchema", "requestSchemaFingerprint", "requestMapping", "input", "security",
+            "acknowledgementStatus", "required", "sourceFingerprint"), "HTTP callback pin");
+        JsonNode target = node.path("target");
+        fields(target, Set.of("location", "path", "parameter"), "HTTP callback target");
+        List<String> path = new ArrayList<>();
+        array(target, "path").forEach(value -> path.add(text(value, "callback target field")));
+        return new HttpCallbackPin(requiredText(node, "id"), requiredText(node, "operation"),
+            requiredInt(node, "majorVersion"), new HttpCallbackInjectionTarget(
+                enumValue(target, "location", HttpCallbackInjectionTarget.Location.class), path,
+                optionalText(target, "parameter")), requiredText(node, "method"), requiredText(node, "mediaType"),
+            schema(node, "requestSchema", "requestSchemaFingerprint"), requiredText(node, "requestMapping"),
+            requiredText(node, "input"), security(array(node, "security")),
+            requiredInt(node, "acknowledgementStatus"), requiredBoolean(node, "required"),
+            requiredText(node, "sourceFingerprint"));
     }
 
     private static HttpParameterPin parameter(JsonNode node) {

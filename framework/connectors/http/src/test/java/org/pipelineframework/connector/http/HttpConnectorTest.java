@@ -83,6 +83,67 @@ class HttpConnectorTest {
     }
 
     @Test
+    void requiresPinnedCallbackAuthorityBeforeIoAndInjectsItAfterMapping() throws Exception {
+        AtomicReference<String> seen = new AtomicReference<>("");
+        server.createContext("/api/jobs", exchange -> {
+            seen.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, "application/json", "{\"value\":\"accepted\"}");
+        });
+        var original = commandPin("/jobs");
+        var requestSchema = new HttpWireSchema("""
+            {"type":"object","properties":{"value":{"type":"string"},"callbackUrl":{"type":"string","format":"uri"}},
+             "required":["value","callbackUrl"],"additionalProperties":false}
+            """);
+        var callback = new HttpCallbackPin("job.completed", original.operation(), 1,
+            new HttpCallbackInjectionTarget(HttpCallbackInjectionTarget.Location.BODY, List.of("callbackUrl"), Optional.empty()),
+            "POST", "application/json", OBJECT, "http.job.callback", LookupOutput.class.getName(),
+            HttpSecurityConstraint.none(), 202, true, SOURCE);
+        var pin = new HttpOperationPin(original.operation(), original.kind(), 1, original.inputType(), original.outputType(),
+            "POST", "/jobs", List.of(), Optional.of(new HttpRequestBodyPin("application/json", Optional.empty(), true, requestSchema)),
+            original.responses(), original.security(), requestSchema, original.requestMappingKey(),
+            original.providerIdempotencyKey(), List.of(callback), SOURCE);
+        var connector = connector(pin);
+        connector.start(runtime(connection(Set.of(), HttpAuthorizationProvider.none())), configuration()).toCompletableFuture().join();
+        var operation = command(connector);
+        assertEquals(List.of(callback.descriptor()), operation.callbacks());
+        var identity = Optional.of(new CommandDispatchIdentity("command", "occurrence", "attempt"));
+        var context = org.pipelineframework.connector.ConnectorExecutionContext.empty();
+        for (var invalid : List.<Optional<org.pipelineframework.connector.ConnectorCallbackContext>>of(Optional.empty(),
+            Optional.of(new org.pipelineframework.connector.ConnectorCallbackContext("wrong", URI.create("https://app.test/callback"))))) {
+            var result = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
+                LookupOutput.class, context, identity, invalid)).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertInstanceOf(CommandOutcome.TerminalFailure.class, result);
+            assertEquals("", seen.get());
+        }
+        var authority = new org.pipelineframework.connector.ConnectorCallbackContext("job.completed",
+            URI.create("https://app.test/callback?token=signed-token"));
+        var plaintext = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
+            LookupOutput.class, context, identity, Optional.of(authority))).toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertInstanceOf(CommandOutcome.TerminalFailure.class, plaintext);
+        assertEquals("", seen.get(), "default callback authority must not be sent to a plaintext provider");
+        AtomicReference<HttpRequest> secureRequest = new AtomicReference<>();
+        var secureConnector = connector(pin);
+        secureConnector.start(runtime(connection(successfulClient(secureRequest, "{\"value\":\"accepted\"}"),
+            URI.create("https://provider.test/api"), Set.of(), HttpAuthorizationProvider.none())), configuration())
+            .toCompletableFuture().join();
+        assertInstanceOf(CommandOutcome.Succeeded.class, command(secureConnector).dispatch(new CommandInvocation<>(
+            new RecordInput("new"), ConnectorConfigurationDocument.empty(), LookupOutput.class, context, identity,
+            Optional.of(authority))).toCompletableFuture().get(5, TimeUnit.SECONDS));
+        assertEquals("https", secureRequest.get().uri().getScheme());
+        var localAuthority = new org.pipelineframework.connector.ConnectorCallbackContext("job.completed", authority.callbackUri(),
+            org.pipelineframework.connector.ConnectorCallbackContext.UriPolicy.LOCAL_HTTP);
+        var result = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
+            LookupOutput.class, context, identity, Optional.of(localAuthority))).toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertInstanceOf(CommandOutcome.Succeeded.class, result);
+        assertEquals(authority.callbackUri().toString(), org.pipelineframework.config.pipeline.PipelineJson.mapper()
+            .readTree(seen.get()).path("callbackUrl").asText());
+        var ordinary = connector(original);
+        assertInstanceOf(CommandOutcome.TerminalFailure.class, command(ordinary).dispatch(new CommandInvocation<>(
+            new RecordInput("new"), ConnectorConfigurationDocument.empty(), LookupOutput.class, context, identity,
+            Optional.of(authority))).toCompletableFuture().get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
     void executesPinnedPostQueryWithAllParameterLocationsAndHostAuthorization() throws Exception {
         AtomicReference<HttpRequest> seen = new AtomicReference<>();
         HttpClient client = successfulClient(seen, "{\"value\":\"found\"}");
@@ -306,11 +367,14 @@ class HttpConnectorTest {
     private static HttpOperationBindingCatalog directBindings(HttpOperationPin pin) {
         String responseMapping = pin.responses().stream().map(HttpResponsePin::mappingKey)
             .flatMap(Optional::stream).findFirst().orElseThrow();
-        return new HttpOperationBindingCatalog(List.of(
+        var bindings = new java.util.ArrayList<>(List.of(
             new HttpOperationRepresentationBinding(pin.requestMappingKey(), HttpRepresentationMode.DIRECT,
                 Optional.empty(), Optional.empty(), DIRECT),
             new HttpOperationRepresentationBinding(responseMapping, HttpRepresentationMode.DIRECT,
                 Optional.empty(), Optional.empty(), "3".repeat(64))));
+        pin.callbacks().forEach(callback -> bindings.add(new HttpOperationRepresentationBinding(callback.requestMappingKey(),
+            HttpRepresentationMode.DIRECT, Optional.empty(), Optional.empty(), DIRECT)));
+        return new HttpOperationBindingCatalog(bindings);
     }
 
     private static ConnectorProviderManifestCatalog manifests(HttpOperationPin pin, String outputType) {
@@ -322,7 +386,8 @@ class HttpConnectorTest {
                 Optional.of(new CommandCapabilities(true, pin.providerIdempotencyKey().isPresent(), false,
                     CommandExecutionPosture.UNSPECIFIED, CommandMachineConfirmation.PROVIDER_ACKNOWLEDGED,
                     false, Set.of())), Optional.empty(), Optional.empty(),
-                Optional.of(new ConnectorOperationTypeContract(pin.inputType(), Optional.of(outputType))));
+                Optional.of(new ConnectorOperationTypeContract(pin.inputType(), Optional.of(outputType))),
+                pin.callbacks().stream().map(HttpCallbackPin::descriptor).toList());
         var provider = new ConnectorProviderArtifactDescriptor(new ConnectorProviderDescriptor(HttpConnector.PROVIDER_ID,
             new ConnectorProviderVersion(1, 0)), List.of(operation));
         return new ConnectorProviderManifestCatalog(List.of(new ConnectorProviderManifest(

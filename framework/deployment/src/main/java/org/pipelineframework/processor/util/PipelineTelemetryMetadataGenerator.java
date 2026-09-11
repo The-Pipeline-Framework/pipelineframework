@@ -717,6 +717,11 @@ public class PipelineTelemetryMetadataGenerator {
             }
             String stepName = toPascalStepName(configStep.name());
             PipelineStepModel model = remainingByToken.remove(toClassToken(stepName));
+            if (model == null) {
+                String generatedName = "Process" + org.pipelineframework.processor.phase.NamingPolicy.formatForClassName(
+                    org.pipelineframework.processor.phase.NamingPolicy.stripProcessPrefix(configStep.name()));
+                model = remainingByToken.remove(toClassToken(generatedName));
+            }
             if (model != null) {
                 baseSteps.add(baseReplayStepFromModel(model, configStep, index++, ctx.getTransportMode()));
                 continue;
@@ -736,7 +741,7 @@ public class PipelineTelemetryMetadataGenerator {
         PipelineTransport transportMode
     ) {
         String service = model.generatedName();
-        String logicalStep = baseLogicalStepName(service);
+        String logicalStep = configStep != null ? toPascalStepName(configStep.name()) : baseLogicalStepName(service);
         return new ReplayTopologyStep(
             resolveClientStepClassName(model, transportMode),
             logicalStep,
