@@ -237,7 +237,7 @@ class PipelineBranchingMetadataGeneratorTest {
             "com.example.order.awaiting.pipeline.AwaitProviderDeferredCompletionStep",
             metadata.getAsJsonArray("steps").get(1).getAsJsonObject().get("runtimeStepClass").getAsString());
         assertEquals(
-            "ApprovalResult",
+            "ApprovalPending",
             metadata.getAsJsonArray("steps").get(1).getAsJsonObject()
                 .getAsJsonArray("acceptedContracts").get(0).getAsString());
         assertEquals(
