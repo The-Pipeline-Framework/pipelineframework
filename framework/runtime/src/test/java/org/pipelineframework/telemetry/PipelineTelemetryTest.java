@@ -387,6 +387,9 @@ class PipelineTelemetryTest {
     }
 
     static final class TestPipelineStepConfig implements PipelineStepConfig {
+        @Override
+        public CallbackConfig callback() { return () -> false; }
+
 
         @Override
         public Integer maxRecursiveDepth() {

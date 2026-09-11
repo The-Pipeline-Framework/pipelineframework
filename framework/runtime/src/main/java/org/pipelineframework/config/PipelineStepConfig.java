@@ -81,6 +81,9 @@ public interface PipelineStepConfig {
     @WithName("await-admission")
     AwaitAdmissionConfig awaitAdmission();
 
+    /** Host policy for provider callback addresses and transmission of callback authority. */
+    CallbackConfig callback();
+
     /**
      * Health check configuration for pipeline startup.
      *
@@ -136,8 +139,15 @@ public interface PipelineStepConfig {
     ClientConfig client();
 
     /**
-     * Runtime-only durable await admission configuration.
+     * Runtime-only provider callback host policy.
      */
+    interface CallbackConfig {
+        /** Explicit local-development opt-in; HTTPS remains required by default. */
+        @WithDefault("false")
+        boolean allowHttp();
+    }
+
+    /** Runtime-only durable await admission configuration. */
     interface AwaitAdmissionConfig {
 
         /**
