@@ -10,7 +10,8 @@ flowchart LR
     D --> S[Review and select]
     S --> I[Import standard provider metadata and HTTP pins]
     I --> C[Compile canonical mappings]
-    C --> R[Ordinary Query or Command runtime]
+    C --> Q[Ordinary Query or synchronous Command]
+    C --> A[Command with await: deferred completion]
     C --> L[Optional existing callable catalogue]
 ```
 
@@ -26,7 +27,8 @@ acquired references, security requirements, and descriptive servers and vendor e
 
 The importer does not infer Query or Command from the HTTP method. An effectful `GET` remains a
 Command when the application classifies it that way; `POST` can be a Query when it only observes
-external reality.
+external reality. A selected callback does not create another step: it supplies the completion
+contract for a Command whose native `await:` modifier pauses the Pipeline after dispatch.
 
 ## Add the importer and runtime capability
 

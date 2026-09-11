@@ -23,7 +23,7 @@ known execution-local data        -> carry immutably through typed pipeline stat
 large immutable content           -> PayloadReference / representation
 fresh external observation        -> Query
 external side effect              -> Command
-durable human/external suspension -> Await
+deferred external completion      -> await: on the initiating operation
 orthogonal persistence/history    -> persistence aspect
 pipeline-result replay            -> generic cache
 external-observation replay       -> Query capture
@@ -62,7 +62,8 @@ Do not inject repositories, connector clients, object stores, materializers, wor
 - Put cardinality in pipeline topology. Do not hide a stream boundary inside an arbitrary `List` merely because Java collections are convenient.
 - Prefer reactive shapes for async work and end-to-end backpressure. Use an explicit blocking shape for synchronous libraries; list forms materialize, while the supported iterator shape is incremental.
 - Use an ordinary service for an application transformation. Use an operator when a reusable/delegated execution unit owns its own model or genuinely needs an independently selectable boundary. A helper method or one application's policy is not an operator.
-- Query, Command, and Await are semantic I/O boundaries, not operator variants.
+- Query and Command are semantic I/O boundaries, not operator variants. `await:` is an orthogonal
+  deferred-completion modifier on an ordinary authored operation, not a standalone step kind.
 - Use `ONE_TO_MANY` for one-input-to-stream cardinality. Do not call that shape an Expansion; compatibility code may still parse the historical uppercase `EXPANSION` token.
 - A Block is a compile-time dependency containing reusable pipeline definitions. The application still owns connector bindings and Command authority.
 - An Expansion is a versioned distribution package of related Blocks, Connectors, and supporting assets. It does not introduce a runtime step kind or transfer application-owned bindings and authority into the package.
@@ -106,6 +107,12 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 For current authoring journeys, prefer the [Connector](/develop/connectors/), [Block](/develop/blocks/),
 [Expansion](/develop/expansions/), and [experimental OAuth connection](/develop/oauth-connections/)
 Guides over reconstructing a contract from implementation classes.
+
+When an OpenAPI Command completes through a provider callback, use the imported callback identity
+from [Import OpenAPI operations](/develop/connectors/openapi-import) in that Command's native
+`await:` declaration. Keep the immediate provider acknowledgement, callback input, and final
+projected output as separate types. Do not create a second Await step, accept an arbitrary callback
+URL from business input, or move callback authentication and admission into an authored service.
 
 Do not load every reference. Search `docs/architecture/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
 

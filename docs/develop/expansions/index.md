@@ -57,20 +57,36 @@ of ordinary artefacts whose contracts are linked into the consuming application.
 
 ## OpenAPI Expansion
 
-The OpenAPI Expansion maps selected external operations into TPF semantics:
+The OpenAPI Expansion is the release-aligned family for importing selected SaaS REST operations. It
+includes:
 
-- synchronous request/response becomes Query or Command;
-- asynchronous request plus callback becomes Command → Await;
-- schema adaptation chooses direct mapping first, with an LLM fallback or a curated DTO when needed.
+- the `connector-openapi-maven-plugin` for bounded acquisition, offline discovery, explicit
+  selection, refresh, and drift verification;
+- the generic pinned HTTP Connector and representation provider used at runtime;
+- the optional `openapi-representation-mapper` Block, which produces a reviewable mapping proposal;
+  and
+- synchronous and callback-completion proof applications, generated-contract checks, and focused
+  authoring guidance.
+
+Selected request/response operations become ordinary Query or Command capabilities. A selected
+required callback on a Command becomes that Command's deferred-completion contract: the Command
+dispatch produces its trusted acknowledgement, `await:` suspends the Pipeline, and the authenticated
+callback is projected into the final typed output. It is one authored operation with an orthogonal
+lifecycle modifier, not a generated `Command` step followed by a generated `Await` step.
+
+Schema adaptation uses direct mapping, bounded deterministic options, or an explicit curated
+DTO/Mapper. The optional LLM Query is an authoring aid: it proposes bounded options, but author
+review, committed configuration, and compiler validation remain authoritative. No model interprets
+the contract or mapping at runtime.
 
 This is distinct from the [public OpenAPI contract filter](../openapi-contract), which publishes a
 focused application-owned contract. The Expansion consumes an external contract into application
 capabilities; the filter controls what an application publishes.
 
-Synchronous import is documented in [Import OpenAPI operations](../connectors/openapi-import). It
-uses the generic pinned HTTP Connector and ordinary callable catalogues. Callback-to-Await support
-is a separate delivery so the synchronous importer does not invent or partially duplicate Await
-semantics.
+[Import OpenAPI operations](../connectors/openapi-import) documents the complete workflow, including
+callback selection, trusted endpoint injection, callback authentication, and the current support
+boundary. The importer supports one required `POST` callback per HTTP Command; top-level webhooks,
+optional callback pins, and Spring callback ingress are not part of the current contract.
 
 ## Specialised loops
 

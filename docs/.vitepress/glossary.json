@@ -39,7 +39,7 @@
   "Machine confirmation": "The minimum provider-side evidence a Command policy requires before an external effect is considered confirmed.",
   "Object ingest": "A Connector boundary that admits files or object-store entries as typed Pipeline inputs with identity and replay-aware metadata.",
   "Object publish": "A Connector boundary that writes typed Pipeline output to an object destination without moving storage code into the business function.",
-  "OpenAPI Expansion": "The capability family that maps selected OpenAPI operations to Query, Command, or Command then Await, with direct, LLM-assisted, or curated-DTO schema adaptation.",
+  "OpenAPI Expansion": "The release-aligned family that imports selected OpenAPI operations as pinned Query or Command capabilities; a callback-capable Command uses the orthogonal await: modifier for durable deferred completion.",
   "Operator": "An existing Java method or remote endpoint reused as a Pipeline Step and validated at build time where possible.",
   "Orchestrator runtime": "The generated runtime surface that admits Pipeline work, invokes Steps, and owns execution status and background lifecycle behaviour.",
   "PayloadReference": "A typed reference to payload content stored out of line instead of carried inline.",

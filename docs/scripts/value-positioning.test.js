@@ -63,9 +63,11 @@ test('value pages use diagrams and present the publication capability set', () =
 
   const saas = readDocsFile('value/saas-integration.md')
   assert.match(saas, /## OpenAPI Expansion/)
+  assert.match(saas, /Command with await: deferred completion/)
   assert.match(saas, /Direct mapping/)
-  assert.match(saas, /LLM fallback/)
-  assert.match(saas, /Curated DTO fallback/)
+  assert.match(saas, /Bounded deterministic options/)
+  assert.match(saas, /Optional LLM authoring Block/)
+  assert.match(saas, /Curated DTO and Mapper/)
   assert.match(saas, /public OpenAPI contract filter[\s\S]*opposite problem/)
   assert.equal(/Landing Next|not shipped yet/.test(saas), false)
 
