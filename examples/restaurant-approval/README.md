@@ -50,9 +50,25 @@ This is the UI-focused monolith demo. For the self-hosted coordinator and separa
 
 The dev profile enables plain HTTP on port `8081` so the Next.js app can call the generated REST APIs without dealing with local TLS trust first.
 
+From a fresh source worktree, first install the framework snapshot and the example's shared `common` module into that worktree's Maven repository:
+
 ```bash
-./mvnw -f examples/restaurant-approval/pom.xml -pl monolith-svc quarkus:dev
+./mvnw -N install -DskipTests -Dgpg.skip \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw -f framework/pom.xml install -DskipTests -Dgpg.skip \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw -f examples/restaurant-approval/pom.xml -pl common -am install -DskipTests \
+  -Dmaven.repo.local="$PWD/.m2/repository"
 ```
+
+Then start dev mode for the monolith only:
+
+```bash
+./mvnw -f examples/restaurant-approval/pom.xml -pl monolith-svc compile quarkus:dev \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+Do not include `common` in the `quarkus:dev` reactor selection. It is a library module with the Quarkus build plugin, so Maven would start dev mode for `common` on port `8080` instead of starting the monolith on port `8081`.
 
 ### 2. Install and run the Next.js UI
 

@@ -7,8 +7,9 @@ purpose-built browser-native WebGL scene that emphasizes the async boundary, Kaf
 persistence/store actor without reusing the replay viewer UI itself.
 
 The cinematic compresses a captured replay into a fixed 12-second presentation. It is not a trace viewer or a
-telemetry conformance proof. The current CSV fixture follows the live-eligible Await path: the highlighted
-provider interval means that completion is in flight, not that the execution entered durable fallback or resume.
+telemetry conformance proof. The current CSV fixture follows the live-eligible deferred-completion path: the
+highlighted provider interval overlays `ProcessCsvPaymentsInput` and means completion is in flight, not that the
+execution entered durable fallback or resume.
 
 ## Source of truth
 

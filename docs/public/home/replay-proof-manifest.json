@@ -1,11 +1,11 @@
 {
   "generatedBy": "tools/homepage-replay-video/build_homepage_replay_video.sh",
   "sources": {
-    "tools/replay-viewer/datasets/csv-payments-built-in.json": "e738e703e3854b6a61df01c98a4f45b0461ba7246a7d11a73f705b628407323b",
-    "tools/homepage-replay-video/data/csv-payments-cinematic.json": "ab154afcc05de6140637429ed918633f206b879c343b4c8bf4873974233e2a3d",
-    "tools/homepage-replay-video/prepare_replay_data.cjs": "ea9cb3b90c8e1c9bcfa431317b8001f0ed5adba1420efa6ba8b3bc0aca53042e",
+    "tools/replay-viewer/datasets/csv-payments-built-in.json": "072a692628ec7ad80e0ace9b44d0566b9bec2abcf38c4d177e33b438692728e9",
+    "tools/homepage-replay-video/data/csv-payments-cinematic.json": "ca14fbe5391f84555d66b04745e0f454b69579e08a53f41ef3657ed48f0023a9",
+    "tools/homepage-replay-video/prepare_replay_data.cjs": "2ee355fa5e23c44b457bedf328e1a03793157c04046d9f9193acc7ef2d474c28",
     "tools/homepage-replay-video/render_scene.html": "3475f81ab194920feb2c0fb4d1c8ed2374c8eccbc4da6e1ced6d47c6b4b240b6",
-    "tools/homepage-replay-video/render_scene.js": "de1e5db61c1a57dca17f8589b9ae9b0f3303958d616e812994d151745dc70ad7",
+    "tools/homepage-replay-video/render_scene.js": "ca843db12e7dae7d86f410c371ad8c7918aeb0f44a28906383aa89ea881d4767",
     "tools/homepage-replay-video/capture_frames.cjs": "67255c822f2c8ce4aee6fc4100514a14b3c76fefc5416c43fbcaa5ab3e42a5e7",
     "tools/homepage-replay-video/encode_video.py": "fedfa59e90e8c94ae9af50e2848a4279c37114efc52b97ed8a2d54b11d18c163"
   }
