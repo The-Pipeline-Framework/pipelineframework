@@ -847,7 +847,11 @@ public class PipelineYamlConfigLoader {
                 || !callback.keySet().equals(Set.of("name", "endpointResolver", "authenticator"))) {
                 throw new IllegalArgumentException("step '" + stepName + "' callback requires signed tokens and excludes transport/idempotency");
             }
-            return new PipelineYamlAwaitConfig(correlation, Optional.empty(), readAwaitCompletion(awaitMap, stepName),
+            Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
+            if (completion.isEmpty()) {
+                throw new IllegalArgumentException("step '" + stepName + "' callback requires await.completion");
+            }
+            return new PipelineYamlAwaitConfig(correlation, Optional.empty(), completion,
                 Optional.of(new PipelineYamlAwaitCallback(
                     readRequiredString(callback, "name", "callback"), readRequiredString(callback, "endpointResolver", "callback"),
                     readRequiredString(callback, "authenticator", "callback"))));

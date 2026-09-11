@@ -106,6 +106,13 @@ public class CommandDeferredCompletionSupportTest {
             assertEquals("input:done", coordinator.resumePayload(observed.record()));
             assertEquals(ambiguous ? CommandEffectStatus.AMBIGUOUS : CommandEffectStatus.SUCCEEDED,
                 effects.find("tenant", "effect").await().indefinitely().orElseThrow().status());
+            // Ordinary Await admission owns late-callback continuation. Redelivery of
+            // the original Command must not also return a result to its worker.
+            assertThrows(AwaitSuspendedException.class, () -> support(coordinator()).execute(descriptor, "input",
+                (ignored, signedToken) -> { throw new AssertionError("completed recovery must reuse callback authority"); },
+                ignored -> { throw new AssertionError("completed effect must not dispatch again"); })
+                .await().atMost(Duration.ofSeconds(5)));
+            assertEquals(1, provider.operation.dispatches.get());
             return;
         }
         assertEquals(AwaitInteractionStatus.COMPLETION_OBSERVED, observed.record().status());

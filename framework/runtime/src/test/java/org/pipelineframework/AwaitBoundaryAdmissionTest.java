@@ -6,6 +6,8 @@ import java.util.Set;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.InOrder;
@@ -132,9 +134,11 @@ class AwaitBoundaryAdmissionTest {
       verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
     }
 
-  @Test
-  void fallsBackToDurableContinuationWhenNoLiveSessionAccepts() {
-    AwaitInteractionRecord interaction = awaitRecord(0);
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void fallsBackToDurableContinuationWhenNoLiveSessionAccepts(boolean commandCallback) {
+    AwaitInteractionRecord interaction = awaitRecord(0, AwaitInteractionStatus.COMPLETED,
+        commandCallback ? Map.of("completionMode", "CONNECTOR_CALLBACK") : Map.of());
     AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, 1, 1, true, null);
     AwaitCompletionCommand command = command(interaction.interactionId());
     AwaitCompletionResult completion = new AwaitCompletionResult(interaction, false);

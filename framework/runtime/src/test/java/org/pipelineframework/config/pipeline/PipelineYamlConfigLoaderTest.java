@@ -716,6 +716,40 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void requiresCompletionForCommandCallbacks() {
+        String yaml = """
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Start job
+                kind: command
+                operation: job.start
+                using: work
+                await:
+                  correlation:
+                    strategy: signedResumeToken
+                  callback:
+                    name: job.completed
+                    endpointResolver: com.example.CallbackEndpoint
+                    authenticator: com.example.CallbackAuthenticator
+            """;
+        var loader = new PipelineYamlConfigLoader();
+        var failure = assertThrows(IllegalArgumentException.class,
+            () -> loader.load(new StringReader(yaml)));
+        assertEquals("step 'Start job' callback requires await.completion", failure.getMessage());
+        PipelineYamlConfig valid = loader.load(new StringReader(yaml + """
+                  completion:
+                    type: com.example.JobCallback
+                    projector: com.example.JobProjector
+            """));
+        assertEquals("com.example.JobCallback",
+            valid.steps().getFirst().awaitConfig().completion().orElseThrow().type());
+    }
+
+    @Test
     void loadsNamedConnectorBindingsAndOperationFirstCommandAndQuerySelections() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"
