@@ -1051,6 +1051,37 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void rejectsUnknownDeferredOperationOutputType() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-config-unknown-deferred-output.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Deferred completion
+            basePackage: com.example.deferred
+            transport: GRPC
+            types:
+              Request: { fields: [[id, string]] }
+              Decision: { fields: [[status, string]] }
+            steps:
+              - name: Create pending request
+                service: com.example.CreatePendingRequest
+                cardinality: ONE_TO_ONE
+                input: Request
+                output: Decision
+                await:
+                  operationOutput: { type: MissingPending }
+                  timeout: PT5M
+                  correlation: { strategy: signedResumeToken }
+                  transport: { type: interaction-api }
+            """);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("Step 'Create pending request' references unknown await.operationOutput type 'MissingPending'.",
+            failure.getMessage());
+    }
+
+    @Test
     void rejectsDistinctDeferredOperationOutputForVersionOneTemplates() throws Exception {
         Path configPath = tempDir.resolve("pipeline-config-deferred-completion-v1.yaml");
         Files.writeString(configPath, """

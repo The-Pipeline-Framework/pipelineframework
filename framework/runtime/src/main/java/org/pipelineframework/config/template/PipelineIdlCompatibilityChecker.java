@@ -392,13 +392,16 @@ public final class PipelineIdlCompatibilityChecker {
                 errors.add("Step '" + baselineStep.name() + "' changed output message from '"
                     + baselineStep.outputTypeName() + "' to '" + currentStep.outputTypeName() + "'");
             }
-            String baselineOperationOutput = baselineStep.operationOutputTypeName()
-                .orElse(baselineStep.outputTypeName());
-            String currentOperationOutput = currentStep.operationOutputTypeName()
-                .orElse(currentStep.outputTypeName());
-            if (!Objects.equals(baselineOperationOutput, currentOperationOutput)) {
-                errors.add("Step '" + baselineStep.name() + "' changed deferred operation output from '"
-                    + baselineOperationOutput + "' to '" + currentOperationOutput + "'");
+            if (baselineStep.operationOutputTypeName().isPresent()
+                || currentStep.operationOutputTypeName().isPresent()) {
+                String baselineOperationOutput = baselineStep.operationOutputTypeName()
+                    .orElse(baselineStep.outputTypeName());
+                String currentOperationOutput = currentStep.operationOutputTypeName()
+                    .orElse(currentStep.outputTypeName());
+                if (!Objects.equals(baselineOperationOutput, currentOperationOutput)) {
+                    errors.add("Step '" + baselineStep.name() + "' changed deferred operation output from '"
+                        + baselineOperationOutput + "' to '" + currentOperationOutput + "'");
+                }
             }
         }
     }

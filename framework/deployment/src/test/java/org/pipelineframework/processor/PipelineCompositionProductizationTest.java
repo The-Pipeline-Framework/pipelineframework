@@ -514,7 +514,7 @@ class PipelineCompositionProductizationTest {
                   output: A
                   java: { input: com.example.diagnostic.A, output: com.example.diagnostic.A }
                   await:
-                    operationOutput: { type: A, java: com.example.diagnostic.A }
+                    operationOutput: { type: A, java: com.example.diagnostic.domain.A }
                     timeout: PT1M
                     correlation: { strategy: interactionId }
                     transport: { type: interaction-api }

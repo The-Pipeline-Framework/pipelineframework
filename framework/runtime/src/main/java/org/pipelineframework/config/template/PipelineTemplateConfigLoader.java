@@ -857,6 +857,12 @@ public class PipelineTemplateConfigLoader {
             if (!typeModel.contains(step.outputTypeName())) {
                 throw new IllegalStateException("Step '" + step.name() + "' references unknown output type '" + step.outputTypeName() + "'.");
             }
+            step.deferredOperationOutputTypeName().ifPresent(operationOutput -> {
+                if (!typeModel.contains(operationOutput)) {
+                    throw new IllegalStateException("Step '" + step.name()
+                        + "' references unknown await.operationOutput type '" + operationOutput + "'.");
+                }
+            });
             for (org.pipelineframework.config.pipeline.PipelineYamlCallable callable : step.callables().values()) {
                 if (!typeModel.contains(callable.input())) {
                     throw new IllegalStateException("Step '" + step.name() + "' callable '" + callable.alias()
@@ -1408,6 +1414,12 @@ public class PipelineTemplateConfigLoader {
                 step.inputTypeName(), step.inputFields(), messages, unions, step.name(), "input");
             List<PipelineTemplateField> outputFields = resolveStepFields(
                 step.outputTypeName(), step.outputFields(), messages, unions, step.name(), "output");
+            step.deferredOperationOutputTypeName().ifPresent(operationOutput -> {
+                if (!messages.containsKey(operationOutput) && !unions.containsKey(operationOutput)) {
+                    throw new IllegalStateException("Step '" + step.name()
+                        + "' references unknown await.operationOutput type '" + operationOutput + "'.");
+                }
+            });
             if (step.execution() != null && step.execution().isRemote()
                 && !"ONE_TO_ONE".equalsIgnoreCase(step.cardinality())) {
                 throw new IllegalStateException(

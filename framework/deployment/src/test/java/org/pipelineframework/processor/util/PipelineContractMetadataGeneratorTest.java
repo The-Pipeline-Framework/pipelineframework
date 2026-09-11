@@ -110,6 +110,36 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void deferredCompletionFingerprintIgnoresTransportConfigInsertionOrder() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Map<String, Object> firstConfig = new LinkedHashMap<>();
+        Map<String, Object> firstHeaders = new LinkedHashMap<>();
+        firstHeaders.put("tenant", "north");
+        firstHeaders.put("source", "orders");
+        firstConfig.put("topic", "approval.requests");
+        firstConfig.put("headers", firstHeaders);
+        Map<String, Object> secondConfig = new LinkedHashMap<>();
+        Map<String, Object> reversedHeaders = new LinkedHashMap<>();
+        reversedHeaders.put("source", "orders");
+        reversedHeaders.put("tenant", "north");
+        secondConfig.put("headers", reversedHeaders);
+        secondConfig.put("topic", "approval.requests");
+
+        Path firstOutput = tempDir.resolve("first-transport-order");
+        Path secondOutput = tempDir.resolve("second-transport-order");
+        writeMetadata(pipelineYaml, firstOutput, firstConfig);
+        writeMetadata(pipelineYaml, secondOutput, secondConfig);
+
+        JsonObject firstCompletion = readContract(firstOutput).getAsJsonArray("steps").get(1)
+            .getAsJsonObject().getAsJsonObject("deferredCompletion");
+        JsonObject secondCompletion = readContract(secondOutput).getAsJsonArray("steps").get(1)
+            .getAsJsonObject().getAsJsonObject("deferredCompletion");
+        assertEquals(firstCompletion.get("transportConfigFingerprint"),
+            secondCompletion.get("transportConfigFingerprint"));
+        assertEquals(firstCompletion.get("fingerprint"), secondCompletion.get("fingerprint"));
+    }
+
+    @Test
     void skipsContractWhenNoPipelineModelExists() throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(tempDir.resolve("empty"), Map.of());
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
@@ -356,6 +386,11 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     private void writeMetadata(Path pipelineYaml, Path outputDir) throws IOException {
+        writeMetadata(pipelineYaml, outputDir, Map.of());
+    }
+
+    private void writeMetadata(Path pipelineYaml, Path outputDir, Map<String, Object> transportConfig)
+        throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of("pipeline.config", pipelineYaml.toString()));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -373,7 +408,7 @@ class PipelineContractMetadataGeneratorTest {
         ctx.setStepModels(java.util.List.of(
             step("ProcessValidateOrderRequestService", "PlaceRestaurantOrderRequest", "ValidatedRestaurantOrderRequest",
                 StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.REST_CLIENT_STEP)),
-            deferredStep()));
+            deferredStep(transportConfig)));
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
@@ -501,6 +536,10 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     private PipelineStepModel deferredStep() {
+        return deferredStep(Map.of());
+    }
+
+    private PipelineStepModel deferredStep(Map<String, Object> transportConfig) {
         return new PipelineStepModel.Builder()
             .serviceName("ProcessAwaitRestaurantDecisionService")
             .generatedName("ProcessAwaitRestaurantDecisionService")
@@ -518,7 +557,7 @@ class PipelineContractMetadataGeneratorTest {
                 List.of("orderId"),
                 "interactionId",
                 "interaction-api",
-                Map.of(),
+                transportConfig,
                 Optional.empty(),
                 Optional.empty()))
             .streamingShape(StreamingShape.UNARY_UNARY)

@@ -565,6 +565,52 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsRemovedTopLevelAwaitFields() {
+        for (List<String> legacyField : List.of(
+            List.of("timeout: PT10M", "top-level timeout is no longer supported; move it to await.timeout"),
+            List.of("idempotencyKeyFields: [orderId]",
+                "top-level idempotencyKeyFields is no longer supported; move it to await.idempotency.fields"))) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () ->
+                new PipelineYamlConfigLoader().load(new StringReader("""
+                    basePackage: com.example
+                    steps:
+                      - name: Fraud Check
+                        service: com.example.CreateFraudCheck
+                        input: Request
+                        output: Decision
+                        %s
+                    """.formatted(legacyField.getFirst()))));
+
+            assertTrue(failure.getMessage().contains(legacyField.get(1)), failure.getMessage());
+        }
+    }
+
+    @Test
+    void rejectsNonListAwaitIdempotencyFields() {
+        for (String malformedFields : List.of("orderId", "{ orderId: true }", "null")) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () ->
+                new PipelineYamlConfigLoader().load(new StringReader("""
+                    basePackage: com.example
+                    steps:
+                      - name: Fraud Check
+                        service: com.example.CreateFraudCheck
+                        input: Request
+                        output: Decision
+                        await:
+                          operationOutput: { type: Pending }
+                          timeout: PT10M
+                          correlation: { strategy: interactionId }
+                          idempotency:
+                            fields: %s
+                          transport: { type: interaction-api }
+                    """.formatted(malformedFields))));
+
+            assertEquals("step 'Fraud Check' await.idempotency.fields must be defined as a list",
+                failure.getMessage());
+        }
+    }
+
+    @Test
     void rejectsNullAndUnknownAwaitCompletionConfigurationAtRuntime() {
         for (String completion : List.of(
             "completion: null",
