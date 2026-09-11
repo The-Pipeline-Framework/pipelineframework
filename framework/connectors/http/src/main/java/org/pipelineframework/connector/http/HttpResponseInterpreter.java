@@ -1,4 +1,5 @@
 package org.pipelineframework.connector.http;
+import org.pipelineframework.representation.http.HttpRepresentationBindings;
 
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;

@@ -157,6 +157,56 @@ For Commands, provider idempotency is enabled only by an explicit projection of 
 provider idempotency key onto a declared header. The application still selects its Command ID
 generator, duplicate policy, and `CommandPolicy` in `pipeline.yaml`.
 
+## Command completion callbacks
+
+Select a callback from the initiating Command's OpenAPI `callbacks` explicitly:
+
+```yaml
+callbacks:
+  - source:
+      name: jobStatus
+      expression: '{$request.body#/callbackUrl}'
+      operationId: jobCompleted
+      method: POST
+    callback: job.completed
+    input: JobCallback
+    request:
+      mediaType: application/json
+      representation: http.job.completed.request
+    acknowledgement:
+      status: '202'
+    security:
+      require: { callbackSignature: [] }
+```
+
+Use the selected identity in `await.callback` on the native Command. The initiating acknowledgement,
+callback payload, and final projected output have separate types. The completion projector receives
+the original canonical Command input. See [Command Connectors](../extension/command-connectors).
+
+One selected POST callback is supported per Command. Its inbound payload must be a JSON body with
+an explicitly selected schema, mapping, security alternative, and exact advertised 2xx acknowledgement.
+Injection supports object fields under `$request.body#/`, declared `$request.query.` parameters, and
+declared `$request.header.` parameters. JSON Pointer escapes are decoded; arrays, wildcards,
+response expressions, arbitrary URLs, and authorization/idempotency collisions are rejected.
+Top-level webhooks cannot complete an initiating Command.
+
+The compiler excludes the reserved injection field from authored canonical input mapping. The
+runtime injects the trusted URI and validates the complete wire shape for all mapping routes.
+Provider schema 7 and HTTP pin schema 2 release-pin callback contracts and mappings.
+
+Application beans implement `org.pipelineframework.connector.ProviderCallbackEndpointResolver`
+and `ProviderCallbackAuthenticator`. The resolver returns the trusted public base URI. The framework
+appends `pipeline/callbacks/{signed-token}`; configure any public proxy prefix in that base URI.
+HTTPS is required unless the host explicitly enables `pipeline.callback.allow-http` for local use.
+The authenticator asynchronously returns an optional `ProviderCallbackActor` through
+`CompletionStage`, using bounded raw headers/body and the selected security requirements. An empty
+result rejects the request. Choose a stable audit identifier; never use a signature or credential.
+
+The Quarkus ingress validates the signed token against durable state, resolves the exact generated
+descriptor and pin, authenticates, validates/maps the payload, and calls ordinary Await completion.
+It returns the pinned acknowledgement only after accepted or duplicate admission. Spring ingress is
+not implemented. Runtime requires neither source OpenAPI documents nor the Swagger parser.
+
 ## Resolve canonical representations
 
 Each request and successful response names an ordinary v3 mapping key. Resolution follows the

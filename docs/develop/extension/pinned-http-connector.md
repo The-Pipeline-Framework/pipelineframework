@@ -43,6 +43,17 @@ response:
 The pin does not contain a server authority, endpoint credential, OAuth configuration, tenant,
 account, or runtime authorization value. HTTP methods carry no Query or Command authority.
 
+Command pins may declare input-only completion callbacks. HTTP pin schema 2 records their injection
+targets, POST media/schema, inbound mappings, security compatibility, and acknowledgement status.
+Schema 1 remains readable for synchronous operations. Provider callback descriptors must agree.
+
+The runtime supplies `ConnectorCallbackContext` after registering durable completion. The Connector
+rejects missing or mismatched context before connection work, maps the input, deep-copies the wire
+value, and injects the trusted URI. Any pre-existing value at the reserved target, including JSON
+null, is rejected. Full wire-schema validation follows injection for direct, generated, and curated
+mappings. Ordinary operations reject extra callback context. See
+[OpenAPI callback import](../connectors/openapi-import#command-completion-callbacks).
+
 ## Supply the host connection
 
 The Connector asks the application's existing `ConnectionResolver` for an `HttpClientConnection`.

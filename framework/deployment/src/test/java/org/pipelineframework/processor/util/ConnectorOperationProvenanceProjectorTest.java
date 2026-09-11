@@ -98,6 +98,51 @@ class ConnectorOperationProvenanceProjectorTest {
     }
 
     @Test
+    void projectsOnlySelectedCallbackWithCanonicalAndMappingFingerprints() throws Exception {
+        var config = new PipelineYamlConfigLoader().load(new java.io.StringReader("""
+            basePackage: example
+            connectors:
+              jobs: { provider: http.client, version: 1 }
+            steps:
+              - name: Start
+                kind: command
+                using: jobs
+                operation: job.start
+                await:
+                  correlation: { strategy: signedResumeToken }
+                  callback: { name: job.completed, endpointResolver: example.Endpoint, authenticator: example.Auth }
+                  completion: { type: example.Callback, projector: example.Projector }
+            """));
+        Path resource = temporary.resolve("src/main/resources").resolve(ConnectorOperationProvenanceProjector.RESOURCE_PATH);
+        Files.createDirectories(resource.getParent());
+        Files.writeString(resource, """
+            {"schemaVersion":1,"imports":[{"provider":"http.client","importId":"jobs","operations":[
+              {"kind":"tpf:command","operation":"job.start","majorVersion":1,"callbacks":[
+                {"callback":"job.completed","requestMappingKey":"http.job.completed","wireFingerprint":"wire"},
+                {"callback":"job.unused","requestMappingKey":"http.job.unused"}]}]}]}
+            """);
+        var canonical = new org.pipelineframework.representation.spi.CanonicalType("Callback", "example.Callback",
+            org.pipelineframework.representation.spi.CanonicalTypeShape.RECORD);
+        var mapping = new org.pipelineframework.representation.spi.ResolvedOperationRepresentation("http", "job.start",
+            org.pipelineframework.representation.spi.OperationRepresentationRole.CALLBACK, "http.job.completed", canonical,
+            "DIRECT", java.util.Optional.empty(), java.util.Optional.empty(), "a".repeat(64), Map.of(),
+            java.util.Optional.of("b".repeat(64)));
+        var projector = new ConnectorOperationProvenanceProjector();
+        var projected = projector.project(config, temporary, getClass().getClassLoader(), List.of(mapping));
+        String material = projected.toString();
+        org.junit.jupiter.api.Assertions.assertTrue(material.contains("canonicalInputFingerprint=" + "b".repeat(64)));
+        org.junit.jupiter.api.Assertions.assertTrue(material.contains("mappingFingerprint=" + "a".repeat(64)));
+        org.junit.jupiter.api.Assertions.assertFalse(material.contains("job.unused"));
+        assertThrows(IllegalStateException.class, () -> projector.project(config, temporary, getClass().getClassLoader(), List.of()));
+        var changed = new org.pipelineframework.representation.spi.ResolvedOperationRepresentation("http", "job.start",
+            org.pipelineframework.representation.spi.OperationRepresentationRole.CALLBACK, "http.job.completed", canonical,
+            "DIRECT", java.util.Optional.empty(), java.util.Optional.empty(), "c".repeat(64), Map.of(),
+            java.util.Optional.of("b".repeat(64)));
+        org.junit.jupiter.api.Assertions.assertNotEquals(projected,
+            projector.project(config, temporary, getClass().getClassLoader(), List.of(changed)));
+    }
+
+    @Test
     void rejectsFractionalAndOutOfRangeVersionNumbers() throws Exception {
         var config = singleLookupConfig();
         Path resource = temporary.resolve("src/main/resources")

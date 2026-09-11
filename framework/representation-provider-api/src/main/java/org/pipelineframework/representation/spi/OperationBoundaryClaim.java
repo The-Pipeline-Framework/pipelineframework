@@ -7,8 +7,13 @@ import java.util.List;
 public record OperationBoundaryClaim(
     String providerKey,
     WireBoundary request,
-    List<WireBoundary> responses
+    List<WireBoundary> responses,
+    List<CallbackBoundary> callbacks
 ) {
+    public OperationBoundaryClaim(String providerKey, WireBoundary request, List<WireBoundary> responses) {
+        this(providerKey, request, responses, List.of());
+    }
+
     public OperationBoundaryClaim {
         providerKey = text(providerKey, "representation provider key");
         request = Objects.requireNonNull(request, "operation request wire boundary must not be null");
@@ -18,9 +23,29 @@ public record OperationBoundaryClaim(
         if (responses.stream().map(WireBoundary::mappingKey).distinct().count() != responses.size()) {
             throw new IllegalArgumentException("operation response wire boundaries contain duplicate mapping keys");
         }
+        callbacks = List.copyOf(Objects.requireNonNull(callbacks, "operation callback wire boundaries"));
+        if (callbacks.size() > 16 || callbacks.stream().map(CallbackBoundary::id).distinct().count() != callbacks.size()) {
+            throw new IllegalArgumentException("operation callback boundaries must be bounded and distinct");
+        }
     }
 
-    public record WireBoundary(String mappingKey, String schemaJson, String schemaFingerprint) {
+    public record CallbackBoundary(String id, String canonicalType, WireBoundary wire) {
+        public CallbackBoundary {
+            id = text(id, "callback identity");
+            canonicalType = text(canonicalType, "callback canonical type");
+            wire = Objects.requireNonNull(wire, "callback wire boundary");
+            if (!wire.runtimeSuppliedPaths().isEmpty()) {
+                throw new IllegalArgumentException("inbound callbacks cannot contain runtime-supplied request fields");
+            }
+        }
+    }
+
+    public record WireBoundary(String mappingKey, String schemaJson, String schemaFingerprint,
+        List<String> runtimeSuppliedPaths) {
+        public WireBoundary(String mappingKey, String schemaJson, String schemaFingerprint) {
+            this(mappingKey, schemaJson, schemaFingerprint, List.of());
+        }
+
         public WireBoundary {
             mappingKey = text(mappingKey, "operation representation mapping key");
             schemaJson = text(schemaJson, "operation wire schema");
@@ -28,6 +53,17 @@ public record OperationBoundaryClaim(
             if (!schemaFingerprint.matches("[0-9a-f]{64}")) {
                 throw new IllegalArgumentException("operation wire schema fingerprint must be SHA-256 hex");
             }
+            runtimeSuppliedPaths = normalizeRuntimePaths(runtimeSuppliedPaths);
+        }
+
+        static List<String> normalizeRuntimePaths(List<String> paths) {
+            Objects.requireNonNull(paths, "runtime-supplied paths");
+            if (paths.size() > 128 || paths.stream().anyMatch(path -> path == null || !path.startsWith("/")
+                || path.length() > 4096 || path.matches(".*~(?![01]).*")
+                || path.codePoints().anyMatch(Character::isISOControl))) {
+                throw new IllegalArgumentException("runtime-supplied paths must be bounded JSON Pointers");
+            }
+            return paths.stream().distinct().sorted().toList();
         }
     }
 

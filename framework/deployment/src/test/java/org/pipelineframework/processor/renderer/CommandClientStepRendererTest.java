@@ -192,8 +192,8 @@ class CommandClientStepRendererTest {
                 }
                 """,
             "com.example.EndpointResolver", """
-                public class EndpointResolver implements org.pipelineframework.awaitable.ProviderCallbackEndpointResolver {
-                    public java.net.URI resolve(org.pipelineframework.awaitable.AwaitInteractionRecord interaction, String token) {
+                public class EndpointResolver implements org.pipelineframework.connector.ProviderCallbackEndpointResolver {
+                    public java.net.URI resolve(org.pipelineframework.connector.ProviderCallbackRequest request) {
                         return java.net.URI.create("https://app.example/callback");
                     }
                 }

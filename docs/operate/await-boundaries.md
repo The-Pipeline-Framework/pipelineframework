@@ -6,6 +6,21 @@ Use this page with [Await Boundaries](/architecture/await-boundaries) for applic
 
 ## Runtime Requirements
 
+For a native Command using `await.callback`, completion is registered before effect dispatch. The
+Quarkus HTTP ingress is `pipeline/callbacks/{signed-token}` relative to the application's public base.
+Configure the application endpoint resolver and authenticator, keep the resume-token secret stable
+across replicas, and route the public path to the owning application release. Authenticate provider
+requests even though the resume token is signed.
+
+Treat callback URLs as credentials: redact their token-bearing paths in reverse-proxy and HTTP
+access logs, and do not put raw signatures or payloads in application authentication diagnostics.
+The ingress bounds bodies to 1 MiB and headers to 32 KiB, and emits empty rejection responses.
+Invalid requests and terminal admission rejections return 400. Internal lookup, authentication-service,
+or completion failures return 503 so the provider can retry without receiving internal diagnostics.
+Provider retries may receive the pinned success acknowledgement after duplicate admission. An
+early callback cannot advance execution until Command dispatch settles; a late callback resumes
+through ordinary Await admission. See [callback setup](/develop/connectors/openapi-import#command-completion-callbacks).
+
 Await requires `QUEUE_ASYNC`. The owning execution must be stored before it can wait on an external result.
 
 At minimum:

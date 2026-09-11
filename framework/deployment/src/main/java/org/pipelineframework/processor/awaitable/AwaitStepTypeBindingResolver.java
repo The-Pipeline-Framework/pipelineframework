@@ -213,7 +213,7 @@ public final class AwaitStepTypeBindingResolver {
     private boolean validateCallbackBean(PipelineCompilationContext ctx, String stepName, ClassName name, String contract) {
         var elements = ctx.getProcessingEnv().getElementUtils();
         TypeElement bean = elements.getTypeElement(name.canonicalName());
-        TypeElement spi = elements.getTypeElement("org.pipelineframework.awaitable." + contract);
+        TypeElement spi = elements.getTypeElement("org.pipelineframework.connector." + contract);
         boolean valid = bean != null && spi != null && bean.getKind() == ElementKind.CLASS
             && bean.getModifiers().contains(Modifier.PUBLIC) && !bean.getModifiers().contains(Modifier.ABSTRACT)
             && ctx.getProcessingEnv().getTypeUtils().isAssignable(bean.asType(), spi.asType());

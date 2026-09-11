@@ -1040,6 +1040,29 @@ public class AwaitCoordinator {
         return matching.get(0);
     }
 
+    /** Resolves a provider callback without granting completion authority from untrusted lookup hints. */
+    public Uni<AwaitInteractionRecord> resolveCallback(String token, long nowEpochMs) {
+        var hints = resumeTokenService.lookupHints(token);
+        return interactionStore().get(hints.tenantId(), hints.interactionId())
+            .map(found -> found.orElseThrow(() -> new AwaitInteractionNotFoundException("Callback unavailable")))
+            .invoke(record -> {
+                resumeTokenService.validate(token, record, nowEpochMs);
+                if (!record.commandCallback()) {
+                    throw new AwaitResumeTokenRejectedException("Callback unavailable");
+                }
+            });
+    }
+
+    /** Reuses durable descriptor compatibility checks before ingress authenticates or maps a payload. */
+    public AwaitCompletionDescriptor callbackDescriptor(AwaitInteractionRecord record) {
+        AwaitCompletionDescriptor descriptor = descriptorFor(record);
+        validateDurableOutputContract(record, descriptor);
+        if (descriptor.callback().isEmpty()) {
+            throw new IllegalStateException("Callback descriptor unavailable");
+        }
+        return descriptor;
+    }
+
     private Uni<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {
         Uni<Optional<AwaitInteractionRecord>> lookup;
         if (command.interactionId() != null) {

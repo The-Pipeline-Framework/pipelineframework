@@ -27,6 +27,27 @@ public final class OpenApiImportConfiguration {
         public RequestSelection request;
         public List<ResponseSelection> responses = List.of();
         public ProviderIdempotencyKey providerIdempotencyKey;
+        public List<CallbackSelection> callbacks = List.of();
+    }
+
+    public static final class CallbackSelection {
+        public SourceCallback source;
+        public String callback;
+        public String input;
+        public RequestSelection request;
+        public AcknowledgementSelection acknowledgement;
+        public SecuritySelection security;
+    }
+
+    public static final class SourceCallback {
+        public String name;
+        public String expression;
+        public String operationId;
+        public String method;
+    }
+
+    public static final class AcknowledgementSelection {
+        public String status;
     }
 
     public static final class SourceOperation {

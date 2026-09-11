@@ -11,6 +11,8 @@ import org.pipelineframework.command.CommandEffectStatus;
 import org.pipelineframework.command.CommandOutcomeException;
 import org.pipelineframework.command.CommandRetryableEffectException;
 import org.pipelineframework.connector.ConnectorCallbackContext;
+import org.pipelineframework.connector.ProviderCallbackEndpointResolver;
+import org.pipelineframework.connector.ProviderCallbackRequest;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 import org.pipelineframework.orchestrator.OrchestratorMode;
@@ -19,6 +21,7 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 /** Orders durable completion registration around the existing Command execution path. */
 @ApplicationScoped
 public class CommandDeferredCompletionSupport {
+    public static final String CALLBACK_PATH = "pipeline/callbacks/";
     @Inject AwaitCoordinator coordinator;
     @Inject AwaitResumeTokenService tokens;
     @Inject PipelineOrchestratorConfig config;
@@ -53,9 +56,18 @@ public class CommandDeferredCompletionSupport {
                 ConnectorCallbackContext callback;
                 try {
                     String token = tokens.sign(record, record.createdAtEpochMs());
-                    callback = new ConnectorCallbackContext(descriptor.callback().orElseThrow().callback().id(),
-                        endpointResolver.resolve(record, token), allowHttp
-                            ? ConnectorCallbackContext.UriPolicy.LOCAL_HTTP : ConnectorCallbackContext.UriPolicy.HTTPS_ONLY);
+                    var selected = descriptor.callback().orElseThrow();
+                    var policy = allowHttp ? ConnectorCallbackContext.UriPolicy.LOCAL_HTTP
+                        : ConnectorCallbackContext.UriPolicy.HTTPS_ONLY;
+                    var base = new ConnectorCallbackContext(selected.callback().id(), endpointResolver.resolve(
+                        new ProviderCallbackRequest(record.tenantId(), record.interactionId(),
+                            selected.operation(), selected.callback().id())), policy).callbackUri();
+                    if (base.getRawQuery() != null) {
+                        throw new IllegalArgumentException("callback base URI must not contain a query");
+                    }
+                    String prefix = base.toASCIIString();
+                    callback = new ConnectorCallbackContext(selected.callback().id(), java.net.URI.create(
+                        prefix + (prefix.endsWith("/") ? "" : "/") + CALLBACK_PATH + token), policy);
                 } catch (RuntimeException failure) {
                     return Uni.createFrom().failure(new IllegalStateException("Unable to resolve Command callback endpoint"));
                 }

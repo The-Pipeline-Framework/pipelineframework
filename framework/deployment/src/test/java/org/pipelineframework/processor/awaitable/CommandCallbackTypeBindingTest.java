@@ -38,17 +38,18 @@ class CommandCallbackTypeBindingTest {
             sources.add(source(name, "public record " + name + "() {}"));
         }
         sources.add(source("Endpoint", """
-            public class Endpoint implements org.pipelineframework.awaitable.ProviderCallbackEndpointResolver {
-                public java.net.URI resolve(org.pipelineframework.awaitable.AwaitInteractionRecord record, String token) {
+            public class Endpoint implements org.pipelineframework.connector.ProviderCallbackEndpointResolver {
+                public java.net.URI resolve(org.pipelineframework.connector.ProviderCallbackRequest request) {
                     return java.net.URI.create("https://app.example/callback");
                 }
             }
             """));
         sources.add(source("Authenticator", """
-            public class Authenticator implements org.pipelineframework.awaitable.ProviderCallbackAuthenticator {
-                public io.smallrye.mutiny.Uni<Boolean> authenticate(org.pipelineframework.awaitable.AwaitInteractionRecord record,
-                    String method, java.util.Map<String, java.util.List<String>> headers, byte[] body) {
-                    return io.smallrye.mutiny.Uni.createFrom().item(true);
+            public class Authenticator implements org.pipelineframework.connector.ProviderCallbackAuthenticator {
+                public java.util.concurrent.CompletionStage<java.util.Optional<org.pipelineframework.connector.ProviderCallbackActor>> authenticate(
+                    org.pipelineframework.connector.ProviderCallbackAuthenticationRequest request) {
+                    return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.of(
+                        new org.pipelineframework.connector.ProviderCallbackActor("provider")));
                 }
             }
             """));

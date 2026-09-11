@@ -123,6 +123,12 @@ public final class OperationRepresentationGenerationPhase implements PipelineCom
             input, claim.orElseThrow().request(), resolved);
         claim.orElseThrow().responses().forEach(response -> resolveRole(ctx, config, providers, boundary,
             claim.orElseThrow(), OperationRepresentationRole.RESPONSE, output, response, resolved));
+        claim.orElseThrow().callbacks().forEach(callback -> {
+            ClassName payloadType = new V3JavaTypeResolver(config).resolve(callback.canonicalType()).orElseThrow(() ->
+                new IllegalStateException("Callback canonical type is not declared: " + callback.canonicalType()));
+            resolveRole(ctx, config, providers, boundary, claim.orElseThrow(), OperationRepresentationRole.CALLBACK,
+                canonical(config, callback.canonicalType(), payloadType), callback.wire(), resolved);
+        });
     }
 
     private static void resolveRole(
@@ -164,7 +170,8 @@ public final class OperationRepresentationGenerationPhase implements PipelineCom
         return left.role() == right.role() && left.canonicalType().equals(right.canonicalType())
             && left.mode().equals(right.mode()) && left.representationType().equals(right.representationType())
             && left.mapperType().equals(right.mapperType())
-            && left.mappingFingerprint().equals(right.mappingFingerprint());
+            && left.mappingFingerprint().equals(right.mappingFingerprint())
+            && left.canonicalSchemaFingerprint().equals(right.canonicalSchemaFingerprint());
     }
 
     private static CanonicalType canonical(

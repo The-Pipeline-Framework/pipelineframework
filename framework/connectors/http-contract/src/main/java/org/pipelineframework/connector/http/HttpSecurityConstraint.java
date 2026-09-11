@@ -23,6 +23,23 @@ public record HttpSecurityConstraint(List<HttpSecurityRequirement> requirements)
         return new HttpSecurityConstraint(List.of());
     }
 
+    public com.fasterxml.jackson.databind.node.ArrayNode toJson() {
+        var nodes = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+        requirements.forEach(requirement -> {
+            var node = nodes.addObject();
+            node.put("scheme", requirement.scheme());
+            var scopes = node.putArray("scopes");
+            requirement.scopes().forEach(scopes::add);
+            var targets = node.putArray("targets");
+            requirement.targets().forEach(target -> {
+                var value = targets.addObject();
+                value.put("location", target.location().name());
+                value.put("name", target.name());
+            });
+        });
+        return nodes;
+    }
+
     public boolean permits(HttpParameterLocation location, String name) {
         return requirements.stream().flatMap(requirement -> requirement.targets().stream())
             .anyMatch(target -> target.matches(location, name));

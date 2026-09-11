@@ -63,13 +63,12 @@ public class CommandDeferredCompletionSupportTest {
         CommandDeferredCompletionSupport support = support(coordinator);
         AtomicReference<AwaitInteractionRecord> registered = new AtomicReference<>();
         AtomicReference<String> token = new AtomicReference<>();
-        ProviderCallbackEndpointResolver endpoint = (record, signedToken) -> {
+        org.pipelineframework.connector.ProviderCallbackEndpointResolver endpoint = record -> {
             assertEquals(AwaitInteractionStatus.WAITING, interactions.get(record.tenantId(), record.interactionId())
                 .await().indefinitely().orElseThrow().status());
             assertTrue(effects.find("tenant", "effect").await().indefinitely().isEmpty());
-            registered.set(record);
-            token.set(signedToken);
-            return URI.create("https://app.test/callback?token=" + signedToken);
+            registered.set(interactions.get(record.tenantId(), record.interactionId()).await().indefinitely().orElseThrow());
+            return URI.create("https://app.test/");
         };
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant", "execution", 0));
         CompletableFuture<String> result = support.<String, String>execute(descriptor, "input", endpoint,
@@ -77,10 +76,12 @@ public class CommandDeferredCompletionSupportTest {
             .subscribeAsCompletionStage().toCompletableFuture();
         assertTrue(provider.operation.entered.await(5, TimeUnit.SECONDS));
         var record = registered.get();
-        assertEquals("https://app.test/callback?token=" + token.get(), provider.operation.callback.orElseThrow().callbackUri().toString());
+        var callbackUri = provider.operation.callback.orElseThrow().callbackUri();
+        token.set(callbackUri.getPath().substring(("/" + CommandDeferredCompletionSupport.CALLBACK_PATH).length()));
+        assertEquals("https://app.test/pipeline/callbacks/" + token.get(), callbackUri.toString());
         assertEquals(CommandEffectStatus.DISPATCHING, effects.find("tenant", "effect").await().indefinitely().orElseThrow().status());
         assertThrows(AwaitSuspendedException.class, () -> support(coordinator()).execute(descriptor, "input",
-            (ignored, signedToken) -> URI.create("https://app.test/callback?token=" + signedToken),
+            ignored -> URI.create("https://app.test/"),
             callback -> commands.execute(command, (ignored, input) -> "effect", "input", callback))
             .await().atMost(Duration.ofSeconds(5)));
         assertEquals(AwaitInteractionStatus.DISPATCHING,
@@ -96,7 +97,7 @@ public class CommandDeferredCompletionSupportTest {
             assertEquals(AwaitInteractionStatus.DISPATCHED,
                 interactions.get("tenant", record.interactionId()).await().indefinitely().orElseThrow().status());
             assertThrows(AwaitSuspendedException.class, () -> support(coordinator()).execute(descriptor, "input",
-                (ignored, signedToken) -> { throw new AssertionError("pending recovery must reuse callback authority"); },
+                ignored -> { throw new AssertionError("pending recovery must reuse callback authority"); },
                 ignored -> { throw new AssertionError("settled effect must not dispatch again"); }).await().indefinitely());
         }
         var observed = coordinator.complete(new AwaitCompletionCommand("tenant", record.interactionId(), record.correlationId(),
@@ -109,7 +110,7 @@ public class CommandDeferredCompletionSupportTest {
             // Ordinary Await admission owns late-callback continuation. Redelivery of
             // the original Command must not also return a result to its worker.
             assertThrows(AwaitSuspendedException.class, () -> support(coordinator()).execute(descriptor, "input",
-                (ignored, signedToken) -> { throw new AssertionError("completed recovery must reuse callback authority"); },
+                ignored -> { throw new AssertionError("completed recovery must reuse callback authority"); },
                 ignored -> { throw new AssertionError("completed effect must not dispatch again"); })
                 .await().atMost(Duration.ofSeconds(5)));
             assertEquals(1, provider.operation.dispatches.get());
@@ -125,7 +126,7 @@ public class CommandDeferredCompletionSupportTest {
         assertFalse(effect.toString().contains(token.get()));
         var restarted = support(coordinator());
         assertEquals("input:done", restarted.<String, String>execute(descriptor, "input",
-            (ignored, signedToken) -> { throw new AssertionError("completed interaction must not resolve a fresh URI"); },
+            ignored -> { throw new AssertionError("completed interaction must not resolve a fresh URI"); },
             ignored -> { throw new AssertionError("completed interaction must not invoke Command again"); })
             .await().atMost(Duration.ofSeconds(5)));
     }
