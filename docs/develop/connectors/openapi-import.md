@@ -183,7 +183,8 @@ Use the selected identity in `await.callback` on the native Command. The initiat
 callback payload, and final projected output have separate types. The completion projector receives
 the original canonical Command input. See [Command Connectors](../extension/command-connectors).
 
-One selected POST callback is supported per Command. Its inbound payload must be a JSON body with
+One required POST callback is supported per HTTP Command; optional HTTP callback pins are rejected.
+Its inbound payload must be a JSON body with
 an explicitly selected schema, mapping, security alternative, and exact advertised 2xx acknowledgement.
 Injection supports object fields under `$request.body#/`, declared `$request.query.` parameters, and
 declared `$request.header.` parameters. JSON Pointer escapes are decoded; arrays, wildcards,
@@ -197,7 +198,8 @@ Provider schema 7 and HTTP pin schema 2 release-pin callback contracts and mappi
 Application beans implement `org.pipelineframework.connector.ProviderCallbackEndpointResolver`
 and `ProviderCallbackAuthenticator`. The resolver returns the trusted public base URI. The framework
 appends `pipeline/callbacks/{signed-token}`; configure any public proxy prefix in that base URI.
-HTTPS is required unless the host explicitly enables `pipeline.callback.allow-http` for local use.
+HTTPS is required for both the public callback address and the initiating provider endpoint unless
+the host explicitly enables `pipeline.callback.allow-http` for local use.
 The authenticator asynchronously returns an optional `ProviderCallbackActor` through
 `CompletionStage`, using bounded raw headers/body and the selected security requirements. An empty
 result rejects the request. Choose a stable audit identifier; never use a signature or credential.

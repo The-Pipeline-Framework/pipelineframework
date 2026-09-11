@@ -167,7 +167,17 @@ class ProviderCallbackResourceTest {
             assertEquals("token", completionCommand.get().resumeToken());
             doReturn(Uni.createFrom().item(new AwaitCompletionResult(record, true)))
                 .when(resource.executions).completeAwaitInteraction(any());
+            java.nio.file.Files.delete(metadata.resolve("http-operations.json"));
+            java.nio.file.Files.delete(metadata.resolve("http-operation-bindings.json"));
+            java.nio.file.Files.delete(metadata.resolve("connector-providers.json"));
             assertEquals(202, request("token", "{\"status\":\"done\"}").getStatus());
+            try (var otherLoader = new java.net.URLClassLoader(new java.net.URL[0], original)) {
+                Thread.currentThread().setContextClassLoader(otherLoader);
+                assertEquals(503, request("token", "{\"status\":\"done\"}").getStatus(),
+                    "a different classloader must not reuse another release's cached pins");
+            } finally {
+                Thread.currentThread().setContextClassLoader(loader);
+            }
             doReturn(Uni.createFrom().failure(new AwaitInteractionTerminalException("terminal")))
                 .when(resource.executions).completeAwaitInteraction(any());
             assertEquals(400, request("token", "{\"status\":\"done\"}").getStatus());

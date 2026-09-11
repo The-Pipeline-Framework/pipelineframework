@@ -96,6 +96,23 @@ class HttpCallbackPinTest {
             """).withoutRuntimeSuppliedPaths(List.of("/callbackUrl")));
     }
 
+    @Test
+    void rejectsMultipleRequiredCallbacksAndOptionalInjectionStates() {
+        var first = callback(202);
+        var second = new HttpCallbackPin("job.alternate", first.operation(), first.majorVersion(),
+            new HttpCallbackInjectionTarget(HttpCallbackInjectionTarget.Location.BODY, List.of("value"), Optional.empty()),
+            first.method(), first.mediaType(), first.requestSchema(), "http.job.alternate", first.inputType(),
+            first.security(), first.acknowledgementStatus(), true, SOURCE);
+        var multiple = assertThrows(IllegalArgumentException.class, () -> operation(List.of(first, second)));
+        assertTrue(multiple.getMessage().contains("at most one required callback"));
+        var optional = new HttpCallbackPin(first.id(), first.operation(), first.majorVersion(), first.target(),
+            first.method(), first.mediaType(), first.requestSchema(), first.requestMappingKey(), first.inputType(),
+            first.security(), first.acknowledgementStatus(), false, SOURCE);
+        var absentState = assertThrows(IllegalArgumentException.class, () -> operation(List.of(optional)));
+        assertTrue(absentState.getMessage().contains("optional callback injection is unsupported"));
+        assertEquals(REQUEST, REQUEST.withoutRuntimeSuppliedPaths(List.of()));
+    }
+
     private HttpCallbackPin callback(int acknowledgement) {
         return new HttpCallbackPin("job.completed", "job.start", 1,
             new HttpCallbackInjectionTarget(HttpCallbackInjectionTarget.Location.BODY,

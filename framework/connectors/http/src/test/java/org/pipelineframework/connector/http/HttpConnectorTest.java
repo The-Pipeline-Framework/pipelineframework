@@ -117,8 +117,23 @@ class HttpConnectorTest {
         }
         var authority = new org.pipelineframework.connector.ConnectorCallbackContext("job.completed",
             URI.create("https://app.test/callback?token=signed-token"));
-        var result = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
+        var plaintext = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
             LookupOutput.class, context, identity, Optional.of(authority))).toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertInstanceOf(CommandOutcome.TerminalFailure.class, plaintext);
+        assertEquals("", seen.get(), "default callback authority must not be sent to a plaintext provider");
+        AtomicReference<HttpRequest> secureRequest = new AtomicReference<>();
+        var secureConnector = connector(pin);
+        secureConnector.start(runtime(connection(successfulClient(secureRequest, "{\"value\":\"accepted\"}"),
+            URI.create("https://provider.test/api"), Set.of(), HttpAuthorizationProvider.none())), configuration())
+            .toCompletableFuture().join();
+        assertInstanceOf(CommandOutcome.Succeeded.class, command(secureConnector).dispatch(new CommandInvocation<>(
+            new RecordInput("new"), ConnectorConfigurationDocument.empty(), LookupOutput.class, context, identity,
+            Optional.of(authority))).toCompletableFuture().get(5, TimeUnit.SECONDS));
+        assertEquals("https", secureRequest.get().uri().getScheme());
+        var localAuthority = new org.pipelineframework.connector.ConnectorCallbackContext("job.completed", authority.callbackUri(),
+            org.pipelineframework.connector.ConnectorCallbackContext.UriPolicy.LOCAL_HTTP);
+        var result = operation.dispatch(new CommandInvocation<>(new RecordInput("new"), ConnectorConfigurationDocument.empty(),
+            LookupOutput.class, context, identity, Optional.of(localAuthority))).toCompletableFuture().get(5, TimeUnit.SECONDS);
         assertInstanceOf(CommandOutcome.Succeeded.class, result);
         assertEquals(authority.callbackUri().toString(), org.pipelineframework.config.pipeline.PipelineJson.mapper()
             .readTree(seen.get()).path("callbackUrl").asText());

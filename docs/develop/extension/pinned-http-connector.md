@@ -46,6 +46,8 @@ account, or runtime authorization value. HTTP methods carry no Query or Command 
 Command pins may declare input-only completion callbacks. HTTP pin schema 2 records their injection
 targets, POST media/schema, inbound mappings, security compatibility, and acknowledgement status.
 Schema 1 remains readable for synchronous operations. Provider callback descriptors must agree.
+HTTP Commands support one required callback; optional callback pins are rejected because the
+authorable mapping must know whether runtime injection changes the wire property counts.
 
 The runtime supplies `ConnectorCallbackContext` after registering durable completion. The Connector
 rejects missing or mismatched context before connection work, maps the input, deep-copies the wire
@@ -53,6 +55,10 @@ value, and injects the trusted URI. Any pre-existing value at the reserved targe
 null, is rejected. Full wire-schema validation follows injection for direct, generated, and curated
 mappings. Ordinary operations reject extra callback context. See
 [OpenAPI callback import](../connectors/openapi-import#command-completion-callbacks).
+
+The initiating provider endpoint must use HTTPS when transmitting callback authority. An explicit
+`ConnectorCallbackContext.UriPolicy.LOCAL_HTTP` opt-in permits plaintext only for local deployments,
+including container test networks. Imported pins cannot enable that policy.
 
 ## Supply the host connection
 

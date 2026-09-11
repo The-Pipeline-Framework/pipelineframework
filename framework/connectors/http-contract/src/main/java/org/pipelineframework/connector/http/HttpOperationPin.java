@@ -126,6 +126,12 @@ public record HttpOperationPin(
             || callbacks.stream().map(callback -> callback.target().pointer()).distinct().count() != callbacks.size()) {
             throw new IllegalArgumentException("HTTP callbacks must have bounded, unique IDs and targets");
         }
+        if (callbacks.stream().filter(HttpCallbackPin::required).count() > 1) {
+            throw new IllegalArgumentException("HTTP Command supports at most one required callback");
+        }
+        if (callbacks.stream().anyMatch(callback -> !callback.required())) {
+            throw new IllegalArgumentException("HTTP callback pins require completion; optional callback injection is unsupported");
+        }
         for (HttpCallbackPin callback : callbacks) {
             if (!callback.operation().equals(operation) || callback.majorVersion() != majorVersion) {
                 throw new IllegalArgumentException("HTTP callback belongs to a different Command");

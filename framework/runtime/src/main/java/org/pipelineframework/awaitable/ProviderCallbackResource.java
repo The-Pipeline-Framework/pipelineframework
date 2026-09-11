@@ -32,6 +32,7 @@ import org.pipelineframework.representation.http.HttpRepresentationBindings;
 @Path("/" + CommandDeferredCompletionSupport.CALLBACK_PATH + "{token}")
 public class ProviderCallbackResource {
     private static final int MAX_BODY = 1_048_576;
+    private final java.util.Map<ClassLoader, CallbackArtifacts> catalogues = new java.util.concurrent.ConcurrentHashMap<>();
     @Inject AwaitCoordinator coordinator;
     @Inject PipelineExecutionService executions;
     @Inject @Any Instance<ProviderCallbackAuthenticator> authenticators;
@@ -74,7 +75,7 @@ public class ProviderCallbackResource {
         if (!"http.client".equals(selection.operation().providerId().value()) || selection.providerMajorVersion() != 1) {
             return unavailable();
         }
-        var catalogue = HttpOperationCatalog.load(loader);
+        var catalogue = artifacts(loader).operations();
         HttpCallbackPin pin = catalogue.operations().stream()
             .filter(operation -> operation.operation().equals(selection.operation().operationId())
                 && operation.kind().equals(selection.operation().kind())
@@ -117,7 +118,7 @@ public class ProviderCallbackResource {
         HttpRepresentationBindings representations;
         try {
             callbackType = Class.forName(descriptor.transportOutputType(), false, loader);
-            representations = new HttpRepresentationBindings(HttpOperationBindingCatalog.load(loader), loader);
+            representations = artifacts(loader).representations();
         } catch (Exception failure) {
             return unavailable();
         }
@@ -148,6 +149,13 @@ public class ProviderCallbackResource {
     private Uni<Response> unavailable() {
         return Uni.createFrom().item(() -> Response.status(503).build());
     }
+
+    private CallbackArtifacts artifacts(ClassLoader loader) {
+        return catalogues.computeIfAbsent(loader, selected -> new CallbackArtifacts(HttpOperationCatalog.load(selected),
+            new HttpRepresentationBindings(HttpOperationBindingCatalog.load(selected), selected)));
+    }
+
+    private record CallbackArtifacts(HttpOperationCatalog operations, HttpRepresentationBindings representations) { }
 
     private Uni<Response> rejected() {
         return Uni.createFrom().item(() -> Response.status(400).build());

@@ -36,7 +36,13 @@ final class HttpRequestProjector {
         HttpAuthorizationMaterial authorization, HttpProviderConfiguration configuration,
         Optional<CommandDispatchIdentity> dispatchIdentity,
         Optional<org.pipelineframework.connector.ConnectorCallbackContext> callbackContext) {
-        JsonNode requestInput = pin.selectCallback(callbackContext)
+        var selectedCallback = pin.selectCallback(callbackContext);
+        if (selectedCallback.isPresent() && !"https".equalsIgnoreCase(connection.baseUri().getScheme())
+            && callbackContext.orElseThrow().uriPolicy()
+                != org.pipelineframework.connector.ConnectorCallbackContext.UriPolicy.LOCAL_HTTP) {
+            throw new IllegalArgumentException("HTTP callback tokens require an HTTPS provider endpoint or explicit local HTTP policy");
+        }
+        JsonNode requestInput = selectedCallback
             .map(callback -> callback.target().inject(wireInput, callbackContext.orElseThrow()))
             .orElse(wireInput);
         HttpWireValueValidator.validate(requestInput, pin.requestSchema());
