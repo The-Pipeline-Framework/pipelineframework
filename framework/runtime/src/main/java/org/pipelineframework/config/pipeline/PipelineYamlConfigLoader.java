@@ -840,6 +840,22 @@ public class PipelineYamlConfigLoader {
             throw new IllegalArgumentException("step '" + stepName + "' await.scope is not supported");
         }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
+        if (awaitMap.containsKey("callback")) {
+            if (awaitMap.containsKey("transport") || awaitMap.containsKey("idempotency")
+                || !"signedResumeToken".equals(correlation.strategy())
+                || !(awaitMap.get("callback") instanceof Map<?, ?> callback)
+                || !callback.keySet().equals(Set.of("name", "endpointResolver", "authenticator"))) {
+                throw new IllegalArgumentException("step '" + stepName + "' callback requires signed tokens and excludes transport/idempotency");
+            }
+            Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
+            if (completion.isEmpty()) {
+                throw new IllegalArgumentException("step '" + stepName + "' callback requires await.completion");
+            }
+            return new PipelineYamlAwaitConfig(correlation, Optional.empty(), completion,
+                Optional.of(new PipelineYamlAwaitCallback(
+                    readRequiredString(callback, "name", "callback"), readRequiredString(callback, "endpointResolver", "callback"),
+                    readRequiredString(callback, "authenticator", "callback"))));
+        }
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
         Optional<PipelineYamlAwaitCompletion> completion = readAwaitCompletion(awaitMap, stepName);
         return new PipelineYamlAwaitConfig(correlation, transport, completion);

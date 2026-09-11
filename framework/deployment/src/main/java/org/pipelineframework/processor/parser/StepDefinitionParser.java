@@ -214,7 +214,7 @@ public class StepDefinitionParser {
         rootMap.forEach((key, value) -> templateData.put(String.valueOf(key), value));
         String basePackage = getStringValue(templateData, "basePackage");
         int version = parseVersion(templateData);
-        Optional<V3JavaTypeResolver> v3JavaTypes = version == 3 && containsRemoteExecution(templateData)
+        Optional<V3JavaTypeResolver> v3JavaTypes = version == 3 && requiresCanonicalJavaResolution(templateData)
             ? Optional.of(new V3JavaTypeResolver(new PipelineTemplateConfigLoader().load(templatePath)))
             : Optional.empty();
         Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
@@ -252,8 +252,8 @@ public class StepDefinitionParser {
         return new ParsedPipelineDefinitionCatalog(rootSteps, definitions);
     }
 
-    private boolean containsRemoteExecution(Map<String, Object> templateData) {
-        if (stepsContainRemoteExecution(templateData.get("steps"))) {
+    private boolean requiresCanonicalJavaResolution(Map<String, Object> templateData) {
+        if (stepsRequireCanonicalJavaResolution(templateData.get("steps"))) {
             return true;
         }
         Object rawDefinitions = templateData.get("pipelines");
@@ -263,16 +263,22 @@ public class StepDefinitionParser {
         return definitions.values().stream()
             .filter(Map.class::isInstance)
             .map(Map.class::cast)
-            .anyMatch(definition -> stepsContainRemoteExecution(definition.get("steps")));
+            .anyMatch(definition -> stepsRequireCanonicalJavaResolution(definition.get("steps")));
     }
 
-    private boolean stepsContainRemoteExecution(Object rawSteps) {
+    private boolean stepsRequireCanonicalJavaResolution(Object rawSteps) {
         if (!(rawSteps instanceof Iterable<?> steps)) {
             return false;
         }
         for (Object rawStep : steps) {
-            if (rawStep instanceof Map<?, ?> step && step.containsKey("execution")) {
-                return true;
+            if (rawStep instanceof Map<?, ?> step) {
+                if (step.containsKey("execution")) {
+                    return true;
+                }
+                if (step.get("await") instanceof Map<?, ?> completion && completion.containsKey("callback")
+                    && completion.get("operationOutput") instanceof Map<?, ?> output && !output.containsKey("java")) {
+                    return true;
+                }
             }
         }
         return false;
@@ -588,10 +594,10 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            if (kind != StepKind.INTERNAL || dynamicOperationStep || !isBlank(delegatedClassName)
+            if ((kind != StepKind.INTERNAL && kind != StepKind.COMMAND) || dynamicOperationStep || !isBlank(delegatedClassName)
                 || remoteExecution != null || pipelineStep) {
                 String message = "Skipping step '" + name
-                    + "': await currently decorates only an authored internal service operation";
+                    + "': await decorates an authored internal service or an application-bound native Command";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -615,6 +621,13 @@ public class StepDefinitionParser {
                 return null;
             }
             deferredCompletion = Optional.of(parsed);
+            if ((kind == StepKind.COMMAND) != parsed.callback().isPresent()
+                || (kind == StepKind.COMMAND && (requireExactOperationTypes || version != 3
+                    || !(stepData.get("operation") instanceof String) || !(stepData.get("using") instanceof String)))) {
+                report(Diagnostic.Kind.ERROR, "Step '" + name
+                    + "': await requires INTERNAL + transport or application-local native COMMAND + callback (version 3)");
+                throw new StepSkippedException();
+            }
         }
 
         if (kind == StepKind.INTERNAL && !inferredLegacyInternal) {
@@ -818,14 +831,20 @@ public class StepDefinitionParser {
                 command = nativeSelection.orElseThrow().commandName();
             }
             if (operationFirst) {
+                Optional<DeferredCompletionDefinition> selectedCompletion = deferredCompletion;
+                ClassName operationOutput = selectedCompletion.flatMap(DeferredCompletionDefinition::operationOutputJavaType)
+                    .or(() -> selectedCompletion.flatMap(completion -> v3JavaTypes.flatMap(types ->
+                        types.resolve(completion.operationOutputType())))).orElse(outputType);
                 nativeSelection = validateNativeCommandBinding(
-                    name, operation, using, stepData, commandConfig, inputType, outputType,
-                    contracts.logicalInput().orElse(null), contracts.logicalOutput().orElse(null),
+                    name, operation, using, stepData, commandConfig, inputType, operationOutput,
+                    contracts.logicalInput().orElse(null), deferredCompletion.map(DeferredCompletionDefinition::operationOutputType)
+                        .or(() -> contracts.logicalOutput()).orElse(null),
                     connectorBindings, requireExactOperationTypes);
                 if (nativeSelection.isEmpty()) {
                     throw new StepSkippedException();
                 }
                 command = nativeSelection.orElseThrow().commandName();
+                validateCommandCallback(name, nativeSelection.orElseThrow(), deferredCompletion);
                 if (requireExactOperationTypes
                     && (isBlank(getStringValue(stepData, "commandIdGenerator"))
                         || isBlank(getStringValue(stepData, "duplicatePolicy"))
@@ -883,6 +902,9 @@ public class StepDefinitionParser {
                 return commandDefinition;
             }
             NativeCommandSelection selected = nativeSelection.orElseThrow();
+            if (deferredCompletion.isPresent()) {
+                commandDefinition = commandDefinition.withDeferredCompletion(deferredCompletion.orElseThrow());
+            }
             return commandDefinition.withConnectorOperationSelection(ConnectorOperationSelection.command(
                 name,
                 ConnectorBindingName.of(selected.binding().orElseThrow()),
@@ -1335,6 +1357,34 @@ public class StepDefinitionParser {
                 + "' operation.mode dynamic requires a non-blank from step");
         }
         return Optional.of(source);
+    }
+
+    private void validateCommandCallback(String stepName, NativeCommandSelection selected,
+        Optional<DeferredCompletionDefinition> completion) {
+        ConnectorOperationDescriptor operation = providerManifestCatalog().requireOperation(
+            ConnectorProviderId.of(selected.provider()), selected.providerVersion(), selected.operation(),
+            ConnectorOperationKind.COMMAND, selected.operationVersion());
+        try {
+            if (completion.isEmpty()) {
+                if (!operation.callbacks().isEmpty()) {
+                    throw new IllegalArgumentException("callback-capable Command requires await.callback");
+                }
+                return;
+            }
+            DeferredCompletionDefinition definition = completion.orElseThrow();
+            var callback = operation.callbacks().stream()
+                .filter(candidate -> candidate.id().equals(definition.callback().orElseThrow().name()))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("selected callback is absent from provider operation"));
+            if (!callback.typeContract().inputType().equals(definition.completion().orElseThrow().type())) {
+                throw new IllegalArgumentException("await.completion.type must match the callback canonical contract exactly");
+            }
+            if (operation.commandCapabilities().filter(capabilities -> capabilities.userConfirmationSupported()).isPresent()) {
+                throw new IllegalArgumentException("callback deferred Commands cannot advertise user confirmation");
+            }
+        } catch (IllegalArgumentException failure) {
+            report(Diagnostic.Kind.ERROR, "Step '" + stepName + "': " + failure.getMessage());
+            throw new StepSkippedException();
+        }
     }
 
     private Optional<ValidatedNativeQuerySelection> validateNativeQueryBinding(
@@ -2027,7 +2077,7 @@ public class StepDefinitionParser {
             return null;
         }
         Set<String> supportedKeys = Set.of(
-            "operationOutput", "timeout", "idempotency", "correlation", "transport", "completion");
+            "operationOutput", "timeout", "idempotency", "correlation", "transport", "callback", "completion");
         Set<String> unknownKeys = new LinkedHashSet<>();
         for (Object key : awaitMap.keySet()) {
             if (!(key instanceof String text) || !supportedKeys.contains(text)) {
@@ -2117,8 +2167,13 @@ public class StepDefinitionParser {
             }
         }
 
-        Object transportObj = awaitMap.get("transport");
-        if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {
+        boolean callbackMode = awaitMap.containsKey("callback");
+        if (callbackMode && (awaitMap.containsKey("transport") || awaitMap.containsKey("idempotency"))) {
+            report(Diagnostic.Kind.ERROR, "Step '" + stepName + "': await.callback excludes transport and idempotency.fields");
+            throw new StepSkippedException();
+        }
+        Object transportObj = callbackMode ? Map.of("type", "") : awaitMap.get("transport");
+        if (!(transportObj instanceof Map<?, ?> transportMap) || (!callbackMode && isBlank(stringValue(transportMap.get("type"))))) {
             String message = "Skipping step '" + stepName + "': await.transport.type must be declared";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
@@ -2197,6 +2252,25 @@ public class StepDefinitionParser {
             return null;
         }
         normalizedTransport.remove("type");
+        if (callbackMode) {
+            if (!"signedResumeToken".equals(strategy) || completion.isEmpty()
+                || !(awaitMap.get("callback") instanceof Map<?, ?> callback)
+                || !callback.keySet().equals(Set.of("name", "endpointResolver", "authenticator"))) {
+                report(Diagnostic.Kind.ERROR, "Step '" + stepName
+                    + "': callback requires signedResumeToken, completion projector, name, endpointResolver and authenticator");
+                throw new StepSkippedException();
+            }
+            ClassName resolver = parseClassName(stringValue(callback.get("endpointResolver")));
+            ClassName authenticator = parseClassName(stringValue(callback.get("authenticator")));
+            if (resolver == null || authenticator == null
+                || !(callback.get("name") instanceof String callbackName) || callbackName.isBlank()) {
+                report(Diagnostic.Kind.ERROR, "Step '" + stepName + "': invalid callback name or bean class");
+                throw new StepSkippedException();
+            }
+            return new DeferredCompletionDefinition(operationOutputType, operationOutputJavaType, timeout,
+                idempotencyKeyFields, strategy, new DeferredCompletionDefinition.ConnectorCallbackDefinition(
+                    stringValue(callback.get("name")), resolver, authenticator), completion);
+        }
         return new DeferredCompletionDefinition(
             operationOutputType,
             operationOutputJavaType,

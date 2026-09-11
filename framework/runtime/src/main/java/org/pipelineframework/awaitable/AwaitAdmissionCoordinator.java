@@ -87,8 +87,8 @@ public class AwaitAdmissionCoordinator {
         if (!enabled()) {
             return Uni.createFrom().item(Optional.empty());
         }
-        AwaitTransportAdapter<?> adapter = adapter(descriptor.transportType());
-        Optional<String> endpoint = adapter.admissionEndpoint(descriptor);
+        Optional<String> endpoint = descriptor.callback().map(callback -> callback.binding().value())
+            .or(() -> adapter(descriptor.transportType()).admissionEndpoint(descriptor));
         if (endpoint.isEmpty()) {
             return Uni.createFrom().item(Optional.empty());
         }

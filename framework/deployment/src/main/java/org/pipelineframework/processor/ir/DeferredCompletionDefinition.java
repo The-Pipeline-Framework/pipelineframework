@@ -35,8 +35,7 @@ public record DeferredCompletionDefinition(
     String timeout,
     List<String> idempotencyKeyFields,
     String correlationStrategy,
-    String transportType,
-    Map<String, Object> transportConfig,
+    InitiationDefinition initiation,
     Optional<CompletionProjectionDefinition> completion
 ) {
     public DeferredCompletionDefinition {
@@ -45,9 +44,46 @@ public record DeferredCompletionDefinition(
         timeout = requireText(timeout, "timeout");
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
         correlationStrategy = requireText(correlationStrategy, "correlation.strategy");
-        transportType = requireText(transportType, "transport.type");
-        transportConfig = transportConfig == null ? Map.of() : Map.copyOf(transportConfig);
+        Objects.requireNonNull(initiation, "initiation");
         completion = completion == null ? Optional.empty() : completion;
+    }
+
+    public DeferredCompletionDefinition(String operationOutputType, Optional<ClassName> operationOutputJavaType,
+        String timeout, List<String> idempotencyKeyFields, String correlationStrategy, String transportType,
+        Map<String, Object> transportConfig, Optional<CompletionProjectionDefinition> completion) {
+        this(operationOutputType, operationOutputJavaType, timeout, idempotencyKeyFields, correlationStrategy,
+            new PostOperationTransportDefinition(transportType, transportConfig), completion);
+    }
+
+    public sealed interface InitiationDefinition permits PostOperationTransportDefinition, ConnectorCallbackDefinition { }
+
+    public record PostOperationTransportDefinition(String type, Map<String, Object> config)
+        implements InitiationDefinition {
+        public PostOperationTransportDefinition {
+            type = requireText(type, "transport.type");
+            config = Map.copyOf(Objects.requireNonNull(config, "transport.config"));
+        }
+    }
+
+    public record ConnectorCallbackDefinition(String name, ClassName endpointResolverClass, ClassName authenticatorClass)
+        implements InitiationDefinition {
+        public ConnectorCallbackDefinition {
+            name = org.pipelineframework.connector.ConnectorProviderId.of(name).value();
+            Objects.requireNonNull(endpointResolverClass, "callback.endpointResolver");
+            Objects.requireNonNull(authenticatorClass, "callback.authenticator");
+        }
+    }
+
+    public Optional<ConnectorCallbackDefinition> callback() {
+        return initiation instanceof ConnectorCallbackDefinition callback ? Optional.of(callback) : Optional.empty();
+    }
+
+    public String transportType() {
+        return initiation instanceof PostOperationTransportDefinition transport ? transport.type() : "";
+    }
+
+    public Map<String, Object> transportConfig() {
+        return initiation instanceof PostOperationTransportDefinition transport ? transport.config() : Map.of();
     }
 
     private static String requireText(String value, String field) {

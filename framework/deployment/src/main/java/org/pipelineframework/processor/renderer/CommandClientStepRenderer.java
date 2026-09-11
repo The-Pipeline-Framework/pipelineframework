@@ -48,9 +48,13 @@ public class CommandClientStepRenderer {
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         PipelineTransport transportMode = configHints.transportMode();
         TypeName domainInputType = model.inboundDomainType();
-        TypeName domainOutputType = model.outboundDomainType();
+        TypeName domainOutputType = model.deferredCompletionSelection()
+            .map(completion -> completion.finalOutputType()).orElseGet(model::outboundDomainType);
+        PipelineStepModel transportModel = model.deferredCompletionSelection().isPresent()
+            ? model.toBuilder().outputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(domainOutputType)).build()
+            : model;
         CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
-            ctx, model, transportMode);
+            ctx, transportModel, transportMode);
         TypeName inputType = normalizedTransport.input().<TypeName>map(binding -> binding.transportType(transportMode))
             .orElseGet(() -> clientStepType(domainInputType, transportMode, configHints.basePackage()));
         TypeName outputType = normalizedTransport.output().<TypeName>map(binding -> binding.transportType(transportMode))
@@ -114,6 +118,9 @@ public class CommandClientStepRenderer {
         if (connectorSelection.isEmpty()) {
             typeBuilder.addField(descriptorFactory);
         }
+        if (model.deferredCompletionSelection().isPresent()) {
+            addCallbackCompletion(typeBuilder, model);
+        }
         if (inputMapper != null) {
             typeBuilder.addField(inputMapper);
         }
@@ -164,9 +171,25 @@ public class CommandClientStepRenderer {
         com.squareup.javapoet.CodeBlock.Builder body = com.squareup.javapoet.CodeBlock.builder();
         CodeBlock descriptor = connectorSelection
             .map(selection -> nativeDescriptor(
-                selection, domainInputType.toString(), domainOutputType.toString(), commandIdGeneratorName))
+                selection, domainInputType.toString(), model.outboundDomainType().toString(), commandIdGeneratorName))
             .orElseGet(() -> CodeBlock.of("descriptorFactory.descriptor($S, null, $S, $S, $S)",
                 model.serviceName(), domainInputType.toString(), domainOutputType.toString(), commandIdGeneratorName));
+        if (model.deferredCompletionSelection().isPresent()) {
+            if (transportMode == PipelineTransport.LOCAL) {
+                body.addStatement("$T commandInput = input", domainInputType);
+            } else {
+                String from = transportMode == PipelineTransport.REST ? "fromExternal"
+                    : normalizedInput ? "fromGrpc" : "fromGrpcFromDto";
+                body.addStatement("$T commandInput = inputMapper.$L(input)", domainInputType, from);
+            }
+            String outputConversion = transportMode == PipelineTransport.LOCAL ? ""
+                : transportMode == PipelineTransport.REST ? ".map(outputMapper::toExternal)"
+                : normalizedOutput ? ".map(outputMapper::toGrpc)" : ".map(outputMapper::toDtoToGrpc)";
+            body.addStatement("return deferredCompletion.<$T, $T>execute(completion, commandInput, endpointResolver, "
+                    + "callback -> support.<$T, $T>execute($L, commandIdGenerator, commandInput, callback))$L",
+                domainInputType, domainOutputType, domainInputType, model.outboundDomainType(), descriptor, outputConversion);
+            return body.build();
+        }
         if (transportMode == PipelineTransport.LOCAL) {
             body.addStatement("return support.execute($L, commandIdGenerator, input)", descriptor);
             return body.build();
@@ -190,6 +213,48 @@ public class CommandClientStepRenderer {
                 descriptor,
                 toGrpc);
         return body.build();
+    }
+
+    private void addCallbackCompletion(TypeSpec.Builder type, PipelineStepModel model) {
+        var completion = model.deferredCompletionSelection().orElseThrow();
+        var callback = completion.callback().orElseThrow();
+        var selected = callback.operation();
+        ClassName descriptorType = ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptor");
+        type.addAnnotation(ClassName.get("io.quarkus.runtime", "Startup"))
+            .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"))
+            .addField(FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "CommandDeferredCompletionSupport"),
+                "deferredCompletion").addAnnotation(ClassName.get("jakarta.inject", "Inject")).build())
+            .addField(FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionDescriptorRegistry"),
+                "completionRegistry").addAnnotation(ClassName.get("jakarta.inject", "Inject")).build())
+            .addField(FieldSpec.builder(callback.endpointResolver(), "endpointResolver")
+                .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build())
+            .addField(FieldSpec.builder(callback.authenticator(), "authenticator")
+                .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build())
+            .addField(FieldSpec.builder(descriptorType, "completion", Modifier.PRIVATE).build());
+        CodeBlock callbackSelection = CodeBlock.of(
+            "new $T($T.of($S), new $T($T.of($S), $S, $T.COMMAND, $L), $L, "
+                + "new $T($S, new $T($S, $T.empty()), $L), $S, $S)",
+            ClassName.get("org.pipelineframework.awaitable", "ConnectorCallbackSelection"),
+            ClassName.get("org.pipelineframework.connector", "ConnectorBindingName"), selected.binding().value(),
+            ClassName.get("org.pipelineframework.connector", "ConnectorOperationIdentity"),
+            ClassName.get("org.pipelineframework.connector", "ConnectorProviderId"), selected.operation().providerId().value(),
+            selected.operation().operationId(), ClassName.get("org.pipelineframework.connector", "ConnectorOperationKind"),
+            selected.operation().majorVersion(), selected.providerMajorVersion(),
+            ClassName.get("org.pipelineframework.connector", "ConnectorOperationCallbackDescriptor"), callback.descriptor().id(),
+            ClassName.get("org.pipelineframework.connector", "ConnectorOperationTypeContract"), callback.descriptor().typeContract().inputType(),
+            Optional.class, callback.descriptor().required(), callback.endpointResolver().canonicalName(), callback.authenticator().canonicalName());
+        CodeBlock descriptor = CodeBlock.of(
+            "new $T($S, $S, $S, $S, $T.parse($S), $S, $S, $T.of(), $T.of(), $S, $S, "
+                + "$T.identity(), $T.identity(), $S, ($T<Object, Object, Object>) ($T<?, ?, ?>) new $T(), true, $T.of($L))",
+            descriptorType, model.serviceName(), model.inboundDomainType().toString(), completion.finalOutputType().toString(),
+            "ONE_TO_ONE", java.time.Duration.class, completion.timeout().toString(), completion.correlationStrategy(), "",
+            java.util.Map.class, java.util.List.class, model.inboundDomainType().toString(), completion.completionPayloadType().orElseThrow().toString(),
+            java.util.function.Function.class, java.util.function.Function.class, completion.completionProjector().orElseThrow().canonicalName(),
+            ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionProjector"),
+            ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionProjector"),
+            completion.completionProjector().orElseThrow(), Optional.class, callbackSelection);
+        type.addMethod(MethodSpec.methodBuilder("registerCompletion").addAnnotation(ClassName.get("jakarta.annotation", "PostConstruct"))
+            .addStatement("completion = completionRegistry.register($L)", descriptor).build());
     }
 
     private CodeBlock nativeDescriptor(

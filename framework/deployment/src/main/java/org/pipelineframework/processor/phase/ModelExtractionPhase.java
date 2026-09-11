@@ -328,6 +328,30 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
+        Optional<DeferredCompletionSelection> callbackCompletion = Optional.empty();
+        if (stepDef.deferredCompletion().isPresent()) {
+            var completion = stepDef.deferredCompletion().orElseThrow();
+            var binding = awaitTypeBindings.resolve(ctx, stepDef);
+            if (binding.isEmpty()) {
+                throw new IllegalArgumentException("Command completion types could not be resolved for " + stepDef.name());
+            }
+            var resolved = binding.orElseThrow();
+            outputType = resolved.operationOutputType();
+            var callback = completion.callback().orElseThrow();
+            var operation = stepDef.connectorOperationSelection().orElseThrow();
+            callbackCompletion = Optional.of(new DeferredCompletionSelection(resolved.finalOutputType(),
+                resolved.finalOutputCanonicalType(), resolved.completionPayloadCanonicalType(),
+                java.time.Duration.parse(completion.timeout()), List.of(), completion.correlationStrategy(), "", Map.of(),
+                resolved.completionPayloadType(), completion.completion().map(DeferredCompletionDefinition.CompletionProjectionDefinition::projector),
+                Optional.of(new DeferredCompletionSelection.ResolvedConnectorCallback(
+                    org.pipelineframework.connector.ConnectorProviderManifestLoader.load(
+                        org.pipelineframework.connector.ConnectorProviderManifestLoader.metadataClassLoader(getClass()))
+                        .requireOperation(operation.operation().providerId(), operation.providerMajorVersion(),
+                            operation.operation().operationId(), operation.operation().kind(), operation.operation().majorVersion())
+                        .callbacks().stream().filter(candidate -> candidate.id().equals(callback.name())).findFirst().orElseThrow(),
+                    operation, callback.endpointResolverClass(), callback.authenticatorClass()))));
+        }
+
         String serviceName = operationServiceName(ctx, definition, stepDef.name());
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
         return new PipelineStepModel.Builder()
@@ -335,6 +359,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(ClassName.get("org.pipelineframework.command", "CommandStepDescriptor"))
+            .deferredCompletionSelection(callbackCompletion)
             .inputMapping(TypeMapping.withoutMapper(inputType))
             .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(StreamingShape.UNARY_UNARY)

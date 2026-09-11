@@ -77,9 +77,12 @@ public record StepDefinition(
         if (executionClass != null && remoteExecution != null) {
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }
-        if (deferredCompletion.isPresent() && kind != StepKind.INTERNAL) {
-            throw new IllegalArgumentException("deferred completion currently supports only INTERNAL authored operations");
-        }
+        deferredCompletion.ifPresent(completion -> {
+            boolean callback = completion.callback().isPresent();
+            if ((callback && kind != StepKind.COMMAND) || (!callback && kind != StepKind.INTERNAL)) {
+                throw new IllegalArgumentException("deferred completion requires INTERNAL + transport or native COMMAND + callback");
+            }
+        });
 
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "remoteExecution");

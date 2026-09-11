@@ -6,6 +6,8 @@ import java.util.Set;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.InOrder;
@@ -78,6 +80,23 @@ class AwaitBoundaryAdmissionTest {
   }
 
   @Test
+  void observedAndDispatchOwnedDuplicateCallbacksDoNotScheduleAnotherContinuation() {
+    for (var status : java.util.List.of(AwaitInteractionStatus.COMPLETION_OBSERVED,
+        AwaitInteractionStatus.COMPLETED)) {
+      var interaction = awaitRecord(0, status, Map.of("completionMode", "CONNECTOR_CALLBACK",
+          "completionDelivery", "dispatch"));
+      when(awaitCoordinator.complete(any()))
+          .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, true)));
+      var result = admission.complete(command(interaction.interactionId()),
+          AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER).await().indefinitely();
+      assertEquals(interaction, result.record());
+    }
+    verify(awaitCoordinator, never()).recordCompletion(any(), org.mockito.ArgumentMatchers.anyLong());
+    verify(liveCompletionRegistry, never()).signal(any());
+    org.mockito.Mockito.verifyNoInteractions(continuations);
+  }
+
+  @Test
   void signalsLiveCompletionBeforeFallbackAggregationAndSkipsDurableContinuationWhenAccepted() {
     AwaitInteractionRecord interaction = awaitRecord(null);
     AwaitCompletionCommand command = command(interaction.interactionId());
@@ -115,9 +134,11 @@ class AwaitBoundaryAdmissionTest {
       verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
     }
 
-  @Test
-  void fallsBackToDurableContinuationWhenNoLiveSessionAccepts() {
-    AwaitInteractionRecord interaction = awaitRecord(0);
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void fallsBackToDurableContinuationWhenNoLiveSessionAccepts(boolean commandCallback) {
+    AwaitInteractionRecord interaction = awaitRecord(0, AwaitInteractionStatus.COMPLETED,
+        commandCallback ? Map.of("completionMode", "CONNECTOR_CALLBACK") : Map.of());
     AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, 1, 1, true, null);
     AwaitCompletionCommand command = command(interaction.interactionId());
     AwaitCompletionResult completion = new AwaitCompletionResult(interaction, false);
@@ -213,6 +234,11 @@ class AwaitBoundaryAdmissionTest {
   }
 
   private static AwaitInteractionRecord awaitRecord(Integer itemIndex, AwaitInteractionStatus status) {
+    return awaitRecord(itemIndex, status, Map.of());
+  }
+
+  private static AwaitInteractionRecord awaitRecord(Integer itemIndex, AwaitInteractionStatus status,
+      Map<String, Object> metadata) {
     return new AwaitInteractionRecord(
         "tenant-1",
         "exec-1",
@@ -233,7 +259,7 @@ class AwaitBoundaryAdmissionTest {
         null,
         null,
         "kafka",
-        Map.of(),
+        metadata,
         10_000L,
         1L,
         2L,

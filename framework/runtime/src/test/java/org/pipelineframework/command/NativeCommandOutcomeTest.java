@@ -99,6 +99,7 @@ class NativeCommandOutcomeTest {
         assertEquals("done", support.<String, String>execute(descriptor(), (ignored, input) -> "stable-1", "input")
             .await().atMost(Duration.ofSeconds(5)));
         assertSame(String.class, operation.outputType);
+        assertEquals(Optional.empty(), operation.callbackContext);
         CommandEffectRecord record = store.find("tenant", "stable-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
         assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
         assertEquals(List.of(new CommandReference("ticket", "TKT-1", CommandReferencePurpose.RECONCILIATION)),
@@ -167,6 +168,14 @@ class NativeCommandOutcomeTest {
         assertEquals(1, boundProvider.operation.invocations);
         assertEquals(0, prototype.starts);
         assertEquals(0, prototype.operation.invocations);
+        var callback = new org.pipelineframework.connector.ConnectorCallbackContext("job.completed",
+            java.net.URI.create("https://app.test/callback?token=secret"));
+        assertEquals("bound-result", boundSupport.<String, String>execute(
+            descriptor, (ignored, input) -> "callback-command", "input", callback).await().atMost(Duration.ofSeconds(5)));
+        assertEquals(Optional.of(callback), boundProvider.operation.callbackContext);
+        var effect = store.find("tenant", "callback-command").await().indefinitely().orElseThrow();
+        assertFalse(effect.toString().contains("token=secret"));
+        assertFalse(boundProvider.operation.executionContext.toString().contains("token=secret"));
     }
 
     @Test
@@ -615,6 +624,7 @@ class NativeCommandOutcomeTest {
         private final List<CommandDispatchIdentity> dispatchIdentities = new java.util.ArrayList<>();
         private ConnectorExecutionContext executionContext;
         private Class<?> outputType;
+        private Optional<org.pipelineframework.connector.ConnectorCallbackContext> callbackContext = Optional.empty();
 
         @Override
         public String id() {
@@ -642,6 +652,7 @@ class NativeCommandOutcomeTest {
             dispatchIdentities.add(invocation.dispatchIdentity().orElseThrow());
             executionContext = invocation.executionContext();
             outputType = invocation.outputType();
+            callbackContext = invocation.callbackContext();
             if (immediateFailure != null) {
                 throw immediateFailure;
             }

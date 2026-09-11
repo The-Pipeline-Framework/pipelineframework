@@ -280,7 +280,10 @@ public final class ConnectorProviderManifestReader {
 
     private static ConnectorOperationDescriptor operation(Map<String, Object> value, int schemaVersion) {
         requireOnly(value, "id", "kind", "majorVersion", "configurationSchema", "commandCapabilities",
-            "queryCapabilities", "queryCardinality", "typeContract");
+            "queryCapabilities", "queryCardinality", "typeContract", "callbacks");
+        if (schemaVersion < 7 && value.containsKey("callbacks")) {
+            throw malformed("callbacks", "field absent from schema versions before 7");
+        }
         if (schemaVersion == 1 && value.containsKey("typeContract")) {
             throw malformed("typeContract", "field absent from schema version 1");
         }
@@ -289,7 +292,16 @@ public final class ConnectorProviderManifestReader {
         return new ConnectorOperationDescriptor(
             string(value, "id"), kind, integer(value, "majorVersion"),
             optionalSchema(value, "configurationSchema"), optionalCommandCapabilities(value),
-            optionalQueryCapabilities(value), queryCardinality, optionalTypeContract(value));
+            optionalQueryCapabilities(value), queryCardinality, optionalTypeContract(value),
+            value.containsKey("callbacks") ? array(value, "callbacks").stream()
+                .map(entry -> callback(object(entry, "callback descriptor"))).toList() : List.of());
+    }
+
+    private static ConnectorOperationCallbackDescriptor callback(Map<String, Object> value) {
+        requireOnly(value, "id", "typeContract", "required");
+        return new ConnectorOperationCallbackDescriptor(string(value, "id"),
+            optionalTypeContract(value).orElseThrow(() -> malformed("typeContract", "required callback contract")),
+            bool(value, "required"));
     }
 
     private static Optional<QueryOperationCardinality> queryCardinality(

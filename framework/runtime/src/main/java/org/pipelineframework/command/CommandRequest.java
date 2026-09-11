@@ -1,6 +1,8 @@
 package org.pipelineframework.command;
 
 import java.util.Map;
+import java.util.Optional;
+import org.pipelineframework.connector.ConnectorCallbackContext;
 
 import org.pipelineframework.execution.PipelineExecutionContext;
 
@@ -14,8 +16,14 @@ public record CommandRequest<I>(
     String attemptId,
     I input,
     PipelineExecutionContext executionContext,
-    Map<String, Object> config
+    Map<String, Object> config,
+    Optional<ConnectorCallbackContext> callbackContext
 ) {
+    public CommandRequest(CommandDescriptor descriptor, String commandId, String occurrenceId,
+        String attemptId, I input, PipelineExecutionContext executionContext, Map<String, Object> config) {
+        this(descriptor, commandId, occurrenceId, attemptId, input, executionContext, config, Optional.empty());
+    }
+
     public CommandRequest(
         CommandDescriptor descriptor,
         String commandId,
@@ -54,6 +62,7 @@ public record CommandRequest<I>(
             throw new IllegalArgumentException("executionContext must not be null");
         }
         config = config == null ? Map.of() : Map.copyOf(config);
+        callbackContext = java.util.Objects.requireNonNull(callbackContext, "callback context must not be null");
     }
 
     /** Stable provider idempotency key for this intentional effect occurrence. */

@@ -43,7 +43,7 @@ class ConnectorProviderArtifactsTest {
         assertTrue(json.contains("line\\nfeed"));
         assertTrue(json.contains("tab\\tvalue"));
         assertTrue(json.contains("unit\\u0001separator"));
-        assertTrue(json.contains("\"schemaVersion\":6"));
+        assertTrue(json.contains("\"schemaVersion\":7"));
         assertTrue(!json.contains("executionCapabilities"));
         assertEquals(manifest, parsed);
     }

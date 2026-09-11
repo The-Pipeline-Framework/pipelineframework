@@ -63,6 +63,13 @@ public final class AwaitStepTypeBindingResolver {
         }
 
         V3JavaTypeResolver javaTypes = new V3JavaTypeResolver(config);
+        if (completion.callback().isPresent()) {
+            var callback = completion.callback().orElseThrow();
+            if (!validateCallbackBean(ctx, step.name(), callback.endpointResolverClass(), "ProviderCallbackEndpointResolver")
+                || !validateCallbackBean(ctx, step.name(), callback.authenticatorClass(), "ProviderCallbackAuthenticator")) {
+                return Optional.empty();
+            }
+        }
         Optional<ClassName> inferredOperationOutput = javaTypes.resolve(completion.operationOutputType());
         Optional<ClassName> providerOperationOutput = ctx.getResolvedProviderBoundaries().stream()
             .filter(boundary -> step.name().equals(boundary.boundary().stepName()))
@@ -111,9 +118,19 @@ public final class AwaitStepTypeBindingResolver {
                 + completion.completion().orElseThrow().type() + "'.");
             return Optional.empty();
         }
+        Optional<ClassName> projectorContext = completion.callback().isPresent()
+            ? Optional.ofNullable(step.inputType()).or(() -> config.steps().stream()
+                .filter(candidate -> candidate != null && step.name().equals(candidate.name()))
+                .findFirst().flatMap(candidate -> javaTypes.resolve(candidate.inputTypeName())))
+            : operationOutput;
+        if (projectorContext.isEmpty()) {
+            error(ctx, "Step '" + step.name() + "' could not resolve the canonical completion context type.");
+            return Optional.empty();
+        }
         if (completion.completion().isPresent()
             && !validateProjector(ctx, step.name(), completion.completion().orElseThrow(),
-                operationOutput.orElseThrow(), payloadType.orElseThrow(), finalOutput.orElseThrow())) {
+                projectorContext.orElseThrow(),
+                payloadType.orElseThrow(), finalOutput.orElseThrow())) {
             return Optional.empty();
         }
         return Optional.of(new AwaitStepTypeBinding(
@@ -189,6 +206,19 @@ public final class AwaitStepTypeBindingResolver {
         if (!valid) {
             error(ctx, "Step '" + stepName + "' completion projector '"
                 + projector.getQualifiedName() + "' must be a public concrete class with a public no-arg constructor.");
+        }
+        return valid;
+    }
+
+    private boolean validateCallbackBean(PipelineCompilationContext ctx, String stepName, ClassName name, String contract) {
+        var elements = ctx.getProcessingEnv().getElementUtils();
+        TypeElement bean = elements.getTypeElement(name.canonicalName());
+        TypeElement spi = elements.getTypeElement("org.pipelineframework.awaitable." + contract);
+        boolean valid = bean != null && spi != null && bean.getKind() == ElementKind.CLASS
+            && bean.getModifiers().contains(Modifier.PUBLIC) && !bean.getModifiers().contains(Modifier.ABSTRACT)
+            && ctx.getProcessingEnv().getTypeUtils().isAssignable(bean.asType(), spi.asType());
+        if (!valid) {
+            error(ctx, "Step '" + stepName + "' callback bean '" + name + "' must be a public concrete " + contract);
         }
         return valid;
     }

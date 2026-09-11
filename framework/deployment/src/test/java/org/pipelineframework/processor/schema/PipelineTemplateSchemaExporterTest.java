@@ -409,7 +409,7 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
-    void deferredCompletionIsAnInternalOperationModifier() {
+    void deferredCompletionSelectsExactlyOneInitiationMode() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
         assertFalse(definitions.has("awaitTemplateStep"));
         JsonObject internalProperties = definitions.getAsJsonObject("delegatedOrInternalStep")
@@ -420,7 +420,8 @@ class PipelineTemplateSchemaExporterTest {
         assertContains(awaitConfig.getAsJsonArray("required"), "operationOutput");
         assertContains(awaitConfig.getAsJsonArray("required"), "timeout");
         assertContains(awaitConfig.getAsJsonArray("required"), "correlation");
-        assertContains(awaitConfig.getAsJsonArray("required"), "transport");
+        assertEquals(2, awaitConfig.getAsJsonArray("oneOf").size());
+        assertTrue(awaitConfig.getAsJsonObject("properties").has("callback"));
         assertTrue(awaitConfig.getAsJsonObject("properties").has("idempotency"));
         assertTrue(awaitConfig.getAsJsonObject("properties").has("completion"));
         assertFalse(awaitConfig.getAsJsonObject("properties").has("dispatch"));

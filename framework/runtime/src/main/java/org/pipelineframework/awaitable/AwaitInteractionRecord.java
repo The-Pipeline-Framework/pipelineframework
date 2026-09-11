@@ -184,6 +184,48 @@ public record AwaitInteractionRecord(
         return itemIndex != null;
     }
 
+    /** The completion gate is persisted in the existing interaction. */
+    public boolean commandCallback() {
+        return "CONNECTOR_CALLBACK".equals(transportMetadata.get("completionMode"));
+    }
+
+    public AwaitInteractionStatus observedCompletionStatus() {
+        if (!commandCallback()) {
+            return AwaitInteractionStatus.COMPLETED;
+        }
+        return switch (status) {
+            case DISPATCHING, COMPLETION_OBSERVED -> AwaitInteractionStatus.COMPLETION_OBSERVED;
+            case DISPATCHED, COMPLETED -> AwaitInteractionStatus.COMPLETED;
+            default -> throw new IllegalStateException("Callback cannot be admitted while Command interaction is " + status);
+        };
+    }
+
+    public AwaitInteractionRecord settleCommandDispatch(CommandDispatchSettlement settlement, long nowEpochMs) {
+        java.util.Objects.requireNonNull(settlement, "settlement");
+        if (!commandCallback() || (status != AwaitInteractionStatus.DISPATCHING
+            && status != AwaitInteractionStatus.COMPLETION_OBSERVED)) {
+            throw new IllegalStateException("Command settlement requires an unsettled callback interaction");
+        }
+        boolean observed = status == AwaitInteractionStatus.COMPLETION_OBSERVED;
+        boolean accepted = settlement == CommandDispatchSettlement.SUCCEEDED || settlement == CommandDispatchSettlement.AMBIGUOUS;
+        AwaitInteractionStatus next = deadlineEpochMs <= nowEpochMs ? AwaitInteractionStatus.TIMED_OUT
+            : observed ? (accepted ? AwaitInteractionStatus.COMPLETED : AwaitInteractionStatus.FAILED)
+            : accepted ? AwaitInteractionStatus.DISPATCHED
+            : settlement == CommandDispatchSettlement.RETRYABLE ? AwaitInteractionStatus.WAITING : AwaitInteractionStatus.FAILED;
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(transportMetadata);
+        metadata.put("commandSettlement", settlement.name());
+        if (observed && accepted && next == AwaitInteractionStatus.COMPLETED) {
+            metadata.put("completionDelivery", "dispatch");
+        }
+        if (observed && !accepted) {
+            metadata.put("completionFailure", "contradictory-provider-evidence");
+        }
+        return new AwaitInteractionRecord(tenantId, executionId, stepId, stepIndex, outputType, interactionId,
+            correlationId, causationId, idempotencyKey, version + 1, next, requestPayload, responsePayload,
+            unitId, itemIndex, actor, assignee, group, transportType, metadata, deadlineEpochMs, createdAtEpochMs,
+            nowEpochMs, ttlEpochS, transportOutputType);
+    }
+
     /**
      * Returns a transport-safe snapshot for a portable transition envelope.
      */

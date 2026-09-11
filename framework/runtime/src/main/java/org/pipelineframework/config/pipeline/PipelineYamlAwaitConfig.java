@@ -27,9 +27,14 @@ import java.util.Optional;
  */
 public record PipelineYamlAwaitConfig(
     PipelineYamlAwaitCorrelation correlation,
-    PipelineYamlAwaitTransport transport,
-    Optional<PipelineYamlAwaitCompletion> completion
+    Optional<PipelineYamlAwaitTransport> transport,
+    Optional<PipelineYamlAwaitCompletion> completion,
+    Optional<PipelineYamlAwaitCallback> callback
 ) {
+    public PipelineYamlAwaitConfig(PipelineYamlAwaitCorrelation correlation, PipelineYamlAwaitTransport transport,
+        Optional<PipelineYamlAwaitCompletion> completion) {
+        this(correlation, Optional.of(transport), completion, Optional.empty());
+    }
     public PipelineYamlAwaitConfig(
         PipelineYamlAwaitCorrelation correlation,
         PipelineYamlAwaitTransport transport
@@ -39,8 +44,10 @@ public record PipelineYamlAwaitConfig(
 
     public PipelineYamlAwaitConfig {
         correlation = correlation == null ? new PipelineYamlAwaitCorrelation("interactionId") : correlation;
-        if (transport == null) {
-            throw new IllegalArgumentException("await.transport must be defined");
+        java.util.Objects.requireNonNull(transport, "transport");
+        java.util.Objects.requireNonNull(callback, "callback");
+        if (transport.isPresent() == callback.isPresent()) {
+            throw new IllegalArgumentException("await requires exactly one of transport or callback");
         }
         completion = completion == null ? Optional.empty() : completion;
     }

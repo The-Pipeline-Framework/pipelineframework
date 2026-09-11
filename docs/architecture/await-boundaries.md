@@ -24,7 +24,7 @@ after the current execution turn.
 | Local computation returning now | Authored service |
 | Inline HTTP/gRPC call returning now | Query, Command, Connector, or remote operator |
 | Authored request followed by a human decision | Authored service with `await:` |
-| Provider accepts now and calls back later | Command with deferred completion (planned) |
+| Provider accepts now and calls back later | Native Command with `await.callback` |
 | Independent event starts a new business flow | Inbound admission, not deferred completion |
 | Another pipeline should own the next lifecycle | Checkpoint handoff |
 
@@ -88,6 +88,29 @@ original step input or submitted completion.
 TPF persists the operation output and projected completion as canonical values.
 Recovery resumes from the admitted final output; it does not invoke the authored
 operation or projector again for an already projected canonical completion.
+
+## Command Callback Completion
+
+A native `ONE_TO_ONE` Command can select a callback declared in its provider
+manifest. Its `await.operationOutput` is the immediate acknowledgement contract;
+the top-level `output` is the final pipeline result. The required completion
+projector receives the original canonical Command input and the callback payload,
+so it can produce the final result even when dispatch acknowledgement is ambiguous.
+
+TPF registers the durable interaction before dispatch. A callback arriving during
+dispatch is stored as `COMPLETION_OBSERVED` and cannot advance the pipeline until
+the Command outcome settles. Success or ambiguity permits completion; a callback
+followed by definite rejection fails as contradictory provider evidence. Completing
+an ambiguous Command does not rewrite its effect history.
+
+Callback selection uses an application binding, signed resume tokens, and explicit
+endpoint resolver and authenticator classes. It cannot be combined with
+`await.transport` or authored Await idempotency fields. Query, dynamic, packaged
+Block, attended Command, and streaming Command completion are unsupported.
+
+See [Command Steps](/deploy/orchestrator-runtime/command#callback-completion) for
+the declaration and [ADR-0037](/decisions/0037-command-deferred-completion-joins-effect-and-callback)
+for the durable outcome table.
 
 ## Branching And Unions
 

@@ -36,6 +36,7 @@ public record AwaitReplayLifecycleEvent(
     Boolean dispatchComplete
 ) {
     public static final String INTERACTION_DISPATCHED = "await_interaction_dispatched";
+    public static final String COMPLETION_OBSERVED = "await_completion_observed";
     public static final String ADMISSION_ACQUIRED = "await_admission_acquired";
     public static final String ADMISSION_REUSED = "await_admission_reused";
     public static final String ADMISSION_RELEASED = "await_admission_released";

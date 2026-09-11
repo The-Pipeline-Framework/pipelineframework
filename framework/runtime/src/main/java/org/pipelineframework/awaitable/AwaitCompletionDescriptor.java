@@ -41,8 +41,19 @@ public record AwaitCompletionDescriptor(
     Function<Object, Object> outputFromTransport,
     String completionProjectorId,
     AwaitCompletionProjector<Object, Object, Object> completionProjector,
-    boolean requestAwareCompletion
+    boolean requestAwareCompletion,
+    java.util.Optional<ConnectorCallbackSelection> callback
 ) {
+    public AwaitCompletionDescriptor(String stepId, String inputType, String outputType, String cardinality,
+        Duration timeout, String correlationStrategy, String transportType, Map<String, Object> transportConfig,
+        List<String> idempotencyKeyFields, String transportInputType, String transportOutputType,
+        Function<Object, Object> inputToTransport, Function<Object, Object> outputFromTransport,
+        String completionProjectorId, AwaitCompletionProjector<Object, Object, Object> completionProjector,
+        boolean requestAwareCompletion) {
+        this(stepId, inputType, outputType, cardinality, timeout, correlationStrategy, transportType, transportConfig,
+            idempotencyKeyFields, transportInputType, transportOutputType, inputToTransport, outputFromTransport,
+            completionProjectorId, completionProjector, requestAwareCompletion, java.util.Optional.empty());
+    }
     public AwaitCompletionDescriptor(
         String stepId,
         String inputType,
@@ -134,6 +145,7 @@ public record AwaitCompletionDescriptor(
     }
 
     public AwaitCompletionDescriptor {
+        callback = java.util.Objects.requireNonNull(callback, "callback");
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
         }
@@ -147,7 +159,7 @@ public record AwaitCompletionDescriptor(
         if (timeout == null || timeout.isNegative() || timeout.isZero()) {
             throw new IllegalArgumentException("timeout must be positive");
         }
-        if (transportType == null || transportType.isBlank()) {
+        if (callback.isEmpty() && (transportType == null || transportType.isBlank())) {
             throw new IllegalArgumentException("transportType must not be blank");
         }
         correlationStrategy = correlationStrategy == null || correlationStrategy.isBlank()
@@ -168,6 +180,11 @@ public record AwaitCompletionDescriptor(
             transportConfig = Map.copyOf(transportConfig);
         }
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
+        if (callback.isPresent() && (!"".equals(transportType) || !transportConfig.isEmpty()
+            || !idempotencyKeyFields.isEmpty() || !"signedResumeToken".equals(correlationStrategy)
+            || !"ONE_TO_ONE".equals(cardinality) || !requestAwareCompletion)) {
+            throw new IllegalArgumentException("callback completion requires unary signed-token projection without Await transport or idempotency fields");
+        }
         transportInputType = transportInputType == null || transportInputType.isBlank() ? inputType : transportInputType;
         transportOutputType = transportOutputType == null || transportOutputType.isBlank() ? outputType : transportOutputType;
         inputToTransport = inputToTransport == null ? Function.identity() : inputToTransport;

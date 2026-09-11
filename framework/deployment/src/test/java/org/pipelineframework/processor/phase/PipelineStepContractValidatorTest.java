@@ -25,6 +25,63 @@ import static org.mockito.Mockito.*;
 class PipelineStepContractValidatorTest {
 
     @Test
+    void rejectsCallbackOccurrencesInAStreamAndAcceptsAnExplicitAggregate() {
+        ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
+        Messager messager = mock(Messager.class);
+        when(processing.getMessager()).thenReturn(messager);
+        var context = context(processing);
+        var completion = mock(DeferredCompletionSelection.class);
+        when(completion.callback()).thenReturn(java.util.Optional.of(
+            mock(DeferredCompletionSelection.ResolvedConnectorCallback.class)));
+        var callback = model("Callback", "Shared", "Final").toBuilder()
+            .deferredCompletionSelection(completion).build();
+        var expand = model("Expand", "Input", "Shared").toBuilder()
+            .streamingShape(StreamingShape.UNARY_STREAMING).build();
+        var ordinary = model("Transform", "Shared", "Shared");
+        new PipelineStepContractValidator().validate(context, List.of(expand, ordinary, callback));
+        verify(messager).printMessage(eq(ERROR), contains("cannot consume an upstream stream"));
+
+        clearInvocations(messager);
+        var aggregate = model("Aggregate", "Shared", "Shared").toBuilder()
+            .streamingShape(StreamingShape.STREAMING_UNARY).build();
+        new PipelineStepContractValidator().validate(context, List.of(expand, aggregate, callback));
+        verifyNoInteractions(messager);
+    }
+
+    @Test
+    void aggregationOnOneBranchDoesNotHideStreamingCallbackInputOnAnother() {
+        ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
+        Messager messager = mock(Messager.class);
+        when(processing.getMessager()).thenReturn(messager);
+        var context = context(processing);
+        var completion = mock(DeferredCompletionSelection.class);
+        when(completion.callback()).thenReturn(java.util.Optional.of(
+            mock(DeferredCompletionSelection.ResolvedConnectorCallback.class)));
+        var callback = model("CallbackB", "B", "Final").toBuilder()
+            .deferredCompletionSelection(completion).build();
+        var expand = model("Expand", "Input", "Union").toBuilder()
+            .streamingShape(StreamingShape.UNARY_STREAMING).build();
+        var aggregate = model("AggregateA", "A", "C").toBuilder()
+            .streamingShape(StreamingShape.STREAMING_UNARY).build();
+        var plan = mock(PipelineBranchingPlan.class);
+        when(plan.branchAware()).thenReturn(true);
+        var steps = List.of(branch(0, "Input", List.of("A", "B")),
+            branch(1, "A", List.of("C")), branch(2, "B", List.of("Final")));
+        when(plan.steps()).thenReturn(steps);
+        context.setBranchingPlan(plan);
+        new PipelineStepContractValidator().validate(context, List.of(expand, aggregate, callback));
+        verify(messager).printMessage(eq(ERROR), contains("cannot consume an upstream stream"));
+    }
+
+    private PipelineBranchingPlan.BranchStep branch(int index, String accepted, List<String> produced) {
+        var step = mock(PipelineBranchingPlan.BranchStep.class);
+        when(step.index()).thenReturn(index);
+        when(step.acceptedContractTypes()).thenReturn(List.of(accepted));
+        when(step.producedLeafContractTypes()).thenReturn(produced);
+        return step;
+    }
+
+    @Test
     void reportsAdjacentResolvedJavaContractMismatch() {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Messager messager = mock(Messager.class);

@@ -1818,6 +1818,7 @@ public final class PipelineTemplateSchemaExporter {
           "if": { "required": ["await"] },
           "then": {
             "required": ["service"],
+            "properties": { "await": { "required": ["transport"] } },
             "not": { "anyOf": [{ "required": ["operator"] }, { "required": ["delegate"] }] }
           }
         }
@@ -1958,6 +1959,16 @@ public final class PipelineTemplateSchemaExporter {
         "transport": {
           "$ref": "#/$defs/awaitTransport"
         },
+        "callback": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "endpointResolver": { "$ref": "#/$defs/javaClassName" },
+            "authenticator": { "$ref": "#/$defs/javaClassName" }
+          },
+          "required": ["name", "endpointResolver", "authenticator"],
+          "additionalProperties": false
+        },
         "completion": {
           "type": "object",
           "properties": {
@@ -1979,8 +1990,15 @@ public final class PipelineTemplateSchemaExporter {
       "required": [
         "operationOutput",
         "timeout",
-        "correlation",
-        "transport"
+        "correlation"
+      ],
+      "oneOf": [
+        { "required": ["transport"], "not": { "required": ["callback"] } },
+        {
+          "required": ["callback", "completion"],
+          "properties": { "correlation": { "properties": { "strategy": { "const": "signedResumeToken" } } } },
+          "not": { "anyOf": [{ "required": ["transport"] }, { "required": ["idempotency"] }] }
+        }
       ],
       "additionalProperties": false
     },
@@ -2068,6 +2086,12 @@ public final class PipelineTemplateSchemaExporter {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "await": {
+          "allOf": [
+            { "$ref": "#/$defs/awaitConfig" },
+            { "required": ["callback"] }
+          ]
+        },
         "id": {
           "type": "string",
           "minLength": 1
@@ -2200,6 +2224,13 @@ public final class PipelineTemplateSchemaExporter {
             { "required": ["connector"] },
             { "required": ["operation", "using"] }
           ]
+        },
+        {
+          "if": { "required": ["await"] },
+          "then": {
+            "required": ["operation", "using", "cardinality"],
+            "properties": { "kind": { "const": "command" } }
+          }
         }
       ],
       "required": [
@@ -2695,6 +2726,17 @@ public final class PipelineTemplateSchemaExporter {
                 },
                 { "$ref": "#/$defs/v3TemplateStep" }
               ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "steps": {
+            "items": {
+              "properties": {
+                "await": { "not": { "required": ["callback"] } }
+              }
             }
           }
         }

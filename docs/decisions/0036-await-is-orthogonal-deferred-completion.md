@@ -52,6 +52,10 @@ therefore a subsequent decision and implementation slice. Query, nested pipeline
 remote operator, dynamic operation, and packaged Block support remain proof-driven
 future work.
 
+[ADR-0037](./0037-command-deferred-completion-joins-effect-and-callback.md) supplies
+that Command initiation and settlement model while retaining this decision's
+post-operation ordering for authored internal services.
+
 `kind: await` is rejected. There is no compatibility identity operation and no new
 `interaction` kind.
 

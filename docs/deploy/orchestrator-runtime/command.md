@@ -65,6 +65,65 @@ provider-level configuration. The step `config` is operation-level configuration
 metadata validates both scopes during compilation without constructing the provider or resolving
 connection and secret references.
 
+## Callback Completion
+
+Version 3 operation-first Commands may select one callback declared by their
+provider. The operation remains `ONE_TO_ONE` and requires `QUEUE_ASYNC`:
+
+```yaml
+version: 3
+connectors:
+  jobs:
+    provider: example.jobs
+    version: 1
+steps:
+  - name: Start job
+    kind: command
+    operation: start
+    using: jobs
+    cardinality: ONE_TO_ONE
+    input: StartJobRequest
+    output: JobResult
+    java:
+      input: com.example.StartJobRequest
+      output: com.example.JobResult
+    commandIdGenerator: com.example.JobCommandIdGenerator
+    duplicatePolicy: RETURN_RECORDED
+    await:
+      operationOutput:
+        type: JobAccepted
+        java: com.example.JobAccepted
+      timeout: PT10M
+      correlation:
+        strategy: signedResumeToken
+      callback:
+        name: job.completed
+        endpointResolver: com.example.JobCallbackEndpointResolver
+        authenticator: com.example.JobCallbackAuthenticator
+      completion:
+        type: JobCallback
+        projector: com.example.JobCompletionProjector
+```
+
+The projector implements
+`AwaitCompletionProjector<StartJobRequest, JobCallback, JobResult>`. Its trusted
+context is the original Command input. `JobAccepted` belongs to the effect record
+and never becomes the pipeline's final output.
+
+The application provides the public endpoint resolver and asynchronous callback
+authenticator. Callback URIs require HTTPS; `pipeline.callback.allow-http=true`
+explicitly permits HTTP for local tests. The URI and signed token are passed only
+through the native `CommandInvocation.callbackContext()` and must not be logged or
+copied into configuration or effect evidence. Generic HTTP/OpenAPI ingress is a
+separate integration; a provider callback descriptor alone does not install a route.
+
+The durable interaction exists before provider dispatch. Early callbacks are
+acknowledged without advancing the execution until the effect outcome is recorded.
+Success and ambiguity wait for the callback; known retryable non-acceptance retains
+the same interaction and deadline for deliberate Command retry. A callback followed
+by a definite rejection fails closed. Timeout and cancellation retain their normal
+Await semantics. See [deferred completion](/architecture/await-boundaries#command-callback-completion).
+
 ## Required Runtime Pieces
 
 For operation-first native provider commands, implement `CommandOperation<I, C, O>` as described in

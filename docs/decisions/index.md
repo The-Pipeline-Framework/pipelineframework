@@ -45,6 +45,7 @@ authoritative for exact syntax and release support.
 | [0034](./0034-pinned-http-operations-execute-as-ordinary-connector-capabilities.md) | Execute immutable HTTP operation pins through ordinary Connector Query and Command support. |
 | [0035](./0035-openapi-imports-release-pinned-capabilities-not-authority.md) | Import selected OpenAPI operations as release-pinned capabilities without importing external authority. |
 | [0036](./0036-await-is-orthogonal-deferred-completion.md) | Model Await as deferred completion on an ordinary operation, not as an operation kind. |
+| [0037](./0037-command-deferred-completion-joins-effect-and-callback.md) | Join ordinary Command dispatch with correlated completion before advancing the pipeline. |
 
 ## Maintenance
 

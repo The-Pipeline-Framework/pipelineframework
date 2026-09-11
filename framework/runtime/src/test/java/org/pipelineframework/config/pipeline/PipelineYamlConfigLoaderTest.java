@@ -559,9 +559,9 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("interactionId", step.awaitConfig().correlation().strategy());
         assertEquals("com.example.FraudCheckAnswer", step.awaitConfig().completion().orElseThrow().type());
         assertEquals("com.example.FraudCheckProjector", step.awaitConfig().completion().orElseThrow().projector());
-        assertEquals("webhook", step.awaitConfig().transport().type());
-        assertNotNull(step.awaitConfig().transport().config().get("request"));
-        assertNotNull(step.awaitConfig().transport().config().get("completion"));
+        assertEquals("webhook", step.awaitConfig().transport().orElseThrow().type());
+        assertNotNull(step.awaitConfig().transport().orElseThrow().config().get("request"));
+        assertNotNull(step.awaitConfig().transport().orElseThrow().config().get("completion"));
     }
 
     @Test
@@ -713,6 +713,40 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals("step 'Fraud Check' requires a webhook URL in one of: url, request.url, or dispatch.url",
             exception.getMessage());
+    }
+
+    @Test
+    void requiresCompletionForCommandCallbacks() {
+        String yaml = """
+            basePackage: com.example
+            connectors:
+              work:
+                provider: acme.work
+                version: 1
+            steps:
+              - name: Start job
+                kind: command
+                operation: job.start
+                using: work
+                await:
+                  correlation:
+                    strategy: signedResumeToken
+                  callback:
+                    name: job.completed
+                    endpointResolver: com.example.CallbackEndpoint
+                    authenticator: com.example.CallbackAuthenticator
+            """;
+        var loader = new PipelineYamlConfigLoader();
+        var failure = assertThrows(IllegalArgumentException.class,
+            () -> loader.load(new StringReader(yaml)));
+        assertEquals("step 'Start job' callback requires await.completion", failure.getMessage());
+        PipelineYamlConfig valid = loader.load(new StringReader(yaml + """
+                  completion:
+                    type: com.example.JobCallback
+                    projector: com.example.JobProjector
+            """));
+        assertEquals("com.example.JobCallback",
+            valid.steps().getFirst().awaitConfig().completion().orElseThrow().type());
     }
 
     @Test
