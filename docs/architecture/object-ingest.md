@@ -570,8 +570,7 @@ The business pipeline therefore ends at the last domain transition, not at a fil
 
 ```text
 Object Ingest
-  -> Process Csv Payments Input
-  -> Process Csv Payments Input + deferred completion
+  -> Process Csv Payments Input [deferred completion]
   -> Process Approved Payment Status / Process Unapproved Payment Status
   -> Finalize Payment Output
   -> Object Publish

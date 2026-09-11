@@ -15,7 +15,7 @@ sequenceDiagram
     participant ExecStore as ExecutionStateStore
 
     Worker->>Step: operation produced operationOutput
-    Step->>Coord: createOrGet(descriptor, input)
+    Step->>Coord: createOrGet(descriptor, operationOutput)
     Coord->>UnitStore: createOrGet unit
     Coord->>InteractionStore: createOrGet interaction
     Coord->>UnitStore: attachPrimaryInteraction
