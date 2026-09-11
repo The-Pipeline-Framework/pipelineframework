@@ -34,9 +34,15 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
 - `connector-operation-provenance.json`: source-owned schema 1 provenance for imported Connector
   operations. The compiler projects only referenced operations into `capabilityImports`; the full
   source contract is never copied into runtime metadata.
-- `http-operations.json`: immutable private wire pins for imported `http.client` operations.
+- `http-operations.json`: schema 2 immutable private wire pins for imported `http.client` operations,
+  including selected callback schemas, injection targets, security compatibility, and acknowledgement status.
 - `http-operation-bindings.json`: compiler-generated direct or mapper-class bindings for each
-  referenced HTTP request and response representation.
+  referenced HTTP request, response, and callback representation. Runtime-supplied callback URI paths
+  are excluded from authorable input mappings.
+
+A native Command with `await.callback` remains one semantic node in execution order, branching,
+and replay topology. Its branching input is the original Command request; its replay node carries
+the Command role and deferred-completion overlay. No callback URL or credential enters these resources.
 
 If you package a grouped runtime such as monolith or pipeline-runtime, keep these resources aligned with the runtime artifact that will execute the pipeline.
 

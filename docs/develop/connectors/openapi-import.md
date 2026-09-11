@@ -288,8 +288,10 @@ in the existing contract hash. Documents, base URLs, credentials, authorization 
 and response bodies do not.
 
 See the [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof)
-for two `POST` operations—one Query and one Command—used directly and through the packaged callable
-loop with no OpenAPI document in the runtime application.
+for a Query and synchronous Command used directly and through the packaged callable loop, plus a
+`job.start` Command with a required body callback URI and external completion schema. Its sibling
+jobs application proves callback completion after a real JVM restart using TPF's Dynamo stores,
+with neither the OpenAPI source nor Swagger Parser in runtime JARs.
 
 See [ADR-0035](/decisions/0035-openapi-imports-release-pinned-capabilities-not-authority) for the
 authority boundary and [Pinned HTTP Connector capabilities](/develop/extension/pinned-http-connector)

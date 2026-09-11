@@ -1,0 +1,61 @@
+version: 3
+appName: OpenAPI Callback Proof
+basePackage: org.pipelineframework.examples.openapiproof
+transport: LOCAL
+platform: COMPUTE
+contract: { input: StartJobRequest, output: JobResult }
+
+types:
+  StartJobRequest:
+    java: org.pipelineframework.examples.agentproof.domain.StartJobRequest
+    fields: [[jobId, string], [value, string]]
+  JobAccepted:
+    java: org.pipelineframework.examples.agentproof.domain.JobAccepted
+    fields: [[jobId, string], [accepted, bool]]
+  JobCallback:
+    java: org.pipelineframework.examples.agentproof.domain.JobCallback
+    fields: [[jobId, string], [status, string]]
+  JobResult:
+    java: org.pipelineframework.examples.agentproof.domain.JobResult
+    fields: [[jobId, string], [value, string], [status, string]]
+
+connectors:
+  jobs-http:
+    provider: http.client
+    version: 1
+    config:
+      connection: jobs-api
+      maxRequestBytes: 65536
+      maxResponseBytes: 65536
+      requestTimeout: PT5S
+
+steps:
+  - name: Start provider job
+    kind: command
+    using: jobs-http
+    operation: job.start
+    operationVersion: 1
+    cardinality: ONE_TO_ONE
+    input: StartJobRequest
+    output: JobResult
+    commandIdGenerator: org.pipelineframework.examples.openapiproof.JobCommandIdGenerator
+    duplicatePolicy: RETURN_RECORDED
+    policy:
+      minimumMachineConfirmation: PROVIDER_ACKNOWLEDGED
+    await:
+      operationOutput:
+        type: JobAccepted
+        java: org.pipelineframework.examples.agentproof.domain.JobAccepted
+      timeout: PT30S
+      correlation: { strategy: signedResumeToken }
+      callback:
+        name: job.completed
+        endpointResolver: org.pipelineframework.examples.openapiproof.JobCallbackEndpointResolver
+        authenticator: org.pipelineframework.examples.openapiproof.JobCallbackAuthenticator
+      completion:
+        type: JobCallback
+        projector: org.pipelineframework.examples.openapiproof.JobCompletionProjector
+    terminal: true
+    java:
+      input: org.pipelineframework.examples.agentproof.domain.StartJobRequest
+      output: org.pipelineframework.examples.agentproof.domain.JobResult
