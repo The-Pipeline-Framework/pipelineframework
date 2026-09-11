@@ -7,6 +7,7 @@ public enum AwaitInteractionStatus {
     WAITING,
     DISPATCHING,
     DISPATCHED,
+    COMPLETION_OBSERVED,
     COMPLETED,
     FAILED,
     TIMED_OUT,

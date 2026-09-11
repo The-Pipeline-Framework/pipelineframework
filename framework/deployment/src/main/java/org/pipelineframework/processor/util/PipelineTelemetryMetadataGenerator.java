@@ -802,10 +802,10 @@ public class PipelineTelemetryMetadataGenerator {
         if (configStep != null && "command".equalsIgnoreCase(configStep.kind())) {
             return configStep.command();
         }
-        if (configStep == null || configStep.awaitConfig() == null || configStep.awaitConfig().transport() == null) {
+        if (configStep == null || configStep.awaitConfig() == null || configStep.awaitConfig().transport().isEmpty()) {
             return null;
         }
-        return configStep.awaitConfig().transport().type();
+        return configStep.awaitConfig().transport().orElseThrow().type();
     }
 
     private String resolvePluginRenderRole(String pluginKind) {
@@ -838,10 +838,10 @@ public class PipelineTelemetryMetadataGenerator {
         for (ReplayTopologyStep baseStep : baseSteps) {
             PipelineYamlStep configStep = resolvePipelineStep(baseStep.step(), configStepsByToken);
             if (configStep == null || configStep.awaitConfig() == null
-                || configStep.awaitConfig().transport() == null) {
+                || configStep.awaitConfig().transport().isEmpty()) {
                 continue;
             }
-            String transportType = configStep.awaitConfig().transport().type();
+            String transportType = configStep.awaitConfig().transport().orElseThrow().type();
             if (!"kafka".equalsIgnoreCase(transportType)) {
                 continue;
             }

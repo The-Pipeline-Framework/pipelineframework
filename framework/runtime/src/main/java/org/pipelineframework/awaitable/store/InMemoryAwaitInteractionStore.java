@@ -57,7 +57,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 String existingId = interactionIdByScopedIdempotencyKey.get(scopedKey);
                 if (existingId != null) {
                     AwaitInteractionRecord existing = interactionsByScopedId.get(scopedInteractionId(command.tenantId(), existingId));
-                    if (existing != null && !existing.status().terminal()) {
+                    if (existing != null && (!existing.status().terminal() || existing.commandCallback())) {
                         return new AwaitCreateResult(existing, true);
                     }
                 }
@@ -245,7 +245,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         AwaitInteractionRecord current,
         AwaitCompletionCommand command
     ) {
-        if (current.status() == AwaitInteractionStatus.COMPLETED) {
+        if (current.status() == AwaitInteractionStatus.COMPLETED || current.status() == AwaitInteractionStatus.COMPLETION_OBSERVED) {
             return new AwaitCompletionResult(current, true);
         }
         if (current.status().terminal()) {
@@ -267,7 +267,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.causationId(),
             current.idempotencyKey(),
             current.version() + 1,
-            AwaitInteractionStatus.COMPLETED,
+            current.observedCompletionStatus(),
             current.requestPayload(),
             command.responsePayload(),
             current.unitId(),
@@ -393,6 +393,18 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 return Optional.of(updated);
             }
         });
+    }
+
+    @Override
+    public boolean supportsCommandCompletion() {
+        return true;
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> settleCommandDispatch(AwaitInteractionRecord expected,
+        org.pipelineframework.awaitable.CommandDispatchSettlement settlement, long nowEpochMs) {
+        return transition(expected.tenantId(), expected.interactionId(), expected.version(), nowEpochMs,
+            expected.status(), current -> current.settleCommandDispatch(settlement, nowEpochMs));
     }
 
     private Optional<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {

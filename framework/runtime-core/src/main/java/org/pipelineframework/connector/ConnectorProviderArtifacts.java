@@ -179,6 +179,14 @@ public final class ConnectorProviderArtifacts {
             contract.outputType().ifPresent(output -> json.append(",\"output\":").append(quote(output)));
             json.append('}');
         });
+        if (!operation.callbacks().isEmpty()) {
+            json.append(",\"callbacks\":[");
+            appendJoined(json, operation.callbacks().stream()
+                .sorted(java.util.Comparator.comparing(ConnectorOperationCallbackDescriptor::id)).toList(), callback ->
+                "{\"id\":" + quote(callback.id()) + ",\"typeContract\":{\"input\":"
+                    + quote(callback.typeContract().inputType()) + "},\"required\":" + callback.required() + "}");
+            json.append(']');
+        }
         return json.append('}').toString();
     }
 

@@ -86,6 +86,11 @@ class AwaitBoundaryAdmission {
       AwaitCompletionResult validated,
       AwaitCompletionCommand normalized,
       AwaitItemContinuationHandler itemContinuationHandler) {
+    if (validated.record().status() == AwaitInteractionStatus.COMPLETION_OBSERVED
+        || (validated.record().commandCallback()
+            && "dispatch".equals(validated.record().transportMetadata().get("completionDelivery")))) {
+      return Uni.createFrom().item(validated);
+    }
     if (validated.record().status() != AwaitInteractionStatus.COMPLETED) {
       return routeTerminalInteraction(validated, normalized, itemContinuationHandler);
     }

@@ -79,7 +79,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
             Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode, springRestEntrypoint);
-            if (model.deferredCompletionSelection().isPresent()) {
+            if (model.deferredCompletionSelection().filter(completion -> completion.callback().isEmpty()).isPresent()) {
                 LinkedHashSet<GenerationTarget> decoratedTargets = new LinkedHashSet<>(targets);
                 decoratedTargets.add(operationClientTarget(transportMode));
                 decoratedTargets.add(GenerationTarget.DEFERRED_COMPLETION_STEP);

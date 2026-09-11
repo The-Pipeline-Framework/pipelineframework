@@ -200,6 +200,42 @@ public class CommandStepSupport {
         PipelineExecutionContext context,
         boolean deliberateRetry
     ) {
+        return execute(descriptor, commandIdGenerator, input, context, deliberateRetry, Optional.empty());
+    }
+
+    /** Executes an ordinary native Command with transient framework callback authority. */
+    public <I, O> Uni<O> execute(CommandDescriptor descriptor, CommandIdGenerator<? super I> generator,
+        I input, org.pipelineframework.connector.ConnectorCallbackContext callback) {
+        return executeWithCallback(descriptor, generator, input, callback, false);
+    }
+
+    /** Deliberate retry retains the same registered completion interaction. */
+    public <I, O> Uni<O> retry(CommandDescriptor descriptor, CommandIdGenerator<? super I> generator,
+        I input, org.pipelineframework.connector.ConnectorCallbackContext callback) {
+        return executeWithCallback(descriptor, generator, input, callback, true);
+    }
+
+    private <I, O> Uni<O> executeWithCallback(CommandDescriptor descriptor, CommandIdGenerator<? super I> generator,
+        I input, org.pipelineframework.connector.ConnectorCallbackContext callback, boolean deliberateRetry) {
+        try {
+            java.util.Objects.requireNonNull(generator, "commandIdGenerator must not be null");
+            if (descriptor.nativeSelector().isEmpty() || descriptor.nativeSelector().orElseThrow().binding().isEmpty()) {
+                throw new IllegalArgumentException("callback completion requires an application-bound native Command");
+            }
+            return execute(descriptor, generator, input, captureExecutionContext(), deliberateRetry, Optional.of(callback));
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
+        }
+    }
+
+    private <I, O> Uni<O> execute(
+        CommandDescriptor descriptor,
+        CommandIdGenerator<? super I> commandIdGenerator,
+        I input,
+        PipelineExecutionContext context,
+        boolean deliberateRetry,
+        Optional<org.pipelineframework.connector.ConnectorCallbackContext> callbackContext
+    ) {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
@@ -219,7 +255,7 @@ public class CommandStepSupport {
                     + " returned a command id with leading or trailing whitespace"));
         }
         CommandRequest<I> request = new CommandRequest<>(
-            descriptor, commandId, input, context, descriptor.config());
+            descriptor, commandId, commandId, CommandRequest.newAttemptId(), input, context, descriptor.config(), callbackContext);
         CommandEffectStore store = selectStore();
         return store.find(context.tenantId(), request.commandId())
             .onItem().transformToUni(existing -> handleExistingOrExecute(
@@ -258,7 +294,7 @@ public class CommandStepSupport {
                         admitted.attemptId(),
                         request.input(),
                         request.executionContext(),
-                        request.config());
+                        request.config(), request.callbackContext());
                     return reissueRequest.descriptor().nativeSelector().isPresent()
                         ? executeNative(
                             store,
@@ -307,7 +343,7 @@ public class CommandStepSupport {
                             admitted.attemptId(),
                             request.input(),
                             request.executionContext(),
-                            request.config()))
+                            request.config(), request.callbackContext()))
                         .orElseGet(() -> new CommandRequest<>(
                             request.descriptor(),
                             request.commandId(),
@@ -315,7 +351,7 @@ public class CommandStepSupport {
                             request.attemptId(),
                             request.input(),
                             request.executionContext(),
-                            request.config()));
+                            request.config(), request.callbackContext()));
                     if (record.currentAttempt().attemptId().equals(retryRequest.attemptId())) {
                         return Uni.createFrom().failure(new CommandRetryableOutcomeException(
                             "retry-admission-already-attempted"));
@@ -496,7 +532,7 @@ public class CommandStepSupport {
                 commandOutputType(request.descriptor()),
                 connectorExecutionContext(request, selector, binding),
                 Optional.of(new org.pipelineframework.connector.CommandDispatchIdentity(
-                    request.commandId(), request.occurrenceId(), request.attemptId())))));
+                    request.commandId(), request.occurrenceId(), request.attemptId())), request.callbackContext())));
         return Uni.createFrom().completionStage(stage)
             .onFailure().transform(CommandStepSupport::unwrapTransportFailure);
     }

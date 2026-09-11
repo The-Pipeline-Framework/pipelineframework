@@ -11,8 +11,14 @@ public record CommandInvocation<I, C>(
     C configuration,
     Class<?> outputType,
     ConnectorExecutionContext executionContext,
-    Optional<CommandDispatchIdentity> dispatchIdentity
+    Optional<CommandDispatchIdentity> dispatchIdentity,
+    Optional<ConnectorCallbackContext> callbackContext
 ) {
+    public CommandInvocation(I input, C configuration, Class<?> outputType,
+        ConnectorExecutionContext executionContext, Optional<CommandDispatchIdentity> dispatchIdentity) {
+        this(input, configuration, outputType, executionContext, dispatchIdentity, Optional.empty());
+    }
+
     public CommandInvocation(
         I input,
         C configuration,
@@ -32,5 +38,6 @@ public record CommandInvocation<I, C>(
         outputType = Objects.requireNonNull(outputType, "command output type must not be null");
         executionContext = Objects.requireNonNull(executionContext, "execution context must not be null");
         dispatchIdentity = Objects.requireNonNull(dispatchIdentity, "dispatch identity must not be null");
+        callbackContext = Objects.requireNonNull(callbackContext, "callback context must not be null");
     }
 }

@@ -30,6 +30,7 @@ It is emitted by the framework replay exporter and contains:
   - `cache_hit`
   - `reject`
   - `await_interaction_dispatched`
+  - `await_completion_observed`
   - `await_unit_dispatch_complete`
   - `await_execution_waiting`
   - `await_unit_item_completed`
@@ -44,6 +45,13 @@ not evidence of Quarkus build capability, exporter configuration, or backend ava
 the snapshot as replay provenance; use live metrics and tracing to verify signal delivery.
 
 Await-unit events describe durable fallback. A healthy live itemized handoff is represented by durable interaction completion together with downstream step events; it does not add `await_unit_item_completed` or `await_resume_released` merely to visualize the live path.
+
+For callback-deferred Commands, `await_completion_observed` records a callback that
+arrived before dispatch settled. Its amber pulse remains on the Command node; it
+does not increment emitted values or animate continuation. The durable effect
+outcome must permit completion before the step can advance. A duplicate callback
+does not create another observation event. Callback URIs, tokens, and payloads are
+excluded from this lifecycle event.
 
 Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
 

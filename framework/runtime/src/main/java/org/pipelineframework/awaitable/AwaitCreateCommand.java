@@ -178,7 +178,8 @@ public record AwaitCreateCommand(
         if (correlationId == null || correlationId.isBlank()) {
             throw new IllegalArgumentException("correlationId must not be blank");
         }
-        if (transportType == null || transportType.isBlank()) {
+        if ((transportType == null || transportType.isBlank())
+            && (transportMetadata == null || !"CONNECTOR_CALLBACK".equals(transportMetadata.get("completionMode")))) {
             throw new IllegalArgumentException("transportType must not be blank");
         }
         if (unitId == null || unitId.isBlank()) {

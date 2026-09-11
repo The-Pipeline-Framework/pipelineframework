@@ -40,6 +40,44 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 class DynamoAwaitInteractionStoreTest {
 
     @Test
+    void callbackObservationRetainsDeadlineIndexesUntilCommandSettlement() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        var dispatching = new java.util.HashMap<>(item("tenant-a", "interaction-1", "unit-1", 0,
+            AwaitInteractionStatus.DISPATCHING, 20_000L, "alice", "finance"));
+        dispatching.put("transport_metadata_json", avS("{\"completionMode\":\"CONNECTOR_CALLBACK\"}"));
+        var observed = new java.util.HashMap<>(dispatching);
+        observed.put("status", avS("COMPLETION_OBSERVED"));
+        observed.put("response_payload_json", avS("\"done\""));
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(dispatching).build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(observed).build());
+
+        var completion = store.complete(new AwaitCompletionCommand("tenant-a", "interaction-1", "",
+            "completion-1", "done", "provider", 2_000L)).await().indefinitely();
+        assertEquals(AwaitInteractionStatus.COMPLETION_OBSERVED, completion.record().status());
+        ArgumentCaptor<UpdateItemRequest> updates = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(updates.capture());
+        assertFalse(updates.getValue().updateExpression().contains("REMOVE"));
+        assertTrue(updates.getValue().conditionExpression().contains("#version = :expected"));
+        assertEquals("COMPLETION_OBSERVED", updates.getValue().expressionAttributeValues().get(":status").s());
+
+        var completed = new java.util.HashMap<>(observed);
+        completed.put("status", avS("COMPLETED"));
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(completed).build());
+        var settled = store.settleCommandDispatch(completion.record(),
+            org.pipelineframework.awaitable.CommandDispatchSettlement.AMBIGUOUS, 3_000L).await().indefinitely();
+        assertEquals(AwaitInteractionStatus.COMPLETED, settled.orElseThrow().status());
+        verify(client, times(2)).updateItem(updates.capture());
+        var settlement = updates.getValue();
+        assertTrue(settlement.updateExpression().contains("REMOVE"));
+        assertEquals("COMPLETION_OBSERVED", settlement.expressionAttributeValues().get(":requiredStatus").s());
+        assertEquals("\"done\"", settlement.expressionAttributeValues().get(":response").s());
+    }
+
+    @Test
     void firstCreateUsesItsConditionalTransactionWithoutAnIdempotencyLookupRead() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());

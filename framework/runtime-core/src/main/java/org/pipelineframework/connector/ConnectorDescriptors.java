@@ -41,7 +41,8 @@ final class ConnectorDescriptors {
         }
         return new ConnectorOperationDescriptor(
             operation.id(), kind(operation), operation.majorVersion(), configurationSchema,
-            commandCapabilities, queryCapabilities, queryCardinality, ConnectorOperationTypes.contract(operation));
+            commandCapabilities, queryCapabilities, queryCardinality, ConnectorOperationTypes.contract(operation),
+            operation instanceof CommandOperation<?, ?, ?> command ? command.callbacks() : java.util.List.of());
     }
 
     static ConnectorOperationKind kind(ConnectorOperation operation) {
@@ -59,6 +60,14 @@ final class ConnectorDescriptors {
         }
         throw new IllegalArgumentException(
             "connector operation must implement a supported semantic family: " + operation.getClass().getName());
+    }
+
+    static ConnectorOperationDescriptor operation(ConnectorOperation operation, ConnectorOperationDescriptor expected) {
+        ConnectorOperationDescriptor actual = operation(operation);
+        if (!actual.callbacks().equals(expected.callbacks())) {
+            throw new IllegalStateException("Runtime callback contracts differ from provider manifest for " + expected.id());
+        }
+        return actual;
     }
 
     private static <T> Optional<T> optional(T value, T conservative, String subject) {

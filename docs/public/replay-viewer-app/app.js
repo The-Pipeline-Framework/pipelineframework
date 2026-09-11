@@ -193,6 +193,7 @@ const AWAIT_LIFECYCLE_EVENTS = new Set([
   "await_admission_released",
   "await_admission_reconciled",
   "await_interaction_dispatched",
+  "await_completion_observed",
   "await_unit_dispatch_complete",
   "await_execution_waiting",
   "await_unit_item_completed",
@@ -3564,6 +3565,9 @@ function recordConnectorCounters(rawEvent, event) {
 }
 
 function recordAwaitLifecycleCounters(rawEvent, event) {
+  if (rawEvent.event === "await_completion_observed") {
+    return; // Observation is pending until the Command effect settles; it does not emit a value.
+  }
   const awaitStepName = awaitStepForLifecycleEvent(rawEvent, event);
   if (!awaitStepName) {
     return;
@@ -3920,6 +3924,11 @@ function processAwaitLifecycleEvent(rawEvent, event) {
   }
   const requestFlow = activeAnimationPolicy.awaitRequestByAwaitStep.get(awaitStepName);
   const completionFlow = activeAnimationPolicy.awaitCompletionByAwaitStep.get(awaitStepName);
+  if (rawEvent.event === "await_completion_observed") {
+    highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.75, timeSeconds);
+    spawnPulse(awaitStepName, 0xffb454, EFFECT_PRESETS.pulse.start, timeSeconds);
+    return;
+  }
   if (rawEvent.event === "await_admission_acquired" || rawEvent.event === "await_admission_reused") {
     highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.75, timeSeconds);
     spawnPulse(awaitStepName, 0x8f7aea, EFFECT_PRESETS.pulse.start, timeSeconds);

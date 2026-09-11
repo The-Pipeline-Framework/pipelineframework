@@ -36,9 +36,39 @@ public record DeferredCompletionSelection(
     String transportType,
     Map<String, Object> transportConfig,
     Optional<TypeName> completionPayloadType,
-    Optional<ClassName> completionProjector
+    Optional<ClassName> completionProjector,
+    Optional<ResolvedConnectorCallback> callback
 ) {
+    public enum DeferredCompletionMode { POST_OPERATION, CONNECTOR_CALLBACK }
+
+    public record ResolvedConnectorCallback(
+        org.pipelineframework.connector.ConnectorOperationCallbackDescriptor descriptor,
+        ConnectorOperationSelection operation,
+        ClassName endpointResolver,
+        ClassName authenticator
+    ) {
+        public ResolvedConnectorCallback {
+            Objects.requireNonNull(descriptor, "descriptor");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(endpointResolver, "endpointResolver");
+            Objects.requireNonNull(authenticator, "authenticator");
+        }
+    }
+
+    public DeferredCompletionSelection(TypeName finalOutputType, String finalOutputCanonicalType,
+        Optional<String> completionPayloadCanonicalType, Duration timeout, List<String> idempotencyKeyFields,
+        String correlationStrategy, String transportType, Map<String, Object> transportConfig,
+        Optional<TypeName> completionPayloadType, Optional<ClassName> completionProjector) {
+        this(finalOutputType, finalOutputCanonicalType, completionPayloadCanonicalType, timeout, idempotencyKeyFields,
+            correlationStrategy, transportType, transportConfig, completionPayloadType, completionProjector, Optional.empty());
+    }
+
+    public DeferredCompletionMode mode() {
+        return callback.isPresent() ? DeferredCompletionMode.CONNECTOR_CALLBACK : DeferredCompletionMode.POST_OPERATION;
+    }
+
     public DeferredCompletionSelection {
+        callback = Objects.requireNonNull(callback, "callback");
         Objects.requireNonNull(finalOutputType, "finalOutputType");
         finalOutputCanonicalType = requireText(finalOutputCanonicalType, "finalOutputCanonicalType");
         completionPayloadCanonicalType = completionPayloadCanonicalType == null
@@ -49,7 +79,7 @@ public record DeferredCompletionSelection(
         }
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
         correlationStrategy = requireText(correlationStrategy, "correlationStrategy");
-        transportType = requireText(transportType, "transportType");
+        transportType = callback.isPresent() ? "" : requireText(transportType, "transportType");
         transportConfig = transportConfig == null ? Map.of() : Map.copyOf(transportConfig);
         completionPayloadType = completionPayloadType == null ? Optional.empty() : completionPayloadType;
         completionProjector = completionProjector == null ? Optional.empty() : completionProjector;

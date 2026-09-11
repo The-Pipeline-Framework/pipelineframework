@@ -2,6 +2,7 @@ package org.pipelineframework.connector;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.List;
 
 /**
  * Static operation descriptor. The provider identity is supplied by its containing provider.
@@ -14,7 +15,8 @@ public record ConnectorOperationDescriptor(
     Optional<CommandCapabilities> commandCapabilities,
     Optional<QueryCapabilities> queryCapabilities,
     Optional<QueryOperationCardinality> queryCardinality,
-    Optional<ConnectorOperationTypeContract> typeContract
+    Optional<ConnectorOperationTypeContract> typeContract,
+    List<ConnectorOperationCallbackDescriptor> callbacks
 ) {
     public ConnectorOperationDescriptor {
         id = ConnectorProviderId.require(id, "operation ID");
@@ -27,6 +29,14 @@ public record ConnectorOperationDescriptor(
         queryCapabilities = Objects.requireNonNull(queryCapabilities, "query capabilities must not be null");
         queryCardinality = Objects.requireNonNull(queryCardinality, "query cardinality must not be null");
         typeContract = Objects.requireNonNull(typeContract, "operation type contract must not be null");
+        callbacks = List.copyOf(Objects.requireNonNull(callbacks, "callbacks must not be null"));
+        callbacks = callbacks.stream().sorted(java.util.Comparator.comparing(ConnectorOperationCallbackDescriptor::id)).toList();
+        if (!callbacks.isEmpty() && !ConnectorOperationKind.COMMAND.equals(kind)) {
+            throw new IllegalArgumentException("callbacks require command operation kind");
+        }
+        if (callbacks.stream().map(ConnectorOperationCallbackDescriptor::id).distinct().count() != callbacks.size()) {
+            throw new IllegalArgumentException("callback IDs must be unique within an operation");
+        }
         if (commandCapabilities.isPresent() && !ConnectorOperationKind.COMMAND.equals(kind)) {
             throw new IllegalArgumentException("command capabilities require command operation kind");
         }
@@ -46,6 +56,18 @@ public record ConnectorOperationDescriptor(
     public ConnectorOperationDescriptor(String id, ConnectorOperationKind kind, int majorVersion) {
         this(id, kind, majorVersion, Optional.empty(), Optional.empty(), Optional.empty(),
             defaultQueryCardinality(kind), Optional.empty());
+    }
+
+    public ConnectorOperationDescriptor(
+        String id, ConnectorOperationKind kind, int majorVersion,
+        Optional<ConnectorConfigSchemaDescriptor> configurationSchema,
+        Optional<CommandCapabilities> commandCapabilities,
+        Optional<QueryCapabilities> queryCapabilities,
+        Optional<QueryOperationCardinality> queryCardinality,
+        Optional<ConnectorOperationTypeContract> typeContract
+    ) {
+        this(id, kind, majorVersion, configurationSchema, commandCapabilities, queryCapabilities,
+            queryCardinality, typeContract, List.of());
     }
 
     public ConnectorOperationDescriptor(

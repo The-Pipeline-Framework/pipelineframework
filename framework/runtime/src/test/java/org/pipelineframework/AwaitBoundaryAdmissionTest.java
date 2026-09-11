@@ -78,6 +78,23 @@ class AwaitBoundaryAdmissionTest {
   }
 
   @Test
+  void observedAndDispatchOwnedDuplicateCallbacksDoNotScheduleAnotherContinuation() {
+    for (var status : java.util.List.of(AwaitInteractionStatus.COMPLETION_OBSERVED,
+        AwaitInteractionStatus.COMPLETED)) {
+      var interaction = awaitRecord(0, status, Map.of("completionMode", "CONNECTOR_CALLBACK",
+          "completionDelivery", "dispatch"));
+      when(awaitCoordinator.complete(any()))
+          .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, true)));
+      var result = admission.complete(command(interaction.interactionId()),
+          AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER).await().indefinitely();
+      assertEquals(interaction, result.record());
+    }
+    verify(awaitCoordinator, never()).recordCompletion(any(), org.mockito.ArgumentMatchers.anyLong());
+    verify(liveCompletionRegistry, never()).signal(any());
+    org.mockito.Mockito.verifyNoInteractions(continuations);
+  }
+
+  @Test
   void signalsLiveCompletionBeforeFallbackAggregationAndSkipsDurableContinuationWhenAccepted() {
     AwaitInteractionRecord interaction = awaitRecord(null);
     AwaitCompletionCommand command = command(interaction.interactionId());
@@ -213,6 +230,11 @@ class AwaitBoundaryAdmissionTest {
   }
 
   private static AwaitInteractionRecord awaitRecord(Integer itemIndex, AwaitInteractionStatus status) {
+    return awaitRecord(itemIndex, status, Map.of());
+  }
+
+  private static AwaitInteractionRecord awaitRecord(Integer itemIndex, AwaitInteractionStatus status,
+      Map<String, Object> metadata) {
     return new AwaitInteractionRecord(
         "tenant-1",
         "exec-1",
@@ -233,7 +255,7 @@ class AwaitBoundaryAdmissionTest {
         null,
         null,
         "kafka",
-        Map.of(),
+        metadata,
         10_000L,
         1L,
         2L,

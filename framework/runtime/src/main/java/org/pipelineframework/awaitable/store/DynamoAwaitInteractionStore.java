@@ -296,6 +296,22 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public boolean supportsCommandCompletion() {
+        return true;
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> settleCommandDispatch(AwaitInteractionRecord expected,
+        org.pipelineframework.awaitable.CommandDispatchSettlement settlement, long nowEpochMs) {
+        return blocking(() -> {
+            AwaitInteractionRecord next = expected.settleCommandDispatch(settlement, nowEpochMs);
+            return transitionStatus(expected.tenantId(), expected.interactionId(), expected.version(), expected.status(),
+                next.status(), serializePayload(expected, AwaitDurablePayloadResolver.Slot.RESPONSE, next.responsePayload()),
+                next.actor(), next.transportMetadata(), nowEpochMs);
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> fail(
         String tenantId,
         String interactionId,
@@ -589,7 +605,12 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         AwaitInteractionRecord current,
         AwaitCompletionCommand command
     ) {
-        if (current.status() == AwaitInteractionStatus.COMPLETED) {
+        return completeResolvedBlocking(current, command, 8);
+    }
+
+    private AwaitCompletionResult completeResolvedBlocking(AwaitInteractionRecord current,
+        AwaitCompletionCommand command, int remainingRaces) {
+        if (current.status() == AwaitInteractionStatus.COMPLETED || current.status() == AwaitInteractionStatus.COMPLETION_OBSERVED) {
             return new AwaitCompletionResult(current, true);
         }
         if (current.status().terminal()) {
@@ -610,7 +631,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                     current.tenantId(),
                     current.interactionId(),
                     command.nowEpochMs());
-                if (refreshed.isPresent() && refreshed.get().status() == AwaitInteractionStatus.COMPLETED) {
+                if (refreshed.isPresent() && (refreshed.get().status() == AwaitInteractionStatus.COMPLETED
+                    || refreshed.get().status() == AwaitInteractionStatus.COMPLETION_OBSERVED)) {
                     return new AwaitCompletionResult(refreshed.get(), true);
                 }
             }
@@ -620,7 +642,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             current.tenantId(),
             current.interactionId(),
             current.version(),
-            AwaitInteractionStatus.COMPLETED,
+            current.observedCompletionStatus(),
             serializePayload(current, AwaitDurablePayloadResolver.Slot.RESPONSE, command.responsePayload()),
             command.actor(),
             null,
@@ -630,11 +652,14 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         }
         AwaitInteractionRecord refreshed = getBlocking(current.tenantId(), current.interactionId(), command.nowEpochMs())
             .orElseThrow(() -> new IllegalStateException("Await completion transition lost OCC race and interaction disappeared"));
-        if (refreshed.status() == AwaitInteractionStatus.COMPLETED) {
+        if (refreshed.status() == AwaitInteractionStatus.COMPLETED || refreshed.status() == AwaitInteractionStatus.COMPLETION_OBSERVED) {
             return new AwaitCompletionResult(refreshed, true);
         }
         if (refreshed.status().terminal()) {
             throw new AwaitInteractionTerminalException("Await interaction became terminal during completion: " + refreshed.status());
+        }
+        if (current.commandCallback() && remainingRaces > 0) {
+            return completeResolvedBlocking(refreshed, command, remainingRaces - 1);
         }
         throw new IllegalStateException("Await completion transition lost OCC race");
     }

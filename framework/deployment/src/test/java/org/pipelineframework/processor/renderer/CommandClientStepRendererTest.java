@@ -143,6 +143,87 @@ class CommandClientStepRendererTest {
         return model;
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"LOCAL", "REST", "GRPC"})
+    void callbackCompletionUsesOneCommandAdapterAndTransportsOnlyFinalOutput(String transport) throws IOException {
+        var operation = ConnectorOperationSelection.command("Start", ConnectorBindingName.of("jobs"),
+            new ConnectorOperationIdentity(ConnectorProviderId.of("test.jobs"), "start", ConnectorOperationKind.COMMAND, 1),
+            1, Map.of(), new ConnectorOperationSelection.CommandSelection(
+                ClassName.get("com.example.search", "SearchIndexDocumentCommandIdGenerator"),
+                CommandDuplicatePolicy.RETURN_RECORDED, CommandPolicy.none()));
+        var callback = new org.pipelineframework.processor.ir.DeferredCompletionSelection.ResolvedConnectorCallback(
+            new org.pipelineframework.connector.ConnectorOperationCallbackDescriptor("completed",
+                new org.pipelineframework.connector.ConnectorOperationTypeContract("JobCompletion", Optional.empty()), true),
+            operation, ClassName.get("com.example", "EndpointResolver"), ClassName.get("com.example", "Authenticator"));
+        var completion = new org.pipelineframework.processor.ir.DeferredCompletionSelection(
+            ClassName.get("com.example.search", "FinalResult"), "FinalResult", Optional.of("JobCompletion"),
+            java.time.Duration.ofMinutes(1), java.util.List.of(), "signedResumeToken", "", Map.of(),
+            Optional.of(ClassName.get("com.example", "JobCompletion")), Optional.of(ClassName.get("com.example", "Projector")),
+            Optional.of(callback));
+        var model = commandStepModel().toBuilder().connectorOperationSelection(operation)
+            .deferredCompletionSelection(completion).build();
+        new CommandClientStepRenderer().render(model, generationContext(transport));
+        String source = generatedSource();
+        assertTrue(source.contains("CommandDeferredCompletionSupport deferredCompletion"));
+        assertTrue(source.contains("FinalResult"));
+        assertTrue(source.contains("callback -> support.<SearchIndexDocument, SearchIndexWriteResult>execute"));
+        assertTrue(source.contains("commandIdGenerator, commandInput, callback"));
+        assertTrue(source.contains("new AwaitCompletionDescriptor"));
+        assertTrue(source.contains("new ConnectorCallbackSelection"));
+        assertTrue(!source.contains("SearchIndexWriteResultMapper"));
+        assertTrue(!source.contains("AwaitCompletionSupport"));
+        assertTrue(!source.contains("DeferredCompletionStep"));
+        if (!"LOCAL".equals(transport)) {
+            assertTrue(source.contains("FinalResultMapper outputMapper"));
+        } else {
+            compileCallbackAdapter();
+        }
+    }
+
+    private void compileCallbackAdapter() throws IOException {
+        Map<String, String> fixtures = Map.of(
+            "com.example.search.SearchIndexDocument", "public record SearchIndexDocument() {}",
+            "com.example.search.SearchIndexWriteResult", "public record SearchIndexWriteResult() {}",
+            "com.example.search.FinalResult", "public record FinalResult() {}",
+            "com.example.JobCompletion", "public record JobCompletion() {}",
+            "com.example.search.SearchIndexDocumentCommandIdGenerator", """
+                public class SearchIndexDocumentCommandIdGenerator implements org.pipelineframework.command.CommandIdGenerator<SearchIndexDocument> {
+                    public String commandId(org.pipelineframework.command.CommandDescriptor descriptor, SearchIndexDocument input) { return "job"; }
+                }
+                """,
+            "com.example.EndpointResolver", """
+                public class EndpointResolver implements org.pipelineframework.awaitable.ProviderCallbackEndpointResolver {
+                    public java.net.URI resolve(org.pipelineframework.awaitable.AwaitInteractionRecord interaction, String token) {
+                        return java.net.URI.create("https://app.example/callback");
+                    }
+                }
+                """,
+            "com.example.Authenticator", "public class Authenticator {}",
+            "com.example.Projector", """
+                public class Projector implements org.pipelineframework.awaitable.AwaitCompletionProjector<com.example.search.SearchIndexDocument, JobCompletion, com.example.search.FinalResult> {
+                    public com.example.search.FinalResult project(com.example.search.SearchIndexDocument input, JobCompletion completion,
+                        org.pipelineframework.awaitable.AwaitCompletionMetadata metadata) { return new com.example.search.FinalResult(); }
+                }
+                """);
+        var sources = new java.util.ArrayList<java.io.File>();
+        for (var fixture : fixtures.entrySet()) {
+            var path = tempDir.resolve(fixture.getKey().replace('.', '/') + ".java");
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, "package " + fixture.getKey().substring(0, fixture.getKey().lastIndexOf('.'))
+                + ";\n" + fixture.getValue());
+            sources.add(path.toFile());
+        }
+        sources.add(tempDir.resolve("com/example/search/pipeline/ProcessWriteSearchIndexDocumentCommandClientStep.java").toFile());
+        var compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        var diagnostics = new javax.tools.DiagnosticCollector<javax.tools.JavaFileObject>();
+        try (var manager = compiler.getStandardFileManager(diagnostics, java.util.Locale.ROOT, java.nio.charset.StandardCharsets.UTF_8)) {
+            var options = java.util.List.of("-proc:none", "-classpath", System.getProperty("java.class.path"),
+                "-d", tempDir.toString());
+            assertTrue(compiler.getTask(new java.io.StringWriter(), manager, diagnostics, options,
+                java.util.List.of(), manager.getJavaFileObjectsFromFiles(sources)).call(), diagnostics.getDiagnostics().toString());
+        }
+    }
+
     private String generatedSource() throws IOException {
         return Files.readString(tempDir.resolve(
             "com/example/search/pipeline/ProcessWriteSearchIndexDocumentCommandClientStep.java"));

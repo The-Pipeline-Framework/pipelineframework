@@ -559,9 +559,9 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("interactionId", step.awaitConfig().correlation().strategy());
         assertEquals("com.example.FraudCheckAnswer", step.awaitConfig().completion().orElseThrow().type());
         assertEquals("com.example.FraudCheckProjector", step.awaitConfig().completion().orElseThrow().projector());
-        assertEquals("webhook", step.awaitConfig().transport().type());
-        assertNotNull(step.awaitConfig().transport().config().get("request"));
-        assertNotNull(step.awaitConfig().transport().config().get("completion"));
+        assertEquals("webhook", step.awaitConfig().transport().orElseThrow().type());
+        assertNotNull(step.awaitConfig().transport().orElseThrow().config().get("request"));
+        assertNotNull(step.awaitConfig().transport().orElseThrow().config().get("completion"));
     }
 
     @Test

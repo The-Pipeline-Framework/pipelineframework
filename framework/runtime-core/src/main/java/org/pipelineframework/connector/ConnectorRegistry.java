@@ -71,15 +71,38 @@ public final class ConnectorRegistry {
             }
             Collection<? extends ConnectorOperation> declaredOperations = Objects.requireNonNull(
                 provider.operations(), "operations must not be null for provider " + providerDescriptor.id().value());
+            var manifest = ConnectorProviderManifestLoader.load(provider.getClass().getClassLoader()).providers().stream()
+                .filter(artifact -> artifact.provider().id().equals(provider.id())
+                    && artifact.provider().version().major() == provider.version().major()).findFirst();
             for (ConnectorOperation operation : declaredOperations) {
                 ConnectorOperation checkedOperation = Objects.requireNonNull(
                     operation, "operation must not be null for provider " + providerDescriptor.id().value());
                 ConnectorOperationDescriptor operationDescriptor = ConnectorDescriptors.operation(checkedOperation);
+                manifest.ifPresent(artifact -> {
+                    var expected = artifact.operations().stream().filter(candidate ->
+                        candidate.id().equals(operationDescriptor.id())
+                            && candidate.kind().equals(operationDescriptor.kind())
+                            && candidate.majorVersion() == operationDescriptor.majorVersion()).findFirst();
+                    if (expected.isPresent()) {
+                        ConnectorDescriptors.operation(checkedOperation, expected.orElseThrow());
+                    } else if (!operationDescriptor.callbacks().isEmpty()) {
+                        throw new IllegalStateException("Runtime callback operation is absent from its manifest");
+                    }
+                });
                 ConnectorOperationIdentity identity = ConnectorOperationIdentity.of(providerDescriptor, operationDescriptor);
                 if (operationsByIdentity.putIfAbsent(identity, checkedOperation) != null) {
                     throw new IllegalArgumentException("duplicate connector operation identity: " + identity);
                 }
             }
+            manifest.ifPresent(artifact -> artifact.operations().stream()
+                .filter(operation -> !operation.callbacks().isEmpty())
+                .forEach(operation -> {
+                    if (declaredOperations.stream().noneMatch(candidate -> candidate.id().equals(operation.id())
+                        && candidate.majorVersion() == operation.majorVersion()
+                        && ConnectorDescriptors.kind(candidate).equals(operation.kind()))) {
+                        throw new IllegalStateException("Runtime is missing manifest callback operation " + operation.id());
+                    }
+                }));
         }
         providers = Collections.unmodifiableMap(new LinkedHashMap<>(providersById));
         operations = Collections.unmodifiableMap(new LinkedHashMap<>(operationsByIdentity));

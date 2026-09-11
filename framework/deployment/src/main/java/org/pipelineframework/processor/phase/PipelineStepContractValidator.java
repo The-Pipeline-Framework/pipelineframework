@@ -32,6 +32,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 final class PipelineStepContractValidator {
 
     void validate(PipelineCompilationContext ctx, List<PipelineStepModel> models) {
+        validateCallbackInvocationShape(ctx, models);
         if (ctx == null
             || !(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config)
             || config.inputContract() == null
@@ -57,6 +58,64 @@ final class PipelineStepContractValidator {
                     + "', but previous step '" + stepName(config, index - 1, previous)
                     + "' resolves Java output '"
                     + previousOutput.get() + "'.");
+        }
+    }
+
+    private void validateCallbackInvocationShape(PipelineCompilationContext ctx, List<PipelineStepModel> models) {
+        if (ctx == null || models == null || ctx.getProcessingEnv() == null) {
+            return;
+        }
+        if (ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            && !config.steps().isEmpty() && models.size() != config.steps().size()) {
+            return; // Cross-module subsets cannot establish invocation occurrence shape.
+        }
+        if (ctx.getBranchingPlan() != null && ctx.getBranchingPlan().branchAware()) {
+            validateBranchCallbackInvocationShape(ctx, models);
+            return;
+        }
+        boolean streaming = false;
+        for (PipelineStepModel model : models) {
+            if (model == null) {
+                continue;
+            }
+            if (streaming && model.deferredCompletionSelection()
+                .filter(completion -> completion.callback().isPresent()).isPresent()) {
+                ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR,
+                    "Command callback step '" + model.serviceName()
+                        + "' cannot consume an upstream stream; aggregate into one canonical value before dispatch.");
+            }
+            if (model.streamingShape() == org.pipelineframework.processor.ir.StreamingShape.UNARY_STREAMING
+                || model.streamingShape() == org.pipelineframework.processor.ir.StreamingShape.STREAMING_STREAMING) {
+                streaming = true;
+            } else if (model.streamingShape() == org.pipelineframework.processor.ir.StreamingShape.STREAMING_UNARY) {
+                streaming = false;
+            }
+        }
+    }
+
+    private void validateBranchCallbackInvocationShape(PipelineCompilationContext ctx, List<PipelineStepModel> models) {
+        if (models.size() != ctx.getBranchingPlan().steps().size()) {
+            return;
+        }
+        java.util.Map<String, Boolean> streamingContracts = new java.util.HashMap<>();
+        for (var step : ctx.getBranchingPlan().steps()) {
+            var model = models.get(step.index());
+            boolean streamingInput = step.acceptedContractTypes().stream()
+                .anyMatch(contract -> streamingContracts.getOrDefault(contract, false));
+            if (streamingInput && model.deferredCompletionSelection()
+                .filter(completion -> completion.callback().isPresent()).isPresent()) {
+                ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR,
+                    "Command callback step '" + model.serviceName()
+                        + "' cannot consume an upstream stream; aggregate into one canonical value before dispatch.");
+            }
+            boolean streamingOutput = switch (model.streamingShape()) {
+                case UNARY_STREAMING, STREAMING_STREAMING -> true;
+                case STREAMING_UNARY -> false;
+                case UNARY_UNARY -> streamingInput;
+            };
+            step.acceptedContractTypes().forEach(streamingContracts::remove);
+            step.producedLeafContractTypes().forEach(contract ->
+                streamingContracts.merge(contract, streamingOutput, (left, right) -> left || right));
         }
     }
 

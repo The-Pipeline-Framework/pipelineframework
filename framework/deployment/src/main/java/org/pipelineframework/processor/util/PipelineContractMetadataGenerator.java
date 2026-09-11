@@ -511,6 +511,15 @@ public class PipelineContractMetadataGenerator {
         value.put("timeout", completion.timeout().toString());
         value.put("idempotencyKeyFields", completion.idempotencyKeyFields());
         value.put("correlationStrategy", completion.correlationStrategy());
+        completion.callback().ifPresent(callback -> {
+            value.put("mode", completion.mode().name());
+            var operation = callback.operation();
+            value.put("callback", Map.of("name", callback.descriptor().id(), "binding", operation.binding().value(),
+                "provider", operation.operation().providerId().value(), "providerVersion", operation.providerMajorVersion(),
+                "operation", operation.operation().operationId(), "operationVersion", operation.operation().majorVersion(),
+                "required", callback.descriptor().required(), "contextType", typeId(model.inputMapping().domainType()),
+                "endpointResolver", callback.endpointResolver().canonicalName(), "authenticator", callback.authenticator().canonicalName()));
+        });
         value.put("transportType", completion.transportType());
         Map<String, Object> canonicalTransportConfig = immutableSortedMap(completion.transportConfig());
         value.put("transportConfigFingerprint", sha256(CANONICAL_GSON.toJson(canonicalTransportConfig)));

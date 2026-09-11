@@ -120,6 +120,23 @@ public interface AwaitInteractionStore {
      */
     Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command);
 
+    /** Unsupported stores fail before Command dispatch. */
+    default boolean supportsCommandCompletion() {
+        return false;
+    }
+
+    default Uni<Optional<AwaitInteractionRecord>> settleCommandDispatch(AwaitInteractionRecord expected,
+        org.pipelineframework.awaitable.CommandDispatchSettlement settlement, long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException("Store does not support Command completion"));
+    }
+
+    default Uni<Optional<AwaitInteractionRecord>> markDispatchRetryable(AwaitInteractionRecord expected, long nowEpochMs) {
+        if (expected.status() != org.pipelineframework.awaitable.AwaitInteractionStatus.DISPATCHING) {
+            return Uni.createFrom().item(Optional.empty());
+        }
+        return settleCommandDispatch(expected, org.pipelineframework.awaitable.CommandDispatchSettlement.RETRYABLE, nowEpochMs);
+    }
+
     /**
      * Marks an interaction as failed.
      */

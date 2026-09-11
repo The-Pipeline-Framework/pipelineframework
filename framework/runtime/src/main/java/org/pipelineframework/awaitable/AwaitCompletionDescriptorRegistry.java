@@ -51,6 +51,7 @@ public class AwaitCompletionDescriptorRegistry {
             && existing.correlationStrategy().equals(candidate.correlationStrategy())
             && existing.transportType().equals(candidate.transportType())
             && existing.transportConfig().equals(candidate.transportConfig())
+            && existing.callback().equals(candidate.callback())
             && existing.idempotencyKeyFields().equals(candidate.idempotencyKeyFields())
             && existing.transportInputType().equals(candidate.transportInputType())
             && existing.transportOutputType().equals(candidate.transportOutputType())

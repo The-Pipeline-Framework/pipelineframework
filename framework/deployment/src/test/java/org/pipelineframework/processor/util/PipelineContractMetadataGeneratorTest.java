@@ -140,6 +140,54 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void callbackAuthorityAndAllThreeContractsParticipateInTheReleaseHash() throws IOException {
+        var operation = org.pipelineframework.processor.ir.ConnectorOperationSelection.command("StartJob",
+            org.pipelineframework.connector.ConnectorBindingName.of("jobs"),
+            new org.pipelineframework.connector.ConnectorOperationIdentity(ConnectorProviderId.of("test.jobs"),
+                "start", org.pipelineframework.connector.ConnectorOperationKind.COMMAND, 1), 1, Map.of(),
+            new org.pipelineframework.processor.ir.ConnectorOperationSelection.CommandSelection(
+                ClassName.get("org.example", "IdGenerator"), org.pipelineframework.command.CommandDuplicatePolicy.RETURN_RECORDED,
+                org.pipelineframework.connector.CommandPolicy.none()));
+        var hashes = new java.util.HashSet<String>();
+        var releaseHashes = new java.util.HashSet<String>();
+        record Variant(String name, String immediate, String result, String payload, String authenticator) { }
+        var variants = List.of(
+            new Variant("baseline", "JobAccepted", "JobResult", "JobCallback", "SignatureV1"),
+            new Variant("authenticator", "JobAccepted", "JobResult", "JobCallback", "SignatureV2"),
+            new Variant("immediate", "DifferentAccepted", "JobResult", "JobCallback", "SignatureV1"),
+            new Variant("result", "JobAccepted", "DifferentResult", "JobCallback", "SignatureV1"),
+            new Variant("payload", "JobAccepted", "JobResult", "DifferentCallback", "SignatureV1"));
+        for (var variant : variants) {
+            Path output = tempDir.resolve(variant.name());
+            var processing = processingEnv(output, Map.of());
+            var context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+            var callback = new DeferredCompletionSelection.ResolvedConnectorCallback(
+                new org.pipelineframework.connector.ConnectorOperationCallbackDescriptor("completed",
+                    new org.pipelineframework.connector.ConnectorOperationTypeContract(variant.payload(), Optional.empty()), true),
+                operation, ClassName.get("org.example", "EndpointResolver"), ClassName.get("org.example", variant.authenticator()));
+            var completion = new DeferredCompletionSelection(ClassName.get("org.example", variant.result()), variant.result(),
+                Optional.of(variant.payload()), java.time.Duration.ofMinutes(1), List.of(), "signedResumeToken", "", Map.of(),
+                Optional.of(ClassName.get("org.example", variant.payload())), Optional.of(ClassName.get("org.example", "Projector")),
+                Optional.of(callback));
+            context.setStepModels(List.of(step("StartJob", "StartJobRequest", variant.immediate(), StreamingShape.UNARY_UNARY,
+                Set.of(GenerationTarget.COMMAND_CLIENT_STEP)).toBuilder().connectorOperationSelection(operation)
+                .deferredCompletionSelection(completion).build()));
+            new PipelineContractMetadataGenerator(processing).writePipelineContract(context);
+            var contract = readContract(output);
+            var node = contract.getAsJsonArray("steps").get(0).getAsJsonObject().getAsJsonObject("deferredCompletion");
+            assertEquals("CONNECTOR_CALLBACK", node.get("mode").getAsString());
+            assertEquals("org.example.restaurant.domain." + variant.immediate(), node.get("operationOutputTypeId").getAsString());
+            assertEquals("org.example." + variant.result(), node.get("finalOutputTypeId").getAsString());
+            assertEquals("org.example." + variant.payload(), node.get("completionPayloadTypeId").getAsString());
+            assertEquals("jobs", node.getAsJsonObject("callback").get("binding").getAsString());
+            hashes.add(node.get("fingerprint").getAsString());
+            releaseHashes.add(contract.get("contractHash").getAsString());
+        }
+        assertEquals(variants.size(), hashes.size());
+        assertEquals(variants.size(), releaseHashes.size());
+    }
+
+    @Test
     void skipsContractWhenNoPipelineModelExists() throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(tempDir.resolve("empty"), Map.of());
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);

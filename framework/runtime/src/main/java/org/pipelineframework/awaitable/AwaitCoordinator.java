@@ -364,7 +364,61 @@ public class AwaitCoordinator {
         return resolveForCompletion(normalized)
             .onItem().transformToUni(record -> validateCompletionAdmission(record, normalized)
                 .onItem().transform(safeCommand -> completionContract(record, safeCommand)))
-            .onItem().transformToUni(validated -> interactionStore().complete(validated.command()));
+            .onItem().transformToUni(validated -> interactionStore().complete(validated.command()))
+            .invoke(result -> {
+                if (!result.duplicate() && result.record().status() == AwaitInteractionStatus.COMPLETION_OBSERVED) {
+                    recordAdmissionLifecycle(AwaitReplayLifecycleEvent.COMPLETION_OBSERVED, result.record());
+                }
+            });
+    }
+
+    /** Registers callback completion before any effect is attempted. */
+    public Uni<AwaitCreateResult> registerCommandCompletion(AwaitCompletionDescriptor descriptor,
+        AwaitExecutionContext context, Object input) {
+        if (descriptor.callback().isEmpty() || !interactionStore().supportsCommandCompletion()) {
+            return Uni.createFrom().failure(new IllegalStateException("Command callback requires a supporting interaction store"));
+        }
+        return createOrGet(descriptor, context.tenantId(), context.executionId(), context.currentStepIndex(),
+            context.executionId() + ":" + context.currentStepIndex(), input, "", "", context.traceMetadata())
+            .invoke(created -> {
+                validatePinnedCompletionProjector(created.record(), descriptor);
+                if (created.duplicate() && !PipelineJson.mapper().valueToTree(input)
+                    .equals(PipelineJson.mapper().valueToTree(created.record().requestPayload()))) {
+                    throw new IllegalStateException("Command completion occurrence has incompatible canonical input");
+                }
+            });
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> claimCommandDispatch(AwaitInteractionRecord expected) {
+        return interactionStore().markDispatching(expected.tenantId(), expected.interactionId(), expected.version(),
+            expected.transportMetadata(), System.currentTimeMillis());
+    }
+
+    public Uni<CommandCompletionSettlementResult> settleCommandDispatch(AwaitInteractionRecord expected,
+        CommandDispatchSettlement settlement) {
+        return settleCommandDispatch(expected, settlement, 8);
+    }
+
+    private Uni<CommandCompletionSettlementResult> settleCommandDispatch(AwaitInteractionRecord expected,
+        CommandDispatchSettlement settlement, int remainingRaces) {
+        if (remainingRaces == 0) {
+            return Uni.createFrom().failure(new IllegalStateException("Command completion settlement contention"));
+        }
+        return interactionStore().get(expected.tenantId(), expected.interactionId())
+            .chain(found -> {
+                AwaitInteractionRecord current = found.orElseThrow(() -> new AwaitInteractionNotFoundException("Command interaction disappeared"));
+                if (current.status().terminal() || current.status() == AwaitInteractionStatus.DISPATCHED
+                    || current.status() == AwaitInteractionStatus.WAITING) {
+                    return Uni.createFrom().item(new CommandCompletionSettlementResult(current, false));
+                }
+                return interactionStore().settleCommandDispatch(current, settlement, System.currentTimeMillis())
+                    .invoke(updated -> updated.filter(record -> record.status() == AwaitInteractionStatus.DISPATCHED
+                            || record.status() == AwaitInteractionStatus.COMPLETED)
+                        .ifPresent(this::recordInteractionDispatched))
+                    .chain(updated -> updated.map(record -> Uni.createFrom().item(
+                            new CommandCompletionSettlementResult(record, record.status() == AwaitInteractionStatus.COMPLETED)))
+                        .orElseGet(() -> settleCommandDispatch(current, settlement, remainingRaces - 1)));
+            });
     }
 
     private Uni<AwaitCompletionCommand> validateCompletionAdmission(
@@ -376,6 +430,9 @@ public class AwaitCoordinator {
                 new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
         }
         if (command.resumeToken() == null) {
+            if (record.commandCallback()) {
+                return Uni.createFrom().failure(new AwaitResumeTokenRejectedException("Command callback requires a signed resume token"));
+            }
             return Uni.createFrom().item(withResolvedInteractionId(command, record));
         }
         return Uni.createFrom().item(() -> {
@@ -720,6 +777,7 @@ public class AwaitCoordinator {
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
         String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, canonicalRequestPayload)
+            + (descriptor.callback().isPresent() ? ":step=" + stepIndex : "")
             + (itemIndex == null ? "" : ":item=" + itemIndex);
         String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
         return acquireAdmission(descriptor, tenantId, unitId, itemIndex, executionId, deadline)
@@ -1205,6 +1263,12 @@ public class AwaitCoordinator {
         Map<String, Object> traceMetadata
     ) {
         Map<String, Object> metadata = new java.util.LinkedHashMap<>(traceMetadata);
+        metadata.remove("completionMode");
+        metadata.remove("callbackSelection");
+        descriptor.callback().ifPresent(callback -> {
+            metadata.put("completionMode", "CONNECTOR_CALLBACK");
+            metadata.put("callbackSelection", callback.contractMetadata());
+        });
         metadata.remove(COMPLETION_PROJECTOR_METADATA);
         if (descriptor.requestAwareCompletion()) {
             metadata.put(COMPLETION_PROJECTOR_METADATA, descriptor.completionProjectorId());
@@ -1216,6 +1280,11 @@ public class AwaitCoordinator {
         AwaitInteractionRecord record,
         AwaitCompletionDescriptor descriptor
     ) {
+        if (record.commandCallback() != descriptor.callback().isPresent()
+            || (record.commandCallback() && !descriptor.callback().orElseThrow().contractMetadata()
+                .equals(record.transportMetadata().get("callbackSelection")))) {
+            throw new PinnedCompletionProjectorMismatchException("Await callback contract does not match the pinned interaction");
+        }
         if (!descriptor.requestAwareCompletion()) {
             return; // Ignore reserved metadata supplied to legacy non-request-aware interactions.
         }
