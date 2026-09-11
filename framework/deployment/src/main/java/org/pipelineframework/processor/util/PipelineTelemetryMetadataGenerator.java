@@ -741,7 +741,7 @@ public class PipelineTelemetryMetadataGenerator {
         PipelineTransport transportMode
     ) {
         String service = model.generatedName();
-        String logicalStep = baseLogicalStepName(service);
+        String logicalStep = configStep != null ? toPascalStepName(configStep.name()) : baseLogicalStepName(service);
         return new ReplayTopologyStep(
             resolveClientStepClassName(model, transportMode),
             logicalStep,

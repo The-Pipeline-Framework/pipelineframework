@@ -154,6 +154,7 @@ class PipelineTelemetryMetadataGeneratorTest {
         assertEquals(1, topology.getAsJsonArray("steps").size());
         JsonObject step = topology.getAsJsonArray("steps").get(0).getAsJsonObject();
         assertEquals("com.example.pipeline.ProcessStartJobCommandClientStep", step.get("runtimeStepClass").getAsString());
+        assertEquals("StartJob", step.get("step").getAsString());
         assertEquals("command", step.get("renderRole").getAsString());
         assertTrue(step.get("deferredCompletion").getAsBoolean());
         assertEquals(0, topology.getAsJsonArray("transitions").size());
