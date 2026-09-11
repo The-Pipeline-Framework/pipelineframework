@@ -70,7 +70,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("stepExecution"));
-        assertTrue(definitions.has("awaitTemplateStep"));
+        assertFalse(definitions.has("awaitTemplateStep"));
         assertTrue(definitions.has("materialization"));
         assertTrue(definitions.has("materializationAspect"));
         assertTrue(definitions.has("commandPolicy"));
@@ -409,31 +409,31 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
-    void awaitStepShapeIncludesStructuralRuntimeContract() {
+    void deferredCompletionIsAnInternalOperationModifier() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
-        JsonObject awaitStep = definitions.getAsJsonObject("awaitTemplateStep");
-        JsonObject awaitProperties = awaitStep.getAsJsonObject("properties");
-
-        assertEquals("await", awaitProperties.getAsJsonObject("kind").get("const").getAsString());
-        assertContains(awaitStep.getAsJsonArray("required"), "kind");
-        assertContains(awaitStep.getAsJsonArray("required"), "timeout");
-        assertContains(awaitStep.getAsJsonArray("required"), "await");
-        assertTrue(awaitProperties.has("idempotency"));
-        assertTrue(awaitProperties.has("idempotencyKeyFields"));
-        assertTrue(awaitStep.getAsJsonArray("allOf").asList().stream()
-            .map(JsonElement::getAsJsonObject)
-            .filter(constraint -> constraint.has("not"))
-            .map(constraint -> constraint.getAsJsonObject("not").getAsJsonArray("required"))
-            .anyMatch(required -> required.asList().stream()
-                .map(JsonElement::getAsString)
-                .collect(java.util.stream.Collectors.toSet())
-                .equals(java.util.Set.of("idempotency", "idempotencyKeyFields"))));
+        assertFalse(definitions.has("awaitTemplateStep"));
+        JsonObject internalProperties = definitions.getAsJsonObject("delegatedOrInternalStep")
+            .getAsJsonObject("properties");
+        assertEquals("#/$defs/awaitConfig", internalProperties.getAsJsonObject("await").get("$ref").getAsString());
 
         JsonObject awaitConfig = definitions.getAsJsonObject("awaitConfig");
+        assertContains(awaitConfig.getAsJsonArray("required"), "operationOutput");
+        assertContains(awaitConfig.getAsJsonArray("required"), "timeout");
         assertContains(awaitConfig.getAsJsonArray("required"), "correlation");
         assertContains(awaitConfig.getAsJsonArray("required"), "transport");
-        assertTrue(awaitConfig.getAsJsonObject("properties").has("dispatch"),
-            "schema stays structural; parser owns the semantic await.dispatch rejection");
+        assertTrue(awaitConfig.getAsJsonObject("properties").has("idempotency"));
+        assertTrue(awaitConfig.getAsJsonObject("properties").has("completion"));
+        assertFalse(awaitConfig.getAsJsonObject("properties").has("dispatch"));
+        JsonObject awaitProperties = awaitConfig.getAsJsonObject("properties");
+        assertEquals(
+            "#/$defs/contractOrJavaType",
+            awaitProperties.getAsJsonObject("operationOutput")
+                .getAsJsonObject("properties").getAsJsonObject("type").get("$ref").getAsString());
+        assertEquals("duration", awaitProperties.getAsJsonObject("timeout").get("format").getAsString());
+        JsonObject idempotency = awaitProperties.getAsJsonObject("idempotency");
+        assertContains(idempotency.getAsJsonArray("required"), "fields");
+        assertEquals(1, idempotency.getAsJsonObject("properties")
+            .getAsJsonObject("fields").get("minItems").getAsInt());
 
         JsonObject correlation = definitions.getAsJsonObject("awaitCorrelation");
         assertContains(correlation.getAsJsonArray("required"), "strategy");
@@ -490,7 +490,7 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals("#/$defs/logicalContractReference",
             accepts.getAsJsonObject("items").get("$ref").getAsString());
 
-        assertTrue(definitions.getAsJsonObject("awaitTemplateStep").getAsJsonObject("properties").has("accepts"));
+        assertTrue(internalProperties.has("await"));
         assertTrue(definitions.getAsJsonObject("commandTemplateStep").getAsJsonObject("properties").has("terminal"));
         assertTrue(definitions.getAsJsonObject("queryTemplateStep").getAsJsonObject("properties").has("accepts"));
     }

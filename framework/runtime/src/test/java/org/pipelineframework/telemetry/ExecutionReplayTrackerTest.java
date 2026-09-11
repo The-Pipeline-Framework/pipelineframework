@@ -174,6 +174,43 @@ class ExecutionReplayTrackerTest {
     }
 
     @Test
+    void awaitLifecycleResolvesTheDecoratedSemanticOperationOverlay() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineReplayTopology topology = new PipelineReplayTopology(
+            "approval",
+            List.of(
+                new PipelineReplayTopology.Step(
+                    "create-approval", "CreatePendingApproval", "CreatePendingApprovalService",
+                    "one-to-one", 0, false, null, null, "primary", "interaction-api", true),
+                new PipelineReplayTopology.Step(
+                    "finalize", "Finalize", "FinalizeService", "one-to-one", 1, false, null, null)),
+            List.of(new PipelineReplayTopology.Transition(
+                "approval->finalize", "create-approval", "finalize", "CreatePendingApproval", "Finalize",
+                "CreatePendingApprovalService", "FinalizeService", "one-to-one")));
+        ExecutionReplayTracker tracker = new ExecutionReplayTracker(
+            GlobalOpenTelemetry.getTracer("replay-test"), exporter, topology, null, null);
+
+        tracker.recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            AwaitReplayLifecycleEvent.EXECUTION_WAITING,
+            "execution-1",
+            "unit-1",
+            null,
+            0,
+            "WAITING",
+            null,
+            null,
+            "interaction-api",
+            null,
+            1,
+            0,
+            true), Instant.now());
+
+        PipelineExecutionEvent event = exporter.find(AwaitReplayLifecycleEvent.EXECUTION_WAITING, null);
+        assertEquals("CreatePendingApproval", event.step());
+        assertEquals("CreatePendingApprovalService", event.service());
+    }
+
+    @Test
     void cancelledStepEmitsCancellationWithoutFailureMetadata() {
         CollectingExporter exporter = new CollectingExporter();
         ExecutionReplayTracker tracker = new ExecutionReplayTracker(

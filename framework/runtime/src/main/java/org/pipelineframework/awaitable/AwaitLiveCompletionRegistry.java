@@ -47,7 +47,7 @@ public class AwaitLiveCompletionRegistry {
     @Inject
     AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
 
-    public <O> LiveAwaitSession<O> open(AwaitStepDescriptor descriptor, String tenantId, String unitId) {
+    public <O> LiveAwaitSession<O> open(AwaitCompletionDescriptor descriptor, String tenantId, String unitId) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(unitId, "unitId must not be null");
@@ -82,7 +82,7 @@ public class AwaitLiveCompletionRegistry {
         }
     }
 
-    private static Class<?> resolveCanonicalOutputType(AwaitStepDescriptor descriptor) {
+    private static Class<?> resolveCanonicalOutputType(AwaitCompletionDescriptor descriptor) {
         try {
             ClassLoader loader = Thread.currentThread().getContextClassLoader();
             if (loader == null) {

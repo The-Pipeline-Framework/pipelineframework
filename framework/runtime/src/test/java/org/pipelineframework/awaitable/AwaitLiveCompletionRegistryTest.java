@@ -148,7 +148,7 @@ class AwaitLiveCompletionRegistryTest {
     @Test
     void deliversTheCanonicalCompletionWithoutApplyingTheTransportAdapterAgain() {
         AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        AwaitCompletionDescriptor descriptor = new AwaitCompletionDescriptor(
             "v3", CanonicalStatus.class.getName(), CanonicalStatus.class.getName(), "ONE_TO_ONE",
             Duration.ofMinutes(5), "interactionId", "kafka", Map.of(), java.util.List.of(),
             String.class.getName(), TransportStatus.class.getName(),
@@ -166,8 +166,8 @@ class AwaitLiveCompletionRegistryTest {
         assertEquals(expected, subscriber.getItems().getFirst());
     }
 
-    private static AwaitStepDescriptor descriptor() {
-        return new AwaitStepDescriptor(
+    private static AwaitCompletionDescriptor descriptor() {
+        return new AwaitCompletionDescriptor(
             "review",
             String.class.getName(),
             String.class.getName(),

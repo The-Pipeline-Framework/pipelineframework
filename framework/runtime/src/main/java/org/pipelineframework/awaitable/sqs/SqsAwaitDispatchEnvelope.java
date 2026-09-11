@@ -3,7 +3,7 @@ package org.pipelineframework.awaitable.sqs;
 import java.util.Map;
 
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
-import org.pipelineframework.awaitable.AwaitStepDescriptor;
+import org.pipelineframework.awaitable.AwaitCompletionDescriptor;
 
 /**
  * Framework-owned SQS await request envelope.
@@ -26,7 +26,7 @@ public record SqsAwaitDispatchEnvelope(
     }
 
     public static SqsAwaitDispatchEnvelope from(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         AwaitInteractionRecord interaction,
         Object payload,
         String resumeToken,

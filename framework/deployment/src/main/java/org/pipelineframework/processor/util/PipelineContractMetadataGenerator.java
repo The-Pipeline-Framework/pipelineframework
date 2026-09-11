@@ -317,13 +317,16 @@ public class PipelineContractMetadataGenerator {
             Map<String, Object> descriptor = new LinkedHashMap<>();
             descriptor.put("index", i);
             descriptor.put("authoredName", yamlStep == null ? stripTrailingService(model.generatedName()) : yamlStep.name());
-            descriptor.put("kind", yamlStep == null ? inferKind(model) : yamlStep.kind());
+            descriptor.put("kind", inferKind(model));
             descriptor.put("cardinality", yamlStep == null ? cardinality(model.streamingShape()) : yamlStep.cardinality());
             descriptor.put("inputTypeId", typeId(model.inputMapping().domainType()));
-            descriptor.put("outputTypeId", typeId(model.outputMapping().domainType()));
+            descriptor.put("outputTypeId", model.deferredCompletionSelection()
+                .map(selection -> typeId(selection.finalOutputType()))
+                .orElseGet(() -> typeId(model.outputMapping().domainType())));
             descriptor.put("runtimeClass", runtimeClass(model, ctx));
             descriptor.put("clientClass", clientClass(model, ctx));
-            descriptor.put("awaitTransport", awaitTransport(yamlStep));
+            model.deferredCompletionSelection().ifPresent(selection ->
+                descriptor.put("deferredCompletion", deferredCompletion(model, selection)));
             descriptors.add(descriptor);
         }
         return descriptors;
@@ -333,8 +336,20 @@ public class PipelineContractMetadataGenerator {
         Map<String, Object> sorted = new LinkedHashMap<>();
         values.entrySet().stream()
             .sorted(Map.Entry.comparingByKey())
-            .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
+            .forEach(entry -> sorted.put(entry.getKey(), immutableCanonicalValue(entry.getValue())));
         return Collections.unmodifiableMap(sorted);
+    }
+
+    private static Object immutableCanonicalValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            map.forEach((key, nested) -> normalized.put(Objects.toString(key), nested));
+            return immutableSortedMap(normalized);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(PipelineContractMetadataGenerator::immutableCanonicalValue).toList();
+        }
+        return value;
     }
 
     private String resolvePipelineId(PipelineCompilationContext ctx) {
@@ -454,7 +469,13 @@ public class PipelineContractMetadataGenerator {
     }
 
     private static String inferKind(PipelineStepModel model) {
-        return model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP) ? "await" : "internal";
+        if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+            return "command";
+        }
+        if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+            return "query";
+        }
+        return "internal";
     }
 
     private static String cardinality(StreamingShape shape) {
@@ -467,25 +488,36 @@ public class PipelineContractMetadataGenerator {
     }
 
     private static String runtimeClass(PipelineStepModel model, PipelineCompilationContext ctx) {
-        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+        if (model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)) {
             return clientClass(model, ctx);
         }
         return model.serviceClassName() == null ? null : model.serviceClassName().canonicalName();
     }
 
     private static String clientClass(PipelineStepModel model, PipelineCompilationContext ctx) {
-        String suffix = model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
-            ? "AwaitClientStep"
+        String suffix = model.enabledTargets().contains(GenerationTarget.DEFERRED_COMPLETION_STEP)
+            ? "DeferredCompletionStep"
             : java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC).clientStepSuffix();
         return model.servicePackage() + ".pipeline." + stripTrailingService(model.generatedName()) + suffix;
     }
 
-    private static String awaitTransport(PipelineYamlStep step) {
-        if (step == null || step.awaitConfig() == null || step.awaitConfig().transport() == null) {
-            return null;
-        }
-        PipelineYamlAwaitTransport transport = step.awaitConfig().transport();
-        return transport.type();
+    private static Map<String, Object> deferredCompletion(
+        PipelineStepModel model,
+        org.pipelineframework.processor.ir.DeferredCompletionSelection completion
+    ) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("operationOutputTypeId", typeId(model.outputMapping().domainType()));
+        value.put("finalOutputTypeId", typeId(completion.finalOutputType()));
+        value.put("timeout", completion.timeout().toString());
+        value.put("idempotencyKeyFields", completion.idempotencyKeyFields());
+        value.put("correlationStrategy", completion.correlationStrategy());
+        value.put("transportType", completion.transportType());
+        Map<String, Object> canonicalTransportConfig = immutableSortedMap(completion.transportConfig());
+        value.put("transportConfigFingerprint", sha256(CANONICAL_GSON.toJson(canonicalTransportConfig)));
+        completion.completionPayloadType().ifPresent(type -> value.put("completionPayloadTypeId", typeId(type)));
+        completion.completionProjector().ifPresent(projector -> value.put("completionProjector", projector.canonicalName()));
+        value.put("fingerprint", sha256(CANONICAL_GSON.toJson(immutableSortedMap(value))));
+        return immutableSortedMap(value);
     }
 
     private static String typeId(TypeName typeName) {

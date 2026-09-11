@@ -100,7 +100,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
-        AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
+        DeferredCompletionStepRenderer awaitClientStepRenderer = new DeferredCompletionStepRenderer();
         CommandClientStepRenderer commandClientStepRenderer = new CommandClientStepRenderer();
         QueryClientStepRenderer queryClientStepRenderer = new QueryClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
@@ -397,9 +397,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (!v3GeneratedDomainTypes && terminalModel.isEmpty()) {
             throw new IllegalStateException("Object Publish requires a terminal business step with an outbound mapper");
         }
+        if (!v3GeneratedDomainTypes
+            && terminalModel.orElseThrow().deferredCompletionSelection().isPresent()) {
+            throw new IllegalStateException(
+                "Object Publish with deferred completion requires v3 canonical output types");
+        }
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectPublishType(ctx)
-            : terminalModel.orElseThrow().outputMapping().domainType();
+            : terminalModel.orElseThrow().pipelineOutputType();
         Optional<TypeName> mapperType = v3GeneratedDomainTypes ? Optional.empty()
             : Optional.of(terminalModel.orElseThrow().outputMapping().mapperType()
                 .orElseThrow(() -> new IllegalStateException("Terminal business step is missing an outbound mapper")));
@@ -678,7 +683,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         PipelineStepModel terminalModel
     ) {
         if (ctx.isTransportModeRest()) {
-            return DtoTypeUtils.toDtoType(terminalModel.outputMapping().domainType());
+            return DtoTypeUtils.toDtoType(terminalModel.pipelineOutputType());
         }
         Object binding = ctx.getRendererBindings().get(terminalModel.serviceName() + "_grpc");
         if (binding instanceof GrpcBinding grpcBinding) {
@@ -737,7 +742,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             try {
                 TypeName publicationPayloadType = ctx.getStepModels().isEmpty()
                     ? null
-                    : ctx.getStepModels().getLast().outputMapping().domainType();
+                    : ctx.getStepModels().getLast().pipelineOutputType();
                 ClassName generatedClass = checkpointPublicationDescriptorRenderer.render(
                     templateConfig.basePackage(),
                     templateConfig.output().checkpoint(),
@@ -866,7 +871,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
-            AwaitClientStepRenderer awaitClientStepRenderer,
+            DeferredCompletionStepRenderer awaitClientStepRenderer,
             CommandClientStepRenderer commandClientStepRenderer,
             QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(

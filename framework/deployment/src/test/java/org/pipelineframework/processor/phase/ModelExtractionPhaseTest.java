@@ -159,6 +159,44 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
+    void deferredProviderBoundaryUsesCanonicalOperationOutputForAspects() {
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineReference definition = new PipelineReference("$root");
+        CanonicalType input = new CanonicalType("Request", "example.Request", CanonicalTypeShape.RECORD);
+        CanonicalType output = new CanonicalType(
+            "PendingApproval", "example.CanonicalPendingApproval", CanonicalTypeShape.RECORD);
+        context.registerResolvedProviderBoundary(new ResolvedProviderBoundary(
+            definition,
+            new BoundaryRequest("Create approval", "example.CreateApprovalService", input, output,
+                "ONE_TO_ONE", Set.of(), Map.of()),
+            new BoundaryClaim("example", "create-approval:example", "example.CreateApprovalFacade"),
+            List.of(),
+            Map.of()));
+        StepDefinition step = new StepDefinition(
+            "Create approval",
+            StepKind.INTERNAL,
+            ClassName.get("example", "CreateApprovalService"),
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("example", "Request"),
+            ClassName.get("example", "ApprovalDecision"),
+            StreamingShape.UNARY_UNARY);
+        var completionBinding = new org.pipelineframework.processor.awaitable.AwaitStepTypeBinding(
+            ClassName.get("example", "ProviderPendingApproval"),
+            ClassName.get("example", "ApprovalDecision"),
+            "ApprovalDecision",
+            java.util.Optional.empty(),
+            java.util.Optional.empty());
+
+        TypeName resolved = new ModelExtractionPhase().resolveDeferredOperationOutputModelType(
+            context, definition, step, completionBinding);
+
+        assertEquals(ClassName.get("example", "CanonicalPendingApproval"), resolved);
+        assertNotEquals(completionBinding.operationOutputType(), resolved);
+    }
+
+    @Test
     void keepsIdenticallyNamedModelsOwnedByDifferentDefinitions() {
         PipelineStepModel root = modelOwnedBy("$root");
         PipelineStepModel nested = modelOwnedBy("org.example/document-block");
@@ -455,6 +493,51 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
+    void crossModuleInternalModelPreservesDeferredCompletionAndImmediateOutput() {
+        var completionTypes = new org.pipelineframework.processor.awaitable.AwaitStepTypeBinding(
+            ClassName.get("org.pipelineframework.example.domain", "PendingApproval"),
+            ClassName.get("org.pipelineframework.example.domain", "ApprovalDecision"),
+            "ApprovalDecision",
+            java.util.Optional.empty(),
+            java.util.Optional.empty());
+        var completionResolver = mock(
+            org.pipelineframework.processor.awaitable.AwaitStepTypeBindingResolver.class);
+        ModelExtractionPhase phase = new ModelExtractionPhase(
+            new ModelContextRoleEnricher(), completionResolver);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPluginHost(false);
+
+        StepDefinition stepDefinition = new StepDefinition(
+            "Create Pending Approval",
+            StepKind.INTERNAL,
+            ClassName.get("org.pipelineframework.example.service", "CreatePendingApprovalService"),
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("org.pipelineframework.example.domain", "ApprovalRequest"),
+            ClassName.get("org.pipelineframework.example.domain", "ApprovalDecision"),
+            StreamingShape.UNARY_UNARY)
+            .withDeferredCompletion(new org.pipelineframework.processor.ir.DeferredCompletionDefinition(
+                "PendingApproval",
+                java.util.Optional.empty(),
+                "PT5M",
+                List.of("id"),
+                "signedResumeToken",
+                "interaction-api",
+                Map.of(),
+                java.util.Optional.empty()));
+        when(completionResolver.resolveCanonicalBoundary(context, stepDefinition))
+            .thenReturn(java.util.Optional.of(completionTypes));
+
+        PipelineStepModel model = phase.createCrossModuleInternalModel(stepDefinition, context);
+
+        assertNotNull(model);
+        assertEquals(completionTypes.operationOutputType(), model.outboundDomainType());
+        assertEquals(completionTypes.finalOutputType(),
+            model.deferredCompletionSelection().orElseThrow().finalOutputType());
+    }
+
+    @Test
     void crossModuleInternalModelUsesTemplateBasePackageForShortYamlTypes() {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -519,77 +602,6 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
-    void executeNormalizesShortAwaitTypesUsingTemplateBasePackage() throws Exception {
-        ModelContextRoleEnricher passthroughEnricher = new ModelContextRoleEnricher() {
-            @Override
-            List<PipelineStepModel> enrich(PipelineCompilationContext ctx, List<PipelineStepModel> baseModels) {
-                return baseModels;
-            }
-        };
-        ModelExtractionPhase phase = new ModelExtractionPhase(passthroughEnricher);
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
-            "restaurant-approval",
-            "org.pipelineframework.restaurantapproval",
-            "REST",
-            List.of(),
-            java.util.Map.of()));
-        context.setStepDefinitions(List.of(new StepDefinition(
-            "Await Restaurant Decision",
-            StepKind.AWAIT,
-            null,
-            null,
-            Map.of(
-                "transport", Map.of("type", "interaction-api"),
-                "correlation", Map.of("strategy", "interactionId")),
-            "PT30M",
-            List.of("orderId"),
-            null,
-            null,
-            null,
-            MapperFallbackMode.NONE,
-            ClassName.get("", "PendingRestaurantApproval"),
-            ClassName.get("", "RestaurantDecision"),
-            StreamingShape.UNARY_UNARY
-        )));
-
-        phase.execute(context);
-
-        assertEquals(1, context.getStepModels().size());
-        PipelineStepModel model = context.getStepModels().getFirst();
-        assertEquals(
-            ClassName.get("org.pipelineframework.restaurantapproval.common.domain", "PendingRestaurantApproval"),
-            model.inboundDomainType());
-        assertEquals(
-            ClassName.get("org.pipelineframework.restaurantapproval.common.domain", "RestaurantDecision"),
-            model.outboundDomainType());
-        assertEquals("org.pipelineframework.restaurantapproval.service", model.servicePackage());
-    }
-
-    @Test
-    void reportsCompilerOwnedV3AwaitBindingsThatCannotBeResolved() throws Exception {
-        ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        org.pipelineframework.config.template.PipelineTemplateConfig config = mock(
-            org.pipelineframework.config.template.PipelineTemplateConfig.class);
-        when(config.dialect()).thenReturn(
-            org.pipelineframework.config.template.PipelineTemplateDialect.V3);
-        when(config.steps()).thenReturn(List.of());
-        context.setPipelineTemplateConfig(config);
-        StepDefinition awaitStep = mock(StepDefinition.class);
-        when(awaitStep.kind()).thenReturn(StepKind.AWAIT);
-        when(awaitStep.name()).thenReturn("Unresolved Await");
-        context.setStepDefinitions(List.of(awaitStep));
-
-        phase.execute(context);
-
-        assertTrue(context.getStepModels().isEmpty());
-        verify(messager).printMessage(
-            javax.tools.Diagnostic.Kind.ERROR,
-            "Await step 'Unresolved Await' could not resolve compiler-owned Java input and output bindings.");
-    }
-
-    @Test
     void executePreservesDistinctDeploymentRolesForSameServiceName() throws Exception {
         ModelContextRoleEnricher roleDuplicatingEnricher = new ModelContextRoleEnricher() {
             @Override
@@ -609,23 +621,10 @@ class ModelExtractionPhaseTest {
             List.of(),
             java.util.Map.of()));
         context.setStepDefinitions(List.of(new StepDefinition(
-            "Await Restaurant Decision",
-            StepKind.AWAIT,
-            null,
-            null,
-            Map.of(
-                "transport", Map.of("type", "interaction-api"),
-                "correlation", Map.of("strategy", "interactionId")),
-            "PT30M",
-            List.of("orderId"),
-            null,
-            null,
-            null,
-            MapperFallbackMode.NONE,
-            ClassName.get("", "PendingRestaurantApproval"),
-            ClassName.get("", "RestaurantDecision"),
-            StreamingShape.UNARY_UNARY
-        )));
+            "Process", StepKind.INTERNAL, ClassName.get("com.example", "ProcessService"),
+            null, null, null, MapperFallbackMode.NONE,
+            ClassName.get("com.example", "Input"), ClassName.get("com.example", "Output"),
+            StreamingShape.UNARY_UNARY)));
 
         phase.execute(context);
 

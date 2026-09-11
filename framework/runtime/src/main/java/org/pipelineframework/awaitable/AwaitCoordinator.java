@@ -56,7 +56,7 @@ public class AwaitCoordinator {
     AwaitAdmissionCoordinator awaitAdmissionCoordinator;
 
     @Inject
-    AwaitStepDescriptorFactory descriptorFactory;
+    AwaitCompletionDescriptorRegistry descriptorFactory;
 
     @Inject
     AwaitDurablePayloadResolver durablePayloadResolver;
@@ -75,10 +75,10 @@ public class AwaitCoordinator {
     private volatile AwaitInteractionStore resolvedInteractionStore;
     private volatile AwaitUnitStore resolvedUnitStore;
     private final Map<String, AwaitTransportAdapter<?>> resolvedAdapters = new ConcurrentHashMap<>();
-    private final Map<String, AwaitStepDescriptor> directDescriptors = new ConcurrentHashMap<>();
+    private final Map<String, AwaitCompletionDescriptor> directDescriptors = new ConcurrentHashMap<>();
 
     public Uni<AwaitCreateResult> createOrGet(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -92,7 +92,7 @@ public class AwaitCoordinator {
     }
 
     Uni<AwaitCreateResult> createOrGet(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -127,7 +127,7 @@ public class AwaitCoordinator {
     }
 
     public Uni<AwaitCreateResult> createOrGetItem(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -143,7 +143,7 @@ public class AwaitCoordinator {
     }
 
     Uni<AwaitCreateResult> createOrGetItem(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -169,7 +169,7 @@ public class AwaitCoordinator {
 
     /** Creates the durable unit once before a live itemized source begins concurrent dispatch. */
     public Uni<Void> prepareLiveItemizedUnit(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String unitId,
         String executionId,
@@ -183,7 +183,7 @@ public class AwaitCoordinator {
 
     /** Creates one item in a unit that was durably prepared by the live stream before source demand began. */
     public Uni<AwaitCreateResult> createOrGetPreparedItem(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -199,7 +199,7 @@ public class AwaitCoordinator {
     }
 
     Uni<AwaitCreateResult> createOrGetPreparedItem(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
@@ -223,8 +223,14 @@ public class AwaitCoordinator {
     }
 
     @SuppressWarnings("unchecked")
-    public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitStepDescriptor registered = descriptorFor(interaction);
+    public Uni<AwaitInteractionRecord> dispatch(AwaitCompletionDescriptor descriptor, AwaitInteractionRecord interaction) {
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> dispatchRegistered(interaction));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Uni<AwaitInteractionRecord> dispatchRegistered(AwaitInteractionRecord interaction) {
+        AwaitCompletionDescriptor registered = descriptorFor(interaction);
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         long nowEpochMs = System.currentTimeMillis();
         return interactionStore().markDispatching(
@@ -271,8 +277,14 @@ public class AwaitCoordinator {
      * complete a {@code DISPATCHING} interaction.
      */
     @SuppressWarnings("unchecked")
-    public Uni<AwaitInteractionRecord> dispatchLive(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitStepDescriptor registered = descriptorFor(interaction);
+    public Uni<AwaitInteractionRecord> dispatchLive(AwaitCompletionDescriptor descriptor, AwaitInteractionRecord interaction) {
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> dispatchLiveRegistered(interaction));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Uni<AwaitInteractionRecord> dispatchLiveRegistered(AwaitInteractionRecord interaction) {
+        AwaitCompletionDescriptor registered = descriptorFor(interaction);
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(registered.transportType());
         Uni<AwaitInteractionRecord> intended = interaction.status() == AwaitInteractionStatus.WAITING
             ? interactionStore().markDispatching(
@@ -331,7 +343,7 @@ public class AwaitCoordinator {
      * @param descriptor await descriptor
      * @return true when the transport feeds the live completion registry
      */
-    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
+    public boolean supportsLiveAwaitWindow(AwaitCompletionDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         return adapter(descriptor.transportType()).supportsLiveAwaitWindow(descriptor);
     }
@@ -352,7 +364,6 @@ public class AwaitCoordinator {
         return resolveForCompletion(normalized)
             .onItem().transformToUni(record -> validateCompletionAdmission(record, normalized)
                 .onItem().transform(safeCommand -> completionContract(record, safeCommand)))
-            .onItem().transformToUni(this::enforceCompletionPayloadLimit)
             .onItem().transformToUni(validated -> interactionStore().complete(validated.command()));
     }
 
@@ -390,25 +401,6 @@ public class AwaitCoordinator {
             command.responsePayload(),
             command.actor(),
             command.nowEpochMs());
-    }
-
-    private Uni<ValidatedCompletion> enforceCompletionPayloadLimit(
-        ValidatedCompletion validated
-    ) {
-        if (!materializedOutputCardinality(validated.descriptor().cardinality())) {
-            return Uni.createFrom().item(validated);
-        }
-        return unitStore().get(validated.record().tenantId(), validated.record().unitId())
-            .onItem().transform(optional -> {
-                if (optional.isEmpty()) {
-                    return validated;
-                }
-                Object safePayload = validateAggregateOutputLimit(optional.get(), validated.command().responsePayload());
-                return new ValidatedCompletion(
-                    validated.record(),
-                    withResponsePayload(validated.command(), safePayload),
-                    validated.descriptor());
-            });
     }
 
     public Uni<AwaitUnitRecord> recordCompletion(AwaitInteractionRecord record, long nowEpochMs) {
@@ -484,7 +476,7 @@ public class AwaitCoordinator {
                     .onItem().transform(optional -> optional.orElseThrow(
                         () -> new IllegalStateException("Await interaction not found for primary interaction id "
                             + unit.primaryInteractionId())))
-                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, resumePayload(record)));
+                    .onItem().transform(this::resumePayload);
             }
             return interactionStore().findByUnit(tenantId, unitId)
                 .onItem().transform(records -> {
@@ -711,7 +703,7 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitCreateResult> createInteraction(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String unitId,
         String tenantId,
         String executionId,
@@ -761,7 +753,7 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitCreateResult> createItemInPreparedUnit(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String unitId,
         String tenantId,
         String executionId,
@@ -778,7 +770,7 @@ public class AwaitCoordinator {
             itemIndex, assignee, group, traceMetadata);
     }
 
-    private static Object restoreCanonicalRequestPayload(AwaitStepDescriptor descriptor, Object requestPayload) {
+    private static Object restoreCanonicalRequestPayload(AwaitCompletionDescriptor descriptor, Object requestPayload) {
         try {
             Class<?> canonicalType = AwaitPayloadSupport.resolvePayloadClass(
                 descriptor.inputType(), Thread.currentThread().getContextClassLoader());
@@ -796,7 +788,7 @@ public class AwaitCoordinator {
      * applied only at dispatch, so protobuf/JSON transport values cannot become replay inputs.
      */
     private static Object transportRequestPayload(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         AwaitInteractionRecord interaction
     ) {
         Object canonical = restoreCanonicalRequestPayload(descriptor, interaction.requestPayload());
@@ -848,7 +840,7 @@ public class AwaitCoordinator {
     }
 
     private Uni<Optional<AwaitAdmissionCoordinator.AdmissionLease>> acquireAdmission(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String unitId,
         Integer itemIndex,
@@ -901,7 +893,7 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitUnitRecord> createOrGetUnit(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String unitId,
         String executionId,
@@ -1027,7 +1019,7 @@ public class AwaitCoordinator {
      */
     public Object resumePayload(AwaitInteractionRecord record) {
         try {
-            AwaitStepDescriptor descriptor = descriptorFor(record);
+            AwaitCompletionDescriptor descriptor = descriptorFor(record);
             validateDurableOutputContract(record, descriptor);
             Class<?> canonicalOutputType = AwaitPayloadSupport.resolvePayloadClass(
                 record.outputType(),
@@ -1057,7 +1049,7 @@ public class AwaitCoordinator {
         AwaitInteractionRecord record,
         AwaitCompletionCommand command
     ) {
-        AwaitStepDescriptor descriptor = descriptorFor(record);
+        AwaitCompletionDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
         Object completionPayload = !descriptor.requestAwareCompletion()
             && sameTypeIdentity(record.outputType(), record.transportOutputType())
@@ -1080,7 +1072,7 @@ public class AwaitCoordinator {
      */
     private Object canonicalCompletionPayload(
         AwaitInteractionRecord record,
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         Object payload,
         AwaitCompletionMetadata metadata
     ) {
@@ -1135,7 +1127,7 @@ public class AwaitCoordinator {
         }
     }
 
-    private void validateDurableOutputContract(AwaitInteractionRecord record, AwaitStepDescriptor descriptor) {
+    private void validateDurableOutputContract(AwaitInteractionRecord record, AwaitCompletionDescriptor descriptor) {
         if (!sameTypeIdentity(descriptor.outputType(), record.outputType())) {
             throw new IllegalStateException(
                 "Await durable-contract compatibility failed for execution " + record.executionId()
@@ -1172,20 +1164,25 @@ public class AwaitCoordinator {
         }
     }
 
-    private Uni<AwaitStepDescriptor> registerDescriptor(AwaitStepDescriptor descriptor) {
+    private Uni<AwaitCompletionDescriptor> registerDescriptor(AwaitCompletionDescriptor descriptor) {
         return Uni.createFrom().item(() -> {
-            AwaitStepDescriptor registered = directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
-            registered = registered == null ? descriptor : registered;
+            AwaitCompletionDescriptor registered = descriptor;
             if (descriptorFactory != null) {
                 registered = descriptorFactory.register(registered);
             }
-            return registered;
+            AwaitCompletionDescriptor existing = directDescriptors.putIfAbsent(registered.stepId(), registered);
+            if (existing != null && descriptorFactory == null && !existing.equals(registered)) {
+                throw new IllegalStateException(
+                    "Conflicting deferred-completion descriptors were registered for step '"
+                        + registered.stepId() + "'");
+            }
+            return existing == null ? registered : existing;
         });
     }
 
-    private AwaitStepDescriptor descriptorFor(AwaitInteractionRecord record) {
+    private AwaitCompletionDescriptor descriptorFor(AwaitInteractionRecord record) {
         try {
-            AwaitStepDescriptor descriptor;
+            AwaitCompletionDescriptor descriptor;
             if (descriptorFactory != null) {
                 descriptor = descriptorFactory.descriptorByStepIdNow(record.stepId());
             } else {
@@ -1204,7 +1201,7 @@ public class AwaitCoordinator {
     }
 
     private static Map<String, Object> completionContractMetadata(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         Map<String, Object> traceMetadata
     ) {
         Map<String, Object> metadata = new java.util.LinkedHashMap<>(traceMetadata);
@@ -1217,7 +1214,7 @@ public class AwaitCoordinator {
 
     private static void validatePinnedCompletionProjector(
         AwaitInteractionRecord record,
-        AwaitStepDescriptor descriptor
+        AwaitCompletionDescriptor descriptor
     ) {
         if (!descriptor.requestAwareCompletion()) {
             return; // Ignore reserved metadata supplied to legacy non-request-aware interactions.
@@ -1247,47 +1244,21 @@ public class AwaitCoordinator {
         String message = "Await durable-contract resolution failed for execution " + record.executionId()
             + " interaction " + record.interactionId()
             + " stepId=" + record.stepId()
-            + ": no AwaitStepDescriptor is available";
+            + ": no AwaitCompletionDescriptor is available";
         return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
     }
 
-    private Object enforceAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {
-        return checkAndMaterializeAggregateOutput(unit, payload);
+    private record ValidatedCompletion(
+        AwaitInteractionRecord record,
+        AwaitCompletionCommand command,
+        AwaitCompletionDescriptor descriptor
+    ) {
     }
 
-    private Object validateAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {
-        return checkAndMaterializeAggregateOutput(unit, payload);
-    }
-
-    private Object checkAndMaterializeAggregateOutput(AwaitUnitRecord unit, Object payload) {
-        if (!materializedOutputCardinality(unit.cardinality())) {
-            return payload;
-        }
-        int configuredLimit = orchestratorConfig == null ? 0 : orchestratorConfig.awaitAggregateMaxOutputItems();
-        if (configuredLimit <= 0 || payload == null) {
-            return payload;
-        }
-        if (payload instanceof Iterable<?> iterable) {
-            List<Object> materialized = new ArrayList<>();
-            for (Object item : iterable) {
-                if (materialized.size() == configuredLimit) {
-                    throw aggregateOutputLimitFailure(unit, configuredLimit + 1, configuredLimit);
-                }
-                materialized.add(item);
-            }
-            return List.copyOf(materialized);
-        }
-        if (payload.getClass().isArray()) {
-            int length = java.lang.reflect.Array.getLength(payload);
-            if (length > configuredLimit) {
-                throw aggregateOutputLimitFailure(unit, length, configuredLimit);
-            }
-            return payload;
-        }
-        return payload;
-    }
-
-    private static AwaitCompletionCommand withResponsePayload(AwaitCompletionCommand command, Object responsePayload) {
+    private static AwaitCompletionCommand withResponsePayload(
+        AwaitCompletionCommand command,
+        Object responsePayload
+    ) {
         return new AwaitCompletionCommand(
             command.tenantId(),
             command.interactionId(),
@@ -1299,32 +1270,8 @@ public class AwaitCoordinator {
             command.nowEpochMs());
     }
 
-    private record ValidatedCompletion(
-        AwaitInteractionRecord record,
-        AwaitCompletionCommand command,
-        AwaitStepDescriptor descriptor
-    ) {
-    }
-
-    private static boolean materializedOutputCardinality(String cardinality) {
-        return "ONE_TO_MANY".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
-    }
-
-    private static IllegalStateException aggregateOutputLimitFailure(
-        AwaitUnitRecord unit,
-        int observedCount,
-        int configuredLimit
-    ) {
-        return new IllegalStateException(
-            "Await unit " + unit.unitId()
-                + " materialized at least " + observedCount + " output items for "
-                + unit.cardinality()
-                + ", exceeding pipeline.orchestrator.await-aggregate-max-output-items="
-                + configuredLimit + ".");
-    }
-
     private String deriveCorrelationId(
-        AwaitStepDescriptor descriptor,
+        AwaitCompletionDescriptor descriptor,
         String tenantId,
         String executionId,
         String idempotencyKey) {
@@ -1337,7 +1284,7 @@ public class AwaitCoordinator {
         };
     }
 
-    private String deriveIdempotencyKey(AwaitStepDescriptor descriptor, String executionId, Object requestPayload) {
+    private String deriveIdempotencyKey(AwaitCompletionDescriptor descriptor, String executionId, Object requestPayload) {
         if (descriptor.idempotencyKeyFields().isEmpty()) {
             return executionId + ":" + descriptor.stepId();
         }

@@ -46,6 +46,7 @@ import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.DeferredCompletionSelection;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -95,8 +96,10 @@ class PipelineContractMetadataGeneratorTest {
         assertEquals(2, steps.size());
         assertEquals("Validate Order Request", steps.get(0).getAsJsonObject().get("authoredName").getAsString());
         assertEquals("Await Restaurant Decision", steps.get(1).getAsJsonObject().get("authoredName").getAsString());
-        assertEquals("await", steps.get(1).getAsJsonObject().get("kind").getAsString());
-        assertEquals("interaction-api", steps.get(1).getAsJsonObject().get("awaitTransport").getAsString());
+        assertEquals("internal", steps.get(1).getAsJsonObject().get("kind").getAsString());
+        JsonObject deferredCompletion = steps.get(1).getAsJsonObject().getAsJsonObject("deferredCompletion");
+        assertEquals("interaction-api", deferredCompletion.get("transportType").getAsString());
+        assertTrue(deferredCompletion.get("fingerprint").getAsString().matches("[0-9a-f]{64}"));
         assertEquals(
             "org.example.restaurant.domain.RestaurantDecision",
             steps.get(1).getAsJsonObject().get("outputTypeId").getAsString());
@@ -104,6 +107,36 @@ class PipelineContractMetadataGeneratorTest {
         JsonObject capabilities = first.getAsJsonObject("capabilities");
         assertTrue(capabilities.get("localTransitionExecution").getAsBoolean());
         assertEquals(4, capabilities.getAsJsonArray("transitionWorkerProtocols").size());
+    }
+
+    @Test
+    void deferredCompletionFingerprintIgnoresTransportConfigInsertionOrder() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Map<String, Object> firstConfig = new LinkedHashMap<>();
+        Map<String, Object> firstHeaders = new LinkedHashMap<>();
+        firstHeaders.put("tenant", "north");
+        firstHeaders.put("source", "orders");
+        firstConfig.put("topic", "approval.requests");
+        firstConfig.put("headers", firstHeaders);
+        Map<String, Object> secondConfig = new LinkedHashMap<>();
+        Map<String, Object> reversedHeaders = new LinkedHashMap<>();
+        reversedHeaders.put("source", "orders");
+        reversedHeaders.put("tenant", "north");
+        secondConfig.put("headers", reversedHeaders);
+        secondConfig.put("topic", "approval.requests");
+
+        Path firstOutput = tempDir.resolve("first-transport-order");
+        Path secondOutput = tempDir.resolve("second-transport-order");
+        writeMetadata(pipelineYaml, firstOutput, firstConfig);
+        writeMetadata(pipelineYaml, secondOutput, secondConfig);
+
+        JsonObject firstCompletion = readContract(firstOutput).getAsJsonArray("steps").get(1)
+            .getAsJsonObject().getAsJsonObject("deferredCompletion");
+        JsonObject secondCompletion = readContract(secondOutput).getAsJsonArray("steps").get(1)
+            .getAsJsonObject().getAsJsonObject("deferredCompletion");
+        assertEquals(firstCompletion.get("transportConfigFingerprint"),
+            secondCompletion.get("transportConfigFingerprint"));
+        assertEquals(firstCompletion.get("fingerprint"), secondCompletion.get("fingerprint"));
     }
 
     @Test
@@ -337,8 +370,7 @@ class PipelineContractMetadataGeneratorTest {
         ctx.setStepModels(java.util.List.of(
             validateServer,
             validateClient,
-            step("ProcessAwaitRestaurantDecisionService", "PendingRestaurantApproval", "RestaurantDecision",
-                StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.AWAIT_CLIENT_STEP))));
+            deferredStep()));
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
@@ -349,11 +381,16 @@ class PipelineContractMetadataGeneratorTest {
             "org.example.restaurant.pipeline.ProcessValidateOrderRequestRestClientStep",
             contractSteps.get(0).getAsJsonObject().get("clientClass").getAsString());
         assertEquals(
-            "org.example.restaurant.pipeline.ProcessAwaitRestaurantDecisionAwaitClientStep",
+            "org.example.restaurant.pipeline.ProcessAwaitRestaurantDecisionDeferredCompletionStep",
             contractSteps.get(1).getAsJsonObject().get("clientClass").getAsString());
     }
 
     private void writeMetadata(Path pipelineYaml, Path outputDir) throws IOException {
+        writeMetadata(pipelineYaml, outputDir, Map.of());
+    }
+
+    private void writeMetadata(Path pipelineYaml, Path outputDir, Map<String, Object> transportConfig)
+        throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of("pipeline.config", pipelineYaml.toString()));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -371,8 +408,7 @@ class PipelineContractMetadataGeneratorTest {
         ctx.setStepModels(java.util.List.of(
             step("ProcessValidateOrderRequestService", "PlaceRestaurantOrderRequest", "ValidatedRestaurantOrderRequest",
                 StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.REST_CLIENT_STEP)),
-            step("ProcessAwaitRestaurantDecisionService", "PendingRestaurantApproval", "RestaurantDecision",
-                StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.AWAIT_CLIENT_STEP))));
+            deferredStep(transportConfig)));
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
@@ -499,6 +535,41 @@ class PipelineContractMetadataGeneratorTest {
             .build();
     }
 
+    private PipelineStepModel deferredStep() {
+        return deferredStep(Map.of());
+    }
+
+    private PipelineStepModel deferredStep(Map<String, Object> transportConfig) {
+        return new PipelineStepModel.Builder()
+            .serviceName("ProcessAwaitRestaurantDecisionService")
+            .generatedName("ProcessAwaitRestaurantDecisionService")
+            .servicePackage("org.example.restaurant")
+            .serviceClassName(ClassName.get("org.example.restaurant.service", "ProcessAwaitRestaurantDecisionService"))
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.restaurant.domain", "PendingRestaurantApproval"), null, false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.restaurant.domain", "PendingRestaurantApproval"), null, false))
+            .deferredCompletionSelection(new DeferredCompletionSelection(
+                ClassName.get("org.example.restaurant.domain", "RestaurantDecision"),
+                "RestaurantDecision",
+                Optional.empty(),
+                java.time.Duration.ofMinutes(30),
+                List.of("orderId"),
+                "interactionId",
+                "interaction-api",
+                transportConfig,
+                Optional.empty(),
+                Optional.empty()))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.DEFERRED_COMPLETION_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
     private Path writePipelineYaml() throws IOException {
         Path yaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(yaml, """
@@ -511,11 +582,14 @@ class PipelineContractMetadataGeneratorTest {
                 input: PlaceRestaurantOrderRequest
                 output: ValidatedRestaurantOrderRequest
               - name: Await Restaurant Decision
-                kind: await
+                service: org.example.restaurant.CreatePendingApprovalService
                 cardinality: ONE_TO_ONE
                 input: PendingRestaurantApproval
                 output: RestaurantDecision
                 await:
+                  operationOutput:
+                    type: PendingRestaurantApproval
+                  timeout: PT30M
                   correlation:
                     strategy: interactionId
                   transport:

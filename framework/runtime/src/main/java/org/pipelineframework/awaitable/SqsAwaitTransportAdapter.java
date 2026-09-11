@@ -66,20 +66,20 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     }
 
     @Override
-    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
+    public boolean supportsLiveAwaitWindow(AwaitCompletionDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         return resolvedLiveAwaitWindowConfig().matches(SqsConfig.from(descriptor.transportConfig()));
     }
 
     @Override
-    public Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
+    public Optional<String> admissionEndpoint(AwaitCompletionDescriptor descriptor) {
         return Optional.of("sqs://" + SqsConfig.from(descriptor.transportConfig()).requestQueueUrl());
     }
 
     @Override
     public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
         Objects.requireNonNull(request, "request must not be null");
-        AwaitStepDescriptor descriptor = request.descriptor();
+        AwaitCompletionDescriptor descriptor = request.descriptor();
         AwaitInteractionRecord interaction = request.interaction();
         SqsConfig config = SqsConfig.from(descriptor.transportConfig());
         String resumeToken = resumeTokenService.sign(interaction, System.currentTimeMillis());
