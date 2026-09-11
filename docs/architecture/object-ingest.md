@@ -562,16 +562,15 @@ CSV Payments uses both sides of the object shell in the default path.
 | --- | --- | --- |
 | Source discovery | `ProcessFolderService` listed folders as a business step. | Object Ingest lists and admits source objects, then submits deterministic queue-async executions. |
 | CSV parsing | `ProcessCsvPaymentsInputService` parsed the selected file. | `ProcessCsvPaymentsInputService` still parses the source object domain input. |
-| Provider wait | `Await Payment Provider` dispatched one interaction per row. | Same authored await step; TPF coordinates itemized completion through durable await units and a live await session when the queue-async transition is active. |
+| Provider wait | `Await Payment Provider` dispatched one interaction per row. | `Process Csv Payments Input` emits each parsed row through deferred completion; TPF coordinates itemised completion through durable await units and a live session when the queue-async transition is active. |
 | Output file | `ProcessCsvPaymentsOutputFileService` grouped and wrote final files. | Object Publish groups terminal `PaymentOutput` values and writes `{groupKey}.out`. |
-| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | The parser advances by reactive demand, the await in-flight window, and streaming publish backpressure. |
+| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | The parser advances by reactive demand, the deferred-completion in-flight window, and streaming publish backpressure. |
 
 The business pipeline therefore ends at the last domain transition, not at a file-writing step:
 
 ```text
 Object Ingest
-  -> Process Csv Payments Input
-  -> Await Payment Provider
+  -> Process Csv Payments Input [deferred completion]
   -> Process Approved Payment Status / Process Unapproved Payment Status
   -> Finalize Payment Output
   -> Object Publish
@@ -701,7 +700,7 @@ Use metrics to answer SLO questions:
 Use replay to answer per-run questions:
 
 1. Which source object was admitted?
-2. Which await unit parked the execution?
+2. Which deferred completion, if any, parked the execution in an Await unit?
 3. Which completions were admitted, held, dropped, or released?
 4. Which output object key was published?
 

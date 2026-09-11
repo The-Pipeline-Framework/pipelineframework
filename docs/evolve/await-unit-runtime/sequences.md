@@ -2,20 +2,20 @@
 
 These diagrams show how the await unit model parks and resumes `QUEUE_ASYNC` executions.
 
-## Unary Await
+## Unary Deferred Completion
 
 ```mermaid
 sequenceDiagram
     participant Worker as QueueAsync worker
-    participant Step as Generated await step
+    participant Step as Generated completion modifier
     participant Coord as AwaitCoordinator
     participant UnitStore as AwaitUnitStore
     participant InteractionStore as AwaitInteractionStore
     participant Adapter as AwaitTransportAdapter
     participant ExecStore as ExecutionStateStore
 
-    Worker->>Step: execute await step
-    Step->>Coord: createOrGet(descriptor, input)
+    Worker->>Step: operation produced operationOutput
+    Step->>Coord: createOrGet(descriptor, operationOutput)
     Coord->>UnitStore: createOrGet unit
     Coord->>InteractionStore: createOrGet interaction
     Coord->>UnitStore: attachPrimaryInteraction
@@ -30,14 +30,14 @@ Suspension is normal control flow. It should not be logged as a failed step or r
 
 ## One-To-One Over Stream
 
-`ONE_TO_ONE` over a `Multi` is a stream of unary awaits inside one owning unit. This is the model used by `csv-payments`: each `PaymentRecord` is one input unit and each provider completion is one output unit.
+An operation emitting a `Multi` creates a stream of unary completions inside one owning unit. This is the model used by `csv-payments`: each `PaymentRecord` operation result is one request and each provider completion is one final output.
 
-For brokered await transports, the preferred queue-async path is live. `AwaitStepSupport` opens a live await session for the unit, source dispatch is bounded by the configured in-flight window, and each completion is recorded before it is emitted to the resumed suffix. If that live session is unavailable, the coordinator falls back to durable item continuations.
+For brokered completion transports, the preferred queue-async path is live. `AwaitCompletionSupport` opens a live await session for the unit, source dispatch is bounded by the configured in-flight window, and each completion is recorded before it is emitted to the resumed suffix. If that live session is unavailable, the coordinator falls back to durable item continuations.
 
 ```mermaid
 sequenceDiagram
     participant Source as Upstream Multi
-    participant Step as AwaitStepSupport
+    participant Step as AwaitCompletionSupport
     participant Coord as AwaitCoordinator
     participant Adapter as AwaitTransportAdapter
     participant UnitStore as AwaitUnitStore
@@ -73,38 +73,32 @@ sequenceDiagram
     end
 ```
 
-Completion may arrive out of order. The live path can process accepted completions as they arrive; durable replay and aggregate release preserve item identity by reading completed item interactions by `itemIndex`.
+Completion may arrive out of order. The live path can process accepted completions as they arrive; durable fallback preserves item identity by reading completed item interactions by `itemIndex`.
 
 ## Await Unit Gatekeeper
 
-The await unit is the durable shape for the boundary. In the live path, it is the identity, ordering, and dedupe anchor for item interactions. In the fallback path, it also gates release so completions cannot race ahead of durable parent suspension. For aggregate cardinalities, it defines what must be replayed together.
+The await unit is the durable shape for completion. In the live path, it is the identity, ordering, and dedupe anchor for item interactions. In the fallback path, it also gates release so completions cannot race ahead of durable parent suspension.
 
 ```mermaid
 flowchart TD
-    A["Authored await step"] --> B{"Cardinality + input shape"}
-    B -->|ONE_TO_ONE scalar| C["One unit<br/>one primary interaction"]
-    B -->|ONE_TO_ONE stream| D["One unit<br/>ordered item interactions"]
-    B -->|ONE_TO_MANY| E["One unit<br/>one input, materialized output items"]
-    B -->|MANY_TO_ONE| F["One unit<br/>materialized input items, one output"]
-    B -->|MANY_TO_MANY| G["One unit<br/>materialized input and output items"]
+    A["Authored operation"] --> B{"Emitted operation results"}
+    B -->|one result| C["One unit<br/>one primary interaction"]
+    B -->|result stream| D["One unit<br/>ordered item interactions"]
     C --> H["Scalar resume from completion<br/>or parent wait fallback"]
     D --> I["Live session emits by demand<br/>fallback requires dispatchComplete + parent WAITING_EXTERNAL"]
-    E --> J["Replay whole output unit"]
-    F --> K["Replay one aggregate output"]
-    G --> L["Replay whole output unit"]
 ```
 
-For `ONE_TO_ONE` over a stream, the unit groups item interactions for ordering, dedupe, live-session identity, and fallback release. It is not provider-side batching. For aggregate cardinalities, the unit is the batch because the runtime materializes the relevant side of the boundary.
+For an operation-result stream, the unit groups item interactions for ordering, dedupe, live-session identity, and fallback release. It is not provider-side batching. Whole-batch semantics use an explicit bounded canonical collection as one operation result.
 
 ## CSV Payments Itemized Await
 
-This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, the approved and unapproved status branches can run per completed item through the live await session, `Finalize Payment Output` performs the mandatory terminal merge, and Object Publish writes output chunks before success is committed.
+This is the concrete connector-first `csv-payments` shape. `Process Csv Payments Input` emits parsed records through a Kafka completion overlay, the approved and unapproved status branches can run per completed item through the live await session, `Finalize Payment Output` performs the mandatory terminal merge, and Object Publish writes output chunks before success is committed.
 
 ```mermaid
 sequenceDiagram
     participant Input as Process Csv Payments Input
     participant Runner as PipelineRunner
-    participant Await as Await Payment Provider
+    participant Await as Process Csv Payments Input + completion
     participant AwaitCoord as AwaitCoordinator
     participant Kafka as Kafka broker
     participant Provider as payments-processing-svc
@@ -331,37 +325,10 @@ sequenceDiagram
 ```
 
 The ordinary worker path still applies while `currentStepIndex` names a generated business step.
-Only a non-await `MATERIALIZED_MULTI` terminal cursor is coordinator-owned; it is not a shortcut
-around business execution, await admission, persistence, or terminal publication. A terminal
-cursor that resumes from an await still loads the canonical completion payload and enters the
+Only a non-suspended `MATERIALIZED_MULTI` terminal cursor is coordinator-owned; it is not a shortcut
+around business execution, completion admission, persistence, or terminal publication. A terminal
+cursor that resumes from deferred completion still loads the canonical completion payload and enters the
 normal worker path before publication.
-
-## Aggregate Unit
-
-`ONE_TO_MANY`, `MANY_TO_ONE`, and `MANY_TO_MANY` are aggregate interaction units. The runtime materializes the relevant side of the boundary so replay has one stable unit to restart.
-
-```mermaid
-sequenceDiagram
-    participant Pipeline as Pipeline stream
-    participant Step as Aggregate await step
-    participant Coord as AwaitCoordinator
-    participant Store as Await stores
-    participant Adapter as Transport adapter
-    participant Resume as Resumed suffix
-
-    Pipeline->>Step: input item(s)
-    Step->>Step: materialize aggregate input when required
-    Step->>Coord: createOrGet aggregate unit and primary interaction
-    Coord->>Store: persist unit + interaction snapshots
-    Coord->>Adapter: dispatch aggregate request
-    Step-->>Store: execution waits on awaitUnitId
-    Adapter-->>Coord: complete primary interaction
-    Coord->>Store: record unit COMPLETED with output snapshot
-    Store-->>Resume: load continuation input
-    Resume->>Resume: replay full output unit
-```
-
-This deliberately avoids partial-output checkpointing inside the interaction unit. TPF owns retry/replay of the unit as a whole.
 
 ## Timeout And Resume
 
