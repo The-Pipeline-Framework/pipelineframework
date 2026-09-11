@@ -142,23 +142,18 @@ steps:
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
     input: CsvPaymentsInputFile
-    output: PaymentRecord
-    java:
-      input: org.pipelineframework.csv.domain.CsvPaymentsInputFile
-      output: org.pipelineframework.csv.domain.PaymentRecord
-    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
-  - name: Await Payment Provider
-    kind: await
-    cardinality: ONE_TO_ONE
-    input: PaymentRecord
     output: PaymentStatus
     java:
-      input: org.pipelineframework.csv.domain.PaymentRecord
+      input: org.pipelineframework.csv.domain.CsvPaymentsInputFile
       output: org.pipelineframework.csv.domain.PaymentStatus
-    timeout: PT5M
-    idempotency:
-      fields: [csvPaymentsInputFilePath, csvId, recipient, amount, currency]
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
     await:
+      operationOutput:
+        type: PaymentRecord
+        java: org.pipelineframework.csv.common.domain.PaymentRecord
+      timeout: PT5M
+      idempotency:
+        fields: [csvPaymentsInputFilePath, csvId, recipient, amount, currency]
       correlation:
         strategy: signedResumeToken
       transport:
