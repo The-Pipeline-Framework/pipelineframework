@@ -1,8 +1,10 @@
 package org.pipelineframework;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionRedriveIntent;
 import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
@@ -37,6 +39,9 @@ record ClaimedSegment(
 
   TransitionCommandEnvelope transitionCommand(Object payload, TransitionPayloadCodec payloadCodec) {
     Objects.requireNonNull(payloadCodec, "payloadCodec must not be null");
+    // A resumed segment after the failed root must not receive that root's already-consumed retry authority.
+    boolean retryCompleted = record.redriveIntent() == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+        && record.failedStepIndex() < record.currentStepIndex();
     TransitionWorkerCommand command = new TransitionWorkerCommand(
         record.tenantId(),
         record.executionId(),
@@ -47,12 +52,12 @@ record ClaimedSegment(
         record.version(),
         transitionKey,
         payload,
-        record.redriveIntent(),
-        record.failedStepIndex(),
-        record.redriveIntent() == org.pipelineframework.orchestrator.ExecutionRedriveIntent.REISSUE_COMMAND
+        retryCompleted ? ExecutionRedriveIntent.REPLAY : record.redriveIntent(),
+        retryCompleted ? -1 : record.failedStepIndex(),
+        retryCompleted ? Optional.empty() : record.redriveIntent() == ExecutionRedriveIntent.REISSUE_COMMAND
             ? record.redriveTargetCommandId()
             : record.failedCommandId(),
-        record.redriveReason());
+        retryCompleted ? Optional.empty() : record.redriveReason());
     SerializedTransitionPayload encodedPayload = payloadCodec.encode(payload);
     return TransitionCommandEnvelope.from(
         command,

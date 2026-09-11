@@ -717,6 +717,11 @@ public class PipelineTelemetryMetadataGenerator {
             }
             String stepName = toPascalStepName(configStep.name());
             PipelineStepModel model = remainingByToken.remove(toClassToken(stepName));
+            if (model == null) {
+                String generatedName = "Process" + org.pipelineframework.processor.phase.NamingPolicy.formatForClassName(
+                    org.pipelineframework.processor.phase.NamingPolicy.stripProcessPrefix(configStep.name()));
+                model = remainingByToken.remove(toClassToken(generatedName));
+            }
             if (model != null) {
                 baseSteps.add(baseReplayStepFromModel(model, configStep, index++, ctx.getTransportMode()));
                 continue;
