@@ -24,7 +24,7 @@ class SpringSmokeDependencyGuardTest {
     void springSmokeDoesNotExposeQuarkusRuntimeApi() {
         assertThrows(
             ClassNotFoundException.class,
-            () -> Class.forName("org.pipelineframework.service.ReactiveService"));
+            () -> Class.forName("org.pipelineframework.PipelineExecutionService"));
     }
 
     @Test
