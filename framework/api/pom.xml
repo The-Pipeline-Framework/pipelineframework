@@ -29,6 +29,14 @@
     <name>The Pipeline Framework API</name>
     <description>Framework-neutral API contracts for generated Pipeline applications</description>
 
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <plugin>

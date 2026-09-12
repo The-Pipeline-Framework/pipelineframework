@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -34,6 +35,7 @@ import javax.tools.Diagnostic;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
@@ -795,6 +799,73 @@ class PipelineStepProcessorTest {
 
         // The processor should generate REST resource only for the annotated step
         // with REST transport
+    }
+
+    @Test
+    void defaultCacheKeyGeneratorIsAbsentFromExtractedModel() {
+        PipelineStepModel model = extractPipelineStepModel("DefaultGeneratorStep", """
+            @PipelineStep
+            public class DefaultGeneratorStep {}
+            """);
+
+        assertNull(model.cacheKeyGenerator());
+    }
+
+    @Test
+    void explicitCacheKeyGeneratorIsPreservedInExtractedModel() {
+        PipelineStepModel model = extractPipelineStepModel("ExplicitGeneratorStep", """
+            @PipelineStep(cacheKeyGenerator = GeneratorMarker.class)
+            public class ExplicitGeneratorStep {}
+
+            final class GeneratorMarker {}
+            """);
+
+        assertEquals(ClassName.get("test.step", "GeneratorMarker"), model.cacheKeyGenerator());
+    }
+
+    private PipelineStepModel extractPipelineStepModel(String typeName, String source) {
+        PipelineStepIRExtractorProbe.capturedModel = null;
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepIRExtractorProbe())
+            .compile(JavaFileObjects.forSourceString("test.step." + typeName, """
+                package test.step;
+
+                import org.pipelineframework.annotation.PipelineStep;
+
+                %s
+                """.formatted(source)));
+
+        assertThat(compilation).succeeded();
+        assertNotNull(PipelineStepIRExtractorProbe.capturedModel);
+        return PipelineStepIRExtractorProbe.capturedModel;
+    }
+
+    private static final class PipelineStepIRExtractorProbe extends AbstractProcessor {
+        private static volatile PipelineStepModel capturedModel;
+
+        @Override
+        public Set<String> getSupportedAnnotationTypes() {
+            return Set.of(PipelineStep.class.getCanonicalName());
+        }
+
+        @Override
+        public SourceVersion getSupportedSourceVersion() {
+            return SourceVersion.latestSupported();
+        }
+
+        @Override
+        public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnvironment) {
+            if (!roundEnvironment.processingOver()) {
+                roundEnvironment.getElementsAnnotatedWith(PipelineStep.class).stream()
+                    .filter(TypeElement.class::isInstance)
+                    .map(TypeElement.class::cast)
+                    .findFirst()
+                    .ifPresent(typeElement -> capturedModel = new PipelineStepIRExtractor(processingEnv)
+                        .extract(typeElement)
+                        .model());
+            }
+            return false;
+        }
     }
 
 }

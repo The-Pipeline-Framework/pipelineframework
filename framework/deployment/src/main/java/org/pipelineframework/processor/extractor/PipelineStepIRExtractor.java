@@ -91,7 +91,7 @@ public class PipelineStepIRExtractor {
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"),
             serviceContract == null ? null : serviceContract.outputType());
 
-        ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
+        ClassName cacheKeyGenerator = resolveTypeClass(annotationMirror, "cacheKeyGenerator");
         
         // Extract delegated operator and mapper class names
         ClassName delegateService = resolveDelegateService(annotationMirror, serviceClass);
@@ -217,31 +217,6 @@ public class PipelineStepIRExtractor {
             }
         }
         return serviceContract != null ? serviceContract.shape() : StreamingShape.UNARY_UNARY;
-    }
-
-    /**
-     * Determine the configured cache key generator class from the given annotation mirror.
-     *
-     * Reads the `cacheKeyGenerator` value and returns its ClassName unless the value is absent
-     * or equals the default `io.quarkus.cache.CacheKeyGenerator`, in which case `null` is returned.
-     *
-     * @param annotationMirror the annotation mirror to read the `cacheKeyGenerator` value from
-     * @return the ClassName of the configured cache key generator, or `null` if none or the default is used
-     */
-    private ClassName resolveCacheKeyGenerator(AnnotationMirror annotationMirror) {
-        TypeMirror typeMirror = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "cacheKeyGenerator");
-        if (typeMirror == null) {
-            return null;
-        }
-
-        // Check if it's the default value (io.quarkus.cache.CacheKeyGenerator)
-        TypeElement defaultElement = processingEnv.getElementUtils()
-            .getTypeElement("io.quarkus.cache.CacheKeyGenerator");
-        if (defaultElement != null && processingEnv.getTypeUtils().isSameType(typeMirror, defaultElement.asType())) {
-            return null;
-        }
-
-        return resolveClassNameFromMirror(typeMirror);
     }
 
     /**

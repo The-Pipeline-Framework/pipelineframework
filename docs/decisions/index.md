@@ -47,6 +47,7 @@ authoritative for exact syntax and release support.
 | [0036](./0036-await-is-orthogonal-deferred-completion.md) | Model Await as deferred completion on an ordinary operation, not as an operation kind. |
 | [0037](./0037-command-deferred-completion-joins-effect-and-callback.md) | Join ordinary Command dispatch with correlated completion before advancing the pipeline. |
 | [0038](./0038-openapi-callbacks-are-pinned-connector-completion-contracts.md) | Import OpenAPI callbacks as pinned Command completion contracts with application-owned endpoint and authentication authority. |
+| [0039](./0039-api-owns-authored-compiler-discovery-surfaces.md) | Keep authored compiler discovery surfaces in the framework-neutral API and normalize them through one compiler semantic model. |
 
 ## Maintenance
 

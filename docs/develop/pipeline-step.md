@@ -5,7 +5,9 @@ The Pipeline Framework uses `@PipelineStep` to mark internal execution services 
 ## `@PipelineStep`
 
 `@PipelineStep` is the discovery marker for internal `service:` steps. It does not define the step contract by itself.
-Current internal-step contract metadata belongs in `pipeline.yaml`.
+YAML owns pipeline topology, step sequence, cardinality, and types; the annotation supplies Java-local discovery
+and execution hints such as ordering and thread safety. Current internal-step contract metadata belongs in `pipeline.yaml`.
+The annotation is part of `pipelineframework-api`; the current production discovery host is the JSR-269 deployment processor.
 
 For internal services, YAML is the canonical source of truth for:
 
@@ -52,6 +54,8 @@ Use `@PipelineStep` for Java-local execution concerns:
 - `threadSafety`
 - `sideEffect`
 - `delegate` (for operator steps only)
+
+`cacheKeyGenerator` defaults to `Void.class`, which means no override is selected.
 
 ### Compatibility-Only Members
 
