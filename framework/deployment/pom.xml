@@ -64,6 +64,11 @@
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-runtime-serialization</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-compiler</artifactId>
             <version>${project.version}</version>
         </dependency>
