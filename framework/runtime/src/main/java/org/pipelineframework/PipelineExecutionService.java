@@ -19,6 +19,7 @@ package org.pipelineframework;
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -50,6 +51,7 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 import org.pipelineframework.command.CommandReexecutionBoundary;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
@@ -567,8 +569,15 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       if (inputFailure != null) {
         return Multi.createFrom().failure(inputFailure);
       }
+      Callable<PipelineRunner.ExecutionResult> runWithCallerContext =
+          RuntimeAdapters.executionContextCarrier().contextualize(() -> pipelineRunner.runWithContext(input, steps));
       return awaitStartupHealthReactive().onItem().transformToMulti(ignored -> {
-        PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+        PipelineRunner.ExecutionResult executionResult;
+        try {
+          executionResult = runWithCallerContext.call();
+        } catch (Exception failure) {
+          return Multi.createFrom().failure(failure);
+        }
         Object result = executionResult.result();
         if (result == null) {
           return Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
@@ -883,8 +892,15 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       if (inputFailure != null) {
         return Uni.createFrom().failure(inputFailure);
       }
+      Callable<PipelineRunner.ExecutionResult> runWithCallerContext =
+          RuntimeAdapters.executionContextCarrier().contextualize(() -> pipelineRunner.runWithContext(input, steps));
       return awaitStartupHealthReactive().onItem().transformToUni(ignored -> {
-        PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+        PipelineRunner.ExecutionResult executionResult;
+        try {
+          executionResult = runWithCallerContext.call();
+        } catch (Exception failure) {
+          return Uni.createFrom().failure(failure);
+        }
         Object result = executionResult.result();
         return switch (result) {
           case null -> Uni.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
