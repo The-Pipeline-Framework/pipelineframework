@@ -20,17 +20,18 @@ import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
+import javax.lang.model.element.Element;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.pipelineframework.annotation.PipelineOrchestrator;
+import org.pipelineframework.processor.Jsr269SourceInventory;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 /** Unit tests for TemplateExpansionOrchestrator */
 @ExtendWith(MockitoExtension.class)
@@ -91,12 +92,11 @@ class TemplateExpansionOrchestratorTest {
 
     @Test
     void expandTemplateModels_hasOrchestratorButNotPluginHost_exercisesAspectExpansion() {
-        // Mock the round environment to return elements annotated with PipelineOrchestrator
-        when(roundEnv.getElementsAnnotatedWith(PipelineOrchestrator.class)).thenReturn(Set.of());
-        
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
+        Jsr269SourceInventory sourceInventory = new Jsr269SourceInventory(
+                Set.of(), Set.of(mock(Element.class)), Set.of(), Set.of());
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, sourceInventory);
         ctx.setPluginHost(false); // Not a plugin host
-        // But has orchestrator (mocked above)
+        // But has an authored orchestrator in the source inventory
         
         List<PipelineStepModel> baseModels = List.of(TestModelFactory.createTestModel("TestService"));
         
