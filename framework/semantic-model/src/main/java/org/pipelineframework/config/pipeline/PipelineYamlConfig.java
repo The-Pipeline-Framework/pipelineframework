@@ -19,7 +19,7 @@ package org.pipelineframework.config.pipeline;
 import java.util.List;
 import java.util.Map;
 
-import org.pipelineframework.config.PlatformOverrideResolver;
+import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
@@ -59,7 +59,7 @@ public record PipelineYamlConfig(
      * @throws IllegalArgumentException when platform is not COMPUTE or FUNCTION
      */
     public PipelineYamlConfig {
-        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        String normalizedPlatform = PlatformMode.fromStringOptional(platform).map(Enum::name).orElse(null);
         if (normalizedPlatform == null) {
             if (platform == null || platform.isBlank()) {
                 normalizedPlatform = "COMPUTE";

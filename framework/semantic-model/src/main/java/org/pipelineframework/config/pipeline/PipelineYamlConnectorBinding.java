@@ -2,9 +2,7 @@ package org.pipelineframework.config.pipeline;
 
 import java.util.Map;
 
-import org.pipelineframework.connector.ConnectorBindingDefinition;
 import org.pipelineframework.connector.ConnectorBindingName;
-import org.pipelineframework.connector.ConnectorConfigurationDocument;
 import org.pipelineframework.connector.ConnectorProviderId;
 
 /**
@@ -23,13 +21,5 @@ public record PipelineYamlConnectorBinding(
             throw new IllegalArgumentException("connector binding '" + name + "' version must be positive");
         }
         config = config == null ? Map.of() : Map.copyOf(config);
-    }
-
-    public ConnectorBindingDefinition toDefinition() {
-        return new ConnectorBindingDefinition(
-            ConnectorBindingName.of(name),
-            ConnectorProviderId.of(provider),
-            version,
-            new ConnectorConfigurationDocument(config));
     }
 }

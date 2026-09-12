@@ -151,7 +151,11 @@ public class ConnectorRegistryLifecycle {
         List<ConnectorBindingDefinition> definitions = new ArrayList<>();
         config.orElseThrow().connectors().values().stream()
             .sorted(java.util.Comparator.comparing(binding -> binding.name()))
-            .map(binding -> binding.toDefinition())
+            .map(binding -> new ConnectorBindingDefinition(
+                ConnectorBindingName.of(binding.name()),
+                ConnectorProviderId.of(binding.provider()),
+                binding.version(),
+                new ConnectorConfigurationDocument(binding.config())))
             .forEach(definitions::add);
         return List.copyOf(definitions);
     }
