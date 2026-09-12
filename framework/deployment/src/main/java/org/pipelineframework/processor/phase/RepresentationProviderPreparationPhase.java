@@ -305,8 +305,10 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
     }
 
     private static void reportDiagnostics(PipelineCompilationContext ctx, List<ProviderDiagnostic> diagnostics) {
-        diagnostics.forEach(diagnostic -> ctx.getProcessingEnv().getMessager().printMessage(
-            diagnostic.severity() == ProviderDiagnostic.Severity.ERROR ? Diagnostic.Kind.ERROR : Diagnostic.Kind.WARNING,
+        diagnostics.forEach(diagnostic -> ctx.getCompilerDiagnostics().report(
+            diagnostic.severity() == ProviderDiagnostic.Severity.ERROR
+                ? org.pipelineframework.processor.PipelineCompilerDiagnostics.Severity.ERROR
+                : org.pipelineframework.processor.PipelineCompilerDiagnostics.Severity.WARNING,
             "[representation-provider:" + diagnostic.code() + "] " + diagnostic.message()));
     }
 }

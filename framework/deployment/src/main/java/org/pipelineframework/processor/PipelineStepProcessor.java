@@ -132,7 +132,12 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             return false;
         }
 
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(
+            processingEnv,
+            roundEnv,
+            new PipelineCompilerOptions(processingEnv.getOptions()),
+            new Jsr269PipelineCompilerDiagnostics(processingEnv.getMessager())
+        );
         context.setRepresentationProviderClassLoader(getClass().getClassLoader());
         try {
             compiler.compile(context);

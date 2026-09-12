@@ -18,6 +18,7 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ServiceApiKind;
@@ -87,8 +88,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             return;
         }
         if (!ctx.isTransportModeRest()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "pipeline.platform=FUNCTION currently requires pipeline.transport=REST.");
             return;
         }
@@ -107,7 +107,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             return;
         }
 
-        String policy = ctx.getProcessingEnv().getOptions().get("pipeline.parallelism");
+        String policy = ctx.getCompilerOptions().asMap().get("pipeline.parallelism");
         String normalizedPolicy = policy == null ? null : policy.trim().toUpperCase();
 
         for (PipelineAspectModel aspect : aspects) {
@@ -125,8 +125,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             var elementUtils = ctx.getProcessingEnv().getElementUtils();
             var typeElement = elementUtils.getTypeElement(implClass);
             if (typeElement == null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Plugin implementation class '" + implClass + "' not found for aspect '" + aspect.name() + "'");
                 continue;
             }
@@ -140,8 +139,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
             ParallelismHint hint = typeElement.getAnnotation(ParallelismHint.class);
             if (hint == null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Plugin implementation class '" + implClass + "' does not declare @ParallelismHint " +
                         "and no providerClass is configured for aspect '" + aspect.name() + "'.");
                 continue;
@@ -157,13 +155,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
             if (threadSafety == ThreadSafety.UNSAFE) {
                 if (policyKnown && !sequentialPolicy) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
+                    ctx.getCompilerDiagnostics().error(
                         "Plugin '" + implClass + "' is not thread-safe. " +
                             "Set pipeline.parallelism=SEQUENTIAL to use aspect '" + aspect.name() + "'.");
                 } else if (!policyKnown) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Plugin '" + implClass + "' is not thread-safe. " +
                             "Set pipeline.parallelism=SEQUENTIAL to use aspect '" + aspect.name() + "'.");
                 }
@@ -171,13 +167,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
             if (ordering == OrderingRequirement.STRICT_REQUIRED) {
                 if (policyKnown && !sequentialPolicy) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
+                    ctx.getCompilerDiagnostics().error(
                         "Plugin '" + implClass + "' requires strict ordering. " +
                             "Set pipeline.parallelism=SEQUENTIAL to use aspect '" + aspect.name() + "'.");
                 } else if (!policyKnown) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Plugin '" + implClass + "' requires strict ordering. " +
                             "Set pipeline.parallelism=SEQUENTIAL to use aspect '" + aspect.name() + "'.");
                 }
@@ -185,18 +179,15 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
             if (ordering == OrderingRequirement.STRICT_ADVISED) {
                 if (!policyKnown) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Plugin '" + implClass + "' advises strict ordering for aspect '" + aspect.name() + "'. " +
                             "AUTO will run sequentially; PARALLEL will override the advice.");
                 } else if (autoPolicy) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Plugin '" + implClass + "' advises strict ordering; AUTO will run sequentially " +
                             "for aspect '" + aspect.name() + "'.");
                 } else if (parallelPolicy) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Plugin '" + implClass + "' advises strict ordering; PARALLEL overrides the advice " +
                             "for aspect '" + aspect.name() + "'.");
                 }
@@ -218,9 +209,9 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         if (ctx == null || ctx.getProcessingEnv() == null) {
             return;
         }
-        String policy = ctx.getProcessingEnv().getOptions().get("pipeline.parallelism");
+        String policy = ctx.getCompilerOptions().asMap().get("pipeline.parallelism");
         String normalizedPolicy = policy == null ? null : policy.trim().toUpperCase();
-        var options = ctx.getProcessingEnv().getOptions();
+        var options = ctx.getCompilerOptions().asMap();
         for (var entry : options.entrySet()) {
             String key = entry.getKey();
             if (key == null) {
@@ -249,16 +240,14 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         var elementUtils = ctx.getProcessingEnv().getElementUtils();
         var typeElement = elementUtils.getTypeElement(trimmedClass);
         if (typeElement == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 label + " class '" + trimmedClass + "' not found for processing option");
             return;
         }
 
         ParallelismHint hint = typeElement.getAnnotation(ParallelismHint.class);
         if (hint == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 label + " class '" + trimmedClass + "' does not declare @ParallelismHint; " +
                     "parallelism ordering/thread-safety cannot be validated at build time.");
             return;
@@ -274,13 +263,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         if (threadSafety == ThreadSafety.UNSAFE) {
             if (policyKnown && !sequentialPolicy) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     label + " '" + trimmedClass + "' is not thread-safe. " +
                         "Set pipeline.parallelism=SEQUENTIAL.");
             } else if (!policyKnown) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     label + " '" + trimmedClass + "' is not thread-safe. " +
                         "Set pipeline.parallelism=SEQUENTIAL.");
             }
@@ -288,13 +275,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         if (ordering == OrderingRequirement.STRICT_REQUIRED) {
             if (policyKnown && !sequentialPolicy) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     label + " '" + trimmedClass + "' requires strict ordering. " +
                         "Set pipeline.parallelism=SEQUENTIAL.");
             } else if (!policyKnown) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     label + " '" + trimmedClass + "' requires strict ordering. " +
                         "Set pipeline.parallelism=SEQUENTIAL.");
             }
@@ -302,17 +287,14 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         if (ordering == OrderingRequirement.STRICT_ADVISED) {
             if (!policyKnown) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     label + " '" + trimmedClass + "' advises strict ordering. " +
                         "AUTO will run sequentially; PARALLEL will override the advice.");
             } else if (autoPolicy) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     label + " '" + trimmedClass + "' advises strict ordering; AUTO will run sequentially.");
             } else if (parallelPolicy) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     label + " '" + trimmedClass + "' advises strict ordering; PARALLEL overrides the advice.");
             }
         }
@@ -375,8 +357,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
         
         // Check processing option
-        String option = ctx.getProcessingEnv() != null ? 
-            ctx.getProcessingEnv().getOptions().get("pipeline.orchestrator.generate") : null;
+        String option = ctx.getCompilerOptions().asMap().get("pipeline.orchestrator.generate");
         if (option == null || option.isBlank()) {
             return false;
         }
@@ -407,6 +388,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         var elementUtils = ctx.getProcessingEnv().getElementUtils();
         var messager = ctx.getProcessingEnv().getMessager();
+        var diagnostics = ctx.getCompilerDiagnostics();
 
         // Validate that annotated services not referenced in YAML don't generate steps
         // This is done by checking if each annotated service is in the YAML step definitions
@@ -426,7 +408,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         // Check if we should warn about unreferenced steps (default: true)
         boolean warnUnreferenced = true;
-        String warnOption = ctx.getProcessingEnv().getOptions().get("pipeline.warnUnreferencedSteps");
+        String warnOption = ctx.getCompilerOptions().asMap().get("pipeline.warnUnreferencedSteps");
         if (warnOption != null) {
             warnUnreferenced = Boolean.parseBoolean(warnOption);
         }
@@ -447,8 +429,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             // If this annotated service is not referenced in YAML, emit a warning when enabled
             if (!yamlReferencedServices.contains(serviceClassName)) {
                 if (warnUnreferenced) {
-                    messager.printMessage(
-                        Diagnostic.Kind.WARNING,
+                    diagnostics.warning(
                         "Service '" + serviceClassName + "' is annotated with @PipelineStep but not referenced in pipeline YAML. No step will be generated for it.");
                 }
             }
@@ -463,8 +444,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 // Validate that the delegate service exists
                 var delegateElement = elementUtils.getTypeElement(model.delegateService().canonicalName());
                 if (delegateElement == null) {
-                    messager.printMessage(
-                        Diagnostic.Kind.ERROR,
+                    diagnostics.error(
                         "Delegate service '" + model.delegateService().canonicalName() + "' not found for step '" + model.serviceName() + "'");
                     continue;
                 }
@@ -475,8 +455,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     typeUtils);
 
                 if (!isValidReactiveService) {
-                    messager.printMessage(
-                        Diagnostic.Kind.ERROR,
+                    diagnostics.error(
                         "Delegate service '" + model.delegateService().canonicalName() +
                         "' must implement one of the reactive service interfaces (ReactiveService, ReactiveStreamingService, etc.) for step '" +
                         model.serviceName() + "'");
@@ -487,16 +466,14 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 if (model.externalMapper() != null) {
                     var externalMapperElement = elementUtils.getTypeElement(model.externalMapper().canonicalName());
                     if (externalMapperElement == null) {
-                        messager.printMessage(
-                            Diagnostic.Kind.ERROR,
+                        diagnostics.error(
                             "Operator mapper '" + model.externalMapper().canonicalName() + "' not found for step '" + model.serviceName() + "'");
                         continue;
                     }
 
                     var externalMapperInterfaceElement = elementUtils.getTypeElement("org.pipelineframework.mapper.ExternalMapper");
                     if (externalMapperInterfaceElement == null) {
-                        messager.printMessage(
-                            Diagnostic.Kind.ERROR,
+                        diagnostics.error(
                             "Framework interface 'org.pipelineframework.mapper.ExternalMapper' could not be resolved on the processor classpath "
                                 + "while validating operator mapper '" + model.externalMapper().canonicalName()
                                 + "' for step '" + model.serviceName() + "'.");
@@ -507,8 +484,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                             typeUtils,
                             externalMapperElement.asType(),
                             "org.pipelineframework.mapper.ExternalMapper") == null) {
-                        messager.printMessage(
-                            Diagnostic.Kind.ERROR,
+                        diagnostics.error(
                             "Operator mapper '" + model.externalMapper().canonicalName() + 
                             "' must implement org.pipelineframework.mapper.ExternalMapper for step '" + 
                             model.serviceName() + "'");
@@ -517,7 +493,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     DelegateTypeSignature delegateSignature = resolveDelegateTypeSignature(
                         delegateElement,
                         typeUtils,
-                        messager,
+                        diagnostics,
                         model.serviceName());
                     if (delegateSignature == null || model.inputMapping() == null || model.outputMapping() == null) {
                         continue;
@@ -536,8 +512,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     boolean outputDiffers = !Objects.equals(stepOutputType, delegateOutputType);
                     if ((inputDiffers || outputDiffers)
                         && model.mapperFallbackMode() != org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON) {
-                        messager.printMessage(
-                            Diagnostic.Kind.ERROR,
+                        diagnostics.error(
                             "Delegated step '" + model.serviceName()
                                 + "' requires an operator mapper because YAML types ["
                                 + stepInputType + " -> " + stepOutputType
@@ -569,7 +544,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
     private DelegateTypeSignature resolveDelegateTypeSignature(
             TypeElement delegateElement,
             Types typeUtils,
-            javax.annotation.processing.Messager messager,
+            PipelineCompilerDiagnostics diagnostics,
             String stepName) {
         List<DeclaredType> matches = new ArrayList<>();
         List<String> matchedInterfaceNames = new ArrayList<>();
@@ -583,15 +558,12 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
 
         if (matches.size() > 1) {
-            if (messager != null) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Delegated step '" + stepName + "' uses delegate service '"
-                        + delegateElement.getQualifiedName()
-                        + "' that implements multiple reactive service interfaces: "
-                        + String.join(", ", matchedInterfaceNames)
-                        + ". Use exactly one reactive service interface.");
-            }
+            diagnostics.error(
+                "Delegated step '" + stepName + "' uses delegate service '"
+                    + delegateElement.getQualifiedName()
+                    + "' that implements multiple reactive service interfaces: "
+                    + String.join(", ", matchedInterfaceNames)
+                    + ". Use exactly one reactive service interface.");
             return null;
         }
 

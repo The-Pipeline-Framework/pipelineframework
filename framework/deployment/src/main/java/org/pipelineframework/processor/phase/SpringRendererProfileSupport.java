@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -66,9 +65,7 @@ final class SpringRendererProfileSupport {
 
         if (!errors.isEmpty()) {
             String message = errors.stream().distinct().collect(Collectors.joining(" "));
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR, message);
-            }
+            ctx.getCompilerDiagnostics().error(message);
             throw new IllegalStateException(message);
         }
     }

@@ -2,7 +2,6 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.util.Objects;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -52,8 +51,7 @@ public class RestResourceTargetGenerator implements TargetGenerator {
 
         if (request.restBinding() == null) {
             if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Skipping REST resource generation for '" + model.generatedName()
                         + "' because no REST binding is available.");
             }

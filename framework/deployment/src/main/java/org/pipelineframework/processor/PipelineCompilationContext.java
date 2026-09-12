@@ -42,6 +42,8 @@ public class PipelineCompilationContext {
     // Getters
     private final ProcessingEnvironment processingEnv;
     private final RoundEnvironment roundEnv;
+    private final PipelineCompilerOptions compilerOptions;
+    private final PipelineCompilerDiagnostics compilerDiagnostics;
     @Getter
     @Setter
     private ClassLoader representationProviderClassLoader;
@@ -130,8 +132,28 @@ public class PipelineCompilationContext {
      * @param roundEnv the round environment containing the annotated elements visible in this round
      */
     public PipelineCompilationContext(ProcessingEnvironment processingEnv, RoundEnvironment roundEnv) {
+        this(
+            processingEnv,
+            roundEnv,
+            new PipelineCompilerOptions(
+                processingEnv == null || processingEnv.getOptions() == null ? Map.of() : processingEnv.getOptions()),
+            processingEnv == null || processingEnv.getMessager() == null
+                ? (severity, message) -> { }
+                : new Jsr269PipelineCompilerDiagnostics(processingEnv.getMessager())
+        );
+    }
+
+    public PipelineCompilationContext(
+        ProcessingEnvironment processingEnv,
+        RoundEnvironment roundEnv,
+        PipelineCompilerOptions compilerOptions,
+        PipelineCompilerDiagnostics compilerDiagnostics
+    ) {
         this.processingEnv = processingEnv;
         this.roundEnv = roundEnv;
+        this.compilerOptions = java.util.Objects.requireNonNull(compilerOptions, "compilerOptions must not be null");
+        this.compilerDiagnostics = java.util.Objects.requireNonNull(
+            compilerDiagnostics, "compilerDiagnostics must not be null");
         this.stepModels = List.of();
         this.aspectModels = List.of();
         this.aspectsForExpansion = List.of();

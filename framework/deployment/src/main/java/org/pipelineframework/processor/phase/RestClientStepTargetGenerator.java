@@ -2,7 +2,6 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.util.Objects;
-import javax.tools.Diagnostic;
 
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -55,8 +54,7 @@ public class RestClientStepTargetGenerator implements TargetGenerator {
 
         if (request.restBinding() == null) {
             if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Skipping REST client step generation for '" + model.generatedName()
                         + "' because no REST binding is available.");
             } else {

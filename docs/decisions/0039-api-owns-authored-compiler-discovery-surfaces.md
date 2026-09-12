@@ -23,8 +23,11 @@ step sequence, cardinality, and types; `@PipelineStep` owns Java-local discovery
 execution hints. `@ParallelismHint` carries compiler-generated ordering and thread-safety metadata consumed
 by runtime policy resolution. `PipelineStepProcessor` is the production JSR-269 host adapter and owns
 processing rounds, source discovery signals, diagnostics, and host services. `PipelineCompiler` owns only
-the immutable ordering and execution of compiler phases over a host-created compilation context. Discovery
-and normalization produce the same compiler semantic model that later phases consume.
+the immutable ordering and execution of compiler phases over a host-created compilation context. The host
+snapshots compiler options into an immutable JDK-only view and adapts the compiler's unanchored diagnostic
+severity vocabulary to JSR-269 `Messager`; source elements, type utilities, filer access, processing rounds,
+and source-anchored diagnostics remain explicit host services. Discovery and normalization produce the same
+compiler semantic model that later phases consume.
 
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after

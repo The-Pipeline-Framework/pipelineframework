@@ -5,7 +5,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Locale;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -35,11 +34,8 @@ public class GenerationPathResolver {
         try {
             Files.createDirectories(outputDir);
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Failed to create output directory '" + outputDir + "': " + e.getMessage());
-            }
+            ctx.getCompilerDiagnostics().error(
+                "Failed to create output directory '" + outputDir + "': " + e.getMessage());
             throw new IllegalStateException("Failed to create output directory '" + outputDir + "'", e);
         }
         return outputDir;
@@ -99,10 +95,7 @@ public class GenerationPathResolver {
     }
 
     private void reportResetFailure(PipelineCompilationContext ctx, Path root, IOException e) {
-        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
-                "Failed to reset generated sources root '" + root + "': " + e.getMessage());
-        }
+        ctx.getCompilerDiagnostics().error(
+            "Failed to reset generated sources root '" + root + "': " + e.getMessage());
     }
 }

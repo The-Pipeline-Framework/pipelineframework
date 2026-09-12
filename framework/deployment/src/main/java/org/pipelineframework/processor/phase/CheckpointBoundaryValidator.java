@@ -10,13 +10,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
 import javax.tools.StandardLocation;
 
 import org.pipelineframework.config.template.PipelineTemplateConfig;
@@ -24,6 +22,7 @@ import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 import org.pipelineframework.processor.util.ImplementedGenericInterfaceResolver;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 /**
  * Validates checkpoint publication/subscription declarations loaded from pipeline YAML.
@@ -43,7 +42,7 @@ final class CheckpointBoundaryValidator {
         PipelineTemplateConfig templateConfig,
         Path moduleDir,
         ProcessingEnvironment processingEnv,
-        Messager messager
+        PipelineCompilerDiagnostics diagnostics
     ) {
         if (templateConfig == null) {
             return;
@@ -82,9 +81,8 @@ final class CheckpointBoundaryValidator {
         if (hasOutputCheckpoint && (publication == null || publication.isBlank())) {
             throw new IllegalStateException("output.checkpoint.publication must not be blank");
         }
-        if (messager != null && hasOutputCheckpoint) {
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                "Checkpoint publication enabled for publication '" + publication + "'");
+        if (diagnostics != null && hasOutputCheckpoint) {
+            diagnostics.note("Checkpoint publication enabled for publication '" + publication + "'");
         }
     }
 

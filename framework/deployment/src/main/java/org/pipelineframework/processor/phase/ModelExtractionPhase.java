@@ -77,11 +77,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        Consumer<String> ctxWarningLogger = message -> {
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING, message);
-            }
-        };
+        Consumer<String> ctxWarningLogger = ctx.getCompilerDiagnostics()::warning;
         List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
         boolean hasYamlStepDefinitions = stepDefinitions != null && !stepDefinitions.isEmpty();
 
@@ -115,17 +111,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
-            } else if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.NOTE,
+            } else {
+                ctx.getCompilerDiagnostics().note(
                     "Contextual role/aspect enrichment produced no additional models; preserving YAML-derived models.");
             }
         } else {
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.NOTE,
-                    NO_YAML_DEFINITIONS_MESSAGE);
-            }
+            ctx.getCompilerDiagnostics().note(NO_YAML_DEFINITIONS_MESSAGE);
             // Preserve backward compatibility for legacy template pipelines that do not declare
             // explicit service/operator step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
@@ -306,8 +297,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Command step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
                     + "declare java.input and java.output.");
             return null;
@@ -316,8 +306,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
         if (streamingShape != StreamingShape.UNARY_UNARY) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Command step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
             return null;
         }
@@ -379,8 +368,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Query step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
                     + "declare java.input and java.output.");
             return null;
@@ -390,8 +378,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             : StreamingShape.UNARY_UNARY;
         if (streamingShape != StreamingShape.UNARY_UNARY
             && streamingShape != StreamingShape.UNARY_STREAMING) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Query step '" + stepDef.name() + "' supports only ONE_TO_ONE and ONE_TO_MANY cardinality");
             return null;
         }
@@ -428,8 +415,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Dynamic operation step '" + stepDef.name() + "' must resolve both Java input and output bindings");
             return null;
         }
@@ -479,14 +465,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             Consumer<String> ctxWarningLogger) {
         if (stepDef.remoteExecution() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Remote step '" + stepDef.name() + "' is missing execution metadata");
             return null;
         }
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Remote step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
                     + "declare java.input and java.output.");
             return null;
@@ -495,8 +479,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
         if (streamingShape != StreamingShape.UNARY_UNARY) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Remote step '" + stepDef.name() + "' currently supports only unary execution");
             return null;
         }
@@ -542,8 +525,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (syntheticModel != null) {
                 return syntheticModel;
             }
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step service class '" + stepDef.executionClass().canonicalName() +
                     "' not found for step '" + stepDef.name() + "'");
             return null;
@@ -556,8 +538,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager(),
             true);
         if (serviceSignature == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step service '" + stepDef.executionClass().canonicalName()
                     + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
                     + springPlainMethodHint(ctx, true) + " method for step '"
@@ -573,8 +554,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         StreamingShape yamlShape = stepDef.streamingShapeHint();
         if (yamlShape != null && yamlShape != serviceSignature.shape()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step '" + stepDef.name() + "' declares cardinality "
                     + yamlShape + " in YAML, but service '" + stepDef.executionClass().canonicalName()
                     + "' implements " + serviceSignature.shape() + " semantics.");
@@ -615,8 +595,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         if (stepDef.deferredCompletion().isPresent()
             && !serviceSignature.outputType().equals(completionBinding.orElseThrow().operationOutputType())) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step '" + stepDef.name() + "' service output '" + serviceSignature.outputType()
                     + "' does not match await.operationOutput '"
                     + completionBinding.orElseThrow().operationOutputType() + "'.");
@@ -709,8 +688,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             }
         }
         if (serviceClassName == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Could not resolve service class name for YAML internal step service '"
                     + qualifiedServiceName + "'");
             return null;
@@ -774,13 +752,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             : stepDef.executionClass().packageName() + ".pipeline";
         String serviceName = toYamlServiceName(stepDef.name());
 
-        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
-                "Internal step '" + stepDef.name() + "' is defined in YAML but service class '"
-                    + stepDef.executionClass().canonicalName()
-                    + "' is not on this module classpath. Using YAML type/cardinality metadata for cross-module compilation.");
-        }
+        ctx.getCompilerDiagnostics().warning(
+            "Internal step '" + stepDef.name() + "' is defined in YAML but service class '"
+                + stepDef.executionClass().canonicalName()
+                + "' is not on this module classpath. Using YAML type/cardinality metadata for cross-module compilation.");
 
         DeploymentRole crossModuleRole = ctx.isPluginHost()
             ? DeploymentRole.PLUGIN_CLIENT
@@ -905,8 +880,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .getTypeElement(stepDef.executionClass().canonicalName());
 
         if (delegateElement == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Delegate service class '" + stepDef.executionClass().canonicalName() +
                 "' not found for step '" + stepDef.name() + "'");
             return null;
@@ -920,8 +894,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager(),
             stepDef.delegatedMethodName());
         if (delegateSignature.isEmpty()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Delegate service '" + stepDef.executionClass().canonicalName() +
                     stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
                     + "' must expose a supported step contract for step '" + stepDef.name() + "'");
@@ -930,8 +903,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         SupportedServiceSignature resolvedDelegateSignature = delegateSignature.get();
         StreamingShape yamlShape = stepDef.streamingShapeHint();
         if (yamlShape != null && yamlShape != resolvedDelegateSignature.shape()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Delegated step '" + stepDef.name() + "' declares cardinality "
                     + yamlShape + " in YAML, but delegate '" + stepDef.executionClass().canonicalName()
                     + stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
@@ -942,8 +914,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : resolvedDelegateSignature.inputType();
         TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : resolvedDelegateSignature.outputType();
         if (inputType == null || outputType == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Could not resolve Java input/output bindings for delegated step '" + stepDef.name()
                     + "'. Provide java.input/java.output or use a parameterized reactive delegate type.");
             return null;
@@ -973,8 +944,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         if (stepDef.externalMapper() != null && externalMapper == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 "Skipping delegated step '" + stepDef.name()
                     + "': operator mapper '" + stepDef.externalMapper().canonicalName()
                     + "' was specified but could not be resolved.");
@@ -987,8 +957,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String fallbackMessage = fallbackRequested && !fallbackGloballyEnabled
                 ? " Mapper fallback was requested but global option '" + MAPPER_FALLBACK_GLOBAL_OPTION + "' is disabled."
                 : "";
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 "Skipping delegated step '" + stepDef.name()
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
@@ -1043,10 +1012,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private boolean isMapperFallbackGloballyEnabled(PipelineCompilationContext ctx) {
-        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getOptions() == null) {
+        if (ctx == null) {
             return false;
         }
-        String configured = ctx.getProcessingEnv().getOptions().get(MAPPER_FALLBACK_GLOBAL_OPTION);
+        String configured = ctx.getCompilerOptions().asMap().get(MAPPER_FALLBACK_GLOBAL_OPTION);
         return configured != null && Boolean.parseBoolean(configured.trim());
     }
 
@@ -1075,8 +1044,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
                 .getTypeElement(stepDef.externalMapper().canonicalName());
             if (mapperElement == null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Operator mapper class '" + stepDef.externalMapper().canonicalName()
                         + "' not found for step '" + stepDef.name() + "'");
                 return null;
@@ -1155,8 +1123,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         if (matchingCandidates.isEmpty()) {
             if (reportMissingCandidateErrorFlag) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Step '" + stepName + "' requires an operator mapper for types ["
                         + applicationInputType + " -> " + operatorInputType + ", "
                         + operatorOutputType + " -> " + applicationOutputType
@@ -1172,8 +1139,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 .map(ClassName::canonicalName)
                 .sorted()
                 .collect(Collectors.joining(", "));
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Step '" + stepName + "' has ambiguous operator mapper inference. Matching candidates: " + candidates);
             return null;
         }
@@ -1188,8 +1154,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (!reportMissingCandidateError) {
             return;
         }
-        ctx.getProcessingEnv().getMessager().printMessage(
-            javax.tools.Diagnostic.Kind.ERROR,
+        ctx.getCompilerDiagnostics().error(
             "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
     }
 
@@ -1257,8 +1222,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         if (externalMapperType == null || externalMapperType.getTypeArguments().size() != 4) {
             if (reportErrors) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Operator mapper '" + mapperElement.getQualifiedName()
                         + "' must implement org.pipelineframework.mapper.ExternalMapper<IApp, ILib, OApp, OLib>"
                         + " for step '" + stepName + "'");
@@ -1277,8 +1241,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             && candidateOperatorOutput.equals(operatorOutputType);
 
         if (!matches && reportErrors) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Operator mapper '" + mapperElement.getQualifiedName() + "' has incompatible type parameters for step '"
                     + stepName + "'. Expected ExternalMapper<"
                     + applicationInputType + ", " + operatorInputType + ", "
@@ -1724,9 +1687,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private void printVirtualThreadError(PipelineCompilationContext ctx, String message) {
-        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
-        }
+        ctx.getCompilerDiagnostics().error(message);
     }
 
     private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
@@ -1809,15 +1770,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 return yamlType;
             }
             if (reactiveType != null && !yamlType.equals(reactiveType)) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
                         + "' in YAML, but service implementation declares '" + reactiveType + "'.");
                 return null;
             }
             if (annotationType != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
                         + "' in YAML and deprecated @PipelineStep metadata declares '" + annotationType
                         + "'. YAML is authoritative.");
@@ -1826,8 +1785,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         if (annotationType != null) {
             if (reactiveType != null && !annotationType.equals(reactiveType)) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Internal step '" + stepName + "' has deprecated @PipelineStep " + direction + "Type '"
                         + annotationType + "' that does not match the implemented service interface " + direction + " type '"
                         + reactiveType + "'.");
@@ -1846,8 +1804,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             Optional<ClassName> annotationMapper,
             TypeName expectedDomainType) {
         if (yamlMapper != null && annotationMapper.isPresent()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 "Internal step '" + stepName + "' declares " + fieldName + " '" + yamlMapper.canonicalName()
                     + "' in YAML and deprecated @PipelineStep metadata declares '"
                     + annotationMapper.get().canonicalName() + "'. YAML is authoritative.");
@@ -1872,8 +1829,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             boolean yamlOwned) {
         TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils().getTypeElement(mapperClass.canonicalName());
         if (mapperElement == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step '" + stepName + "' references " + fieldName + " '" + mapperClass.canonicalName()
                     + "', but the mapper class could not be resolved.");
             return false;
@@ -1884,8 +1840,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             mapperElement.asType(),
             "org.pipelineframework.mapper.Mapper");
         if (mapperType == null || mapperType.getTypeArguments().size() != 2) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
                     + "' must implement Mapper<Domain, External>."
                     + (yamlOwned ? "" : " Deprecated annotation-sourced mappers are validated the same way."));
@@ -1894,8 +1849,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         TypeName mapperDomainType = TypeName.get(mapperType.getTypeArguments().getFirst());
         if (expectedDomainType != null && !expectedDomainType.equals(mapperDomainType)) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
                     + "' must declare Mapper<" + expectedDomainType + ", External>, but found Mapper<"
                     + mapperDomainType + ", External>."

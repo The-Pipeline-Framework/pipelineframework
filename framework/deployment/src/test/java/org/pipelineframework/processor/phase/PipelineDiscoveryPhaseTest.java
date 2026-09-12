@@ -36,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -255,21 +256,24 @@ class PipelineDiscoveryPhaseTest {
         when(pathResolver.resolveModuleDir(Map.of(), generatedSourcesRoot)).thenReturn(moduleDir);
         when(pathResolver.resolveModuleName(Map.of())).thenReturn("test-module");
 
-        when(configLoader.resolvePipelineConfigPath(Map.of(), moduleDir, messager))
+        when(configLoader.resolvePipelineConfigPath(
+            eq(Map.of()), eq(moduleDir), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(java.util.Optional.of(pipelineConfig));
-        when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
-        when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
+        when(configLoader.loadAspects(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class)))
+            .thenReturn(java.util.List.of());
+        when(configLoader.loadTemplateConfig(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class)))
+            .thenReturn(null);
         when(configLoader.loadStepConfig(
             eq(pipelineConfig),
             any(Function.class),
             any(Function.class),
-            eq(messager)))
+            any(PipelineCompilerDiagnostics.class)))
             .thenReturn(new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
                 "com.example", "GRPC", "COMPUTE", java.util.List.of(), java.util.List.of()));
-        when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
-        when(tpResolver.resolveTransport("GRPC", messager))
+        when(configLoader.loadRuntimeMapping(eq(moduleDir), any(PipelineCompilerDiagnostics.class))).thenReturn(null);
+        when(tpResolver.resolveTransport(eq("GRPC"), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(org.pipelineframework.processor.ir.PipelineTransport.GRPC);
-        when(tpResolver.resolvePlatform("COMPUTE", messager))
+        when(tpResolver.resolvePlatform(eq("COMPUTE"), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
         when(processingEnv.getOptions()).thenReturn(Map.of());
 
@@ -283,15 +287,15 @@ class PipelineDiscoveryPhaseTest {
         phase.execute(context);
 
         verify(configLoader, times(1))
-            .resolvePipelineConfigPath(Map.of(), moduleDir, messager);
-        verify(configLoader, times(1)).loadAspects(pipelineConfig, messager);
-        verify(configLoader, times(1)).loadTemplateConfig(pipelineConfig, messager);
+            .resolvePipelineConfigPath(eq(Map.of()), eq(moduleDir), any(PipelineCompilerDiagnostics.class));
+        verify(configLoader, times(1)).loadAspects(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class));
+        verify(configLoader, times(1)).loadTemplateConfig(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class));
         verify(configLoader, times(1)).loadStepConfig(
             eq(pipelineConfig),
             any(Function.class),
             any(Function.class),
-            eq(messager));
-        verify(configLoader, times(1)).loadRuntimeMapping(moduleDir, messager);
+            any(PipelineCompilerDiagnostics.class));
+        verify(configLoader, times(1)).loadRuntimeMapping(eq(moduleDir), any(PipelineCompilerDiagnostics.class));
         assertEquals(generatedSourcesRoot, context.getGeneratedSourcesRoot());
         assertEquals(moduleDir, context.getModuleDir());
         assertEquals("test-module", context.getModuleName());
@@ -319,15 +323,18 @@ class PipelineDiscoveryPhaseTest {
         when(pathResolver.resolveModuleDir(processorOptions, generatedSourcesRoot)).thenReturn(moduleDir);
         when(pathResolver.resolveModuleName(processorOptions)).thenReturn("test-module");
 
-        when(configLoader.resolvePipelineConfigPath(processorOptions, moduleDir, messager))
+        when(configLoader.resolvePipelineConfigPath(
+            eq(processorOptions), eq(moduleDir), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(java.util.Optional.of(pipelineConfig));
-        when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
-        when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
+        when(configLoader.loadAspects(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class)))
+            .thenReturn(java.util.List.of());
+        when(configLoader.loadTemplateConfig(eq(pipelineConfig), any(PipelineCompilerDiagnostics.class)))
+            .thenReturn(null);
         when(configLoader.loadStepConfig(
             eq(pipelineConfig),
             any(Function.class),
             any(Function.class),
-            eq(messager)))
+            any(PipelineCompilerDiagnostics.class)))
             .thenAnswer(invocation -> {
                 Function<String, String> propertyLookup = invocation.getArgument(1);
                 String transportOverride = propertyLookup.apply("pipeline.transport");
@@ -335,10 +342,10 @@ class PipelineDiscoveryPhaseTest {
                 return new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
                     "com.example", "LOCAL", "COMPUTE", java.util.List.of(), java.util.List.of());
             });
-        when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
-        when(tpResolver.resolveTransport("LOCAL", messager))
+        when(configLoader.loadRuntimeMapping(eq(moduleDir), any(PipelineCompilerDiagnostics.class))).thenReturn(null);
+        when(tpResolver.resolveTransport(eq("LOCAL"), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(org.pipelineframework.processor.ir.PipelineTransport.LOCAL);
-        when(tpResolver.resolvePlatform("COMPUTE", messager))
+        when(tpResolver.resolvePlatform(eq("COMPUTE"), any(PipelineCompilerDiagnostics.class)))
             .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);

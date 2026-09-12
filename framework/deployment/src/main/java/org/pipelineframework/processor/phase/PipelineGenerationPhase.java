@@ -151,20 +151,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             try {
                 roleMetadataGenerator.writeRoleMetadata();
             } catch (IOException e) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write role metadata: " + e.getMessage());
-                }
+                ctx.getCompilerDiagnostics().warning(
+                    "Failed to write role metadata: " + e.getMessage());
             }
             try {
                 platformMetadataGenerator.writePlatformMetadata(ctx);
             } catch (IOException e) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write platform metadata: " + e.getMessage());
-                }
+                ctx.getCompilerDiagnostics().warning(
+                    "Failed to write platform metadata: " + e.getMessage());
             }
             return;
         }
@@ -204,13 +198,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         + ExternalAdapterRenderer.getExternalAdapterClassName(model);
                     roleMetadataGenerator.recordClassWithRole(externalAdapterClassName, adapterRole.name());
                 } catch (IOException e) {
-                    if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(
-                            javax.tools.Diagnostic.Kind.ERROR,
-                            "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
-                    } else {
-                        LOG.errorf(e, "Failed to generate external adapter for '%s': %s", model.serviceName(), e.getMessage());
-                    }
+                    ctx.getCompilerDiagnostics().error(
+                        "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
                 }
                 continue;
             }
@@ -308,20 +297,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             roleMetadataGenerator.writeRoleMetadata();
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write role metadata: " + e.getMessage());
-            }
+            ctx.getCompilerDiagnostics().warning(
+                "Failed to write role metadata: " + e.getMessage());
         }
         try {
             platformMetadataGenerator.writePlatformMetadata(ctx);
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write platform metadata: " + e.getMessage());
-            }
+            ctx.getCompilerDiagnostics().warning(
+                "Failed to write platform metadata: " + e.getMessage());
         }
         if (ctx.getResolvedPipelineDefinitionGraph() != null && ctx.isTransportModeLocal()) {
             new LocalPipelineInvocationRenderer().render(
@@ -357,11 +340,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 clientPropertiesGenerator.writeClientProperties(ctx);
             }
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write orchestrator metadata: " + e.getMessage());
-            }
+            ctx.getCompilerDiagnostics().warning(
+                "Failed to write orchestrator metadata: " + e.getMessage());
         }
 
         // Write step definitions for Quarkus build step consumption
@@ -373,8 +353,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             StepDefinitionWriter stepDefinitionWriter = new StepDefinitionWriter(ctx.getProcessingEnv().getFiler());
             stepDefinitionWriter.write(ctx.getStepModels());
         } catch (IOException e) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 "Failed to write step definitions: " + e.getMessage());
         }
     }
@@ -433,9 +412,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Publish terminal output adapter: " + e.getMessage();
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
-            }
+            ctx.getCompilerDiagnostics().error(message);
             throw new RuntimeException(message, e);
         }
     }
@@ -491,9 +468,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Ingest input adapter: " + e.getMessage();
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
-            }
+            ctx.getCompilerDiagnostics().error(message);
             throw new RuntimeException(message, e);
         }
     }
@@ -538,9 +513,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             roleMetadataGenerator.recordClassWithRole(generatedClass.canonicalName(), adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Selection mapper: " + e.getMessage();
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
-            }
+            ctx.getCompilerDiagnostics().error(message);
             throw new RuntimeException(message, e);
         }
     }
@@ -572,14 +545,15 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (configPath.isEmpty()) {
             return Optional.empty();
         }
-        org.pipelineframework.config.pipeline.PipelineYamlConfigLoader loader = ctx.getProcessingEnv() != null
-            ? new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(ctx.getProcessingEnv().getOptions()::get, System::getenv)
-            : new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(key -> null, System::getenv);
+        org.pipelineframework.config.pipeline.PipelineYamlConfigLoader loader =
+            new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(
+                ctx.getCompilerOptions().asMap()::get,
+                System::getenv);
         return Optional.of(loader.load(configPath.get()));
     }
 
     private Optional<java.nio.file.Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
-        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        Map<String, String> options = ctx.getCompilerOptions().asMap();
         String explicit = options.get("pipeline.config");
         if (explicit != null && !explicit.isBlank()) {
             java.nio.file.Path explicitPath = java.nio.file.Path.of(explicit.trim());
@@ -754,11 +728,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     + templateConfig.basePackage()
                     + "': "
                     + e.getMessage();
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        message);
-                }
+                ctx.getCompilerDiagnostics().error(message);
                 throw new RuntimeException(message, e);
             }
         }
@@ -781,11 +751,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     + templateConfig.basePackage()
                     + "': "
                     + e.getMessage();
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        message);
-                }
+                ctx.getCompilerDiagnostics().error(message);
                 throw new RuntimeException(message, e);
             }
         }
@@ -1051,7 +1017,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
         } catch (IOException e) {
-            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Failed to generate orchestrator server: " + e.getMessage());
         }
     }
@@ -1066,7 +1032,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (ctx.getProcessingEnv() == null) {
             return Optional.empty();
         }
-        String configured = ctx.getProcessingEnv().getOptions().get("pipeline.cache.keyGenerator");
+        String configured = ctx.getCompilerOptions().asMap().get("pipeline.cache.keyGenerator");
         if (configured == null || configured.isBlank()) {
             return Optional.empty();
         }

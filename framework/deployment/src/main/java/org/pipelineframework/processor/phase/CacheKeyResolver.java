@@ -15,7 +15,7 @@ class CacheKeyResolver {
      * @return the cache key generator class name or null
      */
     static ClassName resolveCacheKeyGenerator(PipelineCompilationContext ctx) {
-        String configured = ctx.getProcessingEnv().getOptions().get("pipeline.cache.keyGenerator");
+        String configured = ctx.getCompilerOptions().asMap().get("pipeline.cache.keyGenerator");
         if (configured == null || configured.isBlank()) {
             return null;
         }

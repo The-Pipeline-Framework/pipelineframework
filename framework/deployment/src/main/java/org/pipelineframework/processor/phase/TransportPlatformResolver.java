@@ -1,10 +1,9 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.Optional;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
@@ -20,16 +19,13 @@ class TransportPlatformResolver {
      * @param messager the messager for warning reporting, may be null
      * @return the resolved transport mode, defaults to GRPC
      */
-    PipelineTransport resolveTransport(String value, Messager messager) {
+    PipelineTransport resolveTransport(String value, PipelineCompilerDiagnostics diagnostics) {
         if (value == null || value.isBlank()) {
             return PipelineTransport.GRPC;
         }
         Optional<PipelineTransport> mode = PipelineTransport.fromStringOptional(value);
         if (mode.isEmpty()) {
-            if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
-            }
+            diagnostics.warning("Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
             return PipelineTransport.GRPC;
         }
         return mode.get();
@@ -42,16 +38,13 @@ class TransportPlatformResolver {
      * @param messager the messager for warning reporting, may be null
      * @return the resolved platform mode, defaults to COMPUTE
      */
-    PlatformMode resolvePlatform(String value, Messager messager) {
+    PlatformMode resolvePlatform(String value, PipelineCompilerDiagnostics diagnostics) {
         if (value == null || value.isBlank()) {
             return PlatformMode.COMPUTE;
         }
         Optional<PlatformMode> mode = PlatformMode.fromStringOptional(value);
         if (mode.isEmpty()) {
-            if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
-            }
+            diagnostics.warning("Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
             return PlatformMode.COMPUTE;
         }
         return mode.get();

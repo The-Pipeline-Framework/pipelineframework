@@ -204,7 +204,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     if (grpcBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping gRPC service generation for '" + model.generatedName()
                                 + "' because no gRPC binding is available.");
                         break;
@@ -248,7 +248,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     if (grpcBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping gRPC client step generation for '" + model.generatedName()
                                 + "' because no gRPC binding is available.");
                         break;
@@ -294,7 +294,7 @@ class StepArtifactGenerationService {
                         }
                     }
                     if (localBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping local client step generation for '" + model.generatedName()
                                 + "' because no local binding is available.");
                         break;
@@ -330,7 +330,7 @@ class StepArtifactGenerationService {
                             grpcBinding);
                     }
                     if (restBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping REST resource generation for '" + model.generatedName()
                                 + "' because no REST binding is available.");
                         break;
@@ -365,7 +365,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     if (restBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping REST client step generation for '" + model.generatedName()
                                 + "' because no REST binding is available.");
                         break;
@@ -397,7 +397,7 @@ class StepArtifactGenerationService {
                 }
                 case REMOTE_OPERATOR_ADAPTER -> {
                     if (grpcBinding == null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        ctx.getCompilerDiagnostics().warning(
                             "Skipping remote operator adapter generation for '" + model.generatedName()
                                 + "' because no gRPC binding is available.");
                         break;
@@ -414,12 +414,9 @@ class StepArtifactGenerationService {
                     roleMetadataGenerator.recordClassWithRole(adapterClassName, adapterRole.name());
                 }
                 default -> {
-                    if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(
-                            javax.tools.Diagnostic.Kind.WARNING,
-                            "Skipping unsupported generation target '" + target
-                                + "' for step '" + model.generatedName() + "'.");
-                    }
+                    ctx.getCompilerDiagnostics().warning(
+                        "Skipping unsupported generation target '" + target
+                            + "' for step '" + model.generatedName() + "'.");
                 }
             }
         }

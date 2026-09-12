@@ -3,7 +3,6 @@ package org.pipelineframework.processor.phase;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Set;
-import javax.tools.Diagnostic;
 
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
@@ -84,8 +83,7 @@ public class OrchestratorGenerationService {
                 ingestClientRenderer.render(binding, createContext(ctx, role, cacheKeyGenerator, descriptorSet));
             }
         } catch (IOException e) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Failed to generate orchestrator artifacts: " + e.getMessage());
             LOG.error("Failed to generate orchestrator artifacts.", e);
         }

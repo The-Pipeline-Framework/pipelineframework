@@ -45,7 +45,7 @@ public class PipelineInfrastructurePhase implements PipelineCompilationPhase {
      * @return the path to the generated sources root directory
      */
     private Path resolveGeneratedSourcesRoot(PipelineCompilationContext ctx) {
-        java.util.Map<String, String> options = ctx.getProcessingEnv().getOptions();
+        java.util.Map<String, String> options = ctx.getCompilerOptions().asMap();
         String configured = options.get("pipeline.generatedSourcesDir");
         if (configured != null && !configured.isBlank()) {
             return Path.of(configured);

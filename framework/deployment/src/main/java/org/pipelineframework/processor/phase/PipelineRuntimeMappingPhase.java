@@ -68,7 +68,7 @@ public class PipelineRuntimeMappingPhase implements PipelineCompilationPhase {
                 throw new IllegalStateException("pipeline.module is required when runtime mapping is enabled");
             }
             if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "pipeline.module not provided; runtime mapping is ignored for this module");
             }
             return;
