@@ -303,9 +303,11 @@ topology, telemetry, and Query capture. Once the API is understood, replace that
 `options.fields` where possible or a curated `Mapper` where business interpretation is required.
 
 The existing `org.pipelineframework.openapi/openapi-representation-mapper` Block is retained as a
-possible future authoring optimisation. Its intended output is a reviewable proposal that could be
-committed as deterministic options; it is not today's fallback. The Maven goals do not invoke it,
-and TPF currently supplies no CLI, report, review UI, or example host that presents its result.
+possible future authoring optimisation, tracked in
+[issue #813](https://github.com/The-Pipeline-Framework/pipelineframework/issues/813). Its intended
+output is a reviewable proposal that could be committed as deterministic options; it is not today's
+fallback. The Maven goals do not invoke it, and TPF currently supplies no CLI, report, review UI, or
+example host that presents its result.
 
 Open objects use nominal validated JSON-object wrappers. Ambiguous unions, incompatible
 constraints, recursive references, or conversions outside the bounded option language require a

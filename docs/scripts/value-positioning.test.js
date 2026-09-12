@@ -90,7 +90,7 @@ test('OpenAPI docs make every non-direct mapping choice explicit', () => {
   assert.match(openApiImport, /operation: petstore\.pet\.get/)
   assert.match(openApiImport, /second authored Query performs the semantic translation/)
   assert.match(openApiImport, /possible future authoring optimisation/)
-  assert.match(openApiImport, /is not today's fallback/)
+  assert.match(openApiImport, /is not today's\s+fallback/)
   assert.match(openApiImport, /openapi-discovery\.json/)
   assert.match(openApiImport, /Petstore 3\.0 contract/)
 })
