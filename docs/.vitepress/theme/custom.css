@@ -400,6 +400,16 @@ kbd {
     margin-left: auto !important;
     width: 100% !important;
   }
+
+  /*
+   * The sidebar data still marks every documentation page as `has-sidebar`.
+   * Once the visual sidebar is hidden, remove VitePress's 688px inner cap as
+   * well so prose, tables, code samples, and diagrams use the available column.
+   */
+  .VPDoc.has-sidebar .content,
+  .VPDoc.has-sidebar.has-aside .content-container {
+    max-width: none !important;
+  }
 }
 
 @media (max-width: 960px) {

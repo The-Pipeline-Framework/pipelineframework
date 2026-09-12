@@ -7,7 +7,8 @@ Docs snapshots preserve public documentation for released framework versions.
 Future snapshots should copy the current public sections:
 
 - `value`
-- `design`
+- `architecture`
+- `decisions`
 - `develop`
 - `deploy`
 - `operate`

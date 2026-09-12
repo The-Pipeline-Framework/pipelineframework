@@ -1,12 +1,20 @@
 # Versions
 
-The Pipeline Framework documentation is available for the following versions:
+Use the current documentation for the latest release, or open a frozen snapshot for an older release.
 
-## Latest Version
+## Current Release
 
-- [v26.9.2](/) - Current released documentation
+- [v26.9.3](/) - Current released documentation
 
-## Previous Versions
+## Recent Release Notes
+
+The v26.9.x releases do not have frozen documentation snapshots. Their release notes remain available:
+
+- [v26.9.3](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.3)
+- [v26.9.2](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.2)
+- [v26.9.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.1)
+
+## Frozen Documentation Snapshots
 
 - [v26.8.1](/versions/v26.8.1/) - Snapshot of the v26.8.1 docs
 - [v26.7.1](/versions/v26.7.1/) - Snapshot of the v26.7.1 docs
@@ -34,8 +42,8 @@ flowchart LR
 
 ## Documentation Snapshot Policy
 
-This site keeps snapshots for released docs versions and points the latest docs to the root.
-When cutting a new release, create a docs snapshot and update the version list:
+This site points the current release documentation to the root. When cutting a release, create its
+frozen snapshot and update the current version entry:
 
 ```bash
 cd docs
