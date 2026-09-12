@@ -43,6 +43,11 @@ and object-boundary adapter interfaces. Reactive service APIs remain outside run
 types are a customer-runtime API choice; runtime-core's dependency guard continues to prohibit Mutiny and
 platform integration dependencies.
 
+Compile-time expansion of authored pipeline order belongs to `pipelineframework-dsl`. Compiler renderers
+refer to generated-code runtime targets by their stable published names rather than loading runtime
+implementation classes into the compiler process. Those names remain compatibility obligations of the
+customer runtime API; spelling them in compiler code does not transfer their semantic ownership to the compiler.
+
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after
 that add a Jandex source-symbol adapter with parity tests. Both source-symbol adapters feed the same semantic

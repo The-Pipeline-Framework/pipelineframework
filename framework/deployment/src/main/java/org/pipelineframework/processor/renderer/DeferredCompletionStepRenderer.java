@@ -30,7 +30,6 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
-import org.pipelineframework.step.StepOneToOne;
 
 /** Renders the durable completion modifier that follows an ordinary operation adapter. */
 public class DeferredCompletionStepRenderer {
@@ -87,7 +86,7 @@ public class DeferredCompletionStepRenderer {
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
             .addSuperinterface(ParameterizedTypeName.get(
-                ClassName.get(StepOneToOne.class), operationOutputType, finalOutputType))
+                RuntimeSymbols.STEP_ONE_TO_ONE, operationOutputType, finalOutputType))
             .addSuperinterface(ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.awaitable", "AwaitStreamOneToOneStep"),
                 operationOutputType,

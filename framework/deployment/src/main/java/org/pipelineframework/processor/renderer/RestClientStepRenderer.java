@@ -19,8 +19,6 @@ import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RestPathResolver;
-import org.pipelineframework.step.StepManyToOne;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Renderer for REST client step implementations based on PipelineStepModel and RestBinding.
@@ -212,7 +210,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             case UNARY_UNARY -> {
                 clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(
-                    ClassName.get(StepOneToOne.class), inputDto, outputDto));
+                    RuntimeSymbols.STEP_ONE_TO_ONE, inputDto, outputDto));
                 MethodSpec cacheKeyTargetMethod = MethodSpec.methodBuilder("cacheKeyTargetType")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)
@@ -240,7 +238,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 clientStepBuilder.addMethod(applyOneToOneMethod.build());
             }
             case UNARY_STREAMING -> {
-                ClassName stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
+                ClassName stepInterface = RuntimeSymbols.STEP_ONE_TO_MANY;
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputDto, outputDto));
                 MethodSpec applyOneToManyMethod = MethodSpec.methodBuilder("applyOneToMany")
                     .addAnnotation(Override.class)
@@ -263,7 +261,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             }
             case STREAMING_UNARY -> {
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(
-                    ClassName.get(StepManyToOne.class), inputDto, outputDto));
+                    RuntimeSymbols.STEP_MANY_TO_ONE, inputDto, outputDto));
                 MethodSpec applyBatchMultiMethod = MethodSpec.methodBuilder("applyReduce")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)

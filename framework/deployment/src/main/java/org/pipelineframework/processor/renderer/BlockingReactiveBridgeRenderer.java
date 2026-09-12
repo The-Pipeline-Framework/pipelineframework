@@ -74,19 +74,19 @@ public class BlockingReactiveBridgeRenderer {
     private TypeName resolveReactiveInterface(PipelineStepModel model, TypeName inputType, TypeName outputType) {
         return switch (model.streamingShape()) {
             case UNARY_STREAMING -> ParameterizedTypeName.get(
-                ClassName.get("org.pipelineframework.service", "ReactiveStreamingService"),
+                RuntimeSymbols.REACTIVE_STREAMING_SERVICE,
                 inputType,
                 outputType);
             case STREAMING_UNARY -> ParameterizedTypeName.get(
-                ClassName.get("org.pipelineframework.service", "ReactiveStreamingClientService"),
+                RuntimeSymbols.REACTIVE_STREAMING_CLIENT_SERVICE,
                 inputType,
                 outputType);
             case STREAMING_STREAMING -> ParameterizedTypeName.get(
-                ClassName.get("org.pipelineframework.service", "ReactiveBidirectionalStreamingService"),
+                RuntimeSymbols.REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE,
                 inputType,
                 outputType);
             default -> ParameterizedTypeName.get(
-                ClassName.get("org.pipelineframework.service", "ReactiveService"),
+                RuntimeSymbols.REACTIVE_SERVICE,
                 inputType,
                 outputType);
         };

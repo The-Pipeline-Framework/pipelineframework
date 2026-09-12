@@ -22,8 +22,6 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.util.GeneratedServiceTypeResolver;
-import org.pipelineframework.step.StepManyToOne;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Renderer for local/in-process client step implementations.
@@ -120,7 +118,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
         ClassName stepInterface;
         switch (model.streamingShape()) {
             case UNARY_UNARY -> {
-                stepInterface = ClassName.get(StepOneToOne.class);
+                stepInterface = RuntimeSymbols.STEP_ONE_TO_ONE;
                 clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
                 MethodSpec cacheKeyTargetMethod = MethodSpec.methodBuilder("cacheKeyTargetType")
@@ -133,11 +131,11 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                 clientStepBuilder.addMethod(cacheKeyTargetMethod);
             }
             case UNARY_STREAMING -> {
-                stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
+                stepInterface = RuntimeSymbols.STEP_ONE_TO_MANY;
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
             }
             case STREAMING_UNARY -> {
-                stepInterface = ClassName.get(StepManyToOne.class);
+                stepInterface = RuntimeSymbols.STEP_MANY_TO_ONE;
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
             }
             case STREAMING_STREAMING -> {

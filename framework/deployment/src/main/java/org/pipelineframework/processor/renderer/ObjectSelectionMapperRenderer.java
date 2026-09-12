@@ -18,14 +18,12 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.config.boundary.PipelineObjectSelectionConfig;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
-import org.pipelineframework.objectingest.ObjectSelectionMapper;
-import org.pipelineframework.objectingest.ObjectSnapshot;
 import org.pipelineframework.processor.PipelineStepProcessor;
 
 /** Generates the typed projection used by grouped Object Ingest. */
 public final class ObjectSelectionMapperRenderer {
     private static final String CLASS_NAME = "ObjectSelectionPipelineInputMapper";
-    private static final String SERVICE_PATH = "META-INF/services/" + ObjectSelectionMapper.class.getName();
+    private static final String SERVICE_PATH = "META-INF/services/" + RuntimeSymbols.OBJECT_SELECTION_MAPPER.canonicalName();
 
     public ClassName render(String basePackage, ClassName outputType,
                             PipelineTemplateTypeDefinition.RecordType record,
@@ -35,7 +33,7 @@ public final class ObjectSelectionMapperRenderer {
         ClassName mapperClass = ClassName.get(packageName, CLASS_NAME);
         TypeSpec type = TypeSpec.classBuilder(CLASS_NAME)
             .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(ObjectSelectionMapper.class), outputType))
+            .addSuperinterface(ParameterizedTypeName.get(RuntimeSymbols.OBJECT_SELECTION_MAPPER, outputType))
             .addMethod(MethodSpec.methodBuilder("outputType")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
@@ -76,7 +74,7 @@ public final class ObjectSelectionMapperRenderer {
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(outputType)
-            .addParameter(ParameterizedTypeName.get(ClassName.get(List.class), ClassName.get(ObjectSnapshot.class)),
+            .addParameter(ParameterizedTypeName.get(ClassName.get(List.class), RuntimeSymbols.OBJECT_SNAPSHOT),
                 "snapshots")
             .addCode(constructor.build())
             .build();
@@ -86,11 +84,11 @@ public final class ObjectSelectionMapperRenderer {
         return MethodSpec.methodBuilder("reference")
             .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
             .returns(ClassName.bestGuess("org.pipelineframework.repository.PayloadReference"))
-            .addParameter(ParameterizedTypeName.get(ClassName.get(List.class), ClassName.get(ObjectSnapshot.class)),
+            .addParameter(ParameterizedTypeName.get(ClassName.get(List.class), RuntimeSymbols.OBJECT_SNAPSHOT),
                 "snapshots")
             .addParameter(String.class, "key")
             .addCode("""
-                java.util.List<org.pipelineframework.objectingest.ObjectSnapshot> matches = snapshots.stream()
+                java.util.List<$L> matches = snapshots.stream()
                     .filter(snapshot -> key.equals(snapshot.key()))
                     .toList();
                 if (matches.size() != 1) {
@@ -98,7 +96,7 @@ public final class ObjectSelectionMapperRenderer {
                         + "' but found " + matches.size());
                 }
                 return reference(matches.getFirst(), key);
-                """)
+                """, RuntimeSymbols.OBJECT_SNAPSHOT.canonicalName())
             .build();
     }
 
@@ -106,7 +104,7 @@ public final class ObjectSelectionMapperRenderer {
         return MethodSpec.methodBuilder("reference")
             .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
             .returns(ClassName.bestGuess("org.pipelineframework.repository.PayloadReference"))
-            .addParameter(ObjectSnapshot.class, "snapshot")
+            .addParameter(RuntimeSymbols.OBJECT_SNAPSHOT, "snapshot")
             .addParameter(String.class, "key")
             .addCode("""
                 if (snapshot.contentRef() == null) {
