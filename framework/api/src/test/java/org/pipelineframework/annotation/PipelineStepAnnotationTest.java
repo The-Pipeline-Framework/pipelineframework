@@ -22,8 +22,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.parallelism.OrderingRequirement;
+import org.pipelineframework.parallelism.ThreadSafety;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,17 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for the {@link PipelineStep} annotation contract.
  *
- * This class verifies structural properties of the annotation that change the codegen contract,
- * in particular changes introduced by this PR (removal of {@code runOnVirtualThreads}).
+ * This class verifies the portable authored annotation contract.
  */
 class PipelineStepAnnotationTest {
 
-    /**
-     * Regression test: the {@code runOnVirtualThreads} element was removed from {@link PipelineStep}
-     * in this PR. Virtual-thread offload is now configured in YAML, not on the annotation.
-     * This test ensures the element stays absent so that generated code and consumers cannot
-     * inadvertently re-introduce annotation-based virtual-thread selection.
-     */
     @Test
     void pipelineStepAnnotationDoesNotHaveRunOnVirtualThreadsAttribute() {
         assertThrows(NoSuchMethodException.class,
@@ -74,7 +70,23 @@ class PipelineStepAnnotationTest {
     }
 
     @Test
-    void pipelineStepAnnotationHasExpectedCoreAttributes() {
+    void pipelineStepAnnotationHasRuntimeRetentionAndTypeTarget() {
+        assertEquals(java.lang.annotation.RetentionPolicy.RUNTIME,
+            PipelineStep.class.getAnnotation(java.lang.annotation.Retention.class).value());
+        assertEquals(Set.of(java.lang.annotation.ElementType.TYPE),
+            Set.of(PipelineStep.class.getAnnotation(java.lang.annotation.Target.class).value()));
+    }
+
+    @Test
+    void pipelineStepDefaultsStayPortable() {
+        PipelineStep annotation = MinimalStep.class.getAnnotation(PipelineStep.class);
+        assertEquals(OrderingRequirement.RELAXED, annotation.ordering());
+        assertEquals(ThreadSafety.SAFE, annotation.threadSafety());
+        assertEquals(Void.class, annotation.cacheKeyGenerator());
+    }
+
+    @Test
+    void pipelineStepAnnotationHasExpectedCoreAttributes() throws NoSuchMethodException {
         Set<String> attributeNames = Arrays.stream(PipelineStep.class.getDeclaredMethods())
             .map(Method::getName)
             .collect(Collectors.toSet());
@@ -84,5 +96,9 @@ class PipelineStepAnnotationTest {
         assertTrue(attributeNames.contains("threadSafety"), "threadSafety must be present");
         assertTrue(attributeNames.contains("operator"), "operator must be present");
         assertTrue(attributeNames.contains("cacheKeyGenerator"), "cacheKeyGenerator must be present");
+        assertEquals(Class.class, PipelineStep.class.getDeclaredMethod("cacheKeyGenerator").getReturnType());
     }
+
+    @PipelineStep
+    private static class MinimalStep {}
 }

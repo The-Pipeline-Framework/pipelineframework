@@ -21,7 +21,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import io.quarkus.cache.CacheKeyGenerator;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 
@@ -113,9 +112,9 @@ public @interface PipelineStep {
 
     /**
      * Optional cache key generator override for this step.
-     * @return the cache key generator class to use, or CacheKeyGenerator.class to use the default
+     * @return the cache key generator class to use, or Void.class when no override is specified
      */
-    Class<? extends CacheKeyGenerator> cacheKeyGenerator() default CacheKeyGenerator.class;
+    Class<?> cacheKeyGenerator() default Void.class;
 
     /**
      * Declares ordering requirements for the generated client step.
