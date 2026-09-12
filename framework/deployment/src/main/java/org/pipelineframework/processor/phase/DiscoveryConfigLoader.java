@@ -129,7 +129,7 @@ class DiscoveryConfigLoader {
         if (configPath == null) {
             throw new IllegalArgumentException("configPath must not be null");
         }
-        PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(
+        PipelineStepConfigLoader stepLoader = PipelineStepConfigLoader.withWarningSink(
             propertyLookup, envLookup, diagnostics::warning);
         try {
             return stepLoader.load(configPath);

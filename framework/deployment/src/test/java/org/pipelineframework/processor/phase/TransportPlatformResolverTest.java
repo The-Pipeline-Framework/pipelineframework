@@ -74,9 +74,9 @@ class TransportPlatformResolverTest {
     }
 
     @Test
-    void resolveTransport_nullMessager_noException() {
+    void resolveTransport_nullDiagnostics_noException() {
         assertEquals(PipelineTransport.GRPC,
-            resolver.resolveTransport("INVALID", (severity, message) -> { }));
+            resolver.resolveTransport("INVALID", null));
     }
 
     // --- Platform ---
@@ -108,9 +108,9 @@ class TransportPlatformResolverTest {
     }
 
     @Test
-    void resolvePlatform_nullMessager_noException() {
+    void resolvePlatform_nullDiagnostics_noException() {
         assertEquals(PlatformMode.COMPUTE,
-            resolver.resolvePlatform("INVALID", (severity, message) -> { }));
+            resolver.resolvePlatform("INVALID", null));
     }
 
     @Test

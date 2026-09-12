@@ -63,8 +63,16 @@ public class PipelineStepConfigLoader {
      * @param propertyLookup property lookup
      * @param envLookup environment lookup
      * @param warningSink optional warning sink
+     * @return a loader using the supplied warning sink
      */
-    public PipelineStepConfigLoader(
+    public static PipelineStepConfigLoader withWarningSink(
+            Function<String, String> propertyLookup,
+            Function<String, String> envLookup,
+            Consumer<String> warningSink) {
+        return new PipelineStepConfigLoader(propertyLookup, envLookup, warningSink);
+    }
+
+    private PipelineStepConfigLoader(
             Function<String, String> propertyLookup,
             Function<String, String> envLookup,
             Consumer<String> warningSink) {

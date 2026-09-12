@@ -16,7 +16,7 @@ class TransportPlatformResolver {
      * Resolve the transport mode from a configuration value.
      *
      * @param value the raw transport string, may be null or blank
-     * @param messager the messager for warning reporting, may be null
+     * @param diagnostics the compiler diagnostics for warning reporting, may be null
      * @return the resolved transport mode, defaults to GRPC
      */
     PipelineTransport resolveTransport(String value, PipelineCompilerDiagnostics diagnostics) {
@@ -25,7 +25,9 @@ class TransportPlatformResolver {
         }
         Optional<PipelineTransport> mode = PipelineTransport.fromStringOptional(value);
         if (mode.isEmpty()) {
-            diagnostics.warning("Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
+            if (diagnostics != null) {
+                diagnostics.warning("Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
+            }
             return PipelineTransport.GRPC;
         }
         return mode.get();
@@ -35,7 +37,7 @@ class TransportPlatformResolver {
      * Resolve the platform mode from a configuration value.
      *
      * @param value the raw platform string, may be null or blank
-     * @param messager the messager for warning reporting, may be null
+     * @param diagnostics the compiler diagnostics for warning reporting, may be null
      * @return the resolved platform mode, defaults to COMPUTE
      */
     PlatformMode resolvePlatform(String value, PipelineCompilerDiagnostics diagnostics) {
@@ -44,7 +46,9 @@ class TransportPlatformResolver {
         }
         Optional<PlatformMode> mode = PlatformMode.fromStringOptional(value);
         if (mode.isEmpty()) {
-            diagnostics.warning("Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
+            if (diagnostics != null) {
+                diagnostics.warning("Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
+            }
             return PlatformMode.COMPUTE;
         }
         return mode.get();

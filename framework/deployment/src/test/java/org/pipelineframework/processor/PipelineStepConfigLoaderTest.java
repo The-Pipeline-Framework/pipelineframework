@@ -149,4 +149,17 @@ class PipelineStepConfigLoaderTest {
 
         assertEquals("GRPC", stepConfig.transport(), "Should default to GRPC when no transport specified");
     }
+
+    @Test
+    void nullMessagerConstructorRemainsUnambiguous(@TempDir Path tempDir) throws IOException {
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> null,
+            key -> null,
+            null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\ntransport: UNKNOWN\nsteps: []\n");
+
+        assertEquals("GRPC", loader.load(config).transport());
+    }
 }
