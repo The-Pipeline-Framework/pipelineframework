@@ -117,8 +117,8 @@ URL from business input, or move callback authentication and admission into an a
 OpenAPI mapping must fail the build by default when no valid mapping exists. Guide authors towards
 one of three explicit choices: deterministic `options.fields`, a curated representation and
 `Mapper`, or an authored runtime LLM Query that performs the mapping. Never imply that the importer
-silently invokes a model. The runtime choice adds an expensive model call for every item or Pipeline
-execution that crosses the step; describe it as useful for local or staging experimentation and as
+silently invokes a model. The runtime choice adds an expensive model call for every item that
+crosses the step; describe it as useful for local or staging experimentation and as
 something to replace with deterministic mapping in a stable production Pipeline.
 
 When authoring that runtime choice, use a wire-shaped canonical type that maps directly at the

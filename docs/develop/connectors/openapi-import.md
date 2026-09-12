@@ -239,7 +239,7 @@ deterministic mapper classes. If the bounded option language cannot express the 
 faithfully, use a curated representation type and `Mapper` instead.
 
 The third path is deliberately visible in the Pipeline rather than hidden behind the importer. It
-means one additional model call for every item or Pipeline execution that crosses that mapping step,
+means one additional model call for every item that crosses that mapping step,
 with the corresponding latency, cost, failure modes, and replay considerations. It can be useful
 while probing an unfamiliar API in local development or staging. For a stable production Pipeline,
 replace it with deterministic `options.fields` or a curated `Mapper`.

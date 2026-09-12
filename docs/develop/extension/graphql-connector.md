@@ -74,7 +74,7 @@ it normally incurs one model call per agent turn. GraphQL's direct path needs no
 agent path uses the model deliberately.
 
 OpenAPI mapping follows the same cost model only when an application explicitly authors an LLM
-Query as its runtime mapping step. That is one additional model call per item or Pipeline execution,
+Query as its runtime mapping step. That is one additional model call per item,
 not an automatic importer fallback. Missing OpenAPI mappings otherwise fail the build and should be
 resolved with deterministic `options.fields` or a curated `Mapper`. The existing OpenAPI
 authoring-only mapper Block is retained as a possible future optimisation, not presented as today's

@@ -77,8 +77,8 @@ lifecycle modifier, not a generated `Command` step followed by a generated `Awai
 
 Schema adaptation is deterministic by default. If direct mapping is impossible and no mapping is
 declared, the build fails. Developers must write `options.fields`, provide a curated DTO/Mapper, or
-explicitly author a runtime LLM mapping step and accept one additional model call per item or
-Pipeline execution. The runtime path is useful for experimentation, but its visible cost naturally
+explicitly author a runtime LLM mapping step and accept one additional model call per item. The
+runtime path is useful for experimentation, but its visible cost naturally
 encourages replacing it in stable production flows. The Maven importer does not invoke the existing
 authoring-only mapper Block, and no ready-made authoring host is included.
 

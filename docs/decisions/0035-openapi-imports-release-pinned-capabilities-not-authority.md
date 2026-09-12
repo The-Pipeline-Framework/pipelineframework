@@ -31,7 +31,7 @@ direct representation mapping. If that is impossible and the application supplie
 build fails. The author must write deterministic `options.fields`, provide a curated representation
 type and `Mapper`, or explicitly place an application-bound LLM Query in the Pipeline as a runtime
 mapping step. That third choice uses a wire-shaped canonical type at the imported boundary and pays
-for one additional model call per item or Pipeline execution that crosses the mapping step. Neither
+for one additional model call per item that crosses the mapping step. Neither
 the importer nor the pinned HTTP provider adds or invokes that call automatically.
 
 The packaged `openapi-representation-mapper` Block is retained as a possible future authoring
@@ -71,8 +71,8 @@ telemetry, replay, and failure behaviour reviewable.
   is imported.
 - Missing representation mappings fail the build. Authors must provide deterministic
   `options.fields`, a curated DTO/Mapper, or an explicit runtime LLM Query.
-- Runtime LLM mapping is useful for probing an unfamiliar API, but adds a model call per item or
-  Pipeline execution. Stable production flows should normally replace it with deterministic mapping.
+- Runtime LLM mapping is useful for probing an unfamiliar API, but adds a model call per item.
+  Stable production flows should normally replace it with deterministic mapping.
 - The authoring-only representation-mapper Block remains a future optimisation, not a documented
   current workflow.
 - Generated capability provenance and accepted mapping fingerprints participate in the existing
