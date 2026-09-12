@@ -31,7 +31,7 @@ class UnionWrapperMapperRendererTest {
                 "rejected", new PipelineTemplateUnionVariant("rejected", "PaymentRejected", 2),
                 "requiresReview", new PipelineTemplateUnionVariant("requiresReview", "PaymentRequiresReview", 3)));
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.PIPELINE_SERVER,

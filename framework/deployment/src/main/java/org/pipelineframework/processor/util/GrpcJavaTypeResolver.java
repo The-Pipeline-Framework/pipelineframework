@@ -6,6 +6,7 @@ import javax.tools.Diagnostic;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.ir.GrpcBinding;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 /**
  * Resolves gRPC Java types from service descriptors at render time.
@@ -41,7 +42,7 @@ public class GrpcJavaTypeResolver {
      * @throws IllegalArgumentException if the service descriptor is invalid
      */
     public GrpcJavaTypes resolve(GrpcBinding binding) {
-        return resolve(binding, null);
+        return resolve(binding, (Messager) null);
     }
 
     /**
@@ -54,6 +55,15 @@ public class GrpcJavaTypeResolver {
          * @throws IllegalStateException if required descriptor information (such as the method descriptor) is missing or resolution fails
          */
     public GrpcJavaTypes resolve(GrpcBinding binding, Messager messager) {
+        return resolve(binding, messager == null ? null : message -> messager.printMessage(
+            Diagnostic.Kind.WARNING, message));
+    }
+
+    public GrpcJavaTypes resolve(GrpcBinding binding, PipelineCompilerDiagnostics diagnostics) {
+        return resolve(binding, diagnostics == null ? null : diagnostics::warning);
+    }
+
+    private GrpcJavaTypes resolve(GrpcBinding binding, java.util.function.Consumer<String> warningReporter) {
         Object serviceDescriptorObj = binding.serviceDescriptor();
         if (!(serviceDescriptorObj instanceof Descriptors.ServiceDescriptor serviceDescriptor)) {
             throw new IllegalArgumentException("Service descriptor is not of expected type Descriptors.ServiceDescriptor");
@@ -101,10 +111,8 @@ public class GrpcJavaTypeResolver {
             } catch (Exception e) {
                 // In some test scenarios, the service descriptor might not have complete file information
                 // This is acceptable as long as we have the parameter and return types
-                if (messager != null) {
-                    messager.printMessage(
-                            Diagnostic.Kind.WARNING,
-                            "Could not derive gRPC stub/impl base class names: " + e.getMessage());
+                if (warningReporter != null) {
+                    warningReporter.accept("Could not derive gRPC stub/impl base class names: " + e.getMessage());
                 }
             }
 

@@ -109,7 +109,7 @@ class StepArtifactGenerationService {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
                     String commandClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "CommandClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
-                    commandClientStepRenderer.render(model, new GenerationContext(
+                    commandClientStepRenderer.render(model, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, clientRole),
                         clientRole,
@@ -126,7 +126,7 @@ class StepArtifactGenerationService {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
                     String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "DeferredCompletionStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
-                    awaitClientStepRenderer.render(model, new GenerationContext(
+                    awaitClientStepRenderer.render(model, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, clientRole),
                         clientRole,
@@ -143,7 +143,7 @@ class StepArtifactGenerationService {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
                     String queryClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "QueryClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
-                    queryClientStepRenderer.render(model, new GenerationContext(
+                    queryClientStepRenderer.render(model, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, clientRole),
                         clientRole,
@@ -159,7 +159,7 @@ class StepArtifactGenerationService {
                     String dynamicOperationClientClassName = model.servicePackage() + PIPELINE_DOT
                         + baseName + "DynamicOperationClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
-                    queryClientStepRenderer.renderDynamicOperation(model, new GenerationContext(
+                    queryClientStepRenderer.renderDynamicOperation(model, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, clientRole),
                         clientRole,
@@ -211,7 +211,7 @@ class StepArtifactGenerationService {
                     }
                     String grpcClassName = model.servicePackage() + PIPELINE_DOT + model.generatedName() + "GrpcService";
                     DeploymentRole grpcRole = model.deploymentRole();
-                    grpcRenderer.render(grpcBinding, new GenerationContext(
+                    grpcRenderer.render(grpcBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, grpcRole),
                         grpcRole,
@@ -256,7 +256,7 @@ class StepArtifactGenerationService {
                     String clientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "GrpcClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
-                    clientRenderer.render(grpcBinding, new GenerationContext(
+                    clientRenderer.render(grpcBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, clientRole),
                         clientRole,
@@ -304,7 +304,7 @@ class StepArtifactGenerationService {
                     DeploymentRole localClientRole = ctx.isTransportModeLocal() && model.sideEffect()
                         ? DeploymentRole.ORCHESTRATOR_CLIENT
                         : resolveClientRole(model.deploymentRole());
-                    localClientRenderer.render(localBinding, new GenerationContext(
+                    localClientRenderer.render(localBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, localClientRole),
                         localClientRole,
@@ -338,7 +338,7 @@ class StepArtifactGenerationService {
                     String restClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "Resource";
                     DeploymentRole restRole = DeploymentRole.REST_SERVER;
-                    restRenderer.render(restBinding, new GenerationContext(
+                    restRenderer.render(restBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, restRole),
                         restRole,
@@ -350,7 +350,7 @@ class StepArtifactGenerationService {
                     if (ctx.isPlatformModeFunction() && !ctx.isFunctionHttpBridgeEnabled()) {
                         String handlerClassName =
                             restFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
-                        restFunctionHandlerRenderer.render(restBinding, new GenerationContext(
+                        restFunctionHandlerRenderer.render(restBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                             ctx.getProcessingEnv(),
                             pathResolver.resolveRoleOutputDir(ctx, restRole),
                             restRole,
@@ -373,7 +373,7 @@ class StepArtifactGenerationService {
                     String restClientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "RestClientStep";
                     DeploymentRole restClientRole = resolveClientRole(model.deploymentRole());
-                    restClientRenderer.render(restBinding, new GenerationContext(
+                    restClientRenderer.render(restBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, restClientRole),
                         restClientRole,
@@ -386,7 +386,7 @@ class StepArtifactGenerationService {
                     String bridgeClassName = model.servicePackage() + PIPELINE_DOT
                         + model.generatedName() + "BlockingReactiveBridge";
                     DeploymentRole bridgeRole = model.deploymentRole();
-                    blockingReactiveBridgeRenderer.render(model, new GenerationContext(
+                    blockingReactiveBridgeRenderer.render(model, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, bridgeRole),
                         bridgeRole,
@@ -404,7 +404,7 @@ class StepArtifactGenerationService {
                     }
                     String adapterClassName = model.servicePackage() + PIPELINE_DOT + model.serviceClassName().simpleName();
                     DeploymentRole adapterRole = model.deploymentRole();
-                    remoteOperatorAdapterRenderer.render(grpcBinding, new GenerationContext(
+                    remoteOperatorAdapterRenderer.render(grpcBinding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, adapterRole),
                         adapterRole,

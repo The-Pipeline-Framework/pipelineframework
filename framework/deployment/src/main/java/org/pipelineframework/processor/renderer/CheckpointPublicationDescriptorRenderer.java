@@ -83,7 +83,7 @@ public class CheckpointPublicationDescriptorRenderer {
                     .build());
         }
 
-        JavaFile.builder(generatedType.packageName(), descriptor.build()).build().writeTo(ctx.processingEnv().getFiler());
+        JavaFile.builder(generatedType.packageName(), descriptor.build()).build().writeTo(ctx.compilerServices().filer());
         return generatedType;
     }
 

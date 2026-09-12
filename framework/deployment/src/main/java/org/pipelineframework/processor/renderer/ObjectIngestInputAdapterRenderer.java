@@ -110,9 +110,9 @@ public final class ObjectIngestInputAdapterRenderer {
         }
 
         JavaFile javaFile = JavaFile.builder(packageName, type.build()).build();
-        if (ctx.processingEnv() != null) {
-            javaFile.writeTo(ctx.processingEnv().getFiler());
-            writeServiceDescriptor(ctx.processingEnv().getFiler(), adapterClass.canonicalName());
+        if (ctx.compilerServices().available()) {
+            javaFile.writeTo(ctx.compilerServices().filer());
+            writeServiceDescriptor(ctx.compilerServices().filer(), adapterClass.canonicalName());
         } else {
             javaFile.writeTo(ctx.outputDir());
             writeServiceDescriptor(ctx.outputDir(), adapterClass.canonicalName());

@@ -315,16 +315,16 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         String message = "Delegated step '" + model.serviceName()
             + "' requested mapperFallbackMode=JACKSON, but Jackson is not available on the processor classpath. "
             + "Add Jackson dependencies or disable mapper fallback for this step.";
-        if (ctx != null && ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
-            ctx.processingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR, message);
+        if (ctx != null && ctx.compilerServices().available() && ctx.compilerDiagnostics() != null) {
+            ctx.compilerDiagnostics().error(message);
         }
         throw new IllegalStateException(message);
     }
 
     private boolean isJacksonAvailable(GenerationContext ctx) {
-        if (ctx != null && ctx.processingEnv() != null && ctx.processingEnv().getElementUtils() != null) {
-            return ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null
-                && ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.core.type.TypeReference") != null;
+        if (ctx != null && ctx.compilerServices().available() && ctx.compilerServices().elements() != null) {
+            return ctx.compilerServices().elements().getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null
+                && ctx.compilerServices().elements().getTypeElement("com.fasterxml.jackson.core.type.TypeReference") != null;
         }
         return false;
     }

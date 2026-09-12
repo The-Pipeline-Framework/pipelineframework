@@ -78,7 +78,7 @@ class ExternalAdapterRendererTest {
         javax.annotation.processing.ProcessingEnvironment mockProcessingEnv =
             new TestProcessingEnvironment();
 
-        GenerationContext ctx = new GenerationContext(
+        GenerationContext ctx = Jsr269GenerationContext.create(
                 mockProcessingEnv,
                 tempDir,
                 DeploymentRole.PIPELINE_SERVER,
@@ -156,7 +156,7 @@ class ExternalAdapterRendererTest {
         javax.annotation.processing.ProcessingEnvironment mockProcessingEnv =
             new TestProcessingEnvironment();
 
-        GenerationContext ctx = new GenerationContext(
+        GenerationContext ctx = Jsr269GenerationContext.create(
                 mockProcessingEnv,
                 tempDir,
                 DeploymentRole.PIPELINE_SERVER,
@@ -266,7 +266,7 @@ class ExternalAdapterRendererTest {
         javax.annotation.processing.ProcessingEnvironment mockProcessingEnv =
             new TestProcessingEnvironment();
 
-        GenerationContext ctx = new GenerationContext(
+        GenerationContext ctx = Jsr269GenerationContext.create(
                 mockProcessingEnv,
                 tempDir,
                 DeploymentRole.PIPELINE_SERVER,

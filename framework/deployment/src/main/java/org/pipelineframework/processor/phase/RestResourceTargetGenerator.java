@@ -67,7 +67,7 @@ public class RestResourceTargetGenerator implements TargetGenerator {
         }
 
         DeploymentRole role = DeploymentRole.REST_SERVER;
-        renderer.render(request.restBinding(), new GenerationContext(
+        renderer.render(request.restBinding(), org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

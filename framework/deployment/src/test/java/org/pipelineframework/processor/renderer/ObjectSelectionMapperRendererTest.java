@@ -34,7 +34,7 @@ class ObjectSelectionMapperRendererTest {
             ClassName.get("com.example.domain", "Documents"),
             record,
             selection,
-            new GenerationContext(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null));
 
         String source = Files.readString(output.resolve(
             "com/example/pipeline/ObjectSelectionPipelineInputMapper.java"));
@@ -55,7 +55,7 @@ class ObjectSelectionMapperRendererTest {
             ClassName.get("com.example.domain", "Documents"),
             record,
             selection,
-            new GenerationContext(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null));
 
         String source = Files.readString(output.resolve(
             "com/example/pipeline/ObjectSelectionPipelineInputMapper.java"));
@@ -73,7 +73,7 @@ class ObjectSelectionMapperRendererTest {
                 ClassName.get("com.example.domain", "Documents"),
                 record,
                 selection,
-                new GenerationContext(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, output, DeploymentRole.PIPELINE_SERVER, Set.of(), null, null)));
     }
 
     private static PipelineTemplateTypeDefinition.Field field(String name) {

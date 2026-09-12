@@ -59,7 +59,7 @@ public class UnionWrapperMapperRenderer {
             .sorted(Comparator.comparingInt(PipelineTemplateUnionVariant::number))
             .toList();
         for (PipelineTemplateUnionVariant variant : variants) {
-            ClassName domainVariantType = resolveDomainVariantType(unionDomainType, variant, ctx.processingEnv());
+            ClassName domainVariantType = resolveDomainVariantType(unionDomainType, variant, ctx.compilerServices(), ctx);
             ClassName protoVariantType = ClassName.get(basePackage + ".grpc", "PipelineTypes", variant.type());
             TypeName mapperType = ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
@@ -150,17 +150,17 @@ public class UnionWrapperMapperRenderer {
     private ClassName resolveDomainVariantType(
         ClassName unionDomainType,
         PipelineTemplateUnionVariant variant,
-        ProcessingEnvironment processingEnv
+        org.pipelineframework.processor.Jsr269CompilerServices compilerServices,
+        GenerationContext context
     ) {
         ClassName variantType = ClassName.get(unionDomainType.packageName(), variant.type());
-        if (processingEnv != null
-            && processingEnv.getElementUtils() != null
-            && processingEnv.getElementUtils().getTypeElement(variantType.canonicalName()) == null) {
+        if (compilerServices.elements() != null
+            && compilerServices.elements().getTypeElement(variantType.canonicalName()) == null) {
             String message = "Union variant type '" + variantType.canonicalName()
                 + "' was not found. Variant message '" + variant.type()
                 + "' maps by convention to a Java class in the same package as '"
                 + unionDomainType.canonicalName() + "'.";
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, message);
+            context.error(message);
             throw new IllegalStateException(message);
         }
         return variantType;

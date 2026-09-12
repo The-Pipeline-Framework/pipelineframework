@@ -90,7 +90,7 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
             return;
         }
 
-        renderer.render(request.localBinding(), new GenerationContext(
+        renderer.render(request.localBinding(), org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

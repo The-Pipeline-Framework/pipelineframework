@@ -52,7 +52,7 @@ class BlockingReactiveBridgeRendererTest {
             .enabledTargets(Set.of())
             .build();
 
-        new BlockingReactiveBridgeRenderer().render(model, new GenerationContext(
+        new BlockingReactiveBridgeRenderer().render(model, Jsr269GenerationContext.create(
             mock(ProcessingEnvironment.class),
             tempDir,
             DeploymentRole.PIPELINE_SERVER,
@@ -200,7 +200,7 @@ class BlockingReactiveBridgeRendererTest {
     }
 
     private GenerationContext generationContext() {
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
             mock(ProcessingEnvironment.class),
             tempDir,
             DeploymentRole.PIPELINE_SERVER,

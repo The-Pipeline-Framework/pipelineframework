@@ -87,8 +87,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
         String basePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
-            : RestPathResolver.resolveResourcePath(model, ctx.processingEnv());
-        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
+            : RestPathResolver.resolveResourcePath(model, ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
+        String operationPath = RestPathResolver.resolveOperationPath(ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
 
         AnnotationSpec registerRestClient = AnnotationSpec.builder(
                 ClassName.get("org.eclipse.microprofile.rest.client.inject", "RegisterRestClient"))

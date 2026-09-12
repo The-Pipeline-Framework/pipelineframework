@@ -411,7 +411,7 @@ class QueryClientStepRendererTest {
     private GenerationContext generationContext(Map<String, String> options) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(options);
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -423,7 +423,7 @@ class QueryClientStepRendererTest {
     private GenerationContext generationContext(PipelineTransport transport, String basePackage) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,

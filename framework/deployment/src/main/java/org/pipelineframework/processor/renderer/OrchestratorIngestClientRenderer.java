@@ -45,12 +45,10 @@ public class OrchestratorIngestClientRenderer {
         }
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
-        var ingestTypes = typeResolver.resolve(ingestBinding, ctx.processingEnv().getMessager());
+        var ingestTypes = typeResolver.resolve(ingestBinding, ctx.compilerDiagnostics());
         if (ingestTypes == null) {
-            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
-                ctx.processingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Skipping orchestrator ingest client generation: could not resolve gRPC types.");
+            if (ctx.compilerServices().available() && ctx.compilerDiagnostics() != null) {
+                ctx.compilerDiagnostics().warning("Skipping orchestrator ingest client generation: could not resolve gRPC types.");
             }
             return;
         }
@@ -97,7 +95,7 @@ public class OrchestratorIngestClientRenderer {
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.client", client)
             .build()
-            .writeTo(ctx.processingEnv().getFiler());
+            .writeTo(ctx.compilerServices().filer());
     }
 
     /**
@@ -126,12 +124,10 @@ public class OrchestratorIngestClientRenderer {
                 methodName,
                 inputStreaming,
                 outputStreaming,
-                ctx.processingEnv().getMessager());
+                ctx.compilerDiagnostics());
         } catch (IllegalStateException e) {
-            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
-                ctx.processingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Skipping orchestrator ingest client generation: " + e.getMessage());
+            if (ctx.compilerServices().available() && ctx.compilerDiagnostics() != null) {
+                ctx.compilerDiagnostics().warning("Skipping orchestrator ingest client generation: " + e.getMessage());
             }
             return null;
         }
@@ -161,12 +157,10 @@ public class OrchestratorIngestClientRenderer {
             return null;
         }
 
-        var subscribeTypes = typeResolver.resolve(subscribeBinding, ctx.processingEnv().getMessager());
+        var subscribeTypes = typeResolver.resolve(subscribeBinding, ctx.compilerDiagnostics());
         if (subscribeTypes == null) {
-            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
-                ctx.processingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Skipping orchestrator ingest client generation: could not resolve subscribe types.");
+            if (ctx.compilerServices().available() && ctx.compilerDiagnostics() != null) {
+                ctx.compilerDiagnostics().warning("Skipping orchestrator ingest client generation: could not resolve subscribe types.");
             }
             return null;
         }
@@ -176,10 +170,9 @@ public class OrchestratorIngestClientRenderer {
         if (subscribeInputType == null || subscribeOutputType == null) {
             throw new IllegalStateException("Failed to resolve orchestrator subscribe client types from descriptors.");
         }
-        if (!subscribeOutputType.equals(outputType) && ctx.processingEnv() != null
-            && ctx.processingEnv().getMessager() != null) {
-            ctx.processingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+        if (!subscribeOutputType.equals(outputType) && ctx.compilerServices().available()
+            && ctx.compilerDiagnostics() != null) {
+            ctx.compilerDiagnostics().error(
                 "Subscribe output type differs from ingest output type; cannot generate a client that assumes "
                     + "the ingest output type for subscribe.");
             return null;

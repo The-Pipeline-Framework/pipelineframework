@@ -535,7 +535,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
 
         JavaFile.builder(binding.basePackage() + ".orchestrator", app)
             .build()
-            .writeTo(ctx.processingEnv().getFiler());
+            .writeTo(ctx.compilerServices().filer());
     }
 
     /**
@@ -573,7 +573,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             new org.pipelineframework.processor.util.GrpcBindingResolver();
         var grpcBinding = resolver.resolve(firstStepModel, descriptorSet);
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
-        var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
+        var grpcTypes = typeResolver.resolve(grpcBinding, ctx.compilerDiagnostics());
         if (grpcTypes.grpcParameterType() == null) {
             throw new IllegalStateException("Failed to resolve orchestrator gRPC input type from descriptors.");
         }

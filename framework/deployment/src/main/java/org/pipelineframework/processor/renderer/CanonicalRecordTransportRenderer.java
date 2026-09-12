@@ -144,10 +144,10 @@ final class CanonicalRecordTransportRenderer {
     }
 
     private BoundRecord bindRecord(CanonicalTransportTypeBinding binding) {
-        if (context.processingEnv() == null) {
+        if (!context.compilerServices().available()) {
             throw new IllegalStateException("Normalized transport mapping requires an annotation processing environment");
         }
-        TypeElement element = context.processingEnv().getElementUtils().getTypeElement(binding.javaType().canonicalName());
+        TypeElement element = context.compilerServices().elements().getTypeElement(binding.javaType().canonicalName());
         if (element == null || element.getKind() != ElementKind.RECORD) {
             throw new IllegalStateException("Normalized v3 record '" + binding.canonicalName()
                 + "' requires Java record representation " + binding.javaType());

@@ -90,7 +90,7 @@ class DeferredCompletionStepRendererTest {
             .outputMapping(TypeMapping.withoutMapper(
                 ClassName.get("com.example.approval.domain", "PendingApproval")))
             .build();
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(),
             null, null, PipelineTransport.LOCAL, "", null, true);
 
@@ -128,7 +128,7 @@ class DeferredCompletionStepRendererTest {
     }
 
     private GenerationContext context(PipelineTransport transport) {
-        return new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(),
+        return Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(),
             null, null, transport, "com.example.approval", null, true);
     }
 }

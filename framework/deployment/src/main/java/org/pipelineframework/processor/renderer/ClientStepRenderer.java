@@ -17,7 +17,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
-import javax.annotation.processing.Messager;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -75,7 +75,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * @return the generated TypeSpec describing the client step class
      */
     private TypeSpec buildClientStepClass(GrpcBinding binding, GenerationContext ctx) throws IOException {
-        Messager messager = ctx.processingEnv().getMessager();
+        PipelineCompilerDiagnostics messager = ctx.compilerDiagnostics();
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         String clientStepClassName = getClientStepClassName(model);
@@ -396,7 +396,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * @param binding the gRPC binding describing the service and step model
      * @return the TypeName of the gRPC stub to inject, or `null` if resolution is not available
      */
-    private TypeName resolveGrpcStubType(GrpcBinding binding, Messager messager) {
+    private TypeName resolveGrpcStubType(GrpcBinding binding, PipelineCompilerDiagnostics messager) {
         GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
         return grpcTypeResolver.resolve(binding, messager).stub();
     }

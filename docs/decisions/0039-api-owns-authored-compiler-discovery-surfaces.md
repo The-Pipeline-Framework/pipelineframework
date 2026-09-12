@@ -28,10 +28,11 @@ round's root elements in an immutable `Jsr269SourceInventory`. The inventory mak
 explicit to compiler phases without exposing the round lifecycle. `PipelineCompiler` owns only the immutable
 ordering and execution of compiler phases over a host-created compilation context. The host snapshots compiler
 options into an immutable JDK-only view and adapts the compiler's unanchored diagnostic severity vocabulary to
-JSR-269 `Messager`; processing rounds, `ProcessingEnvironment`, type utilities, filer access, and source-anchored
-diagnostics remain explicit host services. The JSR-269 adapter captures authored discovery inputs while semantic
-ownership remains with the compiler and framework API. Discovery and normalization produce the same compiler
-semantic model that later phases consume.
+JSR-269 `Messager`; processing rounds, type utilities, filer access, and source-anchored diagnostics remain explicit
+host services. Renderer contexts receive compiler options and diagnostics plus lazily accessed JSR-269
+`Elements`, `Types`, and `Filer` capabilities, never the whole `ProcessingEnvironment`. The JSR-269 adapter captures
+authored discovery inputs while semantic ownership remains with the compiler and framework API. Discovery and
+normalization produce the same compiler semantic model that later phases consume.
 
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after

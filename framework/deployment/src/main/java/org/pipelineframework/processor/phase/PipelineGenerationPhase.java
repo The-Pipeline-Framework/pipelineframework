@@ -393,7 +393,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DeploymentRole adapterRole = terminalModel
             .map(model -> resolveClientRole(model.deploymentRole()))
             .orElse(DeploymentRole.PIPELINE_SERVER);
-        GenerationContext adapterContext = new GenerationContext(
+        GenerationContext adapterContext = org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
             adapterRole,
@@ -449,7 +449,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DeploymentRole adapterRole = firstModel
             .map(model -> resolveClientRole(model.deploymentRole()))
             .orElse(DeploymentRole.PIPELINE_SERVER);
-        GenerationContext adapterContext = new GenerationContext(
+        GenerationContext adapterContext = org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
             adapterRole,
@@ -496,7 +496,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DeploymentRole adapterRole = firstBusinessStepWithDeploymentRole(ctx)
             .map(model -> resolveClientRole(model.deploymentRole()))
             .orElse(DeploymentRole.PIPELINE_SERVER);
-        GenerationContext generationContext = new GenerationContext(
+        GenerationContext generationContext = org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
             adapterRole,
@@ -706,7 +706,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             return;
         }
         if (templateConfig.output() != null && templateConfig.output().checkpoint() != null) {
-            GenerationContext publicationContext = new GenerationContext(
+            GenerationContext publicationContext = org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                 ctx.getProcessingEnv(),
                 generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
                 DeploymentRole.PIPELINE_SERVER,
@@ -733,7 +733,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         if (templateConfig.input() != null && templateConfig.input().subscription() != null) {
-            GenerationContext handlerContext = new GenerationContext(
+            GenerationContext handlerContext = org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                 ctx.getProcessingEnv(),
                 generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
                 DeploymentRole.PIPELINE_SERVER,
@@ -898,7 +898,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             Set<String> enabledAspects,
             ClassName cacheKeyGenerator,
             DescriptorProtos.FileDescriptorSet descriptorSet) {
-        return new GenerationContext(
+        return org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             resolveRoleOutputDir(ctx, adapterRole),
             adapterRole,
@@ -950,7 +950,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             boolean local = "LOCAL".equalsIgnoreCase(transport);
             if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
-                orchestratorRestRenderer.render(binding, new GenerationContext(
+                orchestratorRestRenderer.render(binding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
@@ -958,7 +958,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     cacheKeyGenerator,
                     descriptorSet));
                 if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
-                    orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
+                    orchestratorFunctionHandlerRenderer.render(binding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                         ctx.getProcessingEnv(),
                         resolveRoleOutputDir(ctx, role),
                         role,
@@ -980,7 +980,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 }
             } else if (!local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
-                orchestratorGrpcRenderer.render(binding, new GenerationContext(
+                orchestratorGrpcRenderer.render(binding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
@@ -991,7 +991,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
             if (generateCli) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
-                orchestratorCliRenderer.render(binding, new GenerationContext(
+                orchestratorCliRenderer.render(binding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
@@ -1008,7 +1008,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
             if (!rest && !local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
-                orchestratorIngestClientRenderer.render(binding, new GenerationContext(
+                orchestratorIngestClientRenderer.render(binding, org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,

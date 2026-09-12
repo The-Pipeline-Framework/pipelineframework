@@ -39,7 +39,7 @@ class RestFunctionHandlerRendererTest {
 
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
         renderer.render(new RestBinding(unaryModel(), null),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -68,7 +68,7 @@ class RestFunctionHandlerRendererTest {
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
 
         renderer.render(new RestBinding(streamingModel(), null),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -91,7 +91,7 @@ class RestFunctionHandlerRendererTest {
 
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
         renderer.render(new RestBinding(streamingUnaryModel(), null),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -114,7 +114,7 @@ class RestFunctionHandlerRendererTest {
 
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
         renderer.render(new RestBinding(streamingManyToManyModel(), null),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -139,7 +139,7 @@ class RestFunctionHandlerRendererTest {
 
         PlaceholderAwareRenderer renderer = new PlaceholderAwareRenderer();
         renderer.render(new RestBinding(unaryModel(), null),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =

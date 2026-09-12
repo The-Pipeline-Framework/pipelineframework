@@ -330,7 +330,7 @@ class AwsLambdaOrchestratorRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         AwsLambdaOrchestratorRenderer renderer = new AwsLambdaOrchestratorRenderer();
-        renderer.render(binding, new GenerationContext(
+        renderer.render(binding, Jsr269GenerationContext.create(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunFunctionHandler.java");

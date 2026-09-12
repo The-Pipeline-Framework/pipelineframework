@@ -40,7 +40,7 @@ class RemoteOperatorAdapterRendererTest {
             new GrpcBinding(remoteModel(new PipelineTemplateRemoteTarget(null, "tpf.remote-operators.charge-card.url")),
                 serviceDescriptor(),
                 methodDescriptor()),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -69,7 +69,7 @@ class RemoteOperatorAdapterRendererTest {
             new GrpcBinding(remoteModel(new PipelineTemplateRemoteTarget("https://operator.example/process", null)),
                 serviceDescriptor(),
                 methodDescriptor()),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =
@@ -92,7 +92,7 @@ class RemoteOperatorAdapterRendererTest {
                 remoteModel(new PipelineTemplateRemoteTarget("https://operator.example/process", null), "ENVELOPE_HTTP_V1"),
                 serviceDescriptor(),
                 methodDescriptor()),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
                 java.util.Set.of(), null, null));
 
         Path generatedSource =

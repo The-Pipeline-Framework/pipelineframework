@@ -232,7 +232,7 @@ class CommandClientStepRendererTest {
     private GenerationContext generationContext(String transport) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,

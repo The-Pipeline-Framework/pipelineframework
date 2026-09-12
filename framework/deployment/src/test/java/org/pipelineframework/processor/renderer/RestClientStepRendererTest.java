@@ -49,7 +49,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -122,7 +122,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -168,7 +168,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -215,7 +215,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -274,7 +274,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -327,7 +327,7 @@ class RestClientStepRendererTest {
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir.resolve("non-side-effect"),
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -377,7 +377,7 @@ class RestClientStepRendererTest {
             "/ObserveCachePaymentOutputSideEffectService/remoteProcess");
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        GenerationContext context = new GenerationContext(
+        GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir.resolve("misclassified-cache"),
             DeploymentRole.ORCHESTRATOR_CLIENT,

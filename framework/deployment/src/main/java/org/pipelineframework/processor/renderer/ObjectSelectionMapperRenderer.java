@@ -47,9 +47,9 @@ public final class ObjectSelectionMapperRenderer {
             .addMethod(snapshotReferenceMethod())
             .build();
         JavaFile javaFile = JavaFile.builder(packageName, type).build();
-        if (ctx.processingEnv() != null) {
-            javaFile.writeTo(ctx.processingEnv().getFiler());
-            writeServiceDescriptor(ctx.processingEnv().getFiler(), mapperClass.canonicalName());
+        if (ctx.compilerServices().available()) {
+            javaFile.writeTo(ctx.compilerServices().filer());
+            writeServiceDescriptor(ctx.compilerServices().filer(), mapperClass.canonicalName());
         } else {
             javaFile.writeTo(ctx.outputDir());
             writeServiceDescriptor(ctx.outputDir(), mapperClass.canonicalName());
