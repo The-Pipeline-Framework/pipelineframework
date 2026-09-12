@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
@@ -15,7 +17,9 @@ import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 import org.pipelineframework.processor.ir.DeploymentRole;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class UnionWrapperMapperRendererTest {
 
@@ -31,6 +35,9 @@ class UnionWrapperMapperRendererTest {
                 "rejected", new PipelineTemplateUnionVariant("rejected", "PaymentRejected", 2),
                 "requiresReview", new PipelineTemplateUnionVariant("requiresReview", "PaymentRequiresReview", 3)));
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        Elements elements = mock(Elements.class);
+        when(elements.getTypeElement(any(CharSequence.class))).thenReturn(mock(TypeElement.class));
+        when(processingEnv.getElementUtils()).thenReturn(elements);
         GenerationContext context = Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
