@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pipelineframework.config.pipeline.PipelineJson;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -156,7 +156,7 @@ class PipelineIdlStateResolverTest {
 
     @Test
     void persistsV3FieldSemanticsAndReadsOlderFieldsWithStrongDefaults() throws Exception {
-        PipelineIdlSnapshot olderState = PipelineJson.mapper().copy().findAndRegisterModules().readValue("""
+        PipelineIdlSnapshot olderState = jsonMapper().readValue("""
             {"version":3,"appName":"V3","basePackage":"com.example.v3","messages":{},"unions":{},
              "types":{"Record":{"name":"Record","kind":"record","fields":[
              {"number":1,"name":"id","protoName":"id","type":"string"}],"target":null,
@@ -171,7 +171,7 @@ class PipelineIdlStateResolverTest {
                 new PipelineIdlSnapshot.TypeFieldSnapshot(1, "id", "id", "string"),
                 new PipelineIdlSnapshot.TypeFieldSnapshot(2, "tags", "tags", "string", true)),
                 Optional.empty(), List.of())), List.of());
-        String serialized = PipelineJson.mapper().copy().findAndRegisterModules().writeValueAsString(snapshot);
+        String serialized = jsonMapper().writeValueAsString(snapshot);
 
         assertEquals(false, serialized.contains("\"id\",\"protoName\":\"id\",\"type\":\"string\",\"repeated\""));
         assertEquals(true, serialized.contains("\"tags\",\"protoName\":\"tags\",\"type\":\"string\",\"repeated\":true"));
@@ -241,7 +241,7 @@ class PipelineIdlStateResolverTest {
         assertEquals(PipelineTemplateWrapperConstraints.empty(), new PipelineIdlSnapshot.TypeSnapshot(
             "CurrencyCode", "wrapper", List.of(), Optional.of("string"), List.of()).constraints());
 
-        PipelineIdlSnapshot olderState = PipelineJson.mapper().copy().findAndRegisterModules().readValue("""
+        PipelineIdlSnapshot olderState = jsonMapper().readValue("""
             {"version":3,"appName":"V3","basePackage":"com.example.v3","messages":{},"unions":{},
              "types":{"CurrencyCode":{"name":"CurrencyCode","kind":"wrapper","fields":[],"target":"string",
              "variants":[],"reservedNumbers":[],"reservedNames":[]}},"steps":[]}
@@ -272,5 +272,9 @@ class PipelineIdlStateResolverTest {
     private String indent(String value, int spaces) {
         String prefix = " ".repeat(spaces);
         return value.lines().map(line -> prefix + line).collect(java.util.stream.Collectors.joining("\n")) + "\n";
+    }
+
+    private ObjectMapper jsonMapper() {
+        return new ObjectMapper().findAndRegisterModules();
     }
 }

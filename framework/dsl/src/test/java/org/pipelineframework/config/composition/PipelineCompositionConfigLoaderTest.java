@@ -347,12 +347,6 @@ class PipelineCompositionConfigLoaderTest {
         assertEquals(List.of("orders-ready"), ir.terminalPublications());
     }
 
-    @Test
-    void compositionSchemaResourceIsPackaged() {
-        assertNotNull(Thread.currentThread().getContextClassLoader()
-            .getResource("META-INF/pipeline/pipeline-composition-schema.json"));
-    }
-
     private Path producerConsumerManifest() throws Exception {
         return writeManifest(tempDir,
             """

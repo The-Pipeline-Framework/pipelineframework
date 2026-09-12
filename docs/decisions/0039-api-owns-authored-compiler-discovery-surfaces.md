@@ -32,7 +32,10 @@ JSR-269 `Messager`; processing rounds, type utilities, filer access, and source-
 host services. Renderer contexts receive compiler options and diagnostics plus lazily accessed JSR-269
 `Elements`, `Types`, and `Filer` capabilities, never the whole `ProcessingEnvironment`. The JSR-269 adapter captures
 authored discovery inputs while semantic ownership remains with the compiler and framework API. Discovery and
-normalization produce the same compiler semantic model that later phases consume.
+normalization produce the same compiler semantic model that later phases consume. YAML contract decoding and
+composition configuration belong to the framework-neutral `pipelineframework-dsl` artifact, which consumes the
+semantic model, runtime-core vocabulary, and SnakeYAML without depending on the runtime integration; runtime and
+deployment consumers depend on that DSL artifact rather than owning its loaders.
 
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after
