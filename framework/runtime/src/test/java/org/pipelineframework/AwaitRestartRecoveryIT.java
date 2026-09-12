@@ -28,6 +28,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.AwaitLifecycleCoverageRegistry;
 import org.pipelineframework.awaitable.AwaitUnitCreateCommand;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
@@ -254,7 +256,8 @@ class AwaitRestartRecoveryIT {
         () -> org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
             .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
             .markTimedOut(raced.tenantId(), raced.interactionId(), raced.version(), now + 65_000L)
-            .await().indefinitely().map(AwaitInteractionRecord::status).orElse(AwaitInteractionStatus.TIMED_OUT));
+            .await().indefinitely().map(AwaitInteractionRecord::status)
+            .orElseGet(() -> persistedInteractionStatus(raced)));
     assertTerminalRaceConverges(raced, attempts, Set.of(AwaitInteractionStatus.COMPLETED, AwaitInteractionStatus.TIMED_OUT));
   }
 
@@ -301,7 +304,8 @@ class AwaitRestartRecoveryIT {
         () -> org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
             .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
             .cancel(raced.tenantId(), raced.interactionId(), raced.version(), "cancelled", now + 7L)
-            .await().indefinitely().map(AwaitInteractionRecord::status).orElse(AwaitInteractionStatus.CANCELLED));
+            .await().indefinitely().map(AwaitInteractionRecord::status)
+            .orElseGet(() -> persistedInteractionStatus(raced)));
     assertTerminalRaceConverges(raced, attempts, Set.of(AwaitInteractionStatus.COMPLETED, AwaitInteractionStatus.CANCELLED));
   }
 
@@ -433,7 +437,8 @@ class AwaitRestartRecoveryIT {
         () -> org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
             .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
             .markTimedOut(interaction.tenantId(), interaction.interactionId(), interaction.version(), now + 61_000L)
-            .await().indefinitely().map(AwaitInteractionRecord::status).orElse(AwaitInteractionStatus.TIMED_OUT));
+            .await().indefinitely().map(AwaitInteractionRecord::status)
+            .orElseGet(() -> persistedInteractionStatus(interaction)));
     assertTerminalRaceConverges(interaction, attempts, Set.of(AwaitInteractionStatus.COMPLETED, AwaitInteractionStatus.TIMED_OUT));
   }
 
@@ -444,7 +449,8 @@ class AwaitRestartRecoveryIT {
         () -> org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
             .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
             .cancel(interaction.tenantId(), interaction.interactionId(), interaction.version(), "cancelled", now + 1L)
-            .await().indefinitely().map(AwaitInteractionRecord::status).orElse(AwaitInteractionStatus.CANCELLED));
+            .await().indefinitely().map(AwaitInteractionRecord::status)
+            .orElseGet(() -> persistedInteractionStatus(interaction)));
     assertTerminalRaceConverges(interaction, attempts, Set.of(AwaitInteractionStatus.COMPLETED, AwaitInteractionStatus.CANCELLED));
   }
 
@@ -527,12 +533,43 @@ class AwaitRestartRecoveryIT {
       AwaitInteractionRecord interaction,
       List<RaceAttempt<AwaitInteractionStatus>> attempts,
       Set<AwaitInteractionStatus> allowedTerminalStates) {
-    AwaitInteractionRecord persisted = org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
-        .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
-        .get(interaction.tenantId(), interaction.interactionId()).await().indefinitely().orElseThrow();
-    assertTrue(allowedTerminalStates.contains(persisted.status()));
+    AwaitInteractionStatus persistedStatus = persistedInteractionStatus(interaction);
+    assertTrue(allowedTerminalStates.contains(persistedStatus));
+    assertTrue(attempts.stream().anyMatch(attempt -> attempt.result().isPresent()),
+        "At least one terminal race contender must succeed");
+    attempts.stream().flatMap(attempt -> attempt.failure().stream()).forEach(failure -> {
+      assertInstanceOf(AwaitInteractionTerminalException.class, failure);
+      assertTrue(persistedStatus == AwaitInteractionStatus.CANCELLED
+          || persistedStatus == AwaitInteractionStatus.TIMED_OUT,
+          "Completion may be rejected only when cancellation or timeout won");
+    });
     assertTrue(attempts.stream().flatMap(attempt -> attempt.result().stream())
-        .allMatch(status -> status == persisted.status()));
+        .allMatch(status -> status == persistedStatus));
+  }
+
+  private AwaitInteractionStatus persistedInteractionStatus(AwaitInteractionRecord interaction) {
+    return org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores
+        .interactionStoreForCompletion(dynamo, TABLE_PREFIX)
+        .get(interaction.tenantId(), interaction.interactionId()).await().indefinitely().orElseThrow().status();
+  }
+
+  @Test
+  void losingCancellationAndTimeoutObserveCompletedWinner() {
+    long now = System.currentTimeMillis();
+    AwaitInteractionStore store = newInteractionStore();
+    AwaitInteractionRecord interaction = createInteraction(store, "tenant-lost-terminal", "lost-terminal", now);
+    complete(interaction, Map.of("decision", "approved"), "terminal-winner", now + 1L);
+
+    var cancelled = store.cancel(interaction.tenantId(), interaction.interactionId(), interaction.version(),
+        "cancelled", now + 2L).await().indefinitely();
+    var timedOut = store.markTimedOut(interaction.tenantId(), interaction.interactionId(), interaction.version(),
+        now + 61_000L).await().indefinitely();
+    assertTrue(cancelled.isEmpty(), "Cancellation must lose to the committed completion");
+    assertTrue(timedOut.isEmpty(), "Timeout must lose to the committed completion");
+    assertEquals(AwaitInteractionStatus.COMPLETED, cancelled.map(AwaitInteractionRecord::status)
+        .orElseGet(() -> persistedInteractionStatus(interaction)));
+    assertEquals(AwaitInteractionStatus.COMPLETED, timedOut.map(AwaitInteractionRecord::status)
+        .orElseGet(() -> persistedInteractionStatus(interaction)));
   }
 
   private record RaceAttempt<T>(
