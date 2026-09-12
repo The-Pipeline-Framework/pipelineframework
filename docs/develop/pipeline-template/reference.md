@@ -457,7 +457,7 @@ The generator reserves removed protobuf names and tags from the committed IDL st
 
 ### Generated Java domain types
 
-Run `PipelineContractGenerator` in the same `generate-sources` lifecycle as protobuf generation. It invokes the independent protobuf and Java target generators from the same resolved v3 type model and committed IDL state.
+Run `PipelineContractGenerator` from `org.pipelineframework:pipelineframework-compiler` in the same `generate-sources` lifecycle as protobuf generation. Declare that artifact explicitly on the generator classpath. It invokes the independent protobuf and Java target generators from the same resolved v3 type model and committed IDL state.
 
 Generated Java sources live under `<basePackage>.domain`. A record field keeps its YAML declaration order in the generated Java record constructor. A wrapper is a distinct one-component record, so two wrappers over the same scalar cannot be exchanged accidentally. Aliases generate no class and use their resolved target type.
 

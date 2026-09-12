@@ -24,8 +24,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.pipelineframework.config.CardinalitySemantics;
-import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.*;
 
@@ -43,7 +43,7 @@ public class PipelineProtoGenerator {
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
     private static final String IDL_BOOTSTRAP_PROPERTY = "pipeline.idl.bootstrap";
     private static final String REQUIRE_COMMITTED_IDL_STATE_PROPERTY = "pipeline.idl.require-committed-state";
-    private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
+    private static final ObjectMapper IDL_MAPPER = new ObjectMapper().registerModule(new Jdk8Module());
     private final PipelineTypesProtoRenderer typesRenderer = new PipelineTypesProtoRenderer();
 
     /**
