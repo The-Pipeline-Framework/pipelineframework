@@ -63,7 +63,8 @@ includes:
 - the `connector-openapi-maven-plugin` for bounded acquisition, offline discovery, explicit
   selection, refresh, and drift verification;
 - the generic pinned HTTP Connector and representation provider used at runtime;
-- the optional `openapi-representation-mapper` Block, which produces a reviewable mapping proposal;
+- the low-level `openapi-representation-mapper` Block contract, retained as a possible future
+  authoring optimisation rather than a current fallback;
   and
 - synchronous and callback-completion proof applications, generated-contract checks, and focused
   authoring guidance.
@@ -74,10 +75,12 @@ dispatch produces its trusted acknowledgement, `await:` suspends the Pipeline, a
 callback is projected into the final typed output. It is one authored operation with an orthogonal
 lifecycle modifier, not a generated `Command` step followed by a generated `Await` step.
 
-Schema adaptation uses direct mapping, bounded deterministic options, or an explicit curated
-DTO/Mapper. The optional LLM Query is an authoring aid: it proposes bounded options, but author
-review, committed configuration, and compiler validation remain authoritative. No model interprets
-the contract or mapping at runtime.
+Schema adaptation is deterministic by default. If direct mapping is impossible and no mapping is
+declared, the build fails. Developers must write `options.fields`, provide a curated DTO/Mapper, or
+explicitly author a runtime LLM mapping step and accept one additional model call per item or
+Pipeline execution. The runtime path is useful for experimentation, but its visible cost naturally
+encourages replacing it in stable production flows. The Maven importer does not invoke the existing
+authoring-only mapper Block, and no ready-made authoring host is included.
 
 This is distinct from the [public OpenAPI contract filter](../openapi-contract), which publishes a
 focused application-owned contract. The Expansion consumes an external contract into application

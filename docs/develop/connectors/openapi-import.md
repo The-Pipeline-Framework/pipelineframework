@@ -213,24 +213,104 @@ not implemented. Runtime requires neither source OpenAPI documents nor the Swagg
 
 ## Resolve canonical representations
 
-Each request and successful response names an ordinary v3 mapping key. Resolution follows the
-existing sequence:
+Each request and successful response names an ordinary v3 mapping key. Direct mapping is used when
+the canonical and wire shapes agree. Otherwise, the default is a build failure: the importer does
+not invent a mapping or silently add a model call.
 
-1. direct mapping when canonical and wire shapes agree;
-2. bounded deterministic HTTP mapping options; or
-3. a curated representation type and `Mapper` class.
+Developers must choose one of three explicit paths:
 
-Use `org.pipelineframework.openapi/openapi-representation-mapper` as an optional authoring aid for
-the middle case. It packages deterministic preparation and validation around one application-bound
-LLM Query, preserves schema fingerprints in its typed state, returns diagnostics through at most
-eight turns, and produces only a reviewable proposal. Copy an accepted proposal into the relevant
-`types.<type>.mappings.<key>.options` declaration and commit it. Compilation revalidates the actual
-canonical and wire schemas and generates deterministic mapper classes; the Block cannot write or
-accept its own output.
+1. write deterministic `options.fields` for bounded structural differences;
+2. provide a curated representation type and `Mapper`; or
+3. explicitly accept an expensive runtime LLM call by authoring an LLM Query as the mapping step.
+
+For example, a stable structural rename belongs in `pipeline.yaml`:
+
+```yaml
+types:
+  Evidence:
+    mappings:
+      http.evidence.lookup.response:
+        options:
+          fields: { evidence: payload.value }
+```
+
+Compilation validates those options against the actual canonical and wire schemas and generates
+deterministic mapper classes. If the bounded option language cannot express the business mapping
+faithfully, use a curated representation type and `Mapper` instead.
+
+The third path is deliberately visible in the Pipeline rather than hidden behind the importer. It
+means one additional model call for every item or Pipeline execution that crosses that mapping step,
+with the corresponding latency, cost, failure modes, and replay considerations. It can be useful
+while probing an unfamiliar API in local development or staging. For a stable production Pipeline,
+replace it with deterministic `options.fields` or a curated `Mapper`.
+
+Concretely, keep the imported boundary honest by giving it a wire-shaped canonical type that maps
+directly, then place an ordinary [one-turn LLM Query](/develop/extension/llm-query) next to it. An
+illustrative Petstore read could look like this in `pipeline.yaml` after selecting `getPetById` as
+`petstore.pet.get`:
+
+```yaml
+types:
+  PetLookup:
+    fields:
+      - [petId, long]
+  PetstorePet: # mirrors the selected OpenAPI response
+    fields:
+      - [id, long]
+      - [name, string]
+      - [status, string, optional]
+  Pet: # the application's stable business type
+    fields:
+      - [id, long]
+      - [displayName, string]
+      - [available, boolean]
+
+connectors:
+  petstore-http:
+    provider: http.client
+    version: 1
+    config:
+      connection: petstore
+  mapping-model:
+    provider: llm.query
+    version: 1
+    config:
+      model: qwen3:8b
+
+steps:
+  - name: Read pet from Petstore
+    kind: query
+    input: PetLookup
+    output: PetstorePet
+    using: petstore-http
+    operation: petstore.pet.get
+    operationVersion: 1
+  - name: Interpret Petstore representation
+    kind: query
+    input: PetstorePet
+    output: Pet
+    using: mapping-model
+    operation: decide
+    operationVersion: 1
+    config:
+      instructions: Map this Petstore representation to the declared Pet business type.
+      structuredOutputSchema: REQUIRED
+```
+
+There is no hidden fallback in this example. The HTTP operation maps directly to `PetstorePet`; the
+second authored Query performs the semantic translation and makes the extra inference visible in
+topology, telemetry, and Query capture. Once the API is understood, replace that Query with
+`options.fields` where possible or a curated `Mapper` where business interpretation is required.
+
+The existing `org.pipelineframework.openapi/openapi-representation-mapper` Block is retained as a
+possible future authoring optimisation. Its intended output is a reviewable proposal that could be
+committed as deterministic options; it is not today's fallback. The Maven goals do not invoke it,
+and TPF currently supplies no CLI, report, review UI, or example host that presents its result.
 
 Open objects use nominal validated JSON-object wrappers. Ambiguous unions, incompatible
 constraints, recursive references, or conversions outside the bounded option language require a
-curated DTO and Mapper. No runtime model interpretation is available.
+curated DTO and Mapper. Runtime model interpretation occurs only when the application explicitly
+authors an LLM Query for that purpose.
 
 ## Refresh, verify, and execute
 
@@ -249,6 +329,52 @@ Review and commit:
 Bind `openapi:verify-import` to the normal build. It is offline and read-only; it fails when the
 committed outputs differ from the local source, selection, or shared provider manifest. Runtime
 needs none of the source contract, parser, importer, or mapping model.
+
+### Run the checked-in example
+
+The [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof)
+vendors its source at `examples/openapi-capability-proof/contracts/contract/openapi.yaml` and its
+selection at `examples/openapi-capability-proof/contracts/openapi-import.yaml`. In a fresh source
+worktree, first install the snapshot importer into the isolated Maven repository:
+
+```bash
+./mvnw -f framework/pom.xml -pl connector-openapi-maven-plugin -am \
+  install -DskipTests -Dgpg.skip \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+Then run discovery:
+
+```bash
+./mvnw -f examples/openapi-capability-proof/contracts/pom.xml \
+  openapi:discover \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+It writes `examples/openapi-capability-proof/contracts/target/openapi-discovery.json`:
+
+```json
+{
+  "closureSha256": "d51b3fa4db429e915ce527f92e3e908a5bcaeb1cbecab026f8067310383f7b45",
+  "openapiVersion": "3.1.2",
+  "operations": [
+    { "method": "POST", "operationId": "recordEvidence", "path": "/evidence" },
+    { "method": "POST", "operationId": "lookupEvidence", "path": "/evidence/{subject}/lookup" },
+    { "method": "POST", "operationId": "startJob", "path": "/jobs" }
+  ],
+  "schemaVersion": 1
+}
+```
+
+This is an operation-discovery report, not a mapping recommendation. `openapi:refresh-import`
+writes the selected provider manifest, HTTP pins, and provenance resources. Its console output only
+reports how many operations were imported.
+
+The importer tests also vendor the upstream Swagger
+[Petstore 3.0 contract](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/framework/connector-openapi-maven-plugin/src/test/resources/petstore3-openapi.yaml).
+It is currently a conformance fixture rather than an end-to-end example. The focused test discovers
+`GET /user/logout` and proves that an effectful `GET` does not silently acquire Query authority when
+the import omits `kind`. It does not invoke the mapper Block or produce a recommendation.
 
 Configure `http.client` with a logical host connection, then invoke the imported operation exactly
 like any other capability:

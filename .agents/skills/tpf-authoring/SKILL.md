@@ -114,6 +114,27 @@ from [Import OpenAPI operations](/develop/connectors/openapi-import) in that Com
 projected output as separate types. Do not create a second Await step, accept an arbitrary callback
 URL from business input, or move callback authentication and admission into an authored service.
 
+OpenAPI mapping must fail the build by default when no valid mapping exists. Guide authors towards
+one of three explicit choices: deterministic `options.fields`, a curated representation and
+`Mapper`, or an authored runtime LLM Query that performs the mapping. Never imply that the importer
+silently invokes a model. The runtime choice adds an expensive model call for every item or Pipeline
+execution that crosses the step; describe it as useful for local or staging experimentation and as
+something to replace with deterministic mapping in a stable production Pipeline.
+
+When authoring that runtime choice, use a wire-shaped canonical type that maps directly at the
+imported HTTP boundary, then place the LLM Query before or after it to translate to or from the
+application's stable business type. This keeps the model call as an explicit typed Pipeline step;
+do not claim that it repairs an unresolved representation mapping inside the HTTP provider.
+
+Retain the existing OpenAPI representation-mapper Block as a possible future authoring optimisation,
+not as today's usable fallback. The OpenAPI Maven goals do not invoke it or surface its terminal
+value; do not promise a Maven report, CLI, review UI, or ready-made host that does not exist.
+
+GraphQL's packaged agent is a separate, deliberately runtime use of LLM-backed argument mapping. It
+may ask its LLM Query to select a pinned operation and produce `operationKey` plus `variablesJson`
+on each agent turn. The proposal is validated and invoked during the running agent loop, so its
+per-turn model cost is part of the application's chosen agentic behaviour.
+
 Do not load every reference. Search `docs/architecture/` for meaning, `docs/develop/` for authoring, and `docs/deploy/` for runtime mechanics, then the relevant compiler/runtime code and focused tests. `docs/decisions/` is not general application-authoring documentation; consult the relevant decision records only when an authoring change affects semantic ownership, identity, or a durable contract. Examples prove compatibility, but may contain historical or application-specific residue.
 
 ## Repository reconnaissance

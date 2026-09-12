@@ -27,10 +27,10 @@ media, response outcomes, one advertised security alternative, and application-b
 
 Import emits a standard `http.client` provider manifest, immutable HTTP operation pins, and
 sanitized provenance. It does not emit executable vendor code. Normal compilation resolves direct,
-bounded-option, or curated representation mappings and generates immutable mapper bindings. An
-optional packaged mapping Block may ask an application-bound LLM Query for a bounded proposal, but
-deterministic validation, author review, committed mapping options, and compiler acceptance remain
-authoritative.
+bounded-option, or curated representation mappings and generates immutable mapper bindings. The
+original design also anticipated an authoring-only Block that would ask an application-bound LLM
+Query for a bounded proposal. [ADR-0039](./0039-openapi-mapping-fails-closed-and-runtime-llm-is-explicit.md)
+supersedes that proposal as the documented usable fallback.
 
 Runtime consumes only the ordinary Connector manifest, HTTP pins, generated mapper bindings, and
 application connector binding. It neither contains nor parses the OpenAPI contract. The host owns
@@ -59,8 +59,10 @@ vendor-specific adapters without weakening host or Command ownership.
   rejected until separately qualified.
 - Server declarations and security schemes are compatibility hints only; no endpoint or credential
   is imported.
-- Ambiguous schema constructs progress through direct mapping, an author-reviewed LLM-assisted
-  proposal, or an explicit curated DTO/Mapper. No model executes at runtime.
+- The original design routed ambiguous schema constructs through direct mapping, an author-reviewed
+  LLM-assisted proposal, or an explicit curated DTO/Mapper, with no runtime model execution.
+  ADR-0039 supersedes this mapping choice while preserving the import and authority boundaries in
+  this decision.
 - Generated capability provenance and accepted mapping fingerprints participate in the existing
   schema-3 pipeline contract hash without exposing documents or secrets.
 - OpenAPI callbacks are not redefined here. A later decision may map suitable correlated callbacks
@@ -69,3 +71,7 @@ vendor-specific adapters without weakening host or Command ownership.
 The callback deferral above is succeeded by
 [ADR-0038](./0038-openapi-callbacks-are-pinned-connector-completion-contracts.md); the capability and
 authority distinctions in this decision remain accepted.
+
+The representation-mapping choice above is succeeded by
+[ADR-0039](./0039-openapi-mapping-fails-closed-and-runtime-llm-is-explicit.md). The release-pinning
+and authority distinctions in this decision remain accepted.

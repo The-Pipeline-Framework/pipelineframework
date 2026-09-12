@@ -50,6 +50,36 @@ wrappers rather than untyped pipeline `Map`, `Object`, or `JsonNode` values. A r
 optional normalized data and a bounded list of sanitized GraphQL errors. `GraphQlResult` is the
 Block-normalized boundary.
 
+### Deterministic calls and LLM-backed argument mapping
+
+Applications can construct `GraphQlQueryRequest` or `GraphQlMutationRequest` directly when the
+operation and variables are already known. The `graphql-agent` Block adds the LLM-backed path: on
+each agent turn, TPF exposes generated callable schemas for `graphql_query` and `graphql_mutation`.
+The model selects one and supplies its untrusted arguments. For example, the proof model returns:
+
+```json
+{
+  "alias": "graphql_query",
+  "argumentsJson": "{\"operationKey\":\"customer.lookup\",\"variablesJson\":\"{\\\"id\\\":\\\"customer-7\\\"}\"}"
+}
+```
+
+The LLM Query validates the proposal against the callable's canonical input schema, materialises a
+`<tpf.llm.AgentCall>`, restores trusted context, and the next dynamic-operation step immediately
+invokes the application-pinned GraphQL operation. Mutation `effectKey` is excluded from the model
+schema and injected from trusted pipeline state.
+
+This is runtime mapping from an objective and operation guide to a selected operation's arguments;
+it normally incurs one model call per agent turn. GraphQL's direct path needs no model; the packaged
+agent path uses the model deliberately.
+
+OpenAPI mapping follows the same cost model only when an application explicitly authors an LLM
+Query as its runtime mapping step. That is one additional model call per item or Pipeline execution,
+not an automatic importer fallback. Missing OpenAPI mappings otherwise fail the build and should be
+resolved with deterministic `options.fields` or a curated `Mapper`. The existing OpenAPI
+authoring-only mapper Block is retained as a possible future optimisation, not presented as today's
+usable fallback.
+
 ## Pin the application operation catalogue
 
 Keep GraphQL documents as application resources. The binding maps stable request keys to exactly

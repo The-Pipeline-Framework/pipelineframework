@@ -84,7 +84,8 @@ flowchart TB
     SA --> DM[Direct mapping]
     SA --> BO[Bounded deterministic options]
     SA --> DF[Curated DTO and Mapper]
-    LP[Optional LLM authoring Block] -. proposes reviewable options .-> BO
+    SA --> RL[Explicit runtime LLM mapping]
+    RL --> EC[One costly model call per execution]
 ```
 
 The author—not the HTTP method—classifies each selected operation. A selected required callback on
@@ -93,10 +94,13 @@ acknowledgement, `await:` suspends execution, and an authenticated callback is p
 Command's final typed output. TPF signs and injects the callback endpoint, then reuses the ordinary
 durable Await admission, timeout, duplicate, and resume lifecycle.
 
-Direct mapping is preferred when schemas align. Bounded differences use deterministic mapping
-options; an optional LLM-backed Block can propose those options during authoring, but the accepted
-result is reviewed, committed, and compiled. Complex boundaries remain explicit curated DTOs and
-Mappers. Neither the OpenAPI parser nor a model is present in the runtime application.
+Direct mapping is preferred when schemas align. When they do not, the build fails until the
+developer writes deterministic `options.fields`, provides a curated DTO and `Mapper`, or explicitly
+authors an expensive runtime LLM mapping step. That last choice incurs another model call for every
+item or Pipeline execution; it is useful for probing an API, but stable production flows should
+normally replace it with deterministic mapping. The existing authoring-only mapper Block remains a
+future optimisation, not today's fallback. The OpenAPI parser is never a runtime dependency, and a
+model is present only when the application makes that runtime choice explicit.
 
 This consumes external contracts into typed capabilities. TPF's
 [public OpenAPI contract filter](/develop/openapi-contract) solves the opposite problem: it removes

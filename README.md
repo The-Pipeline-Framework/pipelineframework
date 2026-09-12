@@ -92,7 +92,8 @@ The same integration model spans:
 - **GraphQL** — use persisted Query and Mutation Blocks directly or through a packaged agent loop;
 - **OpenAPI** — import selected operations as release-pinned Query or Command capabilities over the
   generic HTTP Connector. Callback-capable Commands carry native `await:` deferred completion, and
-  an optional LLM-backed Block proposes reviewable deterministic mapping options during authoring;
+  missing mappings fail the build unless the application supplies deterministic options, a curated
+  Mapper, or explicitly pays for an LLM mapping call at runtime;
 - **OAuth-backed hosts** — resolve logical connections to authenticated Google, Microsoft, LLM, or
   MCP clients without putting tokens in Pipeline values. These host APIs remain experimental.
 
