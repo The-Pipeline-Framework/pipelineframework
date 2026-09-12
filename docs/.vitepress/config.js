@@ -346,7 +346,6 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/evolve/'},
-            {text: 'Documentation Audit — September 2026', link: '/evolve/documentation-audit-2026-09'},
             {text: 'Architecture', link: '/evolve/architecture'},
             {text: 'Queue-Async Immutable Boundaries', link: '/evolve/queue-async-immutable-boundaries'},
             {text: 'Architecture Reference', link: '/evolve/architecture-reference'},

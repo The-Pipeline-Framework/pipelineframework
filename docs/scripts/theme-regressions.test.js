@@ -14,6 +14,10 @@ const glossaryStyles = readFileSync(
   new URL('../.vitepress/theme/glossary.css', import.meta.url),
   'utf8'
 )
+const customStyles = readFileSync(
+  new URL('../.vitepress/theme/custom.css', import.meta.url),
+  'utf8'
+)
 
 test('Mermaid lightbox scopes cloned SVG identifiers', () => {
   assert.match(mermaidEnhancer, /activeSvg\.value = lightboxSvgMarkup\(svg\)/)
@@ -32,4 +36,9 @@ test('glossary tooltips wrap and remain viewport bounded', () => {
   assert.match(glossaryStyles, /white-space: normal !important/)
   assert.match(glossaryStyles, /max-width: min\(20rem, calc\(100vw - 2rem\)\)/)
   assert.match(glossaryStyles, /position: fixed/)
+})
+
+test('desktop documentation pages remove the hidden-sidebar content cap', () => {
+  assert.match(customStyles, /\.VPDoc\.has-sidebar \.content,[\s\S]*?max-width: none !important/)
+  assert.match(customStyles, /\.VPDoc\.has-sidebar\.has-aside \.content-container/)
 })

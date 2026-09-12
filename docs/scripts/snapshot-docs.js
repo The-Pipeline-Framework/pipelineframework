@@ -46,7 +46,7 @@ export function compareVersionsDesc(left, right) {
 }
 
 const root = process.cwd()
-const sourceDirs = ['value', 'design', 'develop', 'deploy', 'operate', 'evolve']
+const sourceDirs = ['value', 'architecture', 'decisions', 'develop', 'deploy', 'operate', 'evolve']
 const isDirectExecution =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 const args = process.argv.slice(2)
@@ -137,7 +137,7 @@ This page is maintainer process guidance rather than versioned user documentatio
 
   if (relativePath === 'index.md') {
     return content.replace(
-      /^(\s*link:\s*)\/(value|design|develop|deploy|operate|evolve)\//gm,
+      /^(\s*link:\s*)\/(value|architecture|decisions|develop|deploy|operate|evolve)\//gm,
       `$1/versions/${normalizedVersion}/$2/`
     )
   }
@@ -150,7 +150,7 @@ async function rewriteInternalLinks(filePath) {
   const versionPrefix = `/versions/${version}`
   let updated = content
 
-  const canonicalDirs = ['value', 'design', 'develop', 'deploy', 'operate', 'evolve']
+  const canonicalDirs = ['value', 'architecture', 'decisions', 'develop', 'deploy', 'operate', 'evolve']
   const replacements = [
     {from: '](/)', to: `](${versionPrefix}/)`},
     {from: '](/index)', to: `](${versionPrefix}/index)`},
@@ -229,16 +229,21 @@ async function updateVersionSelector() {
 
 export function updateVersionsPageContent(content, versionValue) {
   const normalizedVersion = normalizeVersion(versionValue)
-  const heading = '## Previous Versions\n\n'
-  const startIndex = content.indexOf(heading)
+  const currentVersionPattern = /^- \[v?\d+\.\d+(?:\.\d+)?]\(\/\) - Current released documentation$/m
+  const updatedContent = content.replace(
+    currentVersionPattern,
+    `- [${normalizedVersion}](/) - Current released documentation`
+  )
+  const heading = '## Frozen Documentation Snapshots\n\n'
+  const startIndex = updatedContent.indexOf(heading)
   if (startIndex === -1) {
-    return content
+    return updatedContent
   }
 
   const sectionStart = startIndex + heading.length
-  const nextHeadingIndex = content.indexOf('\n## ', sectionStart)
-  const sectionEnd = nextHeadingIndex === -1 ? content.length : nextHeadingIndex
-  const section = content.slice(sectionStart, sectionEnd)
+  const nextHeadingIndex = updatedContent.indexOf('\n## ', sectionStart)
+  const sectionEnd = nextHeadingIndex === -1 ? updatedContent.length : nextHeadingIndex
+  const section = updatedContent.slice(sectionStart, sectionEnd)
   const versionLinePattern = /^- \[([^\]]+)\]\(\/versions\/[^)]+\/\) - Snapshot of the .+ docs$/
   const sectionLines = section.split('\n')
 
@@ -251,7 +256,7 @@ export function updateVersionsPageContent(content, versionValue) {
   }
 
   if (existingVersions.includes(normalizedVersion)) {
-    return content
+    return updatedContent
   }
 
   const sortedVersions = [...existingVersions, normalizedVersion].sort(compareVersionsDesc)
@@ -280,7 +285,7 @@ export function updateVersionsPageContent(content, versionValue) {
 
   const result = updatedSectionLines.join('\n')
   const needsTrailingNewline = section.endsWith('\n') && !result.endsWith('\n')
-  return content.slice(0, sectionStart) + result + (needsTrailingNewline ? '\n' : '') + content.slice(sectionEnd)
+  return updatedContent.slice(0, sectionStart) + result + (needsTrailingNewline ? '\n' : '') + updatedContent.slice(sectionEnd)
 }
 
 export function updateVersionSelectorContent(content, versionValue) {
@@ -312,12 +317,10 @@ export function updateVersionSelectorContent(content, versionValue) {
     .filter(item => item.parsedEntry !== null)
     .map(item => item.parsedEntry)
 
-  if (entries.some(entry => entry.name === normalizedVersion && entry.url === `/versions/${normalizedVersion}/`)) {
-    return content
-  }
-
   const indent = entries[0]?.indent ?? '        '
-  const currentEntries = entries.filter(entry => entry.current)
+  const currentEntries = entries
+    .filter(entry => entry.current)
+    .map(entry => ({...entry, name: normalizedVersion, url: '/'}))
   const snapshotEntries = entries.filter(entry => !entry.current)
   snapshotEntries.push({
     indent,

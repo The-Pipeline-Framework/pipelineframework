@@ -26,7 +26,11 @@ test('compareVersionsDesc distinguishes full semantic versions numerically', () 
 test('updateVersionsPageContent inserts patch versions in descending order', () => {
   const content = `# Versions
 
-## Previous Versions
+## Current Release
+
+- [v26.4.1](/) - Current released documentation
+
+## Frozen Documentation Snapshots
 
 - [v26.4.1](/versions/v26.4.1/) - Snapshot of the v26.4.1 docs
 - [v2.6.4](/versions/v2.6.4/) - Snapshot of the v2.6.4 docs
@@ -40,6 +44,7 @@ test('updateVersionsPageContent inserts patch versions in descending order', () 
     updated,
     /- \[v26\.4\.2]\(\/versions\/v26\.4\.2\/\) - Snapshot of the v26\.4\.2 docs\n- \[v26\.4\.1]\(\/versions\/v26\.4\.1\/\) - Snapshot of the v26\.4\.1 docs\n- \[v2\.6\.4]\(\/versions\/v2\.6\.4\/\) - Snapshot of the v2\.6\.4 docs/
   )
+  assert.match(updated, /- \[v26\.4\.2]\(\/\) - Current released documentation/)
 })
 
 test('updateVersionSelectorContent inserts snapshots using semantic version order', () => {
@@ -60,7 +65,7 @@ test('updateVersionSelectorContent inserts snapshots using semantic version orde
 
   assert.match(
     updated,
-    /\{ name: 'v26\.4', url: '\/', current: true },\n        \{ name: 'v26\.4\.2', url: '\/versions\/v26\.4\.2\/', current: false },\n        \{ name: 'v26\.4\.1', url: '\/versions\/v26\.4\.1\/', current: false },\n        \{ name: 'v2\.6\.4', url: '\/versions\/v2\.6\.4\/', current: false }/
+    /\{ name: 'v26\.4\.2', url: '\/', current: true },\n        \{ name: 'v26\.4\.2', url: '\/versions\/v26\.4\.2\/', current: false },\n        \{ name: 'v26\.4\.1', url: '\/versions\/v26\.4\.1\/', current: false },\n        \{ name: 'v2\.6\.4', url: '\/versions\/v2\.6\.4\/', current: false }/
   )
 })
 

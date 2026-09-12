@@ -12,6 +12,5 @@ flowchart LR
 ```
 
 - [Quarkus 3.39 migration and validation](/evolve/quarkus-3.39-migration)
-- [Documentation audit — September 2026](/evolve/documentation-audit-2026-09)
 - [Architecture reference](/evolve/architecture-reference)
 - [Framework release process](/evolve/framework-release-process)

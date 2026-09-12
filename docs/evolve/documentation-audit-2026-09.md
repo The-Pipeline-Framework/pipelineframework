@@ -1,3 +1,11 @@
+---
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+---
+
 # Documentation Audit — September 2026
 
 This internal audit records the current-documentation review performed after releases v26.7.1,
