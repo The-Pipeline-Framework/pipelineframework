@@ -6,7 +6,10 @@
     <artifactId>document-text-extraction</artifactId>
     <name>Pipeline Block - Document Text Extraction</name>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-api</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-core</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>io.smallrye.reactive</groupId><artifactId>mutiny</artifactId></dependency>
+        <dependency><groupId>jakarta.enterprise</groupId><artifactId>jakarta.enterprise.cdi-api</artifactId><scope>provided</scope></dependency>
         <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId></dependency>
         <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
@@ -16,6 +19,23 @@
             <resource><directory>src/main/resources</directory><filtering>true</filtering></resource>
         </resources>
         <plugins>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId><version>3.6.2</version>
+                <executions><execution><id>enforce-portable-block-dependencies</id><goals><goal>enforce</goal></goals>
+                    <configuration><rules><bannedDependencies>
+                        <searchTransitive>true</searchTransitive>
+                        <excludes>
+                            <exclude>org.pipelineframework:pipelineframework</exclude>
+                            <exclude>org.pipelineframework:pipelineframework-runtime*</exclude>
+                            <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
+                            <exclude>io.quarkus:*</exclude>
+                        </excludes>
+                        <includes>
+                            <include>org.pipelineframework:pipelineframework-runtime-api</include>
+                            <include>org.pipelineframework:pipelineframework-runtime-core</include>
+                        </includes>
+                    </bannedDependencies></rules></configuration>
+                </execution></executions>
+            </plugin>
             <plugin><groupId>io.smallrye</groupId><artifactId>jandex-maven-plugin</artifactId></plugin>
         </plugins>
     </build>

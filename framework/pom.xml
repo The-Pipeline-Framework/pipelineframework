@@ -83,6 +83,7 @@
         <module>semantic-model</module>
         <module>representation-provider-api</module>
         <module>runtime-core</module>
+        <module>runtime-api</module>
         <module>runtime-protocol</module>
         <module>dsl</module>
         <module>compiler</module>
