@@ -10,7 +10,9 @@ Verify exact configuration and release support in current docs/source/tests.
 
 - Call it only to start or resume a root TPF execution from an external application boundary.
 - Code already participating in a TPF execution must not call `PipelineExecutionService` to continue, decompose, dispatch, persist, or otherwise re-enter TPF.
-- Express internal work through pipeline composition: steps, Query, Command, Await, nested pipelines, bounded recursion, and configured aspects as appropriate.
+- Express internal work through pipeline composition: steps, Query, Command, operations with
+  `await:` deferred completion, nested pipelines, bounded recursion, and configured aspects as
+  appropriate.
 - Do not introduce application services, repositories, providers, or generic executors merely to orchestrate work that belongs in `pipeline.yaml`.
 
 When reviewing an authored design, ask:
@@ -36,11 +38,18 @@ worker, and transport attempt IDs do not create new effect identities.
 idempotency key or external identifier; TPF cannot manufacture exactly-once behavior
 after an ambiguous third-party failure.
 
-Use Await when the final answer arrives later: human approval, webhook callback,
-brokered reply, or long-running provider result. Immediate request/response is Query or
-operator territory. Transport may vary, but Await owns correlation, completion
-admission, deadline/timeout, duplicate completion, durable request/completion snapshots,
-and resume. Do not build a polling table or workflow registry beside it.
+Use the `await:` modifier on the initiating operation when its final answer arrives later: human
+approval, webhook callback, brokered reply, or long-running provider result. The operation first
+produces its trusted immediate output, then execution suspends until the admitted completion is
+projected into the operation's final output. Await is not a standalone step kind. Transport may
+vary, but Await owns correlation, completion admission, deadline/timeout, duplicate completion,
+durable request/completion snapshots, and resume. Do not build a polling table or workflow registry
+beside it.
+
+For an imported OpenAPI callback, select the callback during release-time import and reference that
+identity from the Command's `await.callback`. The host owns the public endpoint and callback
+authentication; the framework owns trusted endpoint injection, signed correlation, admission, and
+resume. Keep the Command acknowledgement, callback payload, and final output as separate types.
 
 ## Configure connectors by lifetime
 

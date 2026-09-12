@@ -90,8 +90,10 @@ The same integration model spans:
 - **MCP** — discover broadly, import deliberately, and expose selected tools as pinned Query or
   Command operations;
 - **GraphQL** — use persisted Query and Mutation Blocks directly or through a packaged agent loop;
-- **OpenAPI** — map synchronous operations to Query or Command, asynchronous callbacks to Command →
-  Await, and schema differences through direct, LLM-assisted, or curated-DTO adaptation;
+- **OpenAPI** — import selected operations as release-pinned Query or Command capabilities over the
+  generic HTTP Connector. Callback-capable Commands carry native `await:` deferred completion, and
+  missing mappings fail the build unless the application supplies deterministic options, a curated
+  Mapper, or explicitly pays for an LLM mapping call for every item at runtime;
 - **OAuth-backed hosts** — resolve logical connections to authenticated Google, Microsoft, LLM, or
   MCP clients without putting tokens in Pipeline values. These host APIs remain experimental.
 
@@ -128,6 +130,9 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
   callable loop while the application supplies bindings and Command authority.
 - [`examples/graphql-block-proof`](examples/graphql-block-proof/) runs the production GraphQL agent
   through persisted Query → partial-error Mutation → typed completion.
+- [`examples/openapi-capability-proof`](examples/openapi-capability-proof/) proves synchronous Query
+  and Command import plus a callback-completed Command with signed endpoint injection, durable Await
+  state, replay, retry, timeout, duplicate admission, and restart recovery.
 - [`examples/quickbooks-collections-briefing`](examples/quickbooks-collections-briefing/) imports one
   pinned QuickBooks MCP Query and turns its unstructured result into a typed collections plan.
 - [`examples/csv-payments`](examples/csv-payments/) is the broad runtime proof for streaming,

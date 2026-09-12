@@ -50,10 +50,14 @@ operation guidance, model tools, trusted effect identity, routing, reduction, bo
 typed completion. The consuming application still owns documents, connections, bindings, and
 Command authority.
 
-The OpenAPI Expansion maps synchronous operations to Query or Command, asynchronous callback
-operations to Command → Await, and supports direct, LLM-assisted, or curated-DTO schema adaptation.
-Both families are composed from ordinary TPF artefacts rather than requiring an Expansion runtime or
-registry.
+The OpenAPI Expansion combines a release-time importer, the generic pinned HTTP Connector, an
+optional mapping Block, and executable proofs. Selected operations become ordinary Query or Command
+capabilities; a callback-capable Command carries the native `await:` modifier so its immediate
+acknowledgement, durable suspension, authenticated callback, and final projected output remain one
+typed operation. Schema adaptation is direct, expressed as bounded deterministic options, or
+implemented by a curated DTO/Mapper. The optional LLM Query proposes reviewable options during
+authoring and never interprets mappings at runtime. Both Expansion families are composed from
+ordinary TPF artefacts rather than requiring an Expansion runtime or registry.
 
 “Expansion” remains a versioned distribution boundary, not the `ONE_TO_MANY` cardinality and not a
 marketing label for an arbitrary collection of modules.
@@ -72,6 +76,7 @@ and
 - [Blocks Guide](/develop/blocks/)
 - [Expansions Guide](/develop/expansions/)
 - [GraphQL Connector, Blocks, and packaged agent](/develop/extension/graphql-connector)
+- [Import OpenAPI operations](/develop/connectors/openapi-import)
 - [Using Plugins](/develop/using-plugins)
 - [Writing a Plugin](/develop/writing-a-plugin)
 - [Operators](/architecture/operators)

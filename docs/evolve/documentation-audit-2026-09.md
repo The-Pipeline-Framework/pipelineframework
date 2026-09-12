@@ -37,6 +37,7 @@ flowchart LR
 | The GitHub README still centred low-level generation and Canvas scaffolding | Rebuilt it as a concise repository front door for typed AI applications, composable agentic loops, SaaS capability families, guarantees, modern proofs, and the Agent Skill authoring path. |
 | Value pages described the pre-AI framework and lacked visual explanations | Added dedicated AI/agentic and SaaS-integration tracks, refreshed every existing value page, linked architectural objections into the Coffee Machine, and added a useful Mermaid model to every value page. |
 | Integration positioning lagged the publication target | Presented MCP catalogue import plus the GraphQL and OpenAPI Expansions as one release capability set, while retaining “experimental” only for the OAuth host APIs and lifecycle that remain provisional. |
+| OpenAPI overview copy flattened deferred completion into two steps | Described callback-capable imports as one native Command carrying the orthogonal `await:` modifier, and linked the authoring workflow and restart-backed proof. |
 
 ## Release coverage
 

@@ -167,7 +167,7 @@ telemetry, retries, and deployment integration.
   </div>
   <div>
     <h3>OpenAPI Expansion</h3>
-    <p>Map synchronous operations to Query or Command, callback operations to Command → Await, and schema differences through direct, LLM-assisted, or curated-DTO adaptation.</p>
+    <p>Compile selected operations into pinned Query or Command capabilities. Callback-capable Commands use native <code>await:</code> deferred completion. Missing mappings fail the build unless you provide deterministic options, a curated Mapper, or explicitly accept a costly runtime LLM call per item.</p>
   </div>
 </div>
 

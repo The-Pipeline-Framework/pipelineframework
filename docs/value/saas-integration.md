@@ -9,7 +9,7 @@ authority in their proper places.</p>
 <div class="value-glance">
   <div class="value-glance-item"><strong>MCP Catalogues</strong> &middot; Import selected tools as release-pinned Query or Command operations.</div>
   <div class="value-glance-item"><strong>GraphQL Expansion</strong> &middot; Reuse pinned Query and Mutation Blocks or a complete GraphQL-aware agent loop while the application owns documents and connections.</div>
-  <div class="value-glance-item"><strong>OpenAPI Expansion</strong> &middot; Map synchronous, callback-based, and schema-mismatched operations into Query, Command, and Await semantics.</div>
+  <div class="value-glance-item"><strong>OpenAPI Expansion</strong> &middot; Import synchronous operations and callback-completed Commands as pinned capabilities, with typed schema adaptation and durable Await semantics.</div>
   <div class="value-glance-item"><strong>OAuth Connections</strong> &middot; Resolve logical connection references to host-authenticated clients without moving tokens into pipeline values.</div>
 </div>
 
@@ -28,7 +28,7 @@ flowchart TB
     H[Host-owned connection and OAuth] --> B
     B --> Q[Query: captured observation]
     B --> C[Command: durable effect identity]
-    B --> A[Command then Await: deferred completion]
+    B --> A[Command with await: deferred completion]
     Q --> P[Typed business pipeline]
     C --> P
     A --> P
@@ -68,8 +68,9 @@ or model authority.
 
 ## OpenAPI Expansion
 
-The OpenAPI Expansion promotes selected operations from an external contract into the same semantic
-model:
+The OpenAPI Expansion turns a useful SaaS contract into a reviewed, release-pinned capability set.
+It removes the need to build a vendor-specific Connector for routine HTTP projection without making
+the vendor contract, server list, or security declaration application authority.
 
 ```mermaid
 flowchart TB
@@ -78,17 +79,28 @@ flowchart TB
     S --> Q[Query]
     S --> C[Command]
     O --> AC[Asynchronous request and callback]
-    AC --> CA[Command then Await]
+    AC --> CA[Command with await: deferred completion]
     O --> SA[Schema adaptation]
     SA --> DM[Direct mapping]
-    SA --> LF[LLM fallback]
-    SA --> DF[Curated DTO fallback]
+    SA --> BO[Bounded deterministic options]
+    SA --> DF[Curated DTO and Mapper]
+    SA --> RL[Explicit runtime LLM mapping]
+    RL --> EC[One costly model call per item]
 ```
 
-Direct mapping is the preferred path when schemas align. An LLM-assisted fallback can bridge a
-bounded mismatch, while a curated DTO remains the explicit choice when the boundary deserves a
-stable reviewed contract. Regardless of adaptation path, reads, effects, and callbacks retain
-ordinary Query, Command, and Await semantics.
+The author—not the HTTP method—classifies each selected operation. A selected required callback on
+a Command is compiled as deferred completion on that same operation: dispatch produces a trusted
+acknowledgement, `await:` suspends execution, and an authenticated callback is projected into the
+Command's final typed output. TPF signs and injects the callback endpoint, then reuses the ordinary
+durable Await admission, timeout, duplicate, and resume lifecycle.
+
+Direct mapping is preferred when schemas align. When they do not, the build fails until the
+developer writes deterministic `options.fields`, provides a curated DTO and `Mapper`, or explicitly
+authors an expensive runtime LLM mapping step. That last choice incurs another model call for every
+item; it is useful for probing an API, but stable production flows should
+normally replace it with deterministic mapping. The existing authoring-only mapper Block remains a
+future optimisation, not today's fallback. The OpenAPI parser is never a runtime dependency, and a
+model is present only when the application makes that runtime choice explicit.
 
 This consumes external contracts into typed capabilities. TPF's
 [public OpenAPI contract filter](/develop/openapi-contract) solves the opposite problem: it removes
@@ -132,6 +144,7 @@ and
 
 - [MCP Connector Import](/develop/extension/mcp-connector-import)
 - [GraphQL Connector, Blocks, and packaged agent](/develop/extension/graphql-connector)
+- [Import OpenAPI operations](/develop/connectors/openapi-import)
 - [Experimental OAuth Connections](/develop/oauth-connections/)
 - [Connectors Guide](/develop/connectors/)
 - [Blocks Guide](/develop/blocks/)
