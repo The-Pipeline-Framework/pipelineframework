@@ -132,11 +132,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        // Discover annotated elements - handle null round environment gracefully
-        Set<? extends Element> orchestratorElements =
-            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of();
-        Set<? extends Element> pluginElements =
-            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelinePlugin.class) : Set.of();
+        Set<? extends Element> orchestratorElements = ctx.getSourceInventory().pipelineOrchestratorElements();
+        Set<? extends Element> pluginElements = ctx.getSourceInventory().pipelinePluginElements();
 
         Map<String, String> options = ctx.getCompilerOptions().asMap();
         PipelineCompilerDiagnostics diagnostics = ctx.getCompilerDiagnostics();

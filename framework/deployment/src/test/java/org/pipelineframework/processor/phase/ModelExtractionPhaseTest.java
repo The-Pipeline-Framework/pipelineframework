@@ -116,7 +116,7 @@ class ModelExtractionPhaseTest {
     @Test
     void testExecution_noAnnotatedElements_emptyModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -127,7 +127,7 @@ class ModelExtractionPhaseTest {
     @Test
     void testExecution_noTemplateConfig_noAnnotationModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPipelineTemplateConfig(null);
 
         phase.execute(context);
@@ -137,7 +137,7 @@ class ModelExtractionPhaseTest {
 
     @Test
     void resolvesProviderBoundaryTypesWithinTheOwningLocalDefinition() {
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         PipelineReference definition = new PipelineReference("org.example/document-block");
         CanonicalType canonical = new CanonicalType("DocumentFile", "example.DocumentFile",
             CanonicalTypeShape.RECORD);
@@ -160,7 +160,7 @@ class ModelExtractionPhaseTest {
 
     @Test
     void deferredProviderBoundaryUsesCanonicalOperationOutputForAspects() {
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         PipelineReference definition = new PipelineReference("$root");
         CanonicalType input = new CanonicalType("Request", "example.Request", CanonicalTypeShape.RECORD);
         CanonicalType output = new CanonicalType(
@@ -253,7 +253,7 @@ class ModelExtractionPhaseTest {
         try (URLClassLoader loader = new URLClassLoader(new URL[] { tempDir.toUri().toURL() }, previous)) {
             Thread.currentThread().setContextClassLoader(loader);
             var parsed = new StepDefinitionParser().parseDefinitionCatalog(pipeline);
-            PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+            PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
             context.setStepDefinitions(parsed.rootSteps());
             context.setParsedPipelineDefinitionCatalog(parsed);
             context.setImportedPipelineDefinitions(List.of(
@@ -296,7 +296,7 @@ class ModelExtractionPhaseTest {
     @Test
     void testExecution_emitsNoteWhenFallingBackToLegacyExtraction() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setStepDefinitions(List.of());
 
         phase.execute(context);
@@ -309,7 +309,7 @@ class ModelExtractionPhaseTest {
     @Test
     void testExecute_withTemplateModels_doesNotGenerateWithoutYamlStepDefinitions() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         // Create a real PipelineTemplateStep record instance
         var templateStep = new org.pipelineframework.config.template.PipelineTemplateStep(
@@ -349,7 +349,7 @@ class ModelExtractionPhaseTest {
                 .thenReturn(java.util.Map.of("pipeline.mapper.fallback.enabled", "true"));
 
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         // Create a delegated step definition with JACKSON fallback
         var stepDef = new org.pipelineframework.processor.ir.StepDefinition(
@@ -386,7 +386,7 @@ class ModelExtractionPhaseTest {
                 .thenReturn(java.util.Map.of("pipeline.mapper.fallback.enabled", "false"));
 
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         var stepDef = new org.pipelineframework.processor.ir.StepDefinition(
                 "test-step",
@@ -415,7 +415,7 @@ class ModelExtractionPhaseTest {
                 .thenReturn(java.util.Map.of());  // No fallback option set
 
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         var stepDef = new org.pipelineframework.processor.ir.StepDefinition(
                 "test-step",
@@ -444,7 +444,7 @@ class ModelExtractionPhaseTest {
                 .thenReturn(java.util.Map.of("pipeline.mapper.fallback.enabled", "true"));
 
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         // Step with explicit NONE fallback should not use Jackson even if global option is enabled
         var stepDef = new org.pipelineframework.processor.ir.StepDefinition(
@@ -471,7 +471,7 @@ class ModelExtractionPhaseTest {
     @Test
     void crossModuleInternalModelUsesClientDeploymentRole() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPluginHost(false);
 
         StepDefinition stepDefinition = new StepDefinition(
@@ -504,7 +504,7 @@ class ModelExtractionPhaseTest {
             org.pipelineframework.processor.awaitable.AwaitStepTypeBindingResolver.class);
         ModelExtractionPhase phase = new ModelExtractionPhase(
             new ModelContextRoleEnricher(), completionResolver);
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPluginHost(false);
 
         StepDefinition stepDefinition = new StepDefinition(
@@ -540,7 +540,7 @@ class ModelExtractionPhaseTest {
     @Test
     void crossModuleInternalModelUsesTemplateBasePackageForShortYamlTypes() {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
             "search-pipeline",
             "org.pipelineframework.search",
@@ -574,7 +574,7 @@ class ModelExtractionPhaseTest {
     @Test
     void crossModuleInternalModelPreservesYamlMapperBindings() {
         ModelExtractionPhase phase = new ModelExtractionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         StepDefinition stepDefinition = new StepDefinition(
             "Crawl Source",
@@ -613,7 +613,7 @@ class ModelExtractionPhaseTest {
             }
         };
         ModelExtractionPhase phase = new ModelExtractionPhase(roleDuplicatingEnricher);
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
             "restaurant-approval",
             "org.pipelineframework.restaurantapproval",

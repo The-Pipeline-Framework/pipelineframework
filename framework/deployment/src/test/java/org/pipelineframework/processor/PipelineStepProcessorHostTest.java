@@ -1,7 +1,9 @@
 package org.pipelineframework.processor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -12,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.Messager;
@@ -50,8 +53,62 @@ class PipelineStepProcessorHostTest {
         ArgumentCaptor<PipelineCompilationContext> context = ArgumentCaptor.forClass(PipelineCompilationContext.class);
         verify(phase, times(1)).execute(context.capture());
         assertSame(processingEnv, context.getValue().getProcessingEnv());
-        assertSame(firstRound, context.getValue().getRoundEnv());
+        assertEquals(Set.of(), context.getValue().getSourceInventory().pipelineStepElements());
+        assertEquals(Set.of(), context.getValue().getSourceInventory().pipelineOrchestratorElements());
+        assertEquals(Set.of(), context.getValue().getSourceInventory().pipelinePluginElements());
+        assertEquals(Set.of(), context.getValue().getSourceInventory().rootElements());
         assertSame(processor.getClass().getClassLoader(), context.getValue().getRepresentationProviderClassLoader());
+    }
+
+    @Test
+    void sourceInventorySnapshotsAllDiscoveredElementSets() {
+        Element step = mock(Element.class);
+        Element orchestrator = mock(Element.class);
+        Element plugin = mock(Element.class);
+        Element root = mock(Element.class);
+        Set<Element> steps = new LinkedHashSet<>(Set.of(step));
+        Set<Element> orchestrators = new LinkedHashSet<>(Set.of(orchestrator));
+        Set<Element> plugins = new LinkedHashSet<>(Set.of(plugin));
+        Set<Element> roots = new LinkedHashSet<>(Set.of(root));
+
+        Jsr269SourceInventory inventory = new Jsr269SourceInventory(steps, orchestrators, plugins, roots);
+        steps.clear();
+        orchestrators.clear();
+        plugins.clear();
+        roots.clear();
+
+        assertEquals(Set.of(step), inventory.pipelineStepElements());
+        assertEquals(Set.of(orchestrator), inventory.pipelineOrchestratorElements());
+        assertEquals(Set.of(plugin), inventory.pipelinePluginElements());
+        assertEquals(Set.of(root), inventory.rootElements());
+        assertThrows(UnsupportedOperationException.class, () -> inventory.rootElements().clear());
+        assertEquals(Set.of(), new Jsr269SourceInventory(null, null, null, null).rootElements());
+    }
+
+    @Test
+    void processorCapturesRoundElementsIntoTheCompilationContext() throws Exception {
+        PipelineCompilationPhase phase = mock(PipelineCompilationPhase.class);
+        PipelineStepProcessor processor = new PipelineStepProcessor(new PipelineCompiler(java.util.List.of(phase)));
+        ProcessingEnvironment processingEnv = processingEnvironmentWithYaml();
+        RoundEnvironment round = mock(RoundEnvironment.class);
+        Element step = mock(Element.class);
+        Element orchestrator = mock(Element.class);
+        Element plugin = mock(Element.class);
+        Element root = mock(Element.class);
+        doReturn(Set.of(step)).when(round).getElementsAnnotatedWith(PipelineStep.class);
+        doReturn(Set.of(orchestrator)).when(round).getElementsAnnotatedWith(PipelineOrchestrator.class);
+        doReturn(Set.of(plugin)).when(round).getElementsAnnotatedWith(PipelinePlugin.class);
+        doReturn(Set.of(root)).when(round).getRootElements();
+        processor.init(processingEnv);
+
+        processor.process(Set.<TypeElement>of(), round);
+
+        ArgumentCaptor<PipelineCompilationContext> context = ArgumentCaptor.forClass(PipelineCompilationContext.class);
+        verify(phase).execute(context.capture());
+        assertEquals(Set.of(step), context.getValue().getSourceInventory().pipelineStepElements());
+        assertEquals(Set.of(orchestrator), context.getValue().getSourceInventory().pipelineOrchestratorElements());
+        assertEquals(Set.of(plugin), context.getValue().getSourceInventory().pipelinePluginElements());
+        assertEquals(Set.of(root), context.getValue().getSourceInventory().rootElements());
     }
 
     @Test

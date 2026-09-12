@@ -46,13 +46,13 @@ class TemplateExpansionOrchestratorTest {
 
     @Test
     void expandTemplateModels_emptyBaseModels_empty() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         assertTrue(orchestrator.expandTemplateModels(ctx, List.of()).isEmpty());
     }
 
     @Test
     void expandTemplateModels_noOrchestratorNotPluginHost_empty() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(false);
 
         List<PipelineStepModel> baseModels = List.of(TestModelFactory.createTestModel("TestService"));
@@ -62,7 +62,7 @@ class TemplateExpansionOrchestratorTest {
 
     @Test
     void expandTemplateModels_pluginHostRemoteModels_nonColocatedReturnsRemotePluginModels() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(true);
         // Simulate non-colocated plugins (not local transport and not monolith layout)
         // This should trigger expandRemotePluginModels
@@ -76,7 +76,7 @@ class TemplateExpansionOrchestratorTest {
 
     @Test
     void expandTemplateModels_pluginHostColocated_returnsBothPluginAndClientModels() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(true);
         // For local transport mode, plugins are colocated
         ctx.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.LOCAL);
@@ -94,7 +94,7 @@ class TemplateExpansionOrchestratorTest {
         // Mock the round environment to return elements annotated with PipelineOrchestrator
         when(roundEnv.getElementsAnnotatedWith(PipelineOrchestrator.class)).thenReturn(Set.of());
         
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(false); // Not a plugin host
         // But has orchestrator (mocked above)
         
@@ -108,7 +108,7 @@ class TemplateExpansionOrchestratorTest {
 
     @Test
     void expandTemplateModels_monolithVsNonMonolith_aspectFiltering() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(true);
         
         // Test with monolith layout

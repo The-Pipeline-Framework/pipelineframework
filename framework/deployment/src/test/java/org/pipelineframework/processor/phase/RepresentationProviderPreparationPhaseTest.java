@@ -114,7 +114,7 @@ class RepresentationProviderPreparationPhaseTest {
         BoundaryClaim claim = new BoundaryClaim(
             "file", "Prepare Invoice:file", "example.PrepareInvoiceStepPipelineFacade",
             Optional.of(new ProviderStepContract(ProviderExecutionStyle.REACTIVE, "UNARY_UNARY")));
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setStepModels(List.of(authored));
 
         RepresentationProviderGenerationPhase.replaceServiceWithFacade(context,

@@ -130,7 +130,7 @@ class PipelineStepContractValidatorTest {
     }
 
     private PipelineCompilationContext context(ProcessingEnvironment processing) {
-        return new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+        return new PipelineCompilationContext(processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
     }
 
     private PipelineTemplateConfig configWithInputContract() {

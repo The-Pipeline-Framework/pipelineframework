@@ -38,7 +38,7 @@ class PipelinePlatformMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(tempDir.resolve("class-output")));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPlatformMode(PlatformMode.FUNCTION);
         ctx.setTransportMode(PipelineTransport.REST);
         ctx.setModuleName("orchestrator-svc");

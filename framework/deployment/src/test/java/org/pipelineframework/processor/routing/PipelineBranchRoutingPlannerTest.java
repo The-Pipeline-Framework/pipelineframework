@@ -658,7 +658,7 @@ class PipelineBranchRoutingPlannerTest {
         when(processingEnv.getTypeUtils()).thenReturn(types);
 
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
             2,
             "Order Routing",
@@ -709,7 +709,7 @@ class PipelineBranchRoutingPlannerTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getMessager()).thenReturn(messager);
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        return new PipelineCompilationContext(processingEnv, roundEnv);
+        return new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
     }
 
     private static Map<String, PipelineTemplateMessage> messages() {

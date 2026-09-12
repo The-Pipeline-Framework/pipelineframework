@@ -514,7 +514,7 @@ class PipelineTelemetryMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(tempDir.resolve("class-output")));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setOrchestratorGenerated(true);
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setModuleDir(tempDir);

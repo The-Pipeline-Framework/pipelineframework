@@ -23,7 +23,7 @@ class PipelineCompilerTest {
             new RecordingPhase("generate", executionOrder)));
         PipelineCompiler compiler = new PipelineCompiler(phases);
         phases.add(new RecordingPhase("late", executionOrder));
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
 
         compiler.compile(context);
         compiler.compile(context);
@@ -42,7 +42,7 @@ class PipelineCompilerTest {
         PipelineCompiler compiler = new PipelineCompiler(List.of(failing, skipped));
 
         PipelineCompilationException thrown = assertThrows(PipelineCompilationException.class,
-            () -> compiler.compile(new PipelineCompilationContext(null, null)));
+            () -> compiler.compile(new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty())));
 
         assertEquals("semantic-analysis", thrown.phaseName());
         assertSame(phaseFailure, thrown.getCause());

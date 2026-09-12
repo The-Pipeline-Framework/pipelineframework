@@ -50,7 +50,7 @@ class StepBindingConstructionServiceTest {
     @Test
     void delegatedStepBuildsExternalAdapterAndLocalBinding() {
         when(processingEnv.getMessager()).thenReturn(messager);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel delegated = TestModelFactory
             .createTestModelWithTargets("DelegatedService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
             .toBuilder()
@@ -67,7 +67,7 @@ class StepBindingConstructionServiceTest {
 
     @Test
     void springDelegatedLocalStepBuildsLocalBindingWithoutExternalAdapter() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setRendererProfile("spring");
         PipelineStepModel delegated = TestModelFactory
             .createTestModelWithTargets("DelegatedService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
@@ -86,7 +86,7 @@ class StepBindingConstructionServiceTest {
     @Test
     void delegatedStepWithServerTargetsEmitsWarning() {
         when(processingEnv.getMessager()).thenReturn(messager);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel delegated = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedWarnService", Set.of(GenerationTarget.GRPC_SERVICE))
             .toBuilder()

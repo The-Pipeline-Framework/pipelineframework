@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.annotation.processing.RoundEnvironment;
 
 import com.google.protobuf.DescriptorProtos;
 import lombok.AccessLevel;
@@ -41,7 +40,7 @@ public class PipelineCompilationContext {
 
     // Getters
     private final ProcessingEnvironment processingEnv;
-    private final RoundEnvironment roundEnv;
+    private final Jsr269SourceInventory sourceInventory;
     private final PipelineCompilerOptions compilerOptions;
     private final PipelineCompilerDiagnostics compilerDiagnostics;
     @Getter
@@ -123,18 +122,18 @@ public class PipelineCompilationContext {
     }
     
     /**
-     * Create a compilation context initialized for the given annotation processing round.
+     * Create a compilation context initialized with source elements captured by its host.
      *
      * The constructed context starts with empty model collections and default modes:
      * transport mode GRPC and platform mode COMPUTE.
      *
      * @param processingEnv the processing environment providing compiler utilities and messaging
-     * @param roundEnv the round environment containing the annotated elements visible in this round
+     * @param sourceInventory immutable authored source elements discovered by the host
      */
-    public PipelineCompilationContext(ProcessingEnvironment processingEnv, RoundEnvironment roundEnv) {
+    public PipelineCompilationContext(ProcessingEnvironment processingEnv, Jsr269SourceInventory sourceInventory) {
         this(
             processingEnv,
-            roundEnv,
+            sourceInventory,
             new PipelineCompilerOptions(
                 processingEnv == null || processingEnv.getOptions() == null ? Map.of() : processingEnv.getOptions()),
             processingEnv == null || processingEnv.getMessager() == null
@@ -145,12 +144,12 @@ public class PipelineCompilationContext {
 
     public PipelineCompilationContext(
         ProcessingEnvironment processingEnv,
-        RoundEnvironment roundEnv,
+        Jsr269SourceInventory sourceInventory,
         PipelineCompilerOptions compilerOptions,
         PipelineCompilerDiagnostics compilerDiagnostics
     ) {
         this.processingEnv = processingEnv;
-        this.roundEnv = roundEnv;
+        this.sourceInventory = sourceInventory == null ? Jsr269SourceInventory.empty() : sourceInventory;
         this.compilerOptions = java.util.Objects.requireNonNull(compilerOptions, "compilerOptions must not be null");
         this.compilerDiagnostics = java.util.Objects.requireNonNull(
             compilerDiagnostics, "compilerDiagnostics must not be null");
@@ -187,15 +186,6 @@ public class PipelineCompilationContext {
      */
     public ProcessingEnvironment getProcessingEnv() {
         return processingEnv;
-    }
-
-    /**
-     * Returns the round environment for the current annotation processing round.
-     *
-     * @return the round environment for the current annotation processing round
-     */
-    public RoundEnvironment getRoundEnv() {
-        return roundEnv;
     }
 
     /**

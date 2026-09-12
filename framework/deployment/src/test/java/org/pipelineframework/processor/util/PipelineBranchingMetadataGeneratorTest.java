@@ -59,7 +59,7 @@ class PipelineBranchingMetadataGeneratorTest {
         when(processingEnv.getOptions()).thenReturn(Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(false);
         PipelineTemplateConfig template = mock(PipelineTemplateConfig.class);
@@ -98,7 +98,7 @@ class PipelineBranchingMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.REST);
         ctx.setOrchestratorGenerated(true);
         ctx.setStepModels(List.of(
@@ -175,7 +175,7 @@ class PipelineBranchingMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setStepModels(List.of(
@@ -251,7 +251,7 @@ class PipelineBranchingMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(true);
         var completion = new DeferredCompletionSelection(
@@ -288,7 +288,7 @@ class PipelineBranchingMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(true);
         PipelineStepModel authored = stepModel(

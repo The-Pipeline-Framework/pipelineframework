@@ -67,7 +67,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setModuleDir(moduleDir);
         ctx.setGeneratedRootPipelineStepClasses(List.of("com.example.pipeline.ProcessLocalClientStep"));
@@ -121,7 +121,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -172,7 +172,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -214,7 +214,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setModuleDir(moduleDir);
 
@@ -261,7 +261,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setModuleDir(moduleDir);
 
@@ -309,7 +309,7 @@ class PipelineOrderMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -397,7 +397,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -478,7 +478,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(false);
         ctx.setModuleDir(moduleDir);
@@ -531,7 +531,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -582,7 +582,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -628,7 +628,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -697,7 +697,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
@@ -766,7 +766,7 @@ class PipelineOrderMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(false);
         ctx.setModuleDir(moduleDir);

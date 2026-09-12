@@ -93,18 +93,15 @@ class PluginBindingBuilder {
     static Set<String> extractPluginAspectNames(PipelineCompilationContext ctx) {
         Set<String> pluginAspectNames = new java.util.LinkedHashSet<>();
         
-        if (ctx.getRoundEnv() != null) {
-            Set<? extends Element> pluginElements = ctx.getRoundEnv().getElementsAnnotatedWith(PipelinePlugin.class);
-            for (Element element : pluginElements) {
-                AnnotationMirror annotationMirror = 
-                    AnnotationProcessingUtils.getAnnotationMirror(element, PipelinePlugin.class);
-                if (annotationMirror == null) {
-                    continue;
-                }
-                String aspectName = AnnotationProcessingUtils.getAnnotationValueAsString(annotationMirror, "value", null);
-                if (aspectName != null && !aspectName.isBlank()) {
-                    pluginAspectNames.add(aspectName.trim());
-                }
+        for (Element element : ctx.getSourceInventory().pipelinePluginElements()) {
+            AnnotationMirror annotationMirror =
+                AnnotationProcessingUtils.getAnnotationMirror(element, PipelinePlugin.class);
+            if (annotationMirror == null) {
+                continue;
+            }
+            String aspectName = AnnotationProcessingUtils.getAnnotationValueAsString(annotationMirror, "value", null);
+            if (aspectName != null && !aspectName.isBlank()) {
+                pluginAspectNames.add(aspectName.trim());
             }
         }
         
