@@ -64,6 +64,11 @@
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-semantic-model</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
             <artifactId>representation-provider-api</artifactId>
             <version>${project.version}</version>
         </dependency>
