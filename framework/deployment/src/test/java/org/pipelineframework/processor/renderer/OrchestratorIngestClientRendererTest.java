@@ -28,7 +28,7 @@ class OrchestratorIngestClientRendererTest {
         when(processingEnv.getMessager()).thenReturn(mock(javax.annotation.processing.Messager.class));
 
         OrchestratorIngestClientRenderer renderer = new OrchestratorIngestClientRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/client/OrchestratorIngestClient.java");

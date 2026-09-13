@@ -59,7 +59,7 @@ class SpringRestClientStepRendererTest {
         SpringRestClientStepRenderer renderer = new SpringRestClientStepRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), "/payments"),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentRestClientStep.java");
         String source = Files.readString(clientStep);
@@ -114,7 +114,7 @@ class SpringRestClientStepRendererTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_STREAMING, false), "/payments"),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
 
         assertTrue(error.getMessage().contains("only unary-unary REST client steps"), error.getMessage());
     }
@@ -125,7 +125,7 @@ class SpringRestClientStepRendererTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, true), "/payments"),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
 
         assertTrue(error.getMessage().contains("side-effect REST client steps"), error.getMessage());
     }
@@ -136,7 +136,7 @@ class SpringRestClientStepRendererTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), " "),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
 
         assertTrue(error.getMessage().contains("non-blank resource path"), error.getMessage());
     }
@@ -148,7 +148,7 @@ class SpringRestClientStepRendererTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false),
                     "https://payments.example.test/payments"),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
 
         assertTrue(error.getMessage().contains("must be a path"), error.getMessage());
     }
@@ -159,7 +159,7 @@ class SpringRestClientStepRendererTest {
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), "/payments?mode=test"),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
 
         assertTrue(error.getMessage().contains("query/fragment"), error.getMessage());
     }
@@ -171,7 +171,7 @@ class SpringRestClientStepRendererTest {
         SpringRestClientStepRenderer renderer = new SpringRestClientStepRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), "payments/"),
-            new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentRestClientStep.java");
         String source = Files.readString(clientStep);

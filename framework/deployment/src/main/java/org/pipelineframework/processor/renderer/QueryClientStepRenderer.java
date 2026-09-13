@@ -400,15 +400,15 @@ public class QueryClientStepRenderer {
         PipelineStepModel model,
         GenerationContext ctx
     ) {
-        if (ctx.processingEnv() == null || ctx.processingEnv().getOptions() == null) {
+        if (!ctx.compilerServices().available()) {
             return Optional.empty();
         }
-        String configuredPath = ctx.processingEnv().getOptions().get("pipeline.config");
+        String configuredPath = ctx.compilerOptions().asMap().get("pipeline.config");
         if (configuredPath == null || configuredPath.isBlank()) {
             return Optional.empty();
         }
         PipelineYamlConfig config = new PipelineYamlConfigLoader(
-            ctx.processingEnv().getOptions()::get, System::getenv).load(Path.of(configuredPath));
+            ctx.compilerOptions().asMap()::get, System::getenv).load(Path.of(configuredPath));
         Optional<PipelineYamlStep> selected = config.steps().stream()
             .filter(step -> matchesServiceName(model.serviceName(), step.name()))
             .filter(step -> "query".equalsIgnoreCase(step.kind()))
@@ -457,17 +457,16 @@ public class QueryClientStepRenderer {
     ) {
         if (configHints.transportMode() != PipelineTransport.LOCAL
             || !(model.outboundDomainType() instanceof ClassName domainType)
-            || ctx.processingEnv() == null
-            || ctx.processingEnv().getOptions() == null) {
+            || !ctx.compilerServices().available()) {
             return Optional.empty();
         }
-        String configuredPath = ctx.processingEnv().getOptions().get("pipeline.config");
+        String configuredPath = ctx.compilerOptions().asMap().get("pipeline.config");
         if (configuredPath == null || configuredPath.isBlank()) {
             return Optional.empty();
         }
         Path path = Path.of(configuredPath);
         PipelineYamlConfig yaml = new PipelineYamlConfigLoader(
-            ctx.processingEnv().getOptions()::get, System::getenv).load(path);
+            ctx.compilerOptions().asMap()::get, System::getenv).load(path);
         PipelineYamlStep step = yaml.steps().stream()
             .filter(candidate -> matchesServiceName(model.serviceName(), candidate.name()))
             .filter(candidate -> "query".equalsIgnoreCase(candidate.kind()))
@@ -482,8 +481,8 @@ public class QueryClientStepRenderer {
             return Optional.empty();
         }
         PipelineTemplateConfig template = new PipelineTemplateConfigLoader(
-            ctx.processingEnv().getOptions()::get, System::getenv).load(path);
-        return PersistenceRepresentationMappingResolver.resolve(template, domainType, ctx.processingEnv())
+            ctx.compilerOptions().asMap()::get, System::getenv).load(path);
+        return PersistenceRepresentationMappingResolver.resolve(template, domainType, ctx.compilerServices())
             .filter(mapping -> mapping.representationType().canonicalName().equals(step.commandConfig().get("entity")))
             .map(mapping -> new QueryPersistenceRepresentation(
                 mapping.representationType(), mapping.mapperType()));
@@ -513,14 +512,14 @@ public class QueryClientStepRenderer {
         if (ctx.transportMode() != null && ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank()) {
             return new PipelineConfigHints(ctx.transportMode(), ctx.pipelineBasePackage());
         }
-        Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
+        Map<String, String> options = ctx.compilerOptions().asMap();
         PipelineTransport configuredTransport = PipelineTransport.fromStringOptional(
             options == null ? null : options.get("pipeline.transport")).orElse(null);
         String basePackage = null;
         if (options != null) {
             String configPath = options.get("pipeline.config");
             if (configPath != null && !configPath.isBlank()) {
-                PipelineYamlConfig config = new PipelineYamlConfigLoader(ctx.processingEnv().getOptions()::get, System::getenv)
+                PipelineYamlConfig config = new PipelineYamlConfigLoader(ctx.compilerOptions().asMap()::get, System::getenv)
                     .load(Path.of(configPath));
                 if (configuredTransport == null) {
                     configuredTransport = PipelineTransport.fromStringOptional(config.transport()).orElse(null);

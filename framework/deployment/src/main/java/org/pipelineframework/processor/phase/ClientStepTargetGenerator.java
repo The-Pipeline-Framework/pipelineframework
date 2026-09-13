@@ -55,7 +55,7 @@ public class ClientStepTargetGenerator implements TargetGenerator {
         }
 
         var role = policy.resolveClientRole(model.deploymentRole());
-        renderer.render(request.grpcBinding(), new GenerationContext(
+        renderer.render(request.grpcBinding(), org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

@@ -97,7 +97,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         // Add @Path annotation - derive path from REST naming strategy or use provided path override
         String servicePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
-            : RestPathResolver.resolveResourcePath(model, ctx.processingEnv());
+            : RestPathResolver.resolveResourcePath(model, ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
         resourceBuilder.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
             .addMember("value", "$S", servicePath)
             .build());
@@ -169,7 +169,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName, cacheSideEffect));
         resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName, cacheSideEffect));
 
-        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
+        String operationPath = RestPathResolver.resolveOperationPath(ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
 
         // Create the process method based on service type (determined from streaming shape)
         MethodSpec processMethod = switch (model.streamingShape()) {

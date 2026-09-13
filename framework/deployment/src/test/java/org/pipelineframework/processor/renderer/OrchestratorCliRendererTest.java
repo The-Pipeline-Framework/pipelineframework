@@ -53,7 +53,7 @@ class OrchestratorCliRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorCliRenderer renderer = new OrchestratorCliRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/OrchestratorApplication.java");
@@ -76,7 +76,7 @@ class OrchestratorCliRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         OrchestratorCliRenderer renderer = new OrchestratorCliRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/OrchestratorApplication.java");
@@ -92,8 +92,8 @@ class OrchestratorCliRendererTest {
     void generatedCliMetersCoexistWithGrpcInEitherRegistrationOrder(boolean grpcFirst) throws Exception {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
-        GenerationContext context = mock(GenerationContext.class);
-        when(context.processingEnv()).thenReturn(processingEnv);
+        GenerationContext context = Jsr269GenerationContext.create(
+            processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, java.util.Set.of(), null, null);
         new OrchestratorCliRenderer().render(buildBinding("REST"), context);
 
         // Execute the emitted statements, so the registry test also covers the generator.

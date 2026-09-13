@@ -5,11 +5,11 @@ import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
 
 /** Adapts host-neutral compiler diagnostics to the production JSR-269 messager. */
-final class Jsr269PipelineCompilerDiagnostics implements PipelineCompilerDiagnostics {
+public final class Jsr269PipelineCompilerDiagnostics implements PipelineCompilerDiagnostics {
 
     private final Messager messager;
 
-    Jsr269PipelineCompilerDiagnostics(Messager messager) {
+    public Jsr269PipelineCompilerDiagnostics(Messager messager) {
         this.messager = Objects.requireNonNull(messager, "messager must not be null");
     }
 

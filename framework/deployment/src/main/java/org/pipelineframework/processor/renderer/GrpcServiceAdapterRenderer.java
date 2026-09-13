@@ -1,7 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
-import javax.annotation.processing.Messager;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -38,11 +38,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(
-            binding, ctx.processingEnv().getMessager());
+            binding, ctx.compilerDiagnostics());
         TransportBoundaryResolver.RepresentationBoundary boundary = TransportBoundaryResolver.resolve(
             binding.model(), grpcTypes, ctx);
         TypeSpec grpcServiceClass = buildGrpcServiceClass(
-            binding, ctx.processingEnv().getMessager(), ctx.role(), boundary);
+            binding, ctx.compilerDiagnostics(), ctx.role(), boundary);
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -57,13 +57,13 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * Builds a JavaPoet TypeSpec for the gRPC service adapter class for the provided binding.
      *
      * @param binding the gRPC binding providing the pipeline step model and service metadata
-     * @param messager a Messager for reporting diagnostics during type resolution
+     * @param messager a PipelineCompilerDiagnostics for reporting diagnostics during type resolution
      * @param role the deployment role applied to the generated class's GeneratedRole annotation
      * @return a TypeSpec representing the gRPC service adapter class to be written to a Java file
      */
     private TypeSpec buildGrpcServiceClass(
             GrpcBinding binding,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             org.pipelineframework.processor.ir.DeploymentRole role,
             TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
@@ -161,7 +161,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     private void addUnaryUnaryMethod(
             TypeSpec.Builder builder,
             GrpcBinding binding,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -249,7 +249,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     private void addUnaryStreamingMethod(
             TypeSpec.Builder builder,
             GrpcBinding binding,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -333,7 +333,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     private void addStreamingUnaryMethod(
             TypeSpec.Builder builder,
             GrpcBinding binding,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -421,7 +421,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     private void addStreamingStreamingMethod(
             TypeSpec.Builder builder,
             GrpcBinding binding,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             TransportBoundaryResolver.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -499,14 +499,14 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      *
      * @param binding the gRPC binding that provides the pipeline step model and service metadata
      * @param grpcAdapterClassName the adapter base class to extend
-     * @param messager a diagnostic Messager used during type resolution
+     * @param messager a diagnostic PipelineCompilerDiagnostics used during type resolution
      * @return a TypeSpec for an anonymous class that implements `getService`, `fromGrpc`, and `toGrpc`
      * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the binding
      */
     private TypeSpec inlineAdapterBuilder(
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
-            Messager messager,
+            PipelineCompilerDiagnostics messager,
             TransportBoundaryResolver.RepresentationBoundary boundary
     ) {
         PipelineStepModel model = binding.model();

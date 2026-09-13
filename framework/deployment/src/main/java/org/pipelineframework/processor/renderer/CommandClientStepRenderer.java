@@ -314,7 +314,7 @@ public class CommandClientStepRenderer {
                 : ctx.pipelineBasePackage();
             return new PipelineConfigHints(ctx.transportMode(), basePackage);
         }
-        Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
+        Map<String, String> options = ctx.compilerOptions().asMap();
         PipelineTransport configuredTransport = PipelineTransport.fromStringOptional(
             options == null ? null : options.get("pipeline.transport")).orElse(null);
         String basePackage = null;
@@ -338,12 +338,11 @@ public class CommandClientStepRenderer {
 
     private PipelineYamlConfig loadPipelineConfig(GenerationContext ctx, String configPath) {
         try {
-            return new PipelineYamlConfigLoader(ctx.processingEnv().getOptions()::get, System::getenv)
+            return new PipelineYamlConfigLoader(ctx.compilerOptions().asMap()::get, System::getenv)
                 .load(Path.of(configPath));
         } catch (RuntimeException ex) {
-            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
-                ctx.processingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
+            if (ctx.compilerServices().available() && ctx.compilerDiagnostics() != null) {
+                ctx.compilerDiagnostics().error(
                     "Failed to load pipeline config '" + configPath + "' while rendering command client step: " + ex.getMessage());
             }
             throw new IllegalStateException("Failed to load pipeline config at '" + configPath + "'", ex);

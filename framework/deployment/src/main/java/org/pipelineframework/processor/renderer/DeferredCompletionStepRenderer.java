@@ -198,7 +198,7 @@ public class DeferredCompletionStepRenderer {
                         model, transportInput, transportOutput, ctx.pipelineBasePackage(), ctx.v3GeneratedDomainTypes());
                 }
                 GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = new GrpcJavaTypeResolver().resolve(
-                    grpcBinding, ctx.processingEnv() == null ? null : ctx.processingEnv().getMessager());
+                    grpcBinding, ctx.compilerDiagnostics());
                 yield TransportBoundaryResolver.resolve(model, grpcTypes, ctx);
             }
         };

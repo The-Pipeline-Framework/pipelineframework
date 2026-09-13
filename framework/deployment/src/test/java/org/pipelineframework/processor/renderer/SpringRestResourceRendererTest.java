@@ -46,7 +46,7 @@ class SpringRestResourceRendererTest {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.REACTIVE), "/payments"),
-            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
 
         Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
         String source = Files.readString(resource);
@@ -85,7 +85,7 @@ class SpringRestResourceRendererTest {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.REACTIVE), null),
-            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
 
         Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
         String source = Files.readString(resource);
@@ -98,7 +98,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_STREAMING, ServiceApiKind.REACTIVE), null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     @Test
@@ -106,7 +106,7 @@ class SpringRestResourceRendererTest {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), "/payments"),
-            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
 
         Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
         String source = Files.readString(resource);
@@ -119,7 +119,7 @@ class SpringRestResourceRendererTest {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), null),
-            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
 
         Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
         String source = Files.readString(resource);
@@ -142,7 +142,7 @@ class SpringRestResourceRendererTest {
             .build();
 
         renderer.render(new RestBinding(virtualThreadsModel, "/payments"),
-            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
 
         Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
         String source = Files.readString(resource);
@@ -158,7 +158,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING_ITERATOR), null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     @Test
@@ -171,7 +171,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(missingInput, null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     @Test
@@ -184,7 +184,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(missingOutput, null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     @Test
@@ -197,7 +197,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(sideEffect, null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     @Test
@@ -210,7 +210,7 @@ class SpringRestResourceRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new RestBinding(delegated, null),
-                new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 
     private PipelineStepModel model(StreamingShape shape, ServiceApiKind apiKind) {

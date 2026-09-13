@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
@@ -331,7 +337,7 @@ class QueryClientStepRendererTest {
                 ClassName.get("com.example.domain", "RedriveAnalysis"),
                 ClassName.get("com.example.domain", "InvoiceFiles"));
 
-            new QueryClientStepRenderer().render(model, generationContext(Map.of(
+            new QueryClientStepRenderer().render(model, generationContextWithCompilerTypes(Map.of(
                 "pipeline.config", pipeline.toString(),
                 "pipeline.transport", "LOCAL")));
 
@@ -411,7 +417,30 @@ class QueryClientStepRendererTest {
     private GenerationContext generationContext(Map<String, String> options) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(options);
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            Set.of(),
+            null,
+            null);
+    }
+
+    private GenerationContext generationContextWithCompilerTypes(Map<String, String> options) {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        Elements elements = mock(Elements.class);
+        TypeElement typeElement = mock(TypeElement.class);
+        TypeMirror typeMirror = mock(TypeMirror.class);
+        Types types = mock(Types.class);
+        when(processingEnv.getOptions()).thenReturn(options);
+        when(processingEnv.getElementUtils()).thenReturn(elements);
+        when(processingEnv.getTypeUtils()).thenReturn(types);
+        when(elements.getTypeElement(any(CharSequence.class))).thenReturn(typeElement);
+        when(typeElement.asType()).thenReturn(typeMirror);
+        when(types.getDeclaredType(any(TypeElement.class), any(TypeMirror[].class)))
+            .thenReturn(mock(DeclaredType.class));
+        when(types.isAssignable(any(TypeMirror.class), any(TypeMirror.class))).thenReturn(true);
+        return Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -423,7 +452,7 @@ class QueryClientStepRendererTest {
     private GenerationContext generationContext(PipelineTransport transport, String basePackage) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of());
-        return new GenerationContext(
+        return Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,

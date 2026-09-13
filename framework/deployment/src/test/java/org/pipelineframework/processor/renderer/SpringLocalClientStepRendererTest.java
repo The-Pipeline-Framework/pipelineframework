@@ -48,7 +48,7 @@ class SpringLocalClientStepRendererTest {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
         renderer.render(new LocalBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.REACTIVE)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -77,7 +77,7 @@ class SpringLocalClientStepRendererTest {
                 StreamingShape.UNARY_UNARY,
                 ServiceApiKind.REACTIVE,
                 ReactiveReturnKind.REACTOR_MONO)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
                 null, null, 1));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
@@ -101,7 +101,7 @@ class SpringLocalClientStepRendererTest {
                 StreamingShape.UNARY_UNARY,
                 ServiceApiKind.REACTIVE,
                 ReactiveReturnKind.COMPLETION_STAGE)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
                 null, null, 1));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
@@ -119,7 +119,7 @@ class SpringLocalClientStepRendererTest {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
         renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.REACTIVE, ReactiveReturnKind.REACTOR_MONO)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
                 null, null, 2));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
@@ -142,7 +142,7 @@ class SpringLocalClientStepRendererTest {
                 ServiceApiKind.REACTIVE,
                 ReactiveReturnKind.REACTOR_MONO,
                 "audit")),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -159,7 +159,7 @@ class SpringLocalClientStepRendererTest {
                 ServiceApiKind.REACTIVE,
                 ReactiveReturnKind.COMPLETION_STAGE,
                 "auditAsync")),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -173,7 +173,7 @@ class SpringLocalClientStepRendererTest {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
         renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.BLOCKING, ReactiveReturnKind.MUTINY_UNI)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -187,7 +187,7 @@ class SpringLocalClientStepRendererTest {
 
         renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.BLOCKING, ReactiveReturnKind.MUTINY_UNI,
                 "auditBlocking")),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -204,7 +204,7 @@ class SpringLocalClientStepRendererTest {
                 ServiceApiKind.BLOCKING,
                 ReactiveReturnKind.MUTINY_UNI,
                 ExecutionMode.DEFAULT)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -230,7 +230,7 @@ class SpringLocalClientStepRendererTest {
                 ServiceApiKind.BLOCKING,
                 ReactiveReturnKind.MUTINY_UNI,
                 ExecutionMode.VIRTUAL_THREADS)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
         String source = Files.readString(clientStep);
@@ -243,7 +243,7 @@ class SpringLocalClientStepRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new LocalBinding(model(StreamingShape.UNARY_STREAMING, ServiceApiKind.REACTIVE)),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
     }
 
     @Test
@@ -252,7 +252,7 @@ class SpringLocalClientStepRendererTest {
 
         assertThrows(IllegalArgumentException.class,
             () -> renderer.render(new LocalBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING_ITERATOR)),
-                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+                Jsr269GenerationContext.create(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
     }
 
     private PipelineStepModel model(StreamingShape shape, ServiceApiKind apiKind) {

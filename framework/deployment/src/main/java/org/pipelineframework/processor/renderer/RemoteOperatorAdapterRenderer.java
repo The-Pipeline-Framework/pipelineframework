@@ -19,7 +19,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
-import javax.annotation.processing.Messager;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -60,7 +60,7 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
 
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
-        Messager messager = ctx.processingEnv() == null ? null : ctx.processingEnv().getMessager();
+        PipelineCompilerDiagnostics messager = ctx.compilerDiagnostics();
         TypeSpec typeSpec = buildRemoteAdapter(binding, messager, ctx.role());
         JavaFile.builder(
                 binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
@@ -71,7 +71,7 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
 
     private TypeSpec buildRemoteAdapter(
         GrpcBinding binding,
-        Messager messager,
+        PipelineCompilerDiagnostics messager,
         org.pipelineframework.processor.ir.DeploymentRole role
     ) {
         PipelineStepModel model = binding.model();

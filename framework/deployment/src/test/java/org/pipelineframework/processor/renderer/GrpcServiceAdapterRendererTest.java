@@ -49,7 +49,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -77,7 +77,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -103,7 +103,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -129,7 +129,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -167,7 +167,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PLUGIN_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PLUGIN_SERVER,
             java.util.Set.of(), null, null);
         renderer.render(binding, context);
 
@@ -319,7 +319,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         renderer.render(binding, context);
@@ -377,7 +377,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         renderer.render(binding, context);
@@ -407,7 +407,7 @@ class GrpcServiceAdapterRendererTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        renderer.render(binding, new GenerationContext(
+        renderer.render(binding, Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.PIPELINE_SERVER,
@@ -444,7 +444,7 @@ class GrpcServiceAdapterRendererTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        renderer.render(binding, new GenerationContext(
+        renderer.render(binding, Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.PIPELINE_SERVER,
@@ -478,7 +478,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         renderer.render(binding, context);
@@ -510,7 +510,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
         renderer.render(binding, context);

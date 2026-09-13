@@ -1,13 +1,12 @@
 package org.pipelineframework.processor.util;
 
 import java.util.*;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import org.pipelineframework.processor.ir.GrpcBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 /**
  * Resolves gRPC bindings for the orchestrator service using compiled protobuf descriptors.
@@ -57,7 +56,7 @@ public class OrchestratorGrpcBindingResolver {
         String methodName,
         boolean inputStreaming,
         boolean outputStreaming,
-        Messager messager
+        PipelineCompilerDiagnostics diagnostics
     ) {
         if (descriptorSet == null) {
             throw new IllegalStateException(
@@ -66,7 +65,7 @@ public class OrchestratorGrpcBindingResolver {
         }
 
         Descriptors.ServiceDescriptor serviceDescriptor = findServiceDescriptor(model.serviceName(), descriptorSet);
-        Descriptors.MethodDescriptor methodDescriptor = findMethodDescriptor(serviceDescriptor, methodName, messager);
+        Descriptors.MethodDescriptor methodDescriptor = findMethodDescriptor(serviceDescriptor, methodName, diagnostics);
         validateStreamingSemantics(methodDescriptor, inputStreaming, outputStreaming);
 
         return new GrpcBinding.Builder()
@@ -204,7 +203,7 @@ public class OrchestratorGrpcBindingResolver {
     private Descriptors.MethodDescriptor findMethodDescriptor(
         Descriptors.ServiceDescriptor serviceDescriptor,
         String methodName,
-        Messager messager
+        PipelineCompilerDiagnostics diagnostics
     ) {
         Descriptors.MethodDescriptor found = null;
         for (Descriptors.MethodDescriptor method : serviceDescriptor.getMethods()) {
@@ -220,14 +219,12 @@ public class OrchestratorGrpcBindingResolver {
             throw new IllegalStateException(
                 "Method '" + methodName + "' not found in orchestrator service");
         }
-        if (serviceDescriptor.getMethods().size() > 1 && messager != null) {
+        if (serviceDescriptor.getMethods().size() > 1 && diagnostics != null) {
             boolean hasUnexpected = serviceDescriptor.getMethods().stream()
                 .map(Descriptors.MethodDescriptor::getName)
                 .anyMatch(name -> !ALLOWED_METHODS.contains(name));
             if (hasUnexpected) {
-                messager.printMessage(
-                    Diagnostic.Kind.WARNING,
-                    "Multiple RPCs found in orchestrator service; only '" + methodName + "' is used.");
+                diagnostics.warning("Multiple RPCs found in orchestrator service; only '" + methodName + "' is used.");
             }
         }
         return found;

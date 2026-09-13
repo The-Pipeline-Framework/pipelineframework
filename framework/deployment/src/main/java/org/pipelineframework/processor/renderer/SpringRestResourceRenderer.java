@@ -67,7 +67,7 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
         TypeName outputDtoType = DtoTypeUtils.toDtoType(outputDomainType);
         String servicePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
-            : RestPathResolver.resolveResourcePath(model, ctx.processingEnv());
+            : RestPathResolver.resolveResourcePath(model, ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
 
         FieldSpec runnerField = FieldSpec.builder(
                 ClassName.get("org.pipelineframework.runtime.spring", "SpringPipelineRunner"),
@@ -132,7 +132,7 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
             TypeName inputDtoType,
             TypeName outputDtoType) {
         TypeName monoOutput = ParameterizedTypeName.get(ClassName.get("reactor.core.publisher", "Mono"), outputDtoType);
-        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
+        String operationPath = RestPathResolver.resolveOperationPath(ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
 
         return MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.web.bind.annotation", "PostMapping"))

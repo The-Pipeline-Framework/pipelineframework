@@ -96,7 +96,7 @@ public class CheckpointSubscriptionHandlerRenderer {
 
         JavaFile.builder(generatedType.packageName(), type.build())
             .build()
-            .writeTo(ctx.processingEnv().getFiler());
+            .writeTo(ctx.compilerServices().filer());
         return generatedType;
     }
 
@@ -127,12 +127,12 @@ public class CheckpointSubscriptionHandlerRenderer {
     }
 
     private TypeElement resolveFirstStepServiceElement(OrchestratorBinding binding, GenerationContext ctx) {
-        if (ctx.processingEnv() == null) {
+        if (!ctx.compilerServices().available()) {
             return null;
         }
         if (binding.model() != null && binding.model().serviceClassName() != null) {
-            TypeElement direct = ctx.processingEnv()
-                .getElementUtils()
+            TypeElement direct = ctx.compilerServices()
+                .elements()
                 .getTypeElement(binding.model().serviceClassName().canonicalName());
             if (direct != null) {
                 return direct;
@@ -143,8 +143,8 @@ public class CheckpointSubscriptionHandlerRenderer {
             return null;
         }
         String inferredServicePackage = binding.basePackage() + "." + toPackageSegment(serviceName) + ".service";
-        return ctx.processingEnv()
-            .getElementUtils()
+        return ctx.compilerServices()
+            .elements()
             .getTypeElement(inferredServicePackage + "." + serviceName);
     }
 
@@ -194,17 +194,17 @@ public class CheckpointSubscriptionHandlerRenderer {
 
     private MapperTypes resolveMapperTypes(String mapperClassName, GenerationContext ctx) {
         TypeMirror mapperInterface = Objects.requireNonNull(
-            ctx.processingEnv().getElementUtils().getTypeElement(MAPPER_INTERFACE),
+            ctx.compilerServices().elements().getTypeElement(MAPPER_INTERFACE),
             () -> "Mapper interface not found: " + MAPPER_INTERFACE).asType();
-        javax.lang.model.element.TypeElement mapperElement = ctx.processingEnv().getElementUtils().getTypeElement(mapperClassName);
+        javax.lang.model.element.TypeElement mapperElement = ctx.compilerServices().elements().getTypeElement(mapperClassName);
         if (mapperElement == null) {
             throw new IllegalStateException("Checkpoint subscription mapper type not found: " + mapperClassName);
         }
         for (TypeMirror implemented : mapperElement.getInterfaces()) {
             if (!(implemented instanceof DeclaredType declared)
-                || !ctx.processingEnv().getTypeUtils().isSameType(
-                    ctx.processingEnv().getTypeUtils().erasure(declared),
-                    ctx.processingEnv().getTypeUtils().erasure(mapperInterface))) {
+                || !ctx.compilerServices().types().isSameType(
+                    ctx.compilerServices().types().erasure(declared),
+                    ctx.compilerServices().types().erasure(mapperInterface))) {
                 continue;
             }
             if (declared.getTypeArguments().size() == 2) {

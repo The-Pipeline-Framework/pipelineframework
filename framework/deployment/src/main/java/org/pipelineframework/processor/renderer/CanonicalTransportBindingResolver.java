@@ -112,10 +112,10 @@ final class CanonicalTransportBindingResolver {
     }
 
     private static Optional<PipelineTemplateConfig> loadTemplate(GenerationContext context) {
-        if (context.processingEnv() == null) {
+        if (!context.compilerServices().available()) {
             return Optional.empty();
         }
-        Map<String, String> options = context.processingEnv().getOptions();
+        Map<String, String> options = context.compilerOptions().asMap();
         String configuredPath = options == null ? null : options.get("pipeline.config");
         if (configuredPath == null || configuredPath.isBlank()) {
             return Optional.empty();

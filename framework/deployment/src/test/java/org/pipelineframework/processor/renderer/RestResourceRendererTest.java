@@ -47,7 +47,7 @@ class RestResourceRendererTest {
             "/ProcessPaymentStatusReactiveService/remoteProcess");
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+        GenerationContext context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
             java.util.Set.of(), null, null);
 
         RestResourceRenderer renderer = new RestResourceRenderer();
@@ -98,7 +98,7 @@ class RestResourceRendererTest {
             "/ObserveCacheSomethingSideEffectService/remoteProcess");
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+        GenerationContext context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
             java.util.Set.of(), null, null);
 
         RestResourceRenderer renderer = new RestResourceRenderer();
@@ -189,7 +189,7 @@ class RestResourceRendererTest {
 
     private GenerationContext createContext() {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        return new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null);
+        return Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null);
     }
 
     private String renderAndReadSource(RestBinding binding, String resourceFileName) throws IOException {

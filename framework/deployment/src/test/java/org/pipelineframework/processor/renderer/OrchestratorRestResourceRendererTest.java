@@ -25,7 +25,7 @@ class OrchestratorRestResourceRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         OrchestratorRestResourceRenderer renderer = new OrchestratorRestResourceRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
             java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunResource.java");
@@ -58,7 +58,7 @@ class OrchestratorRestResourceRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         OrchestratorRestResourceRenderer renderer = new OrchestratorRestResourceRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.REST_SERVER,
             java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunResource.java");

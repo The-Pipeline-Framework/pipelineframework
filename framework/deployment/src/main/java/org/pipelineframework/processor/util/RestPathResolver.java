@@ -10,6 +10,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 /**
  * Resolves REST resource and operation paths for generated REST artifacts.
@@ -31,7 +32,15 @@ public final class RestPathResolver {
      * @return the resolved REST base path
      */
     public static String resolveResourcePath(PipelineStepModel model, ProcessingEnvironment processingEnv) {
-        NamingStrategy strategy = resolveNamingStrategy(processingEnv);
+        return resolveResourcePath(model, processingEnv == null ? Map.of() : processingEnv.getOptions(),
+            processingEnv == null || processingEnv.getMessager() == null ? null
+                : new org.pipelineframework.processor.Jsr269PipelineCompilerDiagnostics(processingEnv.getMessager()));
+    }
+
+    public static String resolveResourcePath(
+        PipelineStepModel model, Map<String, String> options, PipelineCompilerDiagnostics diagnostics
+    ) {
+        NamingStrategy strategy = resolveNamingStrategy(options, diagnostics);
         if (strategy == NamingStrategy.LEGACY) {
             return legacyResourcePath(model);
         }
@@ -45,17 +54,17 @@ public final class RestPathResolver {
      * @return "/process" in LEGACY mode, "/" in RESOURCEFUL mode
      */
     public static String resolveOperationPath(ProcessingEnvironment processingEnv) {
-        return resolveNamingStrategy(processingEnv) == NamingStrategy.LEGACY ? "/process" : "/";
+        return resolveOperationPath(processingEnv == null ? Map.of() : processingEnv.getOptions(),
+            processingEnv == null || processingEnv.getMessager() == null ? null
+                : new org.pipelineframework.processor.Jsr269PipelineCompilerDiagnostics(processingEnv.getMessager()));
     }
 
-    private static NamingStrategy resolveNamingStrategy(ProcessingEnvironment processingEnv) {
-        String raw = null;
-        if (processingEnv != null) {
-            Map<String, String> options = processingEnv.getOptions();
-            if (options != null) {
-                raw = options.get(REST_NAMING_STRATEGY_OPTION);
-            }
-        }
+    public static String resolveOperationPath(Map<String, String> options, PipelineCompilerDiagnostics diagnostics) {
+        return resolveNamingStrategy(options, diagnostics) == NamingStrategy.LEGACY ? "/process" : "/";
+    }
+
+    private static NamingStrategy resolveNamingStrategy(Map<String, String> options, PipelineCompilerDiagnostics diagnostics) {
+        String raw = options == null ? null : options.get(REST_NAMING_STRATEGY_OPTION);
         
         // If not found in processing environment options, check system property
         if (raw == null || raw.isBlank()) {
@@ -73,8 +82,8 @@ public final class RestPathResolver {
             return NamingStrategy.RESOURCEFUL;
         }
         String warning = "Unknown REST naming strategy '" + trimmed + "'; defaulting to RESOURCEFUL.";
-        if (processingEnv != null && processingEnv.getMessager() != null) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, warning);
+        if (diagnostics != null) {
+            diagnostics.warning(warning);
         } else {
             System.err.println(warning);
         }

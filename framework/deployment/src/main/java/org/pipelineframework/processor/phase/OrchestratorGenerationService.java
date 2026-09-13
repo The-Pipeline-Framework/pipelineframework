@@ -94,7 +94,7 @@ public class OrchestratorGenerationService {
             DeploymentRole role,
             ClassName cacheKeyGenerator,
             DescriptorProtos.FileDescriptorSet descriptorSet) {
-        return new GenerationContext(
+        return org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

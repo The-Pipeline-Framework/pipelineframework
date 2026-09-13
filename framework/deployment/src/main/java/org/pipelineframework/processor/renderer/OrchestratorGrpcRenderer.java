@@ -2,8 +2,6 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import java.util.List;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
@@ -89,7 +87,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         }
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
-        var grpcTypes = typeResolver.resolve(grpcBinding, messager(ctx));
+        var grpcTypes = typeResolver.resolve(grpcBinding, ctx.compilerDiagnostics());
         ClassName inputType = grpcTypes.grpcParameterType();
         ClassName outputType = grpcTypes.grpcReturnType();
         if (inputType == null || outputType == null) {
@@ -328,7 +326,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)
             .build()
-            .writeTo(ctx.processingEnv().getFiler());
+            .writeTo(ctx.compilerServices().filer());
     }
 
     private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
@@ -346,66 +344,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 methodName,
                 inputStreaming,
                 outputStreaming,
-                messager(ctx));
+                ctx.compilerDiagnostics());
         } catch (IllegalStateException e) {
-            messager(ctx).printMessage(
-                Diagnostic.Kind.WARNING,
-                "Skipping orchestrator gRPC generation: " + e.getMessage());
+            ctx.compilerDiagnostics().warning("Skipping orchestrator gRPC generation: " + e.getMessage());
             return null;
-        }
-    }
-
-    private Messager messager(GenerationContext ctx) {
-        ProcessingEnvironment processingEnv = ctx.processingEnv();
-        if (processingEnv == null || processingEnv.getMessager() == null) {
-            return StderrMessager.INSTANCE;
-        }
-        return processingEnv.getMessager();
-    }
-
-    private enum StderrMessager implements Messager {
-        INSTANCE;
-
-        @Override
-        public void printMessage(Diagnostic.Kind kind, CharSequence msg) {
-            print(kind, msg, null, null, null);
-        }
-
-        @Override
-        public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e) {
-            print(kind, msg, e, null, null);
-        }
-
-        @Override
-        public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a) {
-            print(kind, msg, e, a, null);
-        }
-
-        @Override
-        public void printMessage(
-            Diagnostic.Kind kind,
-            CharSequence msg,
-            Element e,
-            AnnotationMirror a,
-            AnnotationValue v) {
-            print(kind, msg, e, a, v);
-        }
-
-        private void print(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a, AnnotationValue v) {
-            StringBuilder line = new StringBuilder("OrchestratorGrpcRenderer diagnostic [")
-                .append(kind)
-                .append("] ")
-                .append(msg);
-            if (e != null) {
-                line.append(" element=").append(e);
-            }
-            if (a != null) {
-                line.append(" annotation=").append(a);
-            }
-            if (v != null) {
-                line.append(" value=").append(v);
-            }
-            System.err.println(line);
         }
     }
 
@@ -436,7 +378,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         if (runAsyncBinding == null) {
             return null;
         }
-        var asyncTypes = typeResolver.resolve(runAsyncBinding, messager(ctx));
+        var asyncTypes = typeResolver.resolve(runAsyncBinding, ctx.compilerDiagnostics());
         ClassName requestType = asyncTypes.grpcParameterType();
         ClassName responseType = asyncTypes.grpcReturnType();
         if (requestType == null || responseType == null) {
@@ -547,7 +489,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         if (statusBinding == null) {
             return null;
         }
-        var statusTypes = typeResolver.resolve(statusBinding, messager(ctx));
+        var statusTypes = typeResolver.resolve(statusBinding, ctx.compilerDiagnostics());
         ClassName requestType = statusTypes.grpcParameterType();
         ClassName responseType = statusTypes.grpcReturnType();
         if (requestType == null || responseType == null) {
@@ -624,7 +566,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         if (resultBinding == null) {
             return null;
         }
-        var resultTypes = typeResolver.resolve(resultBinding, messager(ctx));
+        var resultTypes = typeResolver.resolve(resultBinding, ctx.compilerDiagnostics());
         ClassName requestType = resultTypes.grpcParameterType();
         ClassName responseType = resultTypes.grpcReturnType();
         if (requestType == null || responseType == null) {
@@ -705,7 +647,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         if (completeAwaitBinding == null) {
             return null;
         }
-        var types = typeResolver.resolve(completeAwaitBinding, messager(ctx));
+        var types = typeResolver.resolve(completeAwaitBinding, ctx.compilerDiagnostics());
         ClassName requestType = types.grpcParameterType();
         ClassName responseType = types.grpcReturnType();
         if (requestType == null || responseType == null) {
@@ -777,7 +719,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         if (listPendingAwaitBinding == null) {
             return null;
         }
-        var types = typeResolver.resolve(listPendingAwaitBinding, messager(ctx));
+        var types = typeResolver.resolve(listPendingAwaitBinding, ctx.compilerDiagnostics());
         ClassName requestType = types.grpcParameterType();
         ClassName responseType = types.grpcReturnType();
         if (requestType == null || responseType == null) {

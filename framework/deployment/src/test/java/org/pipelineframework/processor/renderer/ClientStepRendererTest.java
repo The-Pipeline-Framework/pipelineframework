@@ -45,7 +45,7 @@ class ClientStepRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -76,7 +76,7 @@ class ClientStepRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null);
 
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -101,7 +101,7 @@ class ClientStepRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+        var context = Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null);
 
         renderer.render(binding, context);
@@ -127,7 +127,7 @@ class ClientStepRendererTest {
             when(processingEnv.getTypeUtils()).thenReturn(null);
             when(processingEnv.getFiler()).thenReturn(null);
             when(processingEnv.getMessager()).thenReturn(null);
-            var context = new GenerationContext(
+            var context = Jsr269GenerationContext.create(
                 processingEnv,
                 tempDir,
                 DeploymentRole.ORCHESTRATOR_CLIENT,

@@ -174,13 +174,13 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
 
     private String endpointPath(RestBinding binding, GenerationContext ctx) {
         return joinPaths(resolveServicePath(binding, ctx),
-            normalizePath(RestPathResolver.resolveOperationPath(ctx.processingEnv()), "operation", binding.model()));
+            normalizePath(RestPathResolver.resolveOperationPath(ctx.compilerOptions().asMap(), ctx.compilerDiagnostics()), "operation", binding.model()));
     }
 
     private String resolveServicePath(RestBinding binding, GenerationContext ctx) {
         String servicePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
-            : RestPathResolver.resolveResourcePath(binding.model(), ctx.processingEnv());
+            : RestPathResolver.resolveResourcePath(binding.model(), ctx.compilerOptions().asMap(), ctx.compilerDiagnostics());
         return normalizePath(servicePath, "resource", binding.model());
     }
 

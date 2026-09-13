@@ -32,7 +32,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -67,7 +67,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -91,7 +91,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -112,7 +112,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -131,7 +131,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -153,7 +153,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -175,7 +175,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -194,7 +194,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -214,7 +214,7 @@ class OrchestratorGrpcRendererTest {
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
 
         assertThrows(IllegalStateException.class, () ->
-            renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
                 java.util.Set.of(), null, null)));
     }
 
@@ -233,7 +233,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -252,7 +252,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -271,7 +271,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -289,7 +289,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -308,7 +308,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -327,7 +327,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -346,7 +346,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
@@ -364,7 +364,7 @@ class OrchestratorGrpcRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        renderer.render(binding, Jsr269GenerationContext.create(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, descriptorSet));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");

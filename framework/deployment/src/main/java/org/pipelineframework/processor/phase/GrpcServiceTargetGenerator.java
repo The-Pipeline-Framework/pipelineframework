@@ -93,7 +93,7 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
         PipelineTemplateConfig template = request.ctx().getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
             ? config
             : null;
-        renderer.render(request.grpcBinding(), new GenerationContext(
+        renderer.render(request.grpcBinding(), org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

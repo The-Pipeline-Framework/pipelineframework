@@ -66,7 +66,7 @@ public class RestClientStepTargetGenerator implements TargetGenerator {
         }
 
         DeploymentRole role = policy.resolveClientRole(model.deploymentRole());
-        renderer.render(request.restBinding(), new GenerationContext(
+        renderer.render(request.restBinding(), org.pipelineframework.processor.renderer.Jsr269GenerationContext.create(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,

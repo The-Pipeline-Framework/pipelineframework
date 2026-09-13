@@ -35,13 +35,13 @@ class AwsLambdaOrchestratorAsyncTransportParityTest {
 
         OrchestratorBinding restBinding = buildBinding("REST", false, false);
         OrchestratorRestResourceRenderer restRenderer = new OrchestratorRestResourceRenderer();
-        restRenderer.render(restBinding, new GenerationContext(
+        restRenderer.render(restBinding, Jsr269GenerationContext.create(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
         String restSource = Files.readString(tempDir.resolve("com/example/orchestrator/service/PipelineRunResource.java"));
 
         OrchestratorBinding grpcBinding = buildBinding("GRPC", false, false);
         OrchestratorGrpcRenderer grpcRenderer = new OrchestratorGrpcRenderer();
-        grpcRenderer.render(grpcBinding, new GenerationContext(
+        grpcRenderer.render(grpcBinding, Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.PIPELINE_SERVER,
@@ -52,7 +52,7 @@ class AwsLambdaOrchestratorAsyncTransportParityTest {
 
         OrchestratorBinding functionBinding = buildBinding("REST", false, false);
         AwsLambdaOrchestratorRenderer functionRenderer = new AwsLambdaOrchestratorRenderer();
-        functionRenderer.render(functionBinding, new GenerationContext(
+        functionRenderer.render(functionBinding, Jsr269GenerationContext.create(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
         String functionRunAsync = Files.readString(
             tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java"));
@@ -85,7 +85,7 @@ class AwsLambdaOrchestratorAsyncTransportParityTest {
         when(processingEnv.getMessager()).thenReturn(messager);
 
         OrchestratorBinding grpcBinding = buildBinding("GRPC", false, true);
-        new OrchestratorGrpcRenderer().render(grpcBinding, new GenerationContext(
+        new OrchestratorGrpcRenderer().render(grpcBinding, Jsr269GenerationContext.create(
             processingEnv,
             tempDir,
             DeploymentRole.PIPELINE_SERVER,
@@ -95,7 +95,7 @@ class AwsLambdaOrchestratorAsyncTransportParityTest {
         String grpcSource = Files.readString(tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java"));
 
         OrchestratorBinding functionBinding = buildBinding("REST", false, true);
-        new AwsLambdaOrchestratorRenderer().render(functionBinding, new GenerationContext(
+        new AwsLambdaOrchestratorRenderer().render(functionBinding, Jsr269GenerationContext.create(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
         String functionResult = Files.readString(
             tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java"));
