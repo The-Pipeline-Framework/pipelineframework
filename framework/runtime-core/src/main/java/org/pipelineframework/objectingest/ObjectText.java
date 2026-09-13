@@ -2,6 +2,7 @@ package org.pipelineframework.objectingest;
 
 import java.util.Optional;
 
+/** Shared text normalization for object-boundary contract records. */
 final class ObjectText {
 
     private ObjectText() {

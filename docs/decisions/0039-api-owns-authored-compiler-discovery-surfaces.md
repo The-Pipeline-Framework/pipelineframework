@@ -108,6 +108,8 @@ authored annotation's ownership of Java-local hints and compiler-generated metad
 - Runtime integrations retain platform-specific implementations and validate their own capability classes.
 - Customer execution and self-hosted worker processes can share the generated pipeline contract model through
   runtime-core without depending on the Quarkus runtime implementation.
+- Object-source and object-target provider SPIs, requests, sessions, results, and snapshots are runtime-core contracts;
+  connector implementations consume them without depending on the Quarkus execution engine.
 - Compiler and integration artifacts share generated type naming through the framework API, without integrations
   depending on compiler implementation classes.
 - Future Jandex and JSR-269 discovery adapters must normalize into the existing compiler model and produce
