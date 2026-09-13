@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 import org.jboss.logging.Logger;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.renderer.GenerationContext;
@@ -101,7 +102,8 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
         if (generatedName.endsWith(SERVICE_SUFFIX)) {
             generatedName = generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
         }
-        String className = servicePackage + ".pipeline." + generatedName + "LocalClientStep";
+        String className = servicePackage + ".pipeline." + generatedName
+            + GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX;
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }
 }

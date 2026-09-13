@@ -7,7 +7,7 @@ import javax.lang.model.element.Modifier;
 import com.squareup.javapoet.*;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -145,7 +145,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         DeploymentRole role = ctx.role();
         boolean cachePluginSideEffect = isCachePluginSideEffect(model);
         String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
-            + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
+                + GeneratedTypeNames.REST_CLIENT_STEP_SUFFIX;
 
         TypeSpec.Builder clientStepBuilder = TypeSpec.classBuilder(clientStepClassName)
             .addModifiers(Modifier.PUBLIC)

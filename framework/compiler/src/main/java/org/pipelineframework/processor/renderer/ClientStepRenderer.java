@@ -23,7 +23,7 @@ import javax.lang.model.element.Modifier;
 import com.squareup.javapoet.*;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.GrpcBinding;
@@ -381,7 +381,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         // Determine client step class name based on the target
         String clientStepClassName;
         // For client steps: ${PluginName}GrpcClientStep
-        clientStepClassName = serviceClassName.replace("Service", "") + PipelineStepProcessor.GRPC_CLIENT_STEP_SUFFIX;
+        clientStepClassName = serviceClassName.replace("Service", "") + GeneratedTypeNames.GRPC_CLIENT_STEP_SUFFIX;
         return clientStepClassName;
     }
 

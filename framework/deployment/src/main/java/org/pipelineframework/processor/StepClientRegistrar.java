@@ -27,6 +27,7 @@ import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.extension.MapperRegistryBuildItem;
+import org.pipelineframework.generated.GeneratedTypeNames;
 
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
@@ -34,9 +35,6 @@ import org.pipelineframework.extension.MapperRegistryBuildItem;
 public class StepClientRegistrar {
 
     private static final String FEATURE_NAME = "pipelineframework-steps";
-    private static final String GRPC_CLIENT_STEP_SUFFIX = "GrpcClientStep";
-    private static final String REST_CLIENT_STEP_SUFFIX = "RestClientStep";
-    private static final String LOCAL_CLIENT_STEP_SUFFIX = "LocalClientStep";
     private static final Logger LOG = Logger.getLogger(StepClientRegistrar.class);
 
     /**
@@ -79,9 +77,9 @@ public class StepClientRegistrar {
         List<ClassInfo> classes = index.getKnownClasses().stream()
                 .filter(ci -> {
                     String name = ci.name().toString();
-                    return name.endsWith(GRPC_CLIENT_STEP_SUFFIX)
-                        || name.endsWith(REST_CLIENT_STEP_SUFFIX)
-                        || name.endsWith(LOCAL_CLIENT_STEP_SUFFIX);
+                    return name.endsWith(GeneratedTypeNames.GRPC_CLIENT_STEP_SUFFIX)
+                        || name.endsWith(GeneratedTypeNames.REST_CLIENT_STEP_SUFFIX)
+                        || name.endsWith(GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX);
                 })
                 .toList();
 

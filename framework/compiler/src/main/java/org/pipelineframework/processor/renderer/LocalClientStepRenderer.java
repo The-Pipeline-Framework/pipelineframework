@@ -14,6 +14,7 @@ import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.WildcardTypeName;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
@@ -211,7 +212,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
         if (serviceClassName.endsWith("Service")) {
             serviceClassName = serviceClassName.substring(0, serviceClassName.length() - "Service".length());
         }
-        return serviceClassName + "LocalClientStep";
+        return serviceClassName + GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX;
     }
 
     /**

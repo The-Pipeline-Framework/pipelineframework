@@ -8,6 +8,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateDialect;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -299,7 +300,8 @@ class StepArtifactGenerationService {
                         break;
                     }
                     String localClientClassName = model.servicePackage() + PIPELINE_DOT
-                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "LocalClientStep";
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName())
+                        + GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX;
                     DeploymentRole localClientRole = ctx.isTransportModeLocal() && model.sideEffect()
                         ? DeploymentRole.ORCHESTRATOR_CLIENT
                         : resolveClientRole(model.deploymentRole());

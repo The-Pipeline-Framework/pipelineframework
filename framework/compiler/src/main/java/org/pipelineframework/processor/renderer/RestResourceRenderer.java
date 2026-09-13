@@ -5,7 +5,7 @@ import java.util.Optional;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -81,7 +81,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         String serviceClassName = model.generatedName();
 
         String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
-        String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
+        String resourceClassName = baseName + GeneratedTypeNames.REST_RESOURCE_SUFFIX;
 
         // Create the REST resource class
         TypeSpec.Builder resourceBuilder = TypeSpec.classBuilder(resourceClassName)

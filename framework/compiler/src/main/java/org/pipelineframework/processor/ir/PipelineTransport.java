@@ -2,6 +2,8 @@ package org.pipelineframework.processor.ir;
 
 import java.util.Optional;
 
+import org.pipelineframework.generated.GeneratedTypeNames;
+
 /**
  * Transport mode used for orchestrator client generation.
  */
@@ -18,9 +20,9 @@ public enum PipelineTransport {
      */
     public String clientStepSuffix() {
         return switch (this) {
-            case REST -> "RestClientStep";
-            case LOCAL -> "LocalClientStep";
-            case GRPC -> "GrpcClientStep";
+            case REST -> GeneratedTypeNames.REST_CLIENT_STEP_SUFFIX;
+            case LOCAL -> GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX;
+            case GRPC -> GeneratedTypeNames.GRPC_CLIENT_STEP_SUFFIX;
         };
     }
 
