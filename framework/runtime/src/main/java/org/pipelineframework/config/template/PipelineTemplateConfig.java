@@ -92,7 +92,9 @@ public record PipelineTemplateConfig(
         materialization = materialization == null ? new PipelineTemplateMaterialization(List.of()) : materialization;
         inputContract = normalize(inputContract);
         outputContract = normalize(outputContract);
-        typeModel = typeModel == null ? PipelineTemplateTypeModel.fromLegacy(messages, unions) : typeModel;
+        typeModel = typeModel == null
+            ? new LegacyPipelineTemplateTypeModelAdapter().adapt(messages, unions)
+            : typeModel;
         validateMap(pipelines, "pipelines");
         pipelines = pipelines == null
             ? Map.of()
@@ -153,7 +155,7 @@ public record PipelineTemplateConfig(
     ) {
         this(version, appName, basePackage, transport, platform, messages, unions, sources, publish, steps, aspects,
             input, output, materialization, inputContract, outputContract,
-            PipelineTemplateTypeModel.fromLegacy(messages, unions), Map.of());
+            new LegacyPipelineTemplateTypeModelAdapter().adapt(messages, unions), Map.of());
     }
 
     /** Backward-compatible constructor shape before local definition catalogs were added. */

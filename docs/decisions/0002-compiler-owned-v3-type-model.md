@@ -32,6 +32,9 @@ contracts produced by the compiler and consumed by compiler and runtime code.
 This shared location does not transfer semantic interpretation: the compiler
 remains the owner of normalization, validation, and interpretation, with JSR-269
 as the production build host; runtime code consumes the resulting contracts.
+Legacy authored syntax is converted by compiler/parser adapters before it enters
+the shared model. The semantic model therefore does not depend on legacy authored
+message, union, or field representations.
 
 ## Rationale
 

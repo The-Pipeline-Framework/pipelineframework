@@ -85,47 +85,6 @@ public final class PipelineTemplateTypeModel {
         return new PipelineTemplateTypeModel(Map.of());
     }
 
-    public static PipelineTemplateTypeModel fromLegacy(
-        Map<String, PipelineTemplateMessage> messages,
-        Map<String, PipelineTemplateUnion> unions
-    ) {
-        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
-        if (messages != null) {
-            messages.forEach((name, message) -> definitions.put(name,
-                new PipelineTemplateTypeDefinition.RecordType(name, message.fields().stream()
-                    .map(field -> new PipelineTemplateTypeDefinition.Field(
-                        field.name(), legacyReference(field), field.repeated()))
-                    .toList())));
-        }
-        if (unions != null) {
-            unions.forEach((name, union) -> {
-                Map<String, PipelineTemplateTypeDefinition.Variant> variants = new LinkedHashMap<>();
-                union.variants().forEach((discriminator, variant) -> variants.put(discriminator,
-                    new PipelineTemplateTypeDefinition.Variant(discriminator,
-                        legacyReference(variant.type()))));
-                definitions.put(name, new PipelineTemplateTypeDefinition.UnionType(name, variants));
-            });
-        }
-        return new PipelineTemplateTypeModel(definitions);
-    }
-
-    private static PipelineTemplateTypeReference legacyReference(PipelineTemplateField field) {
-        if (field.isMap()) {
-            return new PipelineTemplateTypeReference.MapType(
-                new PipelineTemplateTypeReference.Scalar(field.keyType()), legacyReference(field.valueType()));
-        }
-        if (field.messageRef() != null && !field.messageRef().isBlank()) {
-            return new PipelineTemplateTypeReference.Named(field.messageRef());
-        }
-        return new PipelineTemplateTypeReference.Scalar(field.canonicalType());
-    }
-
-    private static PipelineTemplateTypeReference legacyReference(String type) {
-        return PipelineTemplateTypeMappings.isV3ScalarType(type)
-            ? new PipelineTemplateTypeReference.Scalar(type)
-            : new PipelineTemplateTypeReference.Named(type);
-    }
-
     public Map<String, PipelineTemplateTypeDefinition> definitions() {
         return definitions;
     }
@@ -260,7 +219,7 @@ public final class PipelineTemplateTypeModel {
     }
 
     private static PipelineTemplateTypeReference reference(String value) {
-        return PipelineTemplateTypeMappings.isV3ScalarType(value)
+        return PipelineTemplateScalarTypes.isScalar(value)
             ? new PipelineTemplateTypeReference.Scalar(value)
             : new PipelineTemplateTypeReference.Named(value);
     }
@@ -290,7 +249,7 @@ public final class PipelineTemplateTypeModel {
             if (name == null || name.isBlank() || definition == null || !name.equals(definition.name())) {
                 throw new IllegalStateException("Invalid v3 type declaration");
             }
-            if (PipelineTemplateTypeMappings.isBuiltinType(name)) {
+            if (PipelineTemplateScalarTypes.isScalar(name) || "map".equalsIgnoreCase(name.trim())) {
                 throw new IllegalStateException("Type name '" + name + "' conflicts with a built-in semantic type");
             }
             if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
