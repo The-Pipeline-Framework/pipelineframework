@@ -24,7 +24,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.pipelineframework.config.pipeline.PipelineJson;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.*;
 
@@ -36,7 +36,7 @@ import org.pipelineframework.config.template.*;
  * renderer owns the other.</p>
  */
 public final class PipelineJavaDomainGenerator {
-    private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
+    private static final ObjectMapper IDL_MAPPER = new ObjectMapper().registerModule(new Jdk8Module());
     private final PipelineGenerationPlanner planner = new PipelineGenerationPlanner();
 
     /** Command-line entry point used by build integrations. */

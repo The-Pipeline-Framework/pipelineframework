@@ -37,6 +37,17 @@ composition configuration belong to the framework-neutral `pipelineframework-dsl
 semantic model, runtime-core vocabulary, and SnakeYAML without depending on the runtime integration; runtime and
 deployment consumers depend on that DSL artifact rather than owning its loaders.
 
+The standalone contract and Java domain generation toolchain belongs to `pipelineframework-compiler`.
+It consumes published semantic-model, DSL, and runtime-core contracts plus explicit third-party libraries,
+without loading or depending on a runtime implementation. Generator entry points retain their public class
+names, and build consumers declare the compiler artifact explicitly. This artifact boundary does not change
+JSR-269's role as the production compiler host.
+
+Shared payload-reference, checkpoint-publication, and transition-worker protobuf schemas belong to
+`pipelineframework-runtime-protocol`. These are published wire contracts consumed by compiler tooling
+and runtime integrations; worker implementations remain runtime-owned. Generated Java names stay stable,
+and runtime-core remains independent of protobuf libraries.
+
 JDK-only contracts shared by compiler output, customer execution, and runtime hosts belong to
 `pipelineframework-runtime-core`. This includes command duplicate policy, pipeline-composition descriptors,
 and object-boundary adapter interfaces. Reactive service APIs remain outside runtime-core because their Mutiny

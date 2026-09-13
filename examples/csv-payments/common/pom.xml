@@ -32,6 +32,12 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-compiler</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <!-- Pipeline Framework Runtime Module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>

@@ -28,6 +28,7 @@ import java.util.UUID;
 import javax.tools.ToolProvider;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junitpioneer.jupiter.ClearSystemProperty;
@@ -36,7 +37,6 @@ import org.pipelineframework.connector.ConnectorOperationIdentity;
 import org.pipelineframework.connector.ConnectorOperationKind;
 import org.pipelineframework.connector.ConnectorPayloadOrigin;
 import org.pipelineframework.connector.ConnectorProviderId;
-import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.repository.PayloadReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -245,7 +245,7 @@ class PipelineProtoGeneratorTest {
 
         String operation = Files.readString(outputDir.resolve("create-pending-request-svc.proto"));
         String orchestrator = Files.readString(outputDir.resolve("orchestrator.proto"));
-        JsonNode idl = PipelineJson.mapper().readTree(Files.readString(tempDir.resolve("deferred-pipeline.idl.json")));
+        JsonNode idl = new ObjectMapper().readTree(Files.readString(tempDir.resolve("deferred-pipeline.idl.json")));
         assertTrue(operation.contains("returns (Pending)"));
         assertTrue(operation.contains("service ObservePersistencePendingSideEffectService"));
         assertFalse(operation.contains("service ObservePersistenceDecisionSideEffectService"));
@@ -1539,7 +1539,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(manifestPath));
         assertTrue(Files.exists(readmePath));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         assertEquals("tpf.external-step-hosts.v1", manifest.path("protocolVersion").asText());
         assertEquals("com.example.remote", manifest.path("basePackage").asText());
         assertEquals("pipeline-types.proto", manifest.path("typesProto").asText());
@@ -2239,7 +2239,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(outputDir.resolve("check-fraud-svc.proto")));
         assertTrue(Files.exists(outputDir.resolve("charge-card-svc.proto")));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         JsonNode steps = manifest.path("steps");
         assertEquals(2, steps.size());
 
@@ -2312,7 +2312,7 @@ class PipelineProtoGeneratorTest {
         Path manifestPath = outputDir.resolve("external-step-hosts.json");
         assertTrue(Files.exists(manifestPath));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         JsonNode steps = manifest.path("steps");
         assertEquals(1, steps.size(), "Only remote step should appear in manifest");
         assertEquals("Remote Step", steps.get(0).path("step").asText());
@@ -2359,7 +2359,7 @@ class PipelineProtoGeneratorTest {
         Path manifestPath = outputDir.resolve("external-step-hosts.json");
         assertTrue(Files.exists(manifestPath));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         JsonNode step = manifest.path("steps").get(0);
         assertEquals("https://service.example.com/grpc", step.path("target").path("url").asText());
         assertTrue(step.path("target").path("urlConfigKey").isMissingNode(),
@@ -2403,7 +2403,7 @@ class PipelineProtoGeneratorTest {
 
         new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
 
-        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        JsonNode manifest = new ObjectMapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
         JsonNode step = manifest.path("steps").get(0);
         assertEquals("ENVELOPE_HTTP_V1", step.path("protocol").asText());
         assertEquals("application/vnd.tpf.envelope.v1+json", step.path("http").path("contentType").asText());
@@ -2501,7 +2501,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(outputDir.resolve("orchestrator.proto")),
             "GRPC transport still generates orchestrator proto");
 
-        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        JsonNode manifest = new ObjectMapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
         assertEquals(1, manifest.path("steps").size());
         assertEquals("grpc-remote", manifest.path("steps").get(0).path("operatorId").asText());
     }
@@ -2543,7 +2543,7 @@ class PipelineProtoGeneratorTest {
 
         new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
 
-        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        JsonNode manifest = new ObjectMapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
         JsonNode headers = manifest.path("steps").get(0).path("http").path("headers");
         assertTrue(headers.isArray());
         List<String> headerList = new ArrayList<>();
@@ -2647,7 +2647,7 @@ class PipelineProtoGeneratorTest {
         Path manifestPath = outputDir.resolve("external-step-hosts.json");
         assertTrue(Files.exists(manifestPath));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         JsonNode step = manifest.path("steps").get(0);
         assertEquals("No Timeout Step", step.path("step").asText());
         assertTrue(step.path("timeoutMs").isNull() || step.path("timeoutMs").isMissingNode(),
@@ -2695,7 +2695,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(manifestPath));
         assertTrue(Files.exists(outputDir.resolve("my-shared-types.proto")));
 
-        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode manifest = new ObjectMapper().readTree(manifestPath.toFile());
         assertEquals("my-shared-types.proto", manifest.path("typesProto").asText(),
             "manifest typesProto must reflect the custom types proto name");
 

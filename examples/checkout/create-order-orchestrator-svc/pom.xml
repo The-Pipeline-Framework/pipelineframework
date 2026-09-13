@@ -20,6 +20,12 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-compiler</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.pipelineframework.checkout</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
