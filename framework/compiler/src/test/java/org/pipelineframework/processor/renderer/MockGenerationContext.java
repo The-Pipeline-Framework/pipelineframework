@@ -1,1 +1,0 @@
-// This file is no longer needed as GenerationContext is a record that can be instantiated directly

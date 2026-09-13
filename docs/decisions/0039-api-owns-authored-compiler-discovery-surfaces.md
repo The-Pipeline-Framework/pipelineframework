@@ -51,6 +51,11 @@ package suffix. Deployment code must not import compiler implementation packages
 compiler artifact; deployment retains only Quarkus and generated-runtime conformance tests and consumes the compiler
 artifact in test scope for those tests. Monorepo consumers pin the compiler through an explicit, independently
 managed compiler-version property rather than inheriting `${project.version}`.
+The compiler source, processor registration, renderers, and compiler-owned tests are maintained in the
+`The-Pipeline-Framework/pipelineframework-compiler` repository. The framework reactor no longer declares a local
+compiler module; it resolves the exact compiler version from published Maven artifacts. Repository-shell checks
+remain in the framework repository because they validate its Maven launcher and Testcontainers environment rather
+than compiler semantics.
 
 No separate `pipelineframework-compiler-api` artifact is introduced at this boundary. The authored API,
 semantic model, DSL, runtime-core contracts, runtime protocol, and representation-provider API already own the

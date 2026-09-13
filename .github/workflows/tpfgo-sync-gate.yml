@@ -94,7 +94,7 @@ jobs:
           if-no-files-found: warn
 
   transport-parity-matrix:
-    name: Transport Parity Matrix (REST/gRPC/FUNCTION + protobuf-over-http semantic)
+    name: Runtime Transport Parity (FUNCTION + protobuf-over-http semantic)
     runs-on: ubuntu-latest
 
     steps:
@@ -113,14 +113,6 @@ jobs:
 
       - name: Build framework and foundational plugins
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
-
-      - name: Run renderer parity tests (REST/gRPC/FUNCTION)
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
-            -pl compiler \
-            -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,RestFunctionHandlerRendererTest \
-            test
 
       - name: Run runtime parity tests (FUNCTION + semantic protobuf-over-http row)
         run: |
