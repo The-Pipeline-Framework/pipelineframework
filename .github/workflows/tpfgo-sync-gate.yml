@@ -118,8 +118,8 @@ jobs:
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f framework/pom.xml \
-            -pl deployment \
-            -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,OrchestratorFunctionHandlerRendererTest \
+            -pl compiler \
+            -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,RestFunctionHandlerRendererTest \
             test
 
       - name: Run runtime parity tests (FUNCTION + semantic protobuf-over-http row)
