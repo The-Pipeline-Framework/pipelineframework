@@ -28,8 +28,7 @@ import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.extension.MapperRegistryBuildItem;
-
-import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
+import org.pipelineframework.generated.GeneratedTypeNames;
 
 /**
  * Registers generated gRPC service classes as additional unremovable beans when CLI generation is disabled.
@@ -78,7 +77,7 @@ public class StepServerRegistrar {
 
         // Find all classes ending with "GrpcService" - these need explicit registration
         index.getKnownClasses().stream()
-            .filter(ci -> ci.name().toString().endsWith(GRPC_SERVICE_SUFFIX))
+            .filter(ci -> ci.name().toString().endsWith(GeneratedTypeNames.GRPC_SERVICE_SUFFIX))
             .forEach(ci -> {
                 LOG.infof("Registering gRPC service: %s", ci.name());
                 additionalBeans.produce(AdditionalBeanBuildItem.unremovableOf(ci.name().toString()));

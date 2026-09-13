@@ -45,7 +45,16 @@ JSR-269's role as the production compiler host. The compiler artifact owns the p
 `PipelineStepProcessor`, its JSR-269 service registration, semantic phases, and renderers.
 `pipelineframework-deployment` retains `StepClientRegistrar`, `StepServerRegistrar`, and the Quarkus/Jandex
 extension integration. Platform annotations and reactive types used only in generated source are JavaPoet
-names, not compiler class-loading dependencies. `NamingPolicy` owns the generated `.pipeline` package suffix.
+names, not compiler class-loading dependencies. The framework API owns `GeneratedTypeNames`, the stable class-name
+suffix contract used by compiler producers and integration consumers. `NamingPolicy` owns the generated `.pipeline`
+package suffix. Deployment code must not import compiler implementation packages.
+
+No separate `pipelineframework-compiler-api` artifact is introduced at this boundary. The authored API,
+semantic model, DSL, runtime-core contracts, runtime protocol, and representation-provider API already own the
+released contracts used across compiler and integration boundaries. The compiler implementation currently exposes
+no additional production Java SPI that integrations need. A compiler API artifact should be introduced only when
+an independently consumable compiler invocation or source-host SPI exists; an otherwise empty facade would add a
+release boundary without removing coupling.
 
 Shared payload-reference, checkpoint-publication, and transition-worker protobuf schemas belong to
 `pipelineframework-runtime-protocol`. These are published wire contracts consumed by compiler tooling
@@ -56,7 +65,9 @@ JDK-only contracts shared by compiler output, customer execution, and runtime ho
 `pipelineframework-runtime-core`. This includes command duplicate policy, pipeline-composition descriptors,
 and object-boundary adapter interfaces. Reactive service APIs remain outside runtime-core because their Mutiny
 types are a customer-runtime API choice; runtime-core's dependency guard continues to prohibit Mutiny and
-platform integration dependencies.
+platform integration dependencies. Pure application extension contracts used by generated code, including
+`AwaitCompletionProjector` and `AwaitCompletionMetadata`, likewise belong to `pipelineframework-runtime-api`
+rather than the Quarkus runtime implementation.
 
 Compile-time expansion of authored pipeline order belongs to `pipelineframework-dsl`. Compiler renderers
 refer to generated-code runtime targets by their stable published names rather than loading runtime
@@ -83,6 +94,8 @@ authored annotation's ownership of Java-local hints and compiler-generated metad
 - Applications can compile against authored discovery annotations and compile-time semantics without
   depending on a runtime integration module.
 - Runtime integrations retain platform-specific implementations and validate their own capability classes.
+- Compiler and integration artifacts share generated type naming through the framework API, without integrations
+  depending on compiler implementation classes.
 - Future Jandex and JSR-269 discovery adapters must normalize into the existing compiler model and produce
   the same `@ParallelismHint` semantic values while preserving YAML ownership of topology, step sequence,
   cardinality, and types, alongside authored annotation-owned Java-local hints.

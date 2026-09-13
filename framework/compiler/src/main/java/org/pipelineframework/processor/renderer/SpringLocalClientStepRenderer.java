@@ -28,6 +28,7 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -177,7 +178,7 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
         if (serviceClassName.endsWith("Service")) {
             serviceClassName = serviceClassName.substring(0, serviceClassName.length() - "Service".length());
         }
-        return serviceClassName + "LocalClientStep";
+        return serviceClassName + GeneratedTypeNames.LOCAL_CLIENT_STEP_SUFFIX;
     }
 
     private TypeName resolveDomainType(TypeName type) {

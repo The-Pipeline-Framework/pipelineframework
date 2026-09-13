@@ -28,7 +28,7 @@ import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -207,6 +207,6 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
     }
 
     private String resourceClassName(PipelineStepModel model) {
-        return ResourceNameUtils.normalizeBaseName(model.generatedName()) + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
+        return ResourceNameUtils.normalizeBaseName(model.generatedName()) + GeneratedTypeNames.REST_RESOURCE_SUFFIX;
     }
 }

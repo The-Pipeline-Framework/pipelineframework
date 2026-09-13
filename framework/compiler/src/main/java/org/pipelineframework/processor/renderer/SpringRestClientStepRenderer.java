@@ -29,7 +29,7 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -278,7 +278,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
     }
 
     private String clientStepClassName(PipelineStepModel model) {
-        return ResourceNameUtils.normalizeBaseName(model.generatedName()) + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
+        return ResourceNameUtils.normalizeBaseName(model.generatedName()) + GeneratedTypeNames.REST_CLIENT_STEP_SUFFIX;
     }
 
     private static String restClientName(String serviceName) {

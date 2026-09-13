@@ -32,7 +32,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeVariableName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.WildcardTypeName;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -204,7 +204,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
 
         String serviceClassName = model.generatedName();
         String baseName = removeSuffix(removeSuffix(serviceClassName, "Service"), "Reactive");
-        String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
+        String resourceClassName = baseName + GeneratedTypeNames.REST_RESOURCE_SUFFIX;
         String handlerClassName = baseName + getHandlerSuffix();
 
         CanonicalTransportBindingPair transport = CanonicalTransportBindingResolver.resolveAndEnsure(

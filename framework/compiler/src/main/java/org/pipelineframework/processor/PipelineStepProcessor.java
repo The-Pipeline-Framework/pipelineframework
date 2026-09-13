@@ -68,18 +68,6 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineStepProcessor extends AbstractProcessingTool {
 
-    /** Suffix to append to generated gRPC client step classes. */
-    public static final String GRPC_CLIENT_STEP_SUFFIX = "GrpcClientStep";
-
-    /** Suffix to append to generated REST client step classes. */
-    public static final String REST_CLIENT_STEP_SUFFIX = "RestClientStep";
-
-    /** Suffix to append to generated gRPC service classes. */
-    public static final String GRPC_SERVICE_SUFFIX = "GrpcService";
-
-    /** Suffix to append to generated REST resource classes. */
-    public static final String REST_RESOURCE_SUFFIX = "Resource";
-
     private final PipelineCompiler compiler;
     private boolean compilationExecuted;
 

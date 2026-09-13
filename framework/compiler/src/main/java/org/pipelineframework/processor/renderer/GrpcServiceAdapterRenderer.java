@@ -5,7 +5,7 @@ import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.generated.GeneratedTypeNames;
 import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.GrpcBinding;
@@ -66,7 +66,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         PipelineStepModel model = binding.model();
         String simpleClassName;
         // For gRPC services: ${ServiceName}GrpcService
-        simpleClassName = model.generatedName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
+        simpleClassName = model.generatedName() + GeneratedTypeNames.GRPC_SERVICE_SUFFIX;
 
         // Resolve gRPC model types from descriptors/bindings.
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(binding, messager);
