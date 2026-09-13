@@ -26,19 +26,40 @@ import java.util.ServiceLoader;
 import javax.annotation.processing.Processor;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompilerDependencyGuardTest {
 
+    private static final List<String> FORBIDDEN_PACKAGES = List.of(
+        "io.quarkus.",
+        "io.smallrye.jandex.",
+        "org.jboss.jandex.",
+        "org.pipelineframework.extension.");
+
     @Test
     void compilerSourcesDoNotImportQuarkusOrJandex() {
-        assertNoForbiddenImport("io.quarkus.");
-        assertNoForbiddenImport("io.smallrye.jandex.");
-        assertNoForbiddenImport("org.jboss.jandex.");
-        assertNoForbiddenImport("org.pipelineframework.extension.");
+        FORBIDDEN_PACKAGES.forEach(this::assertNoForbiddenImport);
+    }
+
+    @Test
+    void forbiddenPackageGuardRecognizesRegularAndStaticImports(@TempDir Path tempDir) throws IOException {
+        for (String forbiddenPackage : FORBIDDEN_PACKAGES) {
+            Path source = tempDir.resolve(forbiddenPackage.replace('.', '-') + "Example.java");
+            Files.writeString(source, """
+                import %1$sType;
+                import static %1$sType.member;
+                """.formatted(forbiddenPackage));
+
+            List<String> violations = new ArrayList<>();
+            collectFileViolations(source, forbiddenPackage, violations);
+
+            assertEquals(2, violations.size(), "both import forms must be forbidden for " + forbiddenPackage);
+        }
     }
 
     @Test
@@ -65,13 +86,13 @@ class CompilerDependencyGuardTest {
     }
 
     private void assertNoForbiddenImport(String forbiddenPackage) {
-        List<String> violations = collectViolations("import " + forbiddenPackage);
+        List<String> violations = collectViolations(forbiddenPackage);
         assertTrue(
             violations.isEmpty(),
             "compiler has forbidden import '" + forbiddenPackage + "':\n" + String.join("\n", violations));
     }
 
-    private List<String> collectViolations(String token) {
+    private List<String> collectViolations(String forbiddenPackage) {
         Path sourceRoot = Path.of("src/main/java");
         if (!Files.isDirectory(sourceRoot)) {
             return List.of("Unable to scan compiler sources: missing directory " + sourceRoot);
@@ -80,7 +101,7 @@ class CompilerDependencyGuardTest {
         List<String> violations = new ArrayList<>();
         try (var stream = Files.walk(sourceRoot)) {
             stream.filter(path -> path.toString().endsWith(".java"))
-                .forEach(path -> collectFileViolations(path, token, violations));
+                .forEach(path -> collectFileViolations(path, forbiddenPackage, violations));
         } catch (IOException e) {
             violations.add("Unable to scan compiler sources: " + e.getMessage());
         }
@@ -88,11 +109,13 @@ class CompilerDependencyGuardTest {
         return violations;
     }
 
-    private void collectFileViolations(Path path, String token, List<String> violations) {
+    private void collectFileViolations(Path path, String forbiddenPackage, List<String> violations) {
         try {
             List<String> lines = Files.readAllLines(path);
             for (int lineNo = 1; lineNo <= lines.size(); lineNo++) {
-                if (lines.get(lineNo - 1).stripLeading().startsWith(token)) {
+                String line = lines.get(lineNo - 1).stripLeading();
+                if (line.startsWith("import " + forbiddenPackage)
+                    || line.startsWith("import static " + forbiddenPackage)) {
                     violations.add(path + ":" + lineNo);
                 }
             }
