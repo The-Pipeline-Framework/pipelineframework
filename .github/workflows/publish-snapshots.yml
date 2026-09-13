@@ -56,6 +56,9 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
+      - name: Verify publication contract
+        run: node scripts/verify-framework-publication.mjs "$GITHUB_WORKSPACE/.m2/repository"
+
       - name: Deploy snapshot to Maven Central
         run: |
           test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"

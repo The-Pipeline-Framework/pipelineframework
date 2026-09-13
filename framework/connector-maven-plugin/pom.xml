@@ -8,6 +8,9 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>connector-maven-plugin</artifactId>
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
     <packaging>maven-plugin</packaging>
     <name>The Pipeline Framework - Connector Packaging Maven Plugin</name>
     <description>Generates connector provider manifests and direct ServiceLoader registration.</description>

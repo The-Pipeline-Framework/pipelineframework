@@ -1,31 +1,127 @@
 {
   "groupId": "org.pipelineframework",
-  "reactorProjectCount": 17,
-  "artifacts": [
-    { "artifactId": "framework-parent", "packaging": "pom" },
-    { "artifactId": "pipelineframework-api", "packaging": "jar" },
-    { "artifactId": "representation-provider-api", "packaging": "jar" },
-    { "artifactId": "pipelineframework-runtime-core", "packaging": "jar" },
-    { "artifactId": "pipelineframework-runtime-spring", "packaging": "jar" },
-    { "artifactId": "pipelineframework", "packaging": "jar" },
-    { "artifactId": "representation-provider-opencsv", "packaging": "jar" },
-    { "artifactId": "pipelineframework-deployment", "packaging": "jar" },
-    { "artifactId": "object-ingest-connector", "packaging": "jar" },
-    { "artifactId": "query-jpa-connector", "packaging": "jar" },
-    { "artifactId": "persistence-plugin", "packaging": "jar" },
-    { "artifactId": "cache-plugin", "packaging": "jar" },
-    { "artifactId": "repository-plugin", "packaging": "jar" }
+  "publicArtifacts": [
+    {
+      "artifactId": "framework-parent",
+      "packaging": "pom"
+    },
+    {
+      "artifactId": "pipelineframework",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-api",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-core",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-spring",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-semantic-model",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-serialization",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-api",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-protocol",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-dsl",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "pipelineframework-deployment",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "http-contract",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "representation-provider-api",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "representation-provider-opencsv",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "object-ingest-connector",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "query-jpa-connector",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "query-hibernate-common",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "persistence-plugin",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "cache-plugin",
+      "packaging": "jar"
+    },
+    {
+      "artifactId": "repository-plugin",
+      "packaging": "jar"
+    }
   ],
   "internalArtifacts": [
-    "representation-provider-fixture",
+    "connector-import-tooling",
+    "connector-maven-plugin",
+    "connector-mcp-maven-plugin",
+    "connector-openapi-maven-plugin",
+    "embedding-query-connector",
+    "embedding-query-langchain4j-connector",
     "framework-connectors",
+    "framework-foundational-plugins",
     "framework-plugins",
-    "framework-foundational-plugins"
+    "gmail-query-connector",
+    "graphql-connector",
+    "graphql-smallrye-connector",
+    "host-gmail",
+    "host-microsoft-graph",
+    "host-oidc-quarkus",
+    "host-quickbooks-mcp",
+    "http-connector",
+    "llm-query-connector",
+    "llm-query-langchain4j-connector",
+    "mcp-connector",
+    "mcp-contract",
+    "query-hibernate-reactive-connector",
+    "representation-provider-file",
+    "representation-provider-fixture",
+    "representation-provider-http",
+    "transport-completeness-tests",
+    "vector-store-connector",
+    "vector-store-pgvector-connector"
+  ],
+  "externalArtifacts": [
+    {
+      "artifactId": "pipelineframework-compiler",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone compiler repository after PR #846"
+    }
   ],
   "invariants": {
-    "R": "all 17 framework-reactor projects",
-    "M": "the 13 explicit public coordinates",
-    "F": "representation-provider-fixture plus three structural aggregators",
-    "deployment": "publication-verification deploys exactly M"
+    "description": "Canonical publication contract for one full framework reactor deployment with module-level skip controls.",
+    "source": "post-#846 compiler extraction"
   }
 }

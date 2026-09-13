@@ -26,6 +26,9 @@
     </parent>
 
     <artifactId>cache-plugin</artifactId>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework - Cache Plugin</name>
     <description>Cache plugin implementation for The Pipeline Framework Plugin System</description>
