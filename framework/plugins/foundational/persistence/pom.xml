@@ -26,6 +26,9 @@
     </parent>
 
     <artifactId>persistence-plugin</artifactId>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework - Persistence Plugin</name>
     <description>Persistence plugin implementation for The Pipeline Framework Plugin System</description>

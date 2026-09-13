@@ -10,6 +10,9 @@
     </parent>
 
     <artifactId>query-jpa-connector</artifactId>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework - JPA Query Connector</name>
     <description>First-party JPA read connector for captured query steps.</description>

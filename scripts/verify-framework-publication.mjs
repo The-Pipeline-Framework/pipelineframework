@@ -1,61 +1,238 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const [repository] = process.argv.slice(2);
 if (!repository) {
-  throw new Error('Usage: verify-framework-publication.mjs <file-repository>');
+  throw new Error('Usage: verify-framework-publication.mjs <maven-local-repository>');
 }
 
 const root = path.resolve(import.meta.dirname, '..');
-const manifest = JSON.parse(fs.readFileSync(path.join(root, 'framework/public-artifacts.json'), 'utf8'));
-const version = process.env.TPF_PUBLICATION_VERSION;
-if (!version) {
-  throw new Error('TPF_PUBLICATION_VERSION must name the staged Maven version');
+const frameworkPom = path.join(root, 'framework', 'pom.xml');
+const manifestPath = path.join(root, 'framework', 'public-artifacts.json');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const localRepository = path.resolve(repository);
+const failures = [];
+
+const expectedPublic = manifest.publicArtifacts ?? [];
+const expectedInternal = manifest.internalArtifacts ?? [];
+const expectedExternal = manifest.externalArtifacts ?? [];
+
+if (!Array.isArray(expectedPublic) || !Array.isArray(expectedInternal) || !Array.isArray(expectedExternal)) {
+  throw new Error('Manifest must define publicArtifacts, internalArtifacts, and externalArtifacts arrays');
 }
 
-const failures = [];
-if (manifest.artifacts.length !== 13) failures.push(`expected 13 public coordinates, found ${manifest.artifacts.length}`);
-if (manifest.internalArtifacts.length !== 4) failures.push(`expected fixture plus three structural aggregators, found ${manifest.internalArtifacts.length}`);
-if (manifest.reactorProjectCount !== manifest.artifacts.length + manifest.internalArtifacts.length) {
-  failures.push('R must equal M union F, with M and F disjoint');
+function normalizeArtifacts(input, sectionName) {
+  const artifacts = new Map();
+  for (const entry of input) {
+    if (!entry || typeof entry !== 'object' || typeof entry.artifactId !== 'string') {
+      failures.push(`${sectionName} entries must be objects with artifactId`);
+      continue;
+    }
+
+    const artifactId = entry.artifactId.trim();
+    if (!artifactId) {
+      failures.push(`${sectionName} contains empty artifactId`);
+      continue;
+    }
+    if (artifacts.has(artifactId)) {
+      failures.push(`${sectionName} contains duplicate artifactId: ${artifactId}`);
+      continue;
+    }
+
+    artifacts.set(artifactId, {
+      artifactId,
+      packaging: typeof entry.packaging === 'string' ? entry.packaging.trim() || 'jar' : 'jar',
+    });
+  }
+  return artifacts;
 }
-const declaredArtifactIds = new Set([
-  ...manifest.artifacts.map(({ artifactId }) => artifactId),
-  ...manifest.internalArtifacts
-]);
-const groupDirectory = path.join(repository, ...manifest.groupId.split('.'));
-if (fs.existsSync(groupDirectory)) {
-  for (const entry of fs.readdirSync(groupDirectory, { withFileTypes: true })) {
-    if (
-      entry.isDirectory() &&
-      !declaredArtifactIds.has(entry.name) &&
-      fs.existsSync(path.join(groupDirectory, entry.name, version))
-    ) {
-      failures.push(`undeclared artifact deployed: ${entry.name}`);
+
+function normalizeStringArtifacts(input, sectionName) {
+  const artifacts = new Set();
+  for (const item of input) {
+    const artifactId =
+      typeof item === 'string'
+        ? item.trim()
+        : item && typeof item === 'object' && typeof item.artifactId === 'string'
+          ? item.artifactId.trim()
+          : '';
+
+    if (!artifactId) {
+      failures.push(`${sectionName} entries must be strings or objects with artifactId`);
+      continue;
+    }
+    if (artifacts.has(artifactId)) {
+      failures.push(`${sectionName} contains duplicate artifactId: ${artifactId}`);
+      continue;
+    }
+    artifacts.add(artifactId);
+  }
+  return artifacts;
+}
+
+const publicArtifacts = normalizeArtifacts(expectedPublic, 'publicArtifacts');
+const internalArtifacts = normalizeStringArtifacts(expectedInternal, 'internalArtifacts');
+const externalArtifacts = normalizeStringArtifacts(expectedExternal, 'externalArtifacts');
+const publicArtifactIds = new Set(publicArtifacts.keys());
+const allDeclared = new Set([...publicArtifactIds, ...internalArtifacts, ...externalArtifacts]);
+
+if (allDeclared.size !== publicArtifactIds.size + internalArtifacts.size + externalArtifacts.size) {
+  failures.push('public/internal/external artifact declarations overlap');
+}
+
+function effectiveProjects() {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tpf-publication-'));
+  const effectivePom = path.join(temporaryDirectory, 'effective-pom.xml');
+
+  try {
+    const result = spawnSync(
+      path.join(root, 'mvnw'),
+      [
+        '-q',
+        '-f',
+        frameworkPom,
+        '-Pcentral-publishing',
+        '-DskipTests',
+        'help:effective-pom',
+        `-Doutput=${effectivePom}`,
+        `-Dmaven.repo.local=${localRepository}`,
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    );
+
+    if (result.status !== 0 || !fs.existsSync(effectivePom)) {
+      const output = `${result.stderr || ''}\n${result.stdout || ''}`.trim();
+      const reason = output || `exit code ${result.status}`;
+      throw new Error(`failed to render the central-publishing effective POM: ${reason}`);
+    }
+
+    return parseEffectiveProjects(fs.readFileSync(effectivePom, 'utf8'));
+  } finally {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
+function parseEffectiveProjects(effectivePom) {
+  const projects = new Map();
+  const projectPattern = /<project(?:\s[^>]*)?>([\s\S]*?)<\/project>/g;
+
+  for (const match of effectivePom.matchAll(projectPattern)) {
+    const project = match[1].replace(/<parent>[\s\S]*?<\/parent>/, '');
+    const groupId = elementValue(project, 'groupId');
+    if (groupId !== manifest.groupId) continue;
+
+    const artifactId = elementValue(project, 'artifactId');
+    if (!artifactId) {
+      failures.push('effective POM contains a framework project without artifactId');
+      continue;
+    }
+    if (projects.has(artifactId)) {
+      failures.push(`reactor artifact appears multiple times: ${artifactId}`);
+      continue;
+    }
+
+    const properties = project.match(/<properties>([\s\S]*?)<\/properties>/)?.[1] ?? '';
+    const deploySkip = elementValue(properties, 'maven.deploy.skip');
+    if (deploySkip !== 'true' && deploySkip !== 'false') {
+      failures.push(`effective maven.deploy.skip for ${artifactId} is not boolean: ${deploySkip || '<unset>'}`);
+    }
+
+    projects.set(artifactId, {
+      artifactId,
+      packaging: elementValue(project, 'packaging') || 'jar',
+      deployable: deploySkip === 'false',
+      dependencies: directDependencies(project),
+    });
+  }
+
+  return projects;
+}
+
+function directDependencies(project) {
+  const section = project.match(/^    <dependencies>\s*$([\s\S]*?)^    <\/dependencies>\s*$/m)?.[1] ?? '';
+  const dependencies = [];
+  const dependencyPattern = /^      <dependency>\s*$([\s\S]*?)^      <\/dependency>\s*$/gm;
+
+  for (const match of section.matchAll(dependencyPattern)) {
+    const dependency = match[1];
+    dependencies.push({
+      groupId: elementValue(dependency, 'groupId'),
+      artifactId: elementValue(dependency, 'artifactId'),
+      scope: elementValue(dependency, 'scope') || 'compile',
+    });
+  }
+  return dependencies;
+}
+
+function elementValue(xml, element) {
+  const match = xml.match(new RegExp(`<${element}>([^<]+)</${element}>`));
+  return match?.[1]?.trim() ?? '';
+}
+
+const reactorArtifacts = effectiveProjects();
+
+for (const [artifactId, artifact] of reactorArtifacts) {
+  if (!allDeclared.has(artifactId)) {
+    failures.push(`undeclared reactor artifact: ${artifactId}`);
+    continue;
+  }
+
+  if (externalArtifacts.has(artifactId)) {
+    failures.push(`externally owned artifact is still present in this reactor: ${artifactId}`);
+  }
+  if (internalArtifacts.has(artifactId) && artifact.deployable) {
+    failures.push(`internal artifact is deployable: ${artifactId}`);
+  }
+  if (publicArtifactIds.has(artifactId) && !artifact.deployable) {
+    failures.push(`declared public artifact is not deployable: ${artifactId}`);
+  }
+  if (publicArtifactIds.has(artifactId)) {
+    for (const dependency of artifact.dependencies) {
+      if (
+        dependency.groupId === manifest.groupId &&
+        dependency.scope !== 'test' &&
+        !publicArtifactIds.has(dependency.artifactId) &&
+        !externalArtifacts.has(dependency.artifactId)
+      ) {
+        failures.push(
+          `public artifact ${artifactId} has a non-public ${dependency.scope} dependency: ${dependency.artifactId}`,
+        );
+      }
     }
   }
-}
-for (const artifact of manifest.artifacts) {
-  const artifactDirectory = path.join(repository, ...manifest.groupId.split('.'), artifact.artifactId, version);
-  const required = [`${artifact.artifactId}-${version}.pom`, `${artifact.artifactId}-${version}.pom.asc`];
-  if (artifact.packaging === 'jar') {
-    required.push(
-      `${artifact.artifactId}-${version}.jar`,
-      `${artifact.artifactId}-${version}.jar.asc`,
-      `${artifact.artifactId}-${version}-sources.jar`,
-      `${artifact.artifactId}-${version}-sources.jar.asc`,
-      `${artifact.artifactId}-${version}-javadoc.jar`,
-      `${artifact.artifactId}-${version}-javadoc.jar.asc`
+
+  const expectedPackaging = publicArtifacts.get(artifactId)?.packaging;
+  if (expectedPackaging && expectedPackaging !== artifact.packaging) {
+    failures.push(
+      `public artifact packaging drift for ${artifactId}: expected ${expectedPackaging}, found ${artifact.packaging}`,
     );
   }
-  for (const file of required) {
-    if (!fs.existsSync(path.join(artifactDirectory, file))) failures.push(`missing ${artifact.artifactId}: ${file}`);
+}
+
+for (const artifactId of publicArtifactIds) {
+  if (!reactorArtifacts.has(artifactId)) {
+    failures.push(`declared public artifact is not in reactor: ${artifactId}`);
   }
 }
-for (const artifact of manifest.internalArtifacts) {
-  const artifactDirectory = path.join(repository, ...manifest.groupId.split('.'), artifact, version);
-  if (fs.existsSync(artifactDirectory)) failures.push(`internal artifact deployed: ${artifact}`);
+
+for (const artifactId of internalArtifacts) {
+  if (!reactorArtifacts.has(artifactId)) {
+    failures.push(`declared internal artifact is not in reactor: ${artifactId}`);
+  }
 }
-if (failures.length) throw new Error(failures.join('\n'));
-console.log(`verified ${manifest.artifacts.length} public artifacts; pom packaging requires only POM + signature`);
+
+if (failures.length) {
+  throw new Error(failures.join('\n'));
+}
+
+console.log(
+  `verified publication contract: ${publicArtifactIds.size} public, ${internalArtifacts.size} internal, ${externalArtifacts.size} external artifacts; ${reactorArtifacts.size} reactor projects classified`,
+);

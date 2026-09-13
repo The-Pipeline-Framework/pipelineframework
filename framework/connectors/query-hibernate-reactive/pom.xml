@@ -9,6 +9,7 @@
     </parent>
 
     <artifactId>query-hibernate-reactive-connector</artifactId>
+    <properties><maven.deploy.skip>true</maven.deploy.skip></properties>
     <name>The Pipeline Framework - Hibernate Reactive Query Connector</name>
     <description>First-party non-blocking Hibernate Reactive connector for captured query steps.</description>
 

@@ -10,6 +10,9 @@
     </parent>
 
     <artifactId>object-ingest-connector</artifactId>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework - Object Ingest Connector</name>
     <description>Filesystem and S3 object source connectors for pipeline object ingest.</description>

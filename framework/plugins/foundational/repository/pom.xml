@@ -26,6 +26,9 @@
     </parent>
 
     <artifactId>repository-plugin</artifactId>
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework - Repository Providers</name>
     <description>Repository provider implementations for field materialization.</description>

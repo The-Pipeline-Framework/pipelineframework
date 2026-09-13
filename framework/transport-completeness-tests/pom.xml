@@ -10,6 +10,9 @@
     </parent>
 
     <artifactId>transport-completeness-tests</artifactId>
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
     <name>The Pipeline Framework - Contributed Protocol Transport Compatibility Tests</name>
     <description>Compiler transport regression fixtures that exercise real contributed connector contracts.</description>
 
