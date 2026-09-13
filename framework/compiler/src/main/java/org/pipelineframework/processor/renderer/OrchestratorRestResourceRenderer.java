@@ -1,0 +1,347 @@
+package org.pipelineframework.processor.renderer;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
+import javax.lang.model.element.Modifier;
+
+import com.squareup.javapoet.*;
+import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineTransport;
+
+/**
+ * Generates REST orchestrator resource based on pipeline configuration.
+ */
+public class OrchestratorRestResourceRenderer implements PipelineRenderer<OrchestratorBinding> {
+
+    /**
+     * Creates a new OrchestratorRestResourceRenderer.
+     */
+    public OrchestratorRestResourceRenderer() {
+    }
+
+    private static final String RESOURCE_CLASS = "PipelineRunResource";
+
+    @Override
+    public GenerationTarget target() {
+        return GenerationTarget.REST_RESOURCE;
+    }
+
+    /**
+     * Generates and writes a REST resource class that exposes orchestrator pipeline endpoints based on the provided binding.
+     *
+     * <p>The generated class (PipelineRunResource) contains endpoints for running pipelines, ingesting streaming input,
+     * and subscribing to pipeline outputs; DTO types, streaming vs unary behaviour, package, and annotations are derived
+     * from the given binding.</p>
+     *
+     * @param binding source of configuration (base package, input/output DTO names, and streaming flags) used to shape the generated resource
+     * @param ctx     generation context used to write the produced Java file via the annotation processing Filer
+     * @throws IOException if writing the generated Java file to the processing Filer fails
+     */
+    @Override
+    public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
+        ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
+        ClassName inject = RuntimeSymbols.INJECT;
+        ClassName path = ClassName.get("jakarta.ws.rs", "Path");
+        ClassName post = ClassName.get("jakarta.ws.rs", "POST");
+        ClassName get = ClassName.get("jakarta.ws.rs", "GET");
+        ClassName pathParam = ClassName.get("jakarta.ws.rs", "PathParam");
+        ClassName queryParam = ClassName.get("jakarta.ws.rs", "QueryParam");
+        ClassName headerParam = ClassName.get("jakarta.ws.rs", "HeaderParam");
+        ClassName context = ClassName.get("jakarta.ws.rs.core", "Context");
+        ClassName securityContext = ClassName.get("jakarta.ws.rs.core", "SecurityContext");
+        ClassName badRequestException = ClassName.get("jakarta.ws.rs", "BadRequestException");
+        ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
+        ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
+        ClassName restStream = ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType");
+        ClassName uni = RuntimeSymbols.UNI;
+        ClassName multi = RuntimeSymbols.MULTI;
+        ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName pipelineContext = ClassName.get("org.pipelineframework.context", "PipelineContext");
+        ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
+        ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
+        ClassName runAsyncAcceptedDto = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
+        ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
+        ClassName awaitCompletionCommand = ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionCommand");
+        ClassName awaitCompletionRequestDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitCompletionRequestDto");
+        ClassName awaitCompletionResponseDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitCompletionResponseDto");
+        ClassName awaitInteractionDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitInteractionDto");
+        ClassName awaitDtoMapper = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitDtoMapper");
+
+        CanonicalTransportBindingPair normalizedTransport = CanonicalTransportBindingResolver.resolveAndEnsure(
+            ctx, binding.model(), PipelineTransport.REST);
+        ClassName inputType = normalizedTransport.input().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto"));
+        ClassName outputType = normalizedTransport.output().map(CanonicalTransportTypeBinding::restDtoType)
+            .orElseGet(() -> ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto"));
+
+        FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
+            .addAnnotation(inject)
+            .build();
+        FieldSpec outputBusField = FieldSpec.builder(outputBus, "pipelineOutputBus", Modifier.PRIVATE)
+            .addAnnotation(inject)
+            .build();
+        FieldSpec defaultPendingAwaitLimitField = FieldSpec.builder(int.class, "DEFAULT_PENDING_AWAIT_LIMIT",
+                Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer("$L", 50)
+            .build();
+        FieldSpec maxPendingAwaitLimitField = FieldSpec.builder(int.class, "MAX_PENDING_AWAIT_LIMIT",
+                Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer("$L", 500)
+            .build();
+
+        MethodSpec.Builder runMethod = MethodSpec.methodBuilder("run")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/run").build());
+
+        if (binding.inputStreaming() && binding.outputStreaming()) {
+            runMethod.addAnnotation(AnnotationSpec.builder(consumes)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build());
+            runMethod.addAnnotation(AnnotationSpec.builder(produces)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build());
+        }
+        if (binding.outputStreaming()) {
+            runMethod.addAnnotation(AnnotationSpec.builder(restStream).addMember("value", "$S", "application/json").build());
+        }
+
+        TypeName returnType = binding.outputStreaming()
+            ? ParameterizedTypeName.get(multi, outputType)
+            : ParameterizedTypeName.get(uni, outputType);
+        runMethod.returns(returnType);
+
+        TypeName inputParamType = binding.inputStreaming()
+            ? ParameterizedTypeName.get(multi, inputType)
+            : inputType;
+        runMethod.addParameter(inputParamType, "input");
+
+        String methodSuffix = binding.outputStreaming() ? "Streaming" : "Unary";
+        if (binding.inputStreaming()) {
+            runMethod.addStatement("return pipelineExecutionService.<$T>executePipeline$L(input)" +
+                    ".onItem().invoke(pipelineOutputBus::publish)",
+                outputType, methodSuffix);
+        } else {
+            runMethod.addStatement("return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))" +
+                    ".onItem().invoke(pipelineOutputBus::publish)",
+                outputType, methodSuffix, uni);
+        }
+
+        MethodSpec ingestMethod = MethodSpec.methodBuilder("ingest")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/ingest").build())
+            .addAnnotation(AnnotationSpec.builder(consumes)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(produces)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(restStream).addMember("value", "$S", "application/json").build())
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ParameterizedTypeName.get(multi, inputType), "input")
+            .addStatement("return pipelineExecutionService.<$T>executePipelineStreaming(input)" +
+                ".onItem().invoke(pipelineOutputBus::publish)", outputType)
+            .build();
+
+        TypeName asyncInputType = binding.inputStreaming()
+            ? ParameterizedTypeName.get(ClassName.get(List.class), inputType)
+            : inputType;
+        MethodSpec.Builder runAsyncMethod = MethodSpec.methodBuilder("runAsync")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/run-async").build())
+            .returns(ParameterizedTypeName.get(uni, runAsyncAcceptedDto))
+            .addParameter(asyncInputType, "input")
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "idempotencyKey")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "Idempotency-Key")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "versionTag")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-version")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "replayMode")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-replay")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "cachePolicy")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-pipeline-cache-policy")
+                    .build())
+                .build());
+        runAsyncMethod
+            .addStatement("$T previousPipelineContext = $T.get()", pipelineContext, pipelineContextHolder)
+            .addStatement("$T.set($T.fromHeaders(versionTag, replayMode, cachePolicy))",
+                pipelineContextHolder, pipelineContext)
+            .beginControlFlow("try");
+        if (binding.inputStreaming()) {
+            runAsyncMethod.addStatement(
+                "return pipelineExecutionService.executePipelineAsync($T.createFrom().iterable(input), tenantId, idempotencyKey, $L)",
+                multi,
+                binding.outputStreaming());
+        } else {
+            runAsyncMethod.addStatement(
+                "return pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey, $L)",
+                binding.outputStreaming());
+        }
+        runAsyncMethod
+            .nextControlFlow("finally")
+            .beginControlFlow("if (previousPipelineContext == null)")
+            .addStatement("$T.clear()", pipelineContextHolder)
+            .nextControlFlow("else")
+            .addStatement("$T.set(previousPipelineContext)", pipelineContextHolder)
+            .endControlFlow()
+            .endControlFlow();
+
+        MethodSpec statusMethod = MethodSpec.methodBuilder("status")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/executions/{executionId}").build())
+            .returns(ParameterizedTypeName.get(uni, executionStatusDto))
+            .addParameter(ParameterSpec.builder(String.class, "executionId")
+                .addAnnotation(AnnotationSpec.builder(pathParam).addMember("value", "$S", "executionId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addStatement("return pipelineExecutionService.getExecutionStatus(tenantId, executionId)")
+            .build();
+
+        TypeName resultReturnType = binding.outputStreaming()
+            ? ParameterizedTypeName.get(uni, ParameterizedTypeName.get(ClassName.get(List.class), outputType))
+            : ParameterizedTypeName.get(uni, outputType);
+        MethodSpec resultMethod = MethodSpec.methodBuilder("result")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/executions/{executionId}/result").build())
+            .returns(resultReturnType)
+            .addParameter(ParameterSpec.builder(String.class, "executionId")
+                .addAnnotation(AnnotationSpec.builder(pathParam).addMember("value", "$S", "executionId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addStatement("return pipelineExecutionService.getExecutionResult(tenantId, executionId, $T.class, $L)",
+                outputType,
+                binding.outputStreaming())
+            .build();
+
+        MethodSpec completeAwaitMethod = MethodSpec.methodBuilder("completeAwait")
+            .addModifiers(Modifier.PUBLIC)
+            .addJavadoc("Completes an await interaction. When an authenticated REST principal is available, it takes precedence over the client-supplied actor.\n")
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/interactions/complete").build())
+            .returns(ParameterizedTypeName.get(uni, awaitCompletionResponseDto))
+            .addParameter(awaitCompletionRequestDto, "request")
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(securityContext, "securityContext")
+                .addAnnotation(context)
+                .build())
+            .beginControlFlow("if (tenantId == null || tenantId.isBlank())")
+            .addStatement("throw new $T($S)", badRequestException, "tenantId header is required")
+            .endControlFlow()
+            .beginControlFlow("if (request == null)")
+            .addStatement("throw new $T($S)", badRequestException, "completion request is required")
+            .endControlFlow()
+            .beginControlFlow("if ((request.interactionId() == null || request.interactionId().isBlank()) && (request.correlationId() == null || request.correlationId().isBlank()))")
+            .addStatement("throw new $T($S)", badRequestException, "interactionId or correlationId is required")
+            .endControlFlow()
+            .addStatement("$T actor = request.actor()", String.class)
+            .addStatement("$T principal = securityContext == null ? null : securityContext.getUserPrincipal()", ClassName.get("java.security", "Principal"))
+            .beginControlFlow("if (principal != null && principal.getName() != null && !principal.getName().isBlank())")
+            .addStatement("actor = principal.getName()")
+            .endControlFlow()
+            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId, request.interactionId(), request.correlationId(), request.resumeToken(), request.idempotencyKey(), request.responsePayload(), actor, $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
+                awaitCompletionCommand,
+                System.class,
+                awaitDtoMapper)
+            .build();
+
+        MethodSpec pendingAwaitMethod = MethodSpec.methodBuilder("pendingAwait")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/interactions/pending").build())
+            .returns(ParameterizedTypeName.get(uni, ParameterizedTypeName.get(ClassName.get(List.class), awaitInteractionDto)))
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "assignee")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "assignee").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "group")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "group").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "stepId")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "stepId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(Integer.class, "limit")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
+                .build())
+            .beginControlFlow("if (tenantId == null || tenantId.isBlank())")
+            .addStatement("throw new $T($S)", badRequestException, "tenantId header is required")
+            .endControlFlow()
+            .beginControlFlow("if (limit != null && limit < 0)")
+            .addStatement("throw new $T($S)", badRequestException, "limit must be >= 0")
+            .endControlFlow()
+            .addStatement("int validatedLimit = limit == null ? DEFAULT_PENDING_AWAIT_LIMIT : $T.min(limit, MAX_PENDING_AWAIT_LIMIT)", Math.class)
+            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, validatedLimit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
+                awaitDtoMapper)
+            .build();
+
+        MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/subscribe").build())
+            .addAnnotation(AnnotationSpec.builder(produces)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(restStream).addMember("value", "$S", "application/json").build())
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addStatement("return pipelineOutputBus.stream($T.class)", outputType)
+            .build();
+
+        TypeSpec resource = TypeSpec.classBuilder(RESOURCE_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(applicationScoped)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/pipeline").build())
+            .addField(defaultPendingAwaitLimitField)
+            .addField(maxPendingAwaitLimitField)
+            .addField(executionField)
+            .addField(outputBusField)
+            .addMethod(runMethod.build())
+            .addMethod(runAsyncMethod.build())
+            .addMethod(ingestMethod)
+            .addMethod(statusMethod)
+            .addMethod(resultMethod)
+            .addMethod(completeAwaitMethod)
+            .addMethod(pendingAwaitMethod)
+            .addMethod(subscribeMethod)
+            .build();
+
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", resource)
+            .build()
+            .writeTo(ctx.outputDir());
+    }
+
+}

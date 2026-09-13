@@ -5,6 +5,9 @@ package org.pipelineframework.processor.phase;
  */
 public final class NamingPolicy {
 
+    /** Package suffix for generated pipeline classes. */
+    public static final String PIPELINE_PACKAGE_SUFFIX = ".pipeline";
+
     private NamingPolicy() {
     }
 

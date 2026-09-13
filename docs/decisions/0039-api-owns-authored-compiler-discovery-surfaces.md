@@ -41,7 +41,11 @@ The standalone contract and Java domain generation toolchain belongs to `pipelin
 It consumes published semantic-model, DSL, and runtime-core contracts plus explicit third-party libraries,
 without loading or depending on a runtime implementation. Generator entry points retain their public class
 names, and build consumers declare the compiler artifact explicitly. This artifact boundary does not change
-JSR-269's role as the production compiler host.
+JSR-269's role as the production compiler host. The compiler artifact owns the production
+`PipelineStepProcessor`, its JSR-269 service registration, semantic phases, and renderers.
+`pipelineframework-deployment` retains `StepClientRegistrar`, `StepServerRegistrar`, and the Quarkus/Jandex
+extension integration. Platform annotations and reactive types used only in generated source are JavaPoet
+names, not compiler class-loading dependencies. `NamingPolicy` owns the generated `.pipeline` package suffix.
 
 Shared payload-reference, checkpoint-publication, and transition-worker protobuf schemas belong to
 `pipelineframework-runtime-protocol`. These are published wire contracts consumed by compiler tooling
