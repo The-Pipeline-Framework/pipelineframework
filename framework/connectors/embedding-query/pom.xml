@@ -6,9 +6,26 @@
     <name>The Pipeline Framework - Portable Embedding Query Connector</name>
     <description>Provider-neutral embedding Query contract and portable vector vocabulary.</description>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-core</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-semantic-model</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><scope>test</scope></dependency>
     </dependencies>
-    <build><plugins><plugin><groupId>com.diffplug.spotless</groupId><artifactId>spotless-maven-plugin</artifactId></plugin></plugins></build>
+    <build><plugins>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId><version>3.6.2</version>
+            <executions><execution><id>enforce-portable-contract-dependencies</id><goals><goal>enforce</goal></goals>
+                <configuration><rules><bannedDependencies>
+                    <searchTransitive>true</searchTransitive>
+                    <excludes>
+                        <exclude>org.pipelineframework:pipelineframework</exclude>
+                        <exclude>org.pipelineframework:pipelineframework-runtime*</exclude>
+                        <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
+                        <exclude>io.quarkus:*</exclude>
+                    </excludes>
+                    <includes><include>org.pipelineframework:pipelineframework-runtime-core</include></includes>
+                </bannedDependencies></rules></configuration>
+            </execution></executions>
+        </plugin>
+        <plugin><groupId>com.diffplug.spotless</groupId><artifactId>spotless-maven-plugin</artifactId></plugin>
+    </plugins></build>
 </project>
