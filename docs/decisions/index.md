@@ -50,6 +50,7 @@ authoritative for exact syntax and release support.
 | [0039](./0039-api-owns-authored-compiler-discovery-surfaces.md) | Keep authored compiler discovery surfaces in the framework-neutral API and normalize them through one compiler semantic model. |
 | [0040](./0040-portable-connector-contracts.md) | Keep provider-neutral connector contracts on runtime-core and semantic-model, outside runtime and platform integrations. |
 | [0041](./0041-customer-runtime-api-and-portable-blocks.md) | Keep customer-authored reactive APIs and portable Blocks outside runtime and platform integrations. |
+| [0042](./0042-shared-canonical-pipeline-serialization.md) | Share one framework-neutral canonical pipeline serialization policy across build hosts, customer code, runtimes, and workers. |
 
 ## Maintenance
 
