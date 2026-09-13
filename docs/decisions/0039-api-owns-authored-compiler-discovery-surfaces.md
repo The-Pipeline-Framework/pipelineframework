@@ -72,8 +72,10 @@ and runtime-core remains independent of protobuf libraries.
 JDK-only contracts shared by compiler output, customer execution, and runtime hosts belong to
 `pipelineframework-runtime-core`. This includes command duplicate policy, pipeline-composition descriptors,
 the generated pipeline-contract descriptor and its ordered-step, capability, and imported-definition provenance
-records, and object-boundary adapter interfaces. The contract model keeps its existing Java package and serialized
-record shape while moving out of the Quarkus runtime artifact. Reactive service APIs remain outside runtime-core because their Mutiny
+records, framework-propagated request context, durable execution identity, and object-boundary adapter interfaces.
+These contracts keep their existing Java packages and record shapes while moving out of the Quarkus runtime artifact.
+Their mutable holders, transport filters, codecs, execution engines, stores, and invocation-local recursion state remain
+runtime-integration concerns. Reactive service APIs remain outside runtime-core because their Mutiny
 types are a customer-runtime API choice; runtime-core's dependency guard continues to prohibit Mutiny and
 platform integration, logging, and serialization implementation dependencies. Pure application extension contracts used by generated code, including
 `AwaitCompletionProjector` and `AwaitCompletionMetadata`, likewise belong to `pipelineframework-runtime-api`
