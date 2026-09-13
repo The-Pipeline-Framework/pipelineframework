@@ -42,8 +42,6 @@ import org.pipelineframework.processor.ir.DynamicOperationSelection;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.step.StepOneToMany;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Renders generated captured query client steps.
@@ -154,7 +152,7 @@ public class QueryClientStepRenderer {
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
             .addSuperinterface(ParameterizedTypeName.get(
-                ClassName.get(streaming ? StepOneToMany.class : StepOneToOne.class), inputType, outputType))
+                streaming ? RuntimeSymbols.STEP_ONE_TO_MANY : RuntimeSymbols.STEP_ONE_TO_ONE, inputType, outputType))
             .addField(support)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(apply.build());
@@ -226,7 +224,7 @@ public class QueryClientStepRenderer {
                 .addMember("ordering", "$T.$L", ClassName.get(OrderingRequirement.class), OrderingRequirement.RELAXED.name())
                 .addMember("threadSafety", "$T.$L", ClassName.get(ThreadSafety.class), ThreadSafety.SAFE.name()).build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
+            .addSuperinterface(ParameterizedTypeName.get(RuntimeSymbols.STEP_ONE_TO_ONE, inputType, outputType))
             .addField(support)
             .addField(descriptor)
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())

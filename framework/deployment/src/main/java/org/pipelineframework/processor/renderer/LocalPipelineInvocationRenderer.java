@@ -15,7 +15,6 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import io.quarkus.arc.Unremovable;
-import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -35,8 +34,8 @@ import org.pipelineframework.processor.util.ClientStepClassNames;
 
 /** Generates the local CDI realization selected from compiler-owned invocation bindings. */
 public final class LocalPipelineInvocationRenderer {
-    private static final ClassName PIPELINE_RUNNER = ClassName.get(PipelineRunner.class);
-    private static final ClassName INVOCATION_STEPS = ClassName.get("org.pipelineframework.invocation", "PipelineInvocationSteps");
+    private static final ClassName PIPELINE_RUNNER = RuntimeSymbols.PIPELINE_RUNNER;
+    private static final ClassName INVOCATION_STEPS = RuntimeSymbols.PIPELINE_INVOCATION_STEPS;
     private static final ClassName CONFIGURABLE_STEP = ClassName.get("org.pipelineframework.step", "ConfigurableStep");
     private static final ClassName PROVIDER = ClassName.get("jakarta.inject", "Provider");
 
@@ -257,8 +256,8 @@ public final class LocalPipelineInvocationRenderer {
 
     private ClassName interfaceFor(CardinalitySemantics cardinality) {
         return switch (cardinality) {
-            case ONE_TO_ONE -> ClassName.get("org.pipelineframework.step", "StepOneToOne");
-            case ONE_TO_MANY -> ClassName.get("org.pipelineframework.step", "StepOneToMany");
+            case ONE_TO_ONE -> RuntimeSymbols.STEP_ONE_TO_ONE;
+            case ONE_TO_MANY -> RuntimeSymbols.STEP_ONE_TO_MANY;
             case MANY_TO_ONE -> ClassName.get("org.pipelineframework.step.functional", "ManyToOne");
             case MANY_TO_MANY -> ClassName.get("org.pipelineframework.step", "StepManyToMany");
         };

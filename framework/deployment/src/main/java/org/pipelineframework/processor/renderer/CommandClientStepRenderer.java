@@ -26,7 +26,6 @@ import org.pipelineframework.processor.ir.ConnectorOperationSelection;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Renders generated command client steps.
@@ -110,7 +109,7 @@ public class CommandClientStepRenderer {
                 .addMember("threadSafety", "$T.$L", ClassName.get(ThreadSafety.class), ThreadSafety.SAFE.name())
                 .build())
             .superclass(ClassName.get("org.pipelineframework.step", "ConfigurableStep"))
-            .addSuperinterface(ParameterizedTypeName.get(ClassName.get(StepOneToOne.class), inputType, outputType))
+            .addSuperinterface(ParameterizedTypeName.get(RuntimeSymbols.STEP_ONE_TO_ONE, inputType, outputType))
             .addSuperinterface(ClassName.get("org.pipelineframework.command", "CommandStep"))
             .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
             .addField(support)

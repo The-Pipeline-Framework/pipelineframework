@@ -4,10 +4,10 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.template.PipelineFieldNullability;
 import org.pipelineframework.config.template.PipelineFieldPresence;
 import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
@@ -16,13 +16,15 @@ import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 
 /** Deterministic JSON Schema view of the compiler-owned canonical v3 type universe. */
 public final class CanonicalSchemaJson {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private CanonicalSchemaJson() {
     }
 
     public static String render(PipelineTemplateTypeModel model, String typeName) {
         JsonNode schema = schema(model, new PipelineTemplateTypeReference.Named(typeName), new HashSet<>());
         try {
-            return PipelineJson.mapper().writeValueAsString(schema);
+            return JSON.writeValueAsString(schema);
         } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
             throw new IllegalStateException("unable to render canonical schema for " + typeName, impossible);
         }

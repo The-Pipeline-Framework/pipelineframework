@@ -49,7 +49,7 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
     private static final ClassName CONFIG_PROPERTY = ClassName.get("org.eclipse.microprofile.config.inject", "ConfigProperty");
     private static final ClassName OPTIONAL = ClassName.get(Optional.class);
     private static final ClassName MAPPER = ClassName.get("org.pipelineframework.mapper", "Mapper");
-    private static final ClassName REACTIVE_SERVICE = ClassName.get("org.pipelineframework.service", "ReactiveService");
+    private static final ClassName REACTIVE_SERVICE = RuntimeSymbols.REACTIVE_SERVICE;
     private static final ClassName PROTOBUF_REMOTE_CLIENT = ClassName.get("org.pipelineframework.transport.http", "ProtobufHttpRemoteOperatorClient");
     private static final ClassName ENVELOPE_REMOTE_CLIENT = ClassName.get("org.pipelineframework.transport.http", "EnvelopeHttpRemoteOperatorClient");
 

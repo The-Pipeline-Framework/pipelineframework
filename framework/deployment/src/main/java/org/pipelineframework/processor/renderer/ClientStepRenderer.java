@@ -32,8 +32,6 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.GrpcBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
-import org.pipelineframework.step.StepManyToOne;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Renderer for gRPC client step implementations based on PipelineStepModel and GrpcBinding.
@@ -153,7 +151,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         ClassName stepInterface;
         switch (model.streamingShape()) {
             case UNARY_UNARY:
-                stepInterface = ClassName.get(StepOneToOne.class);
+                stepInterface = RuntimeSymbols.STEP_ONE_TO_ONE;
                 clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface,
                         stepInputType,
@@ -168,13 +166,13 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                 clientStepBuilder.addMethod(cacheKeyTargetMethod);
                 break;
             case UNARY_STREAMING:
-                stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
+                stepInterface = RuntimeSymbols.STEP_ONE_TO_MANY;
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface,
                         stepInputType,
                         stepOutputType));
                 break;
             case STREAMING_UNARY:
-                stepInterface = ClassName.get(StepManyToOne.class);
+                stepInterface = RuntimeSymbols.STEP_MANY_TO_ONE;
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface,
                         stepInputType,
                         stepOutputType));

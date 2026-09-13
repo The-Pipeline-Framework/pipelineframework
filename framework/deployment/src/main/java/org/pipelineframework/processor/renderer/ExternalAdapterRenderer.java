@@ -33,10 +33,6 @@ import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ExternalAdapterBinding;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.service.ReactiveService;
-import org.pipelineframework.service.ReactiveStreamingClientService;
-import org.pipelineframework.service.ReactiveStreamingService;
-import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
 /**
  * Renderer for external adapter implementations based on PipelineStepModel.
@@ -47,10 +43,11 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 public record ExternalAdapterRenderer(GenerationTarget target) implements PipelineRenderer<ExternalAdapterBinding> {
 
     // Static constants for reactive service interface comparison
-    private static final ClassName REACTIVE_SERVICE = ClassName.get(ReactiveService.class);
-    private static final ClassName REACTIVE_STREAMING_SERVICE = ClassName.get(ReactiveStreamingService.class);
-    private static final ClassName REACTIVE_STREAMING_CLIENT_SERVICE = ClassName.get(ReactiveStreamingClientService.class);
-    private static final ClassName REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE = ClassName.get(ReactiveBidirectionalStreamingService.class);
+    private static final ClassName REACTIVE_SERVICE = RuntimeSymbols.REACTIVE_SERVICE;
+    private static final ClassName REACTIVE_STREAMING_SERVICE = RuntimeSymbols.REACTIVE_STREAMING_SERVICE;
+    private static final ClassName REACTIVE_STREAMING_CLIENT_SERVICE = RuntimeSymbols.REACTIVE_STREAMING_CLIENT_SERVICE;
+    private static final ClassName REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE =
+        RuntimeSymbols.REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE;
 
     /**
      * Generate and write the external adapter class for the given binding.
