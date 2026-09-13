@@ -47,7 +47,9 @@ JSR-269's role as the production compiler host. The compiler artifact owns the p
 extension integration. Platform annotations and reactive types used only in generated source are JavaPoet
 names, not compiler class-loading dependencies. The framework API owns `GeneratedTypeNames`, the stable class-name
 suffix contract used by compiler producers and integration consumers. `NamingPolicy` owns the generated `.pipeline`
-package suffix. Deployment code must not import compiler implementation packages.
+package suffix. Deployment code must not import compiler implementation packages. Compiler unit tests live with the
+compiler artifact; deployment retains only Quarkus and generated-runtime conformance tests and consumes the compiler
+artifact in test scope for those tests.
 
 No separate `pipelineframework-compiler-api` artifact is introduced at this boundary. The authored API,
 semantic model, DSL, runtime-core contracts, runtime protocol, and representation-provider API already own the
