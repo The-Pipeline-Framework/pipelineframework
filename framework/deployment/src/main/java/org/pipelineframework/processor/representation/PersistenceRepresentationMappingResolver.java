@@ -58,7 +58,7 @@ public final class PersistenceRepresentationMappingResolver {
         String representationName,
         String mapperName
     ) {
-        if (compilerServices == null || compilerServices.elements() == null || compilerServices.types() == null) {
+        if (compilerServices == null || !compilerServices.available()) {
             return;
         }
         TypeElement representation = compilerServices.elements().getTypeElement(representationName);
