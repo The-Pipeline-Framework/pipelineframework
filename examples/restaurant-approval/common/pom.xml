@@ -22,7 +22,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-compiler</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.compiler.version}</version>
             <scope>provided</scope>
         </dependency>
         <!-- Pipeline Framework Runtime Module -->

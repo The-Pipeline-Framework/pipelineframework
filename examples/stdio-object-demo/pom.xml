@@ -77,7 +77,7 @@
                         <path>
                             <groupId>org.pipelineframework</groupId>
                             <artifactId>pipelineframework-compiler</artifactId>
-                            <version>${project.version}</version>
+                            <version>${pipelineframework.compiler.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

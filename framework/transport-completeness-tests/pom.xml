@@ -17,7 +17,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-compiler</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.compiler.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
