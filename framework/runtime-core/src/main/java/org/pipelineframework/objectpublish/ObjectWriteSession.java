@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.CompletionStage;
 
 /**
- * Provider-neutral streaming object write session.
+ * Framework-neutral streaming object write session.
  */
 public interface ObjectWriteSession {
     CompletionStage<Void> write(ByteBuffer chunk);

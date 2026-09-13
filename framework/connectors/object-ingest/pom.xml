@@ -17,8 +17,23 @@
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
-            <artifactId>pipelineframework</artifactId>
+            <artifactId>pipelineframework-semantic-model</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-runtime-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-runtime-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <version>${jakarta.cdi.version}</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

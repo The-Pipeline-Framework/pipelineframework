@@ -5,7 +5,7 @@ import java.time.Instant;
 import org.pipelineframework.repository.PayloadReference;
 
 /**
- * Result returned by an object target provider after writing a payload.
+ * Framework-neutral result returned by an object target provider after writing a payload.
  */
 public record ObjectWriteResult(
     PayloadReference reference,

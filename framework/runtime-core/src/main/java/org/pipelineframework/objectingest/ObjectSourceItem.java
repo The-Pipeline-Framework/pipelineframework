@@ -5,7 +5,7 @@ import java.util.Map;
 import org.pipelineframework.repository.PayloadReference;
 
 /**
- * Provider result for one listed object before application-domain projection.
+ * Framework-neutral provider result for one listed object before application-domain projection.
  */
 public record ObjectSourceItem(
     String provider,

@@ -5,21 +5,25 @@ import java.util.Map;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 
 /**
- * Provider-neutral request to open a streaming object write session.
+ * Framework-neutral object write request.
  */
-public record ObjectWriteOpenRequest(
+public record ObjectWriteRequest(
     String targetName,
     PipelineObjectPublishConfig target,
     String objectKey,
+    byte[] bytes,
     String contentType,
     Map<String, String> metadata,
+    String checksum,
     String idempotencyKey
 ) {
-    public ObjectWriteOpenRequest {
+    public ObjectWriteRequest {
         targetName = normalize(targetName);
         objectKey = normalize(objectKey);
         contentType = normalize(contentType);
+        checksum = normalize(checksum);
         idempotencyKey = normalize(idempotencyKey);
+        bytes = bytes == null ? new byte[0] : bytes.clone();
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         if (targetName == null) {
             throw new IllegalArgumentException("object write targetName must not be blank");
@@ -35,6 +39,11 @@ public record ObjectWriteOpenRequest(
                 throw new IllegalArgumentException("object write metadata must not contain null keys or values");
             }
         }
+    }
+
+    @Override
+    public byte[] bytes() {
+        return bytes.clone();
     }
 
     private static String normalize(String value) {

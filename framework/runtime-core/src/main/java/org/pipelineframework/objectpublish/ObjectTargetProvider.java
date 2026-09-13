@@ -5,7 +5,7 @@ import java.util.concurrent.CompletionStage;
 import org.pipelineframework.connector.ObjectTargetOperation;
 
 /**
- * Provider SPI for Object Publish targets.
+ * Framework-neutral provider SPI for Object Publish targets.
  */
 public interface ObjectTargetProvider extends ObjectTargetOperation {
     String providerName();

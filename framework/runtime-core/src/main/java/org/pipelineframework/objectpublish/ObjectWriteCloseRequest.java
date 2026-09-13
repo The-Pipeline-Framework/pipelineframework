@@ -3,7 +3,7 @@ package org.pipelineframework.objectpublish;
 import java.util.Map;
 
 /**
- * Provider-neutral request to close a streaming object write session.
+ * Framework-neutral request to close a streaming object write session.
  */
 public record ObjectWriteCloseRequest(
     long bytes,
