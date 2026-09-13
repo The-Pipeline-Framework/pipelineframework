@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator;
 import java.util.Map;
 
 /**
- * Ordered generated-pipeline step metadata.
+ * Shared ordered generated-pipeline step metadata.
  *
  * @param index zero-based pipeline order index
  * @param authoredName step name from pipeline.yaml or generated model

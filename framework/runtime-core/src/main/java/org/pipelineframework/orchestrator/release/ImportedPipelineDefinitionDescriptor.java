@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator.release;
 import java.util.List;
 import java.util.Objects;
 
-/** Reproducible package provenance for a build-time linked pipeline definition. */
+/** Shared reproducible package provenance for a build-time linked pipeline definition. */
 public record ImportedPipelineDefinitionDescriptor(
     String qualifiedId,
     String logicalName,

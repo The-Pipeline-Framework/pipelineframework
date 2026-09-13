@@ -11,6 +11,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeCoreDependencyGuardTest {
@@ -42,6 +43,28 @@ class RuntimeCoreDependencyGuardTest {
         assertNoForbiddenDependency("io.vertx.");
     }
 
+    @Test
+    void runtimeCoreHasNoSerializationImplementationDependencies() {
+        assertNoForbiddenDependency("com.fasterxml.jackson.");
+        assertNoForbiddenDependency("com.google.protobuf.");
+    }
+
+    @Test
+    void runtimeCoreHasNoRuntimeHostDependencies() {
+        assertNoForbiddenDependency("org.springframework.");
+        assertNoForbiddenDependency("org.jboss.logging.");
+        assertNoForbiddenDependency("org.eclipse.microprofile.");
+    }
+
+    @Test
+    void forbiddenDependencyMatchingCoversRegularAndStaticImports() {
+        assertTrue(isForbiddenImport("import com.google.protobuf.ByteString;", "com.google.protobuf."));
+        assertTrue(isForbiddenImport(
+            "import static com.google.protobuf.ByteString.copyFrom;", "com.google.protobuf."));
+        assertFalse(isForbiddenImport(
+            "return \"com.google.protobuf.ByteString\";", "com.google.protobuf."));
+    }
+
     private void assertNoForbiddenDependency(String forbiddenToken) {
         List<String> violations = collectViolations(forbiddenToken);
         assertTrue(
@@ -63,7 +86,7 @@ class RuntimeCoreDependencyGuardTest {
                     try {
                         List<String> lines = Files.readAllLines(path);
                         for (int lineNo = 1; lineNo <= lines.size(); lineNo++) {
-                            if (lines.get(lineNo - 1).contains(token)) {
+                            if (isForbiddenImport(lines.get(lineNo - 1), token)) {
                                 matches.computeIfAbsent(path, ignored -> new ArrayList<>()).add(lineNo);
                             }
                         }
@@ -85,5 +108,10 @@ class RuntimeCoreDependencyGuardTest {
         } catch (IOException e) {
             return List.of("Unable to scan runtime-core sources: " + e.getMessage());
         }
+    }
+
+    private boolean isForbiddenImport(String line, String token) {
+        String declaration = line.stripLeading();
+        return declaration.startsWith("import ") && declaration.contains(token);
     }
 }

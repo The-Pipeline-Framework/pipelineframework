@@ -71,9 +71,11 @@ and runtime-core remains independent of protobuf libraries.
 
 JDK-only contracts shared by compiler output, customer execution, and runtime hosts belong to
 `pipelineframework-runtime-core`. This includes command duplicate policy, pipeline-composition descriptors,
-and object-boundary adapter interfaces. Reactive service APIs remain outside runtime-core because their Mutiny
+the generated pipeline-contract descriptor and its ordered-step, capability, and imported-definition provenance
+records, and object-boundary adapter interfaces. The contract model keeps its existing Java package and serialized
+record shape while moving out of the Quarkus runtime artifact. Reactive service APIs remain outside runtime-core because their Mutiny
 types are a customer-runtime API choice; runtime-core's dependency guard continues to prohibit Mutiny and
-platform integration dependencies. Pure application extension contracts used by generated code, including
+platform integration, logging, and serialization implementation dependencies. Pure application extension contracts used by generated code, including
 `AwaitCompletionProjector` and `AwaitCompletionMetadata`, likewise belong to `pipelineframework-runtime-api`
 rather than the Quarkus runtime implementation.
 
@@ -102,6 +104,8 @@ authored annotation's ownership of Java-local hints and compiler-generated metad
 - Applications can compile against authored discovery annotations and compile-time semantics without
   depending on a runtime integration module.
 - Runtime integrations retain platform-specific implementations and validate their own capability classes.
+- Customer execution and self-hosted worker processes can share the generated pipeline contract model through
+  runtime-core without depending on the Quarkus runtime implementation.
 - Compiler and integration artifacts share generated type naming through the framework API, without integrations
   depending on compiler implementation classes.
 - Future Jandex and JSR-269 discovery adapters must normalize into the existing compiler model and produce
