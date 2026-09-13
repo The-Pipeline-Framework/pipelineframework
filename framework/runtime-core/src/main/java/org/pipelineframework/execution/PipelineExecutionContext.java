@@ -5,7 +5,7 @@ import java.util.Optional;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 
-/** Framework-managed execution scope for steps that need durable pipeline identity. */
+/** Framework-neutral execution scope for steps that need durable pipeline identity. */
 public record PipelineExecutionContext(
     String tenantId,
     String executionId,
