@@ -37,6 +37,12 @@ composition configuration belong to the framework-neutral `pipelineframework-dsl
 semantic model, runtime-core vocabulary, and SnakeYAML without depending on the runtime integration; runtime and
 deployment consumers depend on that DSL artifact rather than owning its loaders.
 
+JDK-only contracts shared by compiler output, customer execution, and runtime hosts belong to
+`pipelineframework-runtime-core`. This includes command duplicate policy, pipeline-composition descriptors,
+and object-boundary adapter interfaces. Reactive service APIs remain outside runtime-core because their Mutiny
+types are a customer-runtime API choice; runtime-core's dependency guard continues to prohibit Mutiny and
+platform integration dependencies.
+
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after
 that add a Jandex source-symbol adapter with parity tests. Both source-symbol adapters feed the same semantic
