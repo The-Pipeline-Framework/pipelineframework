@@ -7,7 +7,7 @@ import com.squareup.javapoet.TypeName;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
-import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -44,7 +44,7 @@ class GeneratedServiceTypeResolverTest {
         TypeName result = GeneratedServiceTypeResolver.resolveInjectedServiceType(model);
 
         ClassName expected = ClassName.get(
-            SERVICE_PACKAGE + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            SERVICE_PACKAGE + NamingPolicy.PIPELINE_PACKAGE_SUFFIX,
             SERVICE_NAME);
         assertEquals(expected, result);
     }
@@ -160,7 +160,7 @@ class GeneratedServiceTypeResolverTest {
         ClassName result = GeneratedServiceTypeResolver.blockingReactiveBridgeClassName(model);
 
         assertEquals(
-            SERVICE_PACKAGE + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            SERVICE_PACKAGE + NamingPolicy.PIPELINE_PACKAGE_SUFFIX,
             result.packageName());
         assertEquals(GENERATED_NAME + "BlockingReactiveBridge", result.simpleName());
     }
@@ -197,7 +197,7 @@ class GeneratedServiceTypeResolverTest {
         TypeName result = GeneratedServiceTypeResolver.resolveInjectedServiceType(model);
 
         ClassName expected = ClassName.get(
-            SERVICE_PACKAGE + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            SERVICE_PACKAGE + NamingPolicy.PIPELINE_PACKAGE_SUFFIX,
             SERVICE_NAME);
         assertEquals(expected, result);
     }
