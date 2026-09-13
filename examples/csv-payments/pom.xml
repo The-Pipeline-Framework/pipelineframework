@@ -321,7 +321,7 @@
                             </path>
                             <path>
                                 <groupId>org.pipelineframework</groupId>
-                                <artifactId>pipelineframework-deployment</artifactId>
+                                <artifactId>pipelineframework-compiler</artifactId>
                                 <version>${project.version}</version>
                             </path>
                             <path>

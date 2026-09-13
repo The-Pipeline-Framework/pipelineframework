@@ -22,10 +22,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ServiceLoader;
+import javax.annotation.processing.Processor;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompilerDependencyGuardTest {
@@ -46,6 +49,17 @@ class CompilerDependencyGuardTest {
             "compiler must not depend on the Quarkus runtime implementation");
         assertTrue(pom.contains("<artifactId>pipelineframework-semantic-model</artifactId>"),
             "compiler must depend on the shared semantic model");
+    }
+
+    @Test
+    void compilerPublishesALoadableJsr269Processor() {
+        Processor processor = ServiceLoader.load(Processor.class).stream()
+            .filter(provider -> provider.type().equals(PipelineStepProcessor.class))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("compiler must publish PipelineStepProcessor as a JSR-269 service"))
+            .get();
+
+        assertInstanceOf(PipelineStepProcessor.class, processor);
     }
 
     private void assertNoForbiddenImport(String forbiddenPackage) {

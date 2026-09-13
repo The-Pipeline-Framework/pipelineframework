@@ -47,7 +47,6 @@ public class OrchestratorGrpcBindingResolver {
      * @param methodName the expected RPC method name
      * @param inputStreaming whether the method should be client streaming
      * @param outputStreaming whether the method should be server streaming
-     * @param messager optional messager for warnings
      * @return the resolved GrpcBinding
      */
     public GrpcBinding resolve(

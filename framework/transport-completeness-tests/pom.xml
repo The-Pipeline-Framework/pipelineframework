@@ -16,8 +16,14 @@
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
-            <artifactId>pipelineframework-deployment</artifactId>
+            <artifactId>pipelineframework-compiler</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
