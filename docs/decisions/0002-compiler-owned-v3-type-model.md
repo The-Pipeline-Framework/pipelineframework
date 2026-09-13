@@ -27,6 +27,12 @@ streaming or fan-out, and TPF performs no implicit repeated-field/stream convers
 This decision governs `framework/runtime-core`, `framework/runtime`,
 `framework/deployment`, and generated `META-INF/pipeline/` contracts.
 
+The `pipelineframework-semantic-model` artifact owns stable, JDK-only data
+contracts produced by the compiler and consumed by compiler and runtime code.
+This shared location does not transfer semantic interpretation: the compiler
+remains the owner of normalization, validation, and interpretation, with JSR-269
+as the production build host; runtime code consumes the resulting contracts.
+
 ## Rationale
 
 One immutable semantic model makes validation and generation deterministic and prevents
