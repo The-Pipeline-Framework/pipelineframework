@@ -49,7 +49,8 @@ names, not compiler class-loading dependencies. The framework API owns `Generate
 suffix contract used by compiler producers and integration consumers. `NamingPolicy` owns the generated `.pipeline`
 package suffix. Deployment code must not import compiler implementation packages. Compiler unit tests live with the
 compiler artifact; deployment retains only Quarkus and generated-runtime conformance tests and consumes the compiler
-artifact in test scope for those tests.
+artifact in test scope for those tests. Monorepo consumers pin the compiler through an explicit, independently
+managed compiler-version property rather than inheriting `${project.version}`.
 
 No separate `pipelineframework-compiler-api` artifact is introduced at this boundary. The authored API,
 semantic model, DSL, runtime-core contracts, runtime protocol, and representation-provider API already own the
