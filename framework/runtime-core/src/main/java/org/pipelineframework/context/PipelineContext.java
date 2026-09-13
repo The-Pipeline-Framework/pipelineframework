@@ -17,7 +17,7 @@
 package org.pipelineframework.context;
 
 /**
- * Request-scoped context propagated across pipeline calls.
+ * Framework-neutral request context propagated across pipeline calls.
  *
  * @param versionTag version identifier used for replay or cache versioning
  * @param replayMode replay mode indicator
