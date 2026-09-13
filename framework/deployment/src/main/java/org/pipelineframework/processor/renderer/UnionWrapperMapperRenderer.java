@@ -154,7 +154,7 @@ public class UnionWrapperMapperRenderer {
         GenerationContext context
     ) {
         ClassName variantType = ClassName.get(unionDomainType.packageName(), variant.type());
-        if (compilerServices.elements() != null
+        if (compilerServices.available()
             && compilerServices.elements().getTypeElement(variantType.canonicalName()) == null) {
             String message = "Union variant type '" + variantType.canonicalName()
                 + "' was not found. Variant message '" + variant.type()
