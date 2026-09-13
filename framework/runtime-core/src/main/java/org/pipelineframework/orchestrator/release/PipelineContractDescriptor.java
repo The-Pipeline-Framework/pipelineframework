@@ -9,7 +9,7 @@ import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 import org.pipelineframework.orchestrator.composition.PipelineCompositionDescriptor;
 
 /**
- * Generated semantic pipeline contract emitted at build time.
+ * Shared generated semantic pipeline contract emitted at build time.
  */
 public record PipelineContractDescriptor(
     int schemaVersion,

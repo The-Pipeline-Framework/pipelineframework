@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator.release;
 import java.util.List;
 import java.util.Map;
 
-/** Sanitized application resolution of one imported Block capability. */
+/** Shared sanitized application resolution of one imported Block capability. */
 public record ImportedBlockRequirementDescriptor(
     String name,
     String kind,
