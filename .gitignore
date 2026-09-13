@@ -92,3 +92,6 @@ __pycache__/
 
 ### Gitnexus
 .gitnexus/
+
+# Cloudflare Wrangler local cache
+.wrangler/
