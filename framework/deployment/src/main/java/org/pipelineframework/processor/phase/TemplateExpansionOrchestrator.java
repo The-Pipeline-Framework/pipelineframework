@@ -34,8 +34,7 @@ class TemplateExpansionOrchestrator {
             return List.of();
         }
 
-        boolean hasOrchestrator = ctx.getRoundEnv() != null
-            && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty();
+        boolean hasOrchestrator = !ctx.getSourceInventory().pipelineOrchestratorElements().isEmpty();
         if (isRuntimeMappedStepModule(ctx, hasOrchestrator)) {
             return baseModels.stream()
                 .filter(this::isServerCandidate)

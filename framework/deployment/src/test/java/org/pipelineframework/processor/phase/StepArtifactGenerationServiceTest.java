@@ -97,7 +97,7 @@ class StepArtifactGenerationServiceTest {
     @Test
     void clientStepWithoutGrpcBindingIsSkipped() {
         when(processingEnv.getMessager()).thenReturn(messager);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
         PipelineStepModel model = new PipelineStepModel.Builder()
@@ -123,7 +123,7 @@ class StepArtifactGenerationServiceTest {
 
     @Test
     void remoteOperatorTargetInvokesRemoteAdapterRenderer() throws Exception {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
         PipelineStepModel model = buildChargeCardModel().toBuilder()
@@ -171,7 +171,7 @@ class StepArtifactGenerationServiceTest {
     void localSideEffectOnlyTargetGeneratesObservedBean() throws Exception {
         when(processingEnv.getElementUtils()).thenReturn(elements);
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setGeneratedSourcesRoot(tempDir.resolve("generated-sources"));
 
         PipelineStepModel model = new PipelineStepModel.Builder()
@@ -241,7 +241,7 @@ class StepArtifactGenerationServiceTest {
                 input: CanonicalPayment
                 output: CanonicalPayment
             """);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setPipelineTemplateConfig(new PipelineTemplateConfigLoader().load(configPath));
         ctx.setGeneratedSourcesRoot(tempDir.resolve("generated-sources"));
 

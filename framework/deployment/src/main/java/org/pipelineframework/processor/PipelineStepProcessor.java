@@ -134,7 +134,12 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
 
         PipelineCompilationContext context = new PipelineCompilationContext(
             processingEnv,
-            roundEnv,
+            new Jsr269SourceInventory(
+                pipelineStepElements,
+                orchestratorElements,
+                pluginElements,
+                roundEnv.getRootElements()
+            ),
             new PipelineCompilerOptions(processingEnv.getOptions()),
             new Jsr269PipelineCompilerDiagnostics(processingEnv.getMessager())
         );

@@ -38,7 +38,7 @@ class ModelContextRoleEnricherTest {
 
     @Test
     void enrichReturnsEmptyWhenNoPluginHostAndNoOrchestrator() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setAspectModels(List.of());
         List<PipelineStepModel> result = enricher.enrich(ctx, List.of(step("ProcessAService", false)));
@@ -47,8 +47,7 @@ class ModelContextRoleEnricherTest {
 
     @Test
     void enrichesConfiguredLocalOrchestratorBeforeItsGeneratedTypeEntersTheRound() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(
-            mock(ProcessingEnvironment.class), mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(mock(ProcessingEnvironment.class), org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setAspectModels(List.of(new PipelineAspectModel(
             "persistence",
@@ -77,7 +76,7 @@ class ModelContextRoleEnricherTest {
 
     @Test
     void enrichProducesPluginAndClientModelsForColocatedPluginHost() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setPluginHost(true);
         ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setAspectModels(List.of());
@@ -101,7 +100,7 @@ class ModelContextRoleEnricherTest {
         when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
             .thenReturn(Set.of());
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setPluginHost(true);
         ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setAspectModels(List.of(new PipelineAspectModel(
@@ -116,7 +115,7 @@ class ModelContextRoleEnricherTest {
 
     @Test
     void enrichKeepsServerModelsForRuntimeMappedModularStepModule() {
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setModuleName("crawl-source-svc");
         ctx.setRuntimeMapping(new PipelineRuntimeMapping(
             PipelineRuntimeMapping.Layout.MODULAR,
@@ -147,7 +146,7 @@ class ModelContextRoleEnricherTest {
             .when(roundEnv)
             .getElementsAnnotatedWith(eq(PipelineOrchestrator.class));
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setRuntimeMapping(new PipelineRuntimeMapping(
             PipelineRuntimeMapping.Layout.MONOLITH,
             PipelineRuntimeMapping.Validation.STRICT,
@@ -173,7 +172,7 @@ class ModelContextRoleEnricherTest {
             .when(roundEnv)
             .getElementsAnnotatedWith(eq(PipelineOrchestrator.class));
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setRuntimeMapping(new PipelineRuntimeMapping(
             PipelineRuntimeMapping.Layout.MONOLITH,
             PipelineRuntimeMapping.Validation.STRICT,
@@ -201,7 +200,7 @@ class ModelContextRoleEnricherTest {
             .when(roundEnv)
             .getElementsAnnotatedWith(eq(PipelineOrchestrator.class));
 
-        PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setRuntimeMapping(new PipelineRuntimeMapping(
             PipelineRuntimeMapping.Layout.MONOLITH,
             PipelineRuntimeMapping.Validation.STRICT,

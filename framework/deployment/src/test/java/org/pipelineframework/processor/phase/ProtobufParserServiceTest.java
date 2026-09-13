@@ -19,7 +19,7 @@ class ProtobufParserServiceTest {
 
     @Test
     void generatedParserUsesSchemaNameWithoutLegacyTypeAliases() throws IOException {
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setGeneratedSourcesRoot(tempDir);
         ProtobufParserService service = new ProtobufParserService(new GenerationPathResolver());
 

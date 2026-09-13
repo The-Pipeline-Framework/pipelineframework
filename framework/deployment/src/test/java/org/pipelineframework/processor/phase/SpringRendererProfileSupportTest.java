@@ -196,7 +196,7 @@ class SpringRendererProfileSupportTest {
     }
 
     private PipelineCompilationContext context() {
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setRendererProfile("spring");
         context.setTransportMode(PipelineTransport.LOCAL);
         context.setPlatformMode(PlatformMode.COMPUTE);

@@ -23,7 +23,7 @@ public class PipelineCompilationInfrastructureTest {
     @Test
     public void testPipelineCompilationContextCreation() {
         // This test verifies that the core infrastructure classes can be instantiated
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
 
         assertNotNull(context);
         assertNotNull(context.getStepModels());

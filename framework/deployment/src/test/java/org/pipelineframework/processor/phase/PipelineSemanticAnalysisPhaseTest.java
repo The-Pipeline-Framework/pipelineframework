@@ -136,7 +136,7 @@ public class PipelineSemanticAnalysisPhaseTest {
 
     @Test
     public void functionPlatformRequiresRestTransport() throws Exception {
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(PipelineTransport.GRPC);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
@@ -152,7 +152,7 @@ public class PipelineSemanticAnalysisPhaseTest {
         value = StreamingShape.class,
         names = {"UNARY_STREAMING", "STREAMING_UNARY", "STREAMING_STREAMING"})
     public void functionPlatformAllowsStreamingShapes(StreamingShape shape) throws Exception {
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(step(shape)));
@@ -164,7 +164,7 @@ public class PipelineSemanticAnalysisPhaseTest {
 
     @Test
     public void functionPlatformAllowsUnaryRestSteps() throws Exception {
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
@@ -222,7 +222,7 @@ public class PipelineSemanticAnalysisPhaseTest {
             .externalMapper(null)
             .build();
 
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setStepModels(List.of(delegatedModel));
 
         phase.execute(context);
@@ -293,7 +293,7 @@ public class PipelineSemanticAnalysisPhaseTest {
             .externalMapper(null)
             .build();
 
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setStepModels(List.of(delegatedModel));
 
         phase.execute(context);

@@ -81,7 +81,7 @@ class ConnectorBindingMetadataGeneratorTest {
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         when(processingEnv.getOptions()).thenReturn(Map.of());
         PipelineCompilationContext context = new PipelineCompilationContext(
-            processingEnv, mock(RoundEnvironment.class));
+            processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setModuleDir(tempDir);
         context.setEffectivePipelineConfig(new PipelineYamlConfigLoader().load(pipeline));
 
@@ -143,7 +143,7 @@ class ConnectorBindingMetadataGeneratorTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipeline.toString()));
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setModuleDir(tempDir);
         PipelineTemplateConfig template = mock(PipelineTemplateConfig.class);
         PipelineTemplateTypeModel typeModel = mock(PipelineTemplateTypeModel.class);

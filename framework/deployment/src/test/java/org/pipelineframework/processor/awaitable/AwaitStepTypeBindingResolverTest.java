@@ -68,7 +68,7 @@ class AwaitStepTypeBindingResolverTest {
             "PendingDecision", Optional.empty(), "PT5M", List.of(), "interactionId",
             "interaction-api", Map.of(), Optional.empty())));
         PipelineCompilationContext context = new PipelineCompilationContext(
-            processing, mock(RoundEnvironment.class));
+            processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setPipelineTemplateConfig(config);
 
         Optional<AwaitStepTypeBinding> binding = new AwaitStepTypeBindingResolver().resolve(context, step);
@@ -103,7 +103,7 @@ class AwaitStepTypeBindingResolverTest {
             Optional.of(ClassName.get("com.example.await.service", "PendingDecisionEntity")),
             "PT5M", List.of(), "interactionId", "interaction-api", Map.of(), Optional.empty())));
         PipelineCompilationContext context = new PipelineCompilationContext(
-            processing, mock(RoundEnvironment.class));
+            processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setPipelineTemplateConfig(config);
 
         Optional<AwaitStepTypeBinding> binding = new AwaitStepTypeBindingResolver()

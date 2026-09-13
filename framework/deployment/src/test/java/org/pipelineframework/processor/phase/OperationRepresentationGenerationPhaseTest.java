@@ -70,7 +70,7 @@ class OperationRepresentationGenerationPhaseTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Filer filer = mock(Filer.class);
         when(processing.getFiler()).thenReturn(filer);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+        PipelineCompilationContext context = new PipelineCompilationContext(processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setPipelineTemplateConfig(config);
         context.setRepresentationProviderRegistry(RepresentationProviderRegistry.of(List.of(provider)));
         context.setStepModels(List.of(model()));
@@ -101,7 +101,7 @@ class OperationRepresentationGenerationPhaseTest {
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         Filer filer = mock(Filer.class);
         when(processing.getFiler()).thenReturn(filer);
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+        PipelineCompilationContext context = new PipelineCompilationContext(processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setPipelineTemplateConfig(config);
         context.setRepresentationProviderRegistry(RepresentationProviderRegistry.of(List.of(provider)));
         context.setStepModels(List.of(dynamicModel()));
@@ -127,7 +127,7 @@ class OperationRepresentationGenerationPhaseTest {
         var provider = new RecordingProvider();
         ProcessingEnvironment processing = mock(ProcessingEnvironment.class);
         when(processing.getFiler()).thenReturn(mock(Filer.class));
-        PipelineCompilationContext context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+        PipelineCompilationContext context = new PipelineCompilationContext(processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setPipelineTemplateConfig(config);
         context.setRepresentationProviderRegistry(RepresentationProviderRegistry.of(List.of(provider)));
         context.setStepModels(List.of(new PipelineStepModel.Builder()

@@ -81,7 +81,7 @@ class CommandCallbackTypeBindingTest {
             @Override public SourceVersion getSupportedSourceVersion() { return SourceVersion.latestSupported(); }
             @Override public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
                 if (!round.processingOver() && invoked.compareAndSet(false, true)) {
-                    var context = new PipelineCompilationContext(processingEnv, round);
+                    var context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(round));
                     context.setPipelineTemplateConfig(config);
                     bound.set(new AwaitStepTypeBindingResolver().resolve(context, step).isPresent());
                 }

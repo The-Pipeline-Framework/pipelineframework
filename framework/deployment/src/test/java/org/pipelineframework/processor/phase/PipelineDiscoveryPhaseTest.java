@@ -83,7 +83,7 @@ class PipelineDiscoveryPhaseTest {
     @Test
     void testDiscoveryPhaseExecution_defaultValues() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -103,7 +103,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.function.httpBridge", " true "));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -115,7 +115,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.function.httpBridge", "enabled"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         IllegalArgumentException error =
             assertThrows(IllegalArgumentException.class, () -> phase.execute(context));
@@ -126,7 +126,7 @@ class PipelineDiscoveryPhaseTest {
     @Test
     void testDiscoveryPhaseExecution_defaultsRendererProfileToQuarkus() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -138,7 +138,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.rendererProfile", "SPRING"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -150,7 +150,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.rendererProfile", "vertx"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         IllegalArgumentException error =
             assertThrows(IllegalArgumentException.class, () -> phase.execute(context));
@@ -165,7 +165,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "SPRING"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         phase.execute(context);
 
@@ -175,7 +175,7 @@ class PipelineDiscoveryPhaseTest {
     @Test
     void testDiscoveryPhaseExecution_nullRoundEnv() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
 
         phase.execute(context);
 
@@ -187,7 +187,7 @@ class PipelineDiscoveryPhaseTest {
     @Test
     void testDiscoveryPhaseExecution_nullProcessingEnv() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
 
         phase.execute(context);
 
@@ -231,7 +231,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", yaml.toString()));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         phase.execute(context);
 
         verify(messager).printMessage(
@@ -278,7 +278,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of());
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
             .thenReturn(java.util.Set.of());
         when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelinePlugin.class))
@@ -349,7 +349,7 @@ class PipelineDiscoveryPhaseTest {
             .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
             .thenReturn(java.util.Set.of());
         when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelinePlugin.class))
@@ -406,7 +406,7 @@ class PipelineDiscoveryPhaseTest {
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", yaml.toString()));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         assertThrows(RuntimeException.class, () -> phase.execute(context));
 

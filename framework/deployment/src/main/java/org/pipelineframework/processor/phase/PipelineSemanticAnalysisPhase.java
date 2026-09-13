@@ -349,8 +349,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
      */
     protected boolean shouldGenerateOrchestrator(PipelineCompilationContext ctx) {
         // Check if there are orchestrator elements annotated
-        Set<? extends Element> orchestratorElements = 
-            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of();
+        Set<? extends Element> orchestratorElements = ctx.getSourceInventory().pipelineOrchestratorElements();
         
         if (orchestratorElements != null && !orchestratorElements.isEmpty()) {
             return true;
@@ -403,8 +402,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
 
         // Get all @PipelineStep annotated classes
-        Set<? extends Element> pipelineStepElements =
-            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineStep.class) : Set.of();
+        Set<? extends Element> pipelineStepElements = ctx.getSourceInventory().pipelineStepElements();
 
         // Check if we should warn about unreferenced steps (default: true)
         boolean warnUnreferenced = true;

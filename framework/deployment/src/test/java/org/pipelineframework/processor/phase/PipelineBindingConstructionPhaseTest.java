@@ -79,7 +79,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void testBindingConstructionPhaseExecution_noModels() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         assertDoesNotThrow(() -> phase.execute(context));
         assertNotNull(context.getRendererBindings());
@@ -89,7 +89,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void testBindingConstructionPhaseExecution_stepWithRestTargets() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel modelWithTargets = TestModelFactory.createTestModelWithTargets("TestService", Set.of(GenerationTarget.REST_RESOURCE));
         context.setStepModels(List.of(modelWithTargets));
@@ -104,7 +104,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void testBindingConstructionPhaseExecution_stepWithLocalTarget() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel modelWithTargets = TestModelFactory.createTestModelWithTargets("TestService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
         context.setStepModels(List.of(modelWithTargets));
@@ -118,7 +118,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void orchestratorBindingCarriesCanonicalRootMappings() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         PipelineTemplateStep rootStep = new PipelineTemplateStep(
             "Root", "ONE_TO_ONE", "Question", List.of(), "Answer", List.of());
         PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
@@ -162,7 +162,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedClientStepBuildsGrpcAndExternalAdapterBindings() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
@@ -182,7 +182,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedLocalClientStepBuildsLocalAndExternalAdapterBindings() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("DelegatedLocalService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
@@ -201,7 +201,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void springDelegatedLocalClientStepBuildsLocalBindingOnly() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setRendererProfile("spring");
 
         PipelineStepModel delegatedModel = TestModelFactory
@@ -219,7 +219,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedStepWithServerTargetsEmitsWarning() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedServerTargetService", Set.of(
@@ -243,7 +243,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedGrpcStepWithoutMapperFailsValidation() {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedNoMapperService", Set.of(GenerationTarget.CLIENT_STEP))
@@ -260,7 +260,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedGrpcStepWithoutDescriptorFailsValidation() {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedNoDescriptorService", Set.of(GenerationTarget.CLIENT_STEP))
@@ -277,7 +277,7 @@ class PipelineBindingConstructionPhaseTest {
     @Test
     void delegatedGrpcStepWithEmptyDescriptorSetFailsAtBindingResolution() {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineStepModel delegatedModel = TestModelFactory
             .createTestModelWithTargets("ProcessDelegatedEmptyDescriptorService", Set.of(GenerationTarget.CLIENT_STEP))

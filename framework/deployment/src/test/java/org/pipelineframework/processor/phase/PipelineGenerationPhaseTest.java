@@ -97,7 +97,7 @@ class PipelineGenerationPhaseTest {
     void testGenerationPhaseExecutionHandlesEmptyContextGracefully() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         // Execute the phase with an empty context (no models)
         // This should not throw exceptions and should handle the empty case
@@ -139,7 +139,7 @@ class PipelineGenerationPhaseTest {
     void selectsV3BoundaryRolesWithoutLegacyMapperMetadata() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         org.pipelineframework.processor.ir.PipelineStepModel first = model("First", org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER, false);
         org.pipelineframework.processor.ir.PipelineStepModel terminal = model("Terminal", org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER, false);
         context.setStepModels(List.of(
@@ -197,7 +197,7 @@ class PipelineGenerationPhaseTest {
     void skipsClientStepGenerationWhenGrpcBindingMissing() {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         org.pipelineframework.processor.ir.PipelineStepModel model =
             new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
@@ -262,7 +262,7 @@ class PipelineGenerationPhaseTest {
             """);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of("pipeline.config", config.toString()));
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setPluginHost(true);
         context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
         context.setRendererBindings(java.util.Map.of());
@@ -294,7 +294,7 @@ class PipelineGenerationPhaseTest {
             """);
         when(processingEnv.getOptions()).thenReturn(java.util.Map.of("pipeline.config", config.toString()));
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.REST);
         com.squareup.javapoet.ClassName pending = com.squareup.javapoet.ClassName.get("com.example", "PendingApproval");
         org.pipelineframework.processor.ir.PipelineStepModel terminal =
@@ -356,7 +356,7 @@ class PipelineGenerationPhaseTest {
     void externalAdapterGenerationContextPropagatesEnabledAspects() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
         java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
@@ -386,7 +386,7 @@ class PipelineGenerationPhaseTest {
     void computesEnabledAspectsFromContext() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         org.pipelineframework.processor.ir.PipelineAspectModel aspect1 =
             new org.pipelineframework.processor.ir.PipelineAspectModel(
@@ -418,7 +418,7 @@ class PipelineGenerationPhaseTest {
     void handlesNullAspectModelsWhenComputingEnabledAspects() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setAspectModels(null);
 
         java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
@@ -445,7 +445,7 @@ class PipelineGenerationPhaseTest {
         method.setAccessible(true);
 
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         @SuppressWarnings("unchecked")
         java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
@@ -467,7 +467,7 @@ class PipelineGenerationPhaseTest {
         method.setAccessible(true);
 
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         @SuppressWarnings("unchecked")
         java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
@@ -480,7 +480,7 @@ class PipelineGenerationPhaseTest {
     void generatesOrchestratorArtifactsWhenEnabled() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         context.setOrchestratorGenerated(true);
         context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
@@ -588,7 +588,7 @@ class PipelineGenerationPhaseTest {
     void skipsSideEffectBeanGenerationWhenAlreadyGenerated() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         org.pipelineframework.processor.ir.PipelineStepModel model =
             new org.pipelineframework.processor.ir.PipelineStepModel.Builder()

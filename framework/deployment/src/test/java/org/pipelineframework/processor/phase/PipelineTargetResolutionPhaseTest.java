@@ -79,7 +79,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void springProfileResolvesLocalServerStepToLocalClientStep() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setRendererProfile("spring");
         context.setTransportMode(PipelineTransport.LOCAL);
         context.setStepModels(List.of(step("SpringLocalStep", DeploymentRole.PIPELINE_SERVER)));
@@ -94,7 +94,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void springProfileResolvesRestServerStepToRestResourceAndUnaryStep() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setRendererProfile("spring");
         context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(step("SpringRestStep", DeploymentRole.PIPELINE_SERVER)));
@@ -109,7 +109,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void springProfileResolvesOnlyFirstRestServerStepToRestResource() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setRendererProfile("spring");
         context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(
@@ -146,7 +146,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void defaultsToGrpcWhenTransportModeIsNull() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setStepModels(List.of(step("GrpcDefaultStep", DeploymentRole.ORCHESTRATOR_CLIENT)));
         context.setTransportMode(null);
 
@@ -160,7 +160,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void aggregatesResolvedTargetsAcrossModels() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(
             step("ServerStep", DeploymentRole.PIPELINE_SERVER),
@@ -176,7 +176,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void preservesModelIdentityFieldsAndOnlyReplacesEnabledTargets() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel original = step("IdentityStep", DeploymentRole.PIPELINE_SERVER);
         context.setStepModels(List.of(original));
         context.setTransportMode(PipelineTransport.REST);
@@ -201,7 +201,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void preservesDelegationMetadataWhenResolvingTargets() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel original = step("DelegatedIdentityStep", DeploymentRole.ORCHESTRATOR_CLIENT)
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
@@ -221,7 +221,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void forcesDelegatedStepsToLocalClientTargetRegardlessOfRoleOrTransport() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel delegated = step("DelegatedServerStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
@@ -239,7 +239,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void remoteStepsRetainTransportTargetsAndAddRemoteAdapterTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel remote = step("RemoteChargeStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .remoteExecution(new PipelineTemplateStepExecution(
@@ -264,7 +264,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void remoteStepsAlsoRetainGrpcTargetsWhenPipelineTransportIsGrpc() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel remote = step("RemoteChargeStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .remoteExecution(new PipelineTemplateStepExecution(
@@ -291,7 +291,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void blockingInternalStepsAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel blocking = step("BlockingCsvStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.BLOCKING)
@@ -310,7 +310,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void blockingIteratorInternalStepsAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel blocking = step("BlockingIteratorCsvStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
@@ -329,7 +329,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void blockingInternalStepWithDelegateDoesNotAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel blocking = step("BlockingDelegatedStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.BLOCKING)
@@ -348,7 +348,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void blockingInternalStepWithRemoteExecutionDoesNotAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel blocking = step("BlockingRemoteStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.BLOCKING)
@@ -369,7 +369,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void reactiveServerStepDoesNotAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel reactive = step("ReactiveStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.REACTIVE)
@@ -387,7 +387,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void blockingIteratorStepWithDelegateDoesNotAddReactiveBridgeTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel blocking = step("BlockingIteratorDelegatedStep", DeploymentRole.PIPELINE_SERVER)
             .toBuilder()
             .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
@@ -408,7 +408,7 @@ class PipelineTargetResolutionPhaseTest {
             PipelineTransport transportMode,
             Set<GenerationTarget> expectedTargets) throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         context.setTransportMode(transportMode);
         context.setStepModels(List.of(step("Step" + role + transportMode, role)));
 
@@ -429,7 +429,7 @@ class PipelineTargetResolutionPhaseTest {
     @Test
     void queryStepDescriptorResolvesToQueryClientStepTarget() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineStepModel queryModel = new PipelineStepModel(
             "LoadCustomerRisk",
             "LoadCustomerRiskService",
@@ -457,7 +457,7 @@ class PipelineTargetResolutionPhaseTest {
     void queryStepDescriptorResolvesToQueryClientStepTargetRegardlessOfTransport() throws Exception {
         for (PipelineTransport transport : PipelineTransport.values()) {
             PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
-            PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+            PipelineCompilationContext context = new PipelineCompilationContext(null, org.pipelineframework.processor.Jsr269SourceInventory.empty());
             PipelineStepModel queryModel = new PipelineStepModel(
                 "LoadRisk",
                 "LoadRiskService",

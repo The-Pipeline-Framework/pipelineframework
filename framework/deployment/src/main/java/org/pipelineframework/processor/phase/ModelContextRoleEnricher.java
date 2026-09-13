@@ -24,8 +24,7 @@ class ModelContextRoleEnricher {
         }
 
         boolean hasOrchestrator = ctx.isOrchestratorGenerated()
-            || (ctx.getRoundEnv() != null
-                && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty());
+            || !ctx.getSourceInventory().pipelineOrchestratorElements().isEmpty();
         if (isRuntimeMappedStepModule(ctx, hasOrchestrator)) {
             return handleRuntimeMappedStepModule(baseModels);
         }

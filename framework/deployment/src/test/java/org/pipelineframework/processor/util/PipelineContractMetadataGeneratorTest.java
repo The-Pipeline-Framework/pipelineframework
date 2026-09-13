@@ -160,7 +160,7 @@ class PipelineContractMetadataGeneratorTest {
         for (var variant : variants) {
             Path output = tempDir.resolve(variant.name());
             var processing = processingEnv(output, Map.of());
-            var context = new PipelineCompilationContext(processing, mock(RoundEnvironment.class));
+            var context = new PipelineCompilationContext(processing, org.pipelineframework.processor.Jsr269SourceInventory.empty());
             var callback = new DeferredCompletionSelection.ResolvedConnectorCallback(
                 new org.pipelineframework.connector.ConnectorOperationCallbackDescriptor("completed",
                     new org.pipelineframework.connector.ConnectorOperationTypeContract(variant.payload(), Optional.empty()), true),
@@ -191,7 +191,7 @@ class PipelineContractMetadataGeneratorTest {
     void skipsContractWhenNoPipelineModelExists() throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(tempDir.resolve("empty"), Map.of());
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
@@ -303,7 +303,7 @@ class PipelineContractMetadataGeneratorTest {
     void embedsTheResolvedCompositionInTheExistingHashedContract() throws IOException {
         Path output = tempDir.resolve("composition");
         ProcessingEnvironment processingEnv = processingEnv(output, Map.of());
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         PipelineReference outer = new PipelineReference("outer");
         PipelineReference inner = new PipelineReference("inner");
         PipelineDefinition innerDefinition = new PipelineDefinition(inner, "Value", "Value", List.of(
@@ -396,7 +396,7 @@ class PipelineContractMetadataGeneratorTest {
         Path output = tempDir.resolve("monolith");
         ProcessingEnvironment processingEnv = processingEnv(output, Map.of("pipeline.config", pipelineYaml.toString()));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setModuleName("orchestrator-svc");
         ctx.setPlatformMode(PlatformMode.COMPUTE);
         ctx.setTransportMode(PipelineTransport.REST);
@@ -441,7 +441,7 @@ class PipelineContractMetadataGeneratorTest {
         throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of("pipeline.config", pipelineYaml.toString()));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setModuleName("orchestrator-svc");
         ctx.setPlatformMode(PlatformMode.COMPUTE);
         ctx.setTransportMode(PipelineTransport.REST);
@@ -469,7 +469,7 @@ class PipelineContractMetadataGeneratorTest {
         String duplicatePolicy
     ) throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of());
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventory.empty());
         ctx.setStepModels(List.of(step("ProcessImportedService", "Input", "Output",
             StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.LOCAL_CLIENT_STEP))));
         ctx.setImportedPipelineDefinitions(List.of(new ImportedPipelineDefinition(
@@ -494,7 +494,7 @@ class PipelineContractMetadataGeneratorTest {
     private void writeV3Metadata(Path pipelineYaml, Path outputDir, PipelineTemplateTypeModel typeModel) throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of("pipeline.config", pipelineYaml.toString()));
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, org.pipelineframework.processor.Jsr269SourceInventoryTestSupport.snapshot(roundEnv));
         ctx.setModuleName("orchestrator-svc");
         ctx.setPlatformMode(PlatformMode.COMPUTE);
         ctx.setTransportMode(PipelineTransport.REST);

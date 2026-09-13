@@ -211,17 +211,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     /**
      * Fallback extraction path for legacy annotation-driven internal steps.
      *
-     * @param ctx the compilation context containing the current round environment
+     * @param ctx the compilation context containing the captured source inventory
      * @return list of extracted step models from @PipelineStep-annotated classes
      */
     private List<PipelineStepModel> extractStepModelsFromAnnotations(PipelineCompilationContext ctx) {
-        if (ctx.getRoundEnv() == null || ctx.getProcessingEnv() == null) {
+        if (ctx.getProcessingEnv() == null) {
             return List.of();
         }
 
         List<PipelineStepModel> stepModels = new ArrayList<>();
         PipelineStepIRExtractor irExtractor = new PipelineStepIRExtractor(ctx.getProcessingEnv());
-        Set<? extends Element> annotatedElements = ctx.getRoundEnv().getElementsAnnotatedWith(PipelineStep.class);
+        Set<? extends Element> annotatedElements = ctx.getSourceInventory().pipelineStepElements();
         for (Element element : annotatedElements) {
             if (element instanceof TypeElement serviceClass) {
                 var result = irExtractor.extract(serviceClass);
@@ -1095,13 +1095,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName applicationOutputType,
             TypeName operatorOutputType,
             boolean reportMissingCandidateErrorFlag) {
-        if (ctx.getRoundEnv() == null) {
-            reportMissingCandidateError(ctx, stepName, reportMissingCandidateErrorFlag);
-            return null;
-        }
-
         List<ClassName> matchingCandidates = new ArrayList<>();
-        for (Element rootElement : ctx.getRoundEnv().getRootElements()) {
+        for (Element rootElement : ctx.getSourceInventory().rootElements()) {
             if (rootElement.getKind() != ElementKind.CLASS) {
                 continue;
             }
