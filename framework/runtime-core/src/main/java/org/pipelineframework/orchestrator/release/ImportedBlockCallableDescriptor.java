@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator.release;
 import java.util.Map;
 import java.util.Objects;
 
-/** Sanitized compile-time resolution of one callable exposed by an imported Block. */
+/** Shared sanitized compile-time resolution of one callable exposed by an imported Block. */
 public record ImportedBlockCallableDescriptor(
     String sourceStep,
     String alias,
