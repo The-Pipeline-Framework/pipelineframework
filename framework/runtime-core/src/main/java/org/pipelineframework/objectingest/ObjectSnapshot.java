@@ -5,7 +5,7 @@ import java.util.Map;
 import org.pipelineframework.repository.PayloadReference;
 
 /**
- * Stable framework snapshot for one object discovered by an object source.
+ * Stable framework-neutral snapshot for one object discovered by an object source.
  *
  * @param sourceName configured source name
  * @param provider provider name

@@ -7,7 +7,7 @@ import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.connector.ObjectSourceOperation;
 
 /**
- * Runtime-neutral provider SPI for listing and optionally loading object source items.
+ * Framework-neutral provider SPI for listing and optionally loading object source items.
  */
 public interface ObjectSourceProvider extends ObjectSourceOperation {
 
