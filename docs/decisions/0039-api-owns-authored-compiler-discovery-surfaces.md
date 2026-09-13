@@ -21,13 +21,15 @@ The framework-neutral API owns compiler discovery and shared semantic metadata s
 `@PipelineStep`, `@ParallelismHint`, `OrderingRequirement`, and `ThreadSafety`. YAML owns pipeline topology,
 step sequence, cardinality, and types; `@PipelineStep` owns Java-local discovery and its documented
 execution hints. `@ParallelismHint` carries compiler-generated ordering and thread-safety metadata consumed
-by runtime policy resolution. JSR-269 is the current production build host. Discovery and normalization
-produce the same compiler semantic model that later phases consume.
+by runtime policy resolution. `PipelineStepProcessor` is the production JSR-269 host adapter and owns
+processing rounds, source discovery signals, diagnostics, and host services. `PipelineCompiler` owns only
+the immutable ordering and execution of compiler phases over a host-created compilation context. Discovery
+and normalization produce the same compiler semantic model that later phases consume.
 
 Migration proceeds in sequence: first stabilize authored API surfaces while preserving JSR-269 as the
 production host; next extract the JSR-269 compiler and semantic phases from Quarkus deployment; only after
 that add a Jandex source-symbol adapter with parity tests. Both source-symbol adapters feed the same semantic
-model; Jandex must never create a parallel semantic path. Future Jandex and JSR-269 adapters must produce
+model and phase engine; Jandex must never create a parallel semantic path. Future Jandex and JSR-269 adapters must produce
 the same semantic values for `@ParallelismHint`. The API may expose portable class tokens, but validation
 of platform-specific token types belongs to the relevant integration or capability adapter, not to the API.
 

@@ -1,65 +1,58 @@
 package org.pipelineframework.processor;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doReturn;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.annotation.processing.RoundEnvironment;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.annotation.PipelineOrchestrator;
-import org.pipelineframework.annotation.PipelinePlugin;
-import org.pipelineframework.annotation.PipelineStep;
 
 class PipelineCompilerTest {
 
-    private static Set<Element> noElements() {
-        return Collections.emptySet();
+    @Test
+    void executesAnImmutablePhaseOrderOncePerCompileInvocation() {
+        List<String> executionOrder = new ArrayList<>();
+        List<PipelineCompilationPhase> phases = new ArrayList<>(List.of(
+            new RecordingPhase("discover", executionOrder),
+            new RecordingPhase("analyze", executionOrder),
+            new RecordingPhase("generate", executionOrder)));
+        PipelineCompiler compiler = new PipelineCompiler(phases);
+        phases.add(new RecordingPhase("late", executionOrder));
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+
+        compiler.compile(context);
+        compiler.compile(context);
+
+        assertEquals(List.of("discover", "analyze", "generate", "discover", "analyze", "generate"),
+            executionOrder);
     }
 
     @Test
-    void executesYamlDrivenCompilationOnlyOnceAcrossRounds() throws Exception {
-        PipelineCompilationPhase phase = mock(PipelineCompilationPhase.class);
-        PipelineCompiler compiler = new PipelineCompiler(List.of(phase));
+    void identifiesTheFailedPhaseAndPreservesItsCause() throws Exception {
+        Exception phaseFailure = new IllegalStateException("invalid model", new IllegalArgumentException("bad type"));
+        PipelineCompilationPhase failing = mock(PipelineCompilationPhase.class);
+        PipelineCompilationPhase skipped = mock(PipelineCompilationPhase.class);
+        org.mockito.Mockito.when(failing.name()).thenReturn("semantic-analysis");
+        org.mockito.Mockito.doThrow(phaseFailure).when(failing).execute(org.mockito.ArgumentMatchers.any());
+        PipelineCompiler compiler = new PipelineCompiler(List.of(failing, skipped));
 
-        Path pipelineConfig = Files.createTempFile("pipeline-compiler-test", ".yaml");
-        Files.writeString(pipelineConfig, "appName: test\nbasePackage: com.example\nsteps: []\n");
+        PipelineCompilationException thrown = assertThrows(PipelineCompilationException.class,
+            () -> compiler.compile(new PipelineCompilationContext(null, null)));
 
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipelineConfig.toString()));
-        when(processingEnv.getMessager()).thenReturn(mock(Messager.class));
-        compiler.init(processingEnv);
+        assertEquals("semantic-analysis", thrown.phaseName());
+        assertSame(phaseFailure, thrown.getCause());
+        verify(skipped, never()).execute(org.mockito.ArgumentMatchers.any());
+    }
 
-        RoundEnvironment roundOne = mock(RoundEnvironment.class);
-        doReturn(noElements()).when(roundOne).getElementsAnnotatedWith(PipelineStep.class);
-        doReturn(noElements()).when(roundOne).getElementsAnnotatedWith(PipelineOrchestrator.class);
-        doReturn(noElements()).when(roundOne).getElementsAnnotatedWith(PipelinePlugin.class);
-        when(roundOne.processingOver()).thenReturn(false);
-
-        RoundEnvironment roundTwo = mock(RoundEnvironment.class);
-        doReturn(noElements()).when(roundTwo).getElementsAnnotatedWith(PipelineStep.class);
-        doReturn(noElements()).when(roundTwo).getElementsAnnotatedWith(PipelineOrchestrator.class);
-        doReturn(noElements()).when(roundTwo).getElementsAnnotatedWith(PipelinePlugin.class);
-        when(roundTwo.processingOver()).thenReturn(false);
-
-        boolean firstResult = compiler.process(Set.<TypeElement>of(), roundOne);
-        boolean secondResult = compiler.process(Set.<TypeElement>of(), roundTwo);
-
-        assertFalse(firstResult, "YAML-driven compilation should not claim annotations from other processors");
-        assertFalse(secondResult, "Subsequent rounds should not claim annotations either");
-        verify(phase, times(1)).execute(org.mockito.ArgumentMatchers.any(PipelineCompilationContext.class));
+    private record RecordingPhase(String name, List<String> executionOrder) implements PipelineCompilationPhase {
+        @Override
+        public void execute(PipelineCompilationContext context) {
+            executionOrder.add(name);
+        }
     }
 }

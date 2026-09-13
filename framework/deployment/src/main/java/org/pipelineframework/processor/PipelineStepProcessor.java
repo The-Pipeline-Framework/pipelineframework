@@ -1,16 +1,42 @@
 package org.pipelineframework.processor;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
-import javax.annotation.processing.*;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.annotation.processing.SupportedOptions;
+import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic;
+
+import org.pipelineframework.annotation.PipelineOrchestrator;
+import org.pipelineframework.annotation.PipelinePlugin;
+import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.processor.phase.ModelExtractionPhase;
+import org.pipelineframework.processor.phase.OperationRepresentationGenerationPhase;
+import org.pipelineframework.processor.phase.PipelineBindingConstructionPhase;
+import org.pipelineframework.processor.phase.PipelineBranchPlanningPhase;
+import org.pipelineframework.processor.phase.PipelineDiscoveryPhase;
+import org.pipelineframework.processor.phase.PipelineGenerationPhase;
+import org.pipelineframework.processor.phase.PipelineInfrastructurePhase;
+import org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase;
+import org.pipelineframework.processor.phase.PipelineSemanticAnalysisPhase;
+import org.pipelineframework.processor.phase.PipelineTargetResolutionPhase;
+import org.pipelineframework.processor.phase.RepresentationProviderGenerationPhase;
+import org.pipelineframework.processor.phase.RepresentationProviderPreparationPhase;
+import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 /**
- * Java annotation processor that generates both gRPC client and server step implementations
- * from YAML-declared pipeline steps and legacy @PipelineStep annotated service classes.
- * <p>
- * This class now serves as a facade that delegates to the phased compiler architecture.
+ * Production JSR-269 host for pipeline compilation.
+ *
+ * <p>The processor owns annotation-processing lifecycle and discovery signals while delegating
+ * semantic and generation work to the ordered {@link PipelineCompiler} phase engine.</p>
  */
 @SuppressWarnings("unused")
 @SupportedAnnotationTypes({
@@ -30,6 +56,7 @@ import javax.lang.model.element.TypeElement;
     "pipeline.warnUnreferencedSteps", // Optional: suppress warnings for intentionally runtime-mapped step services
     "pipeline.module", // Optional: logical module name for runtime mapping
     "pipeline.moduleDir", // Optional: explicit module directory for runtime mapping/config discovery
+    "project.basedir", // Optional: project base directory used for config discovery fallback
     "pipeline.function.httpBridge", // Optional: prefer HTTP bridge over generated direct function handlers
     "pipeline.platform", // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
@@ -41,81 +68,137 @@ import javax.lang.model.element.TypeElement;
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineStepProcessor extends AbstractProcessingTool {
 
-    private PipelineCompiler compiler;
-
-    /**
-     * Suffix to append to generated gRPC client step classes.
-     */
+    /** Suffix to append to generated gRPC client step classes. */
     public static final String GRPC_CLIENT_STEP_SUFFIX = "GrpcClientStep";
 
-    /**
-     * Suffix to append to generated REST client step classes.
-     */
+    /** Suffix to append to generated REST client step classes. */
     public static final String REST_CLIENT_STEP_SUFFIX = "RestClientStep";
 
-    /**
-     * Suffix to append to generated gRPC service classes.
-     */
+    /** Suffix to append to generated gRPC service classes. */
     public static final String GRPC_SERVICE_SUFFIX = "GrpcService";
 
-    /**
-     * Package suffix for generated pipeline classes.
-     */
+    /** Package suffix for generated pipeline classes. */
     public static final String PIPELINE_PACKAGE_SUFFIX = ".pipeline";
 
-    /**
-     * Suffix to append to generated REST resource classes.
-     */
+    /** Suffix to append to generated REST resource classes. */
     public static final String REST_RESOURCE_SUFFIX = "Resource";
 
-    /**
-     * Creates a new PipelineStepProcessor.
-     */
+    private final PipelineCompiler compiler;
+    private boolean compilationExecuted;
+
+    /** Creates the service-loader compatible production processor. */
     public PipelineStepProcessor() {
+        this(new PipelineCompiler(List.of(
+            new PipelineDiscoveryPhase(),
+            new RepresentationProviderPreparationPhase(),
+            new PipelineBranchPlanningPhase(),
+            new ModelExtractionPhase(),
+            new OperationRepresentationGenerationPhase(),
+            new PipelineRuntimeMappingPhase(),
+            new RepresentationProviderGenerationPhase(),
+            new PipelineSemanticAnalysisPhase(),
+            new PipelineTargetResolutionPhase(),
+            new PipelineBindingConstructionPhase(),
+            new PipelineGenerationPhase(),
+            new PipelineInfrastructurePhase()
+        )));
     }
 
-    /**
-     * Initializes the processor and constructs the phased PipelineCompiler used for processing.
-     *
-     * @param processingEnv the processing environment used to configure compiler-facing utilities
-     */
+    PipelineStepProcessor(PipelineCompiler compiler) {
+        this.compiler = Objects.requireNonNull(compiler, "compiler must not be null");
+    }
+
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
-
-        // Create the phased compiler with all the phases
-        // Mapper inference is performed in the Quarkus build step with CombinedIndexBuildItem.
-        // The annotation processor only extracts pipeline metadata.
-        List<PipelineCompilationPhase> phases = List.of(
-            new org.pipelineframework.processor.phase.PipelineDiscoveryPhase(),
-            new org.pipelineframework.processor.phase.RepresentationProviderPreparationPhase(),
-            new org.pipelineframework.processor.phase.PipelineBranchPlanningPhase(),
-            new org.pipelineframework.processor.phase.ModelExtractionPhase(),
-            new org.pipelineframework.processor.phase.OperationRepresentationGenerationPhase(),
-            new org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase(),
-            new org.pipelineframework.processor.phase.RepresentationProviderGenerationPhase(),
-            new org.pipelineframework.processor.phase.PipelineSemanticAnalysisPhase(),
-            new org.pipelineframework.processor.phase.PipelineTargetResolutionPhase(),
-            new org.pipelineframework.processor.phase.PipelineBindingConstructionPhase(),
-            new org.pipelineframework.processor.phase.PipelineGenerationPhase(),
-            new org.pipelineframework.processor.phase.PipelineInfrastructurePhase()
-        );
-
-        this.compiler = new PipelineCompiler(phases);
-        this.compiler.setRepresentationProviderClassLoader(getClass().getClassLoader());
-        this.compiler.init(processingEnv);
+        compilationExecuted = false;
     }
 
-    /**
-     * Delegates processing to the phased compiler.
-     *
-     * @param annotations the annotation types requested to be processed in this round
-     * @param roundEnv the environment for information about the current and prior round
-     * @return {@code true} if pipeline compilation work was performed, {@code false} otherwise
-     */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        // Delegate validation and generation to the phased compiler.
-        return compiler.process(annotations, roundEnv);
+        if (compilationExecuted) {
+            return false;
+        }
+
+        Set<? extends Element> pipelineStepElements = roundEnv.getElementsAnnotatedWith(PipelineStep.class);
+        Set<? extends Element> orchestratorElements = roundEnv.getElementsAnnotatedWith(PipelineOrchestrator.class);
+        Set<? extends Element> pluginElements = roundEnv.getElementsAnnotatedWith(PipelinePlugin.class);
+        boolean hasRelevantAnnotations = !pipelineStepElements.isEmpty()
+            || !orchestratorElements.isEmpty()
+            || !pluginElements.isEmpty();
+
+        if (!hasRelevantAnnotations && !hasPipelineConfigSignal()) {
+            writeRoleMetadataWhenProcessingCompletes(annotations, roundEnv);
+            return false;
+        }
+
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setRepresentationProviderClassLoader(getClass().getClassLoader());
+        try {
+            compiler.compile(context);
+        } catch (PipelineCompilationException failure) {
+            emitFailureDiagnostics(failure);
+        }
+        compilationExecuted = true;
+        return false;
+    }
+
+    private void writeRoleMetadataWhenProcessingCompletes(
+        Set<? extends TypeElement> annotations,
+        RoundEnvironment roundEnv
+    ) {
+        if (!annotations.isEmpty() || !roundEnv.processingOver()) {
+            return;
+        }
+        try {
+            new RoleMetadataGenerator(processingEnv).writeRoleMetadata();
+        } catch (Exception failure) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                "Failed to write role metadata: " + failure.getMessage());
+        }
+    }
+
+    private void emitFailureDiagnostics(PipelineCompilationException failure) {
+        Throwable phaseFailure = failure.getCause();
+        processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+            "Pipeline compilation failed in phase '" + failure.phaseName() + "': " + phaseFailure.getMessage());
+        Throwable cause = phaseFailure.getCause();
+        if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE,
+                "Cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+        }
+    }
+
+    private boolean hasPipelineConfigSignal() {
+        String configuredPath = processingEnv.getOptions().get("pipeline.config");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            Path configured = Path.of(configuredPath.trim());
+            if (Files.exists(configured) && Files.isRegularFile(configured) && Files.isReadable(configured)) {
+                return true;
+            }
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                "Ignoring pipeline.config because it is not a readable file: " + configuredPath);
+            return false;
+        }
+
+        String baseDir = processingEnv.getOptions().get("pipeline.moduleDir");
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = processingEnv.getOptions().get("pipeline.generatedSourcesDir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = processingEnv.getOptions().get("project.basedir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = System.getProperty("maven.multiModuleProjectDirectory");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            return false;
+        }
+
+        Path basePath = Path.of(baseDir);
+        if (Files.exists(basePath.resolve("pipeline.yaml"))) {
+            return true;
+        }
+        return Files.exists(basePath.resolve(Path.of("src", "main", "resources", "pipeline.yaml")));
     }
 }
