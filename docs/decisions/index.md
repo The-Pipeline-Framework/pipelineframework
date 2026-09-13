@@ -51,6 +51,7 @@ authoritative for exact syntax and release support.
 | [0040](./0040-portable-connector-contracts.md) | Keep provider-neutral connector contracts on runtime-core and semantic-model, outside runtime and platform integrations. |
 | [0041](./0041-customer-runtime-api-and-portable-blocks.md) | Keep customer-authored reactive APIs and portable Blocks outside runtime and platform integrations. |
 | [0042](./0042-shared-canonical-pipeline-serialization.md) | Share one framework-neutral canonical pipeline serialization policy across build hosts, customer code, runtimes, and workers. |
+| [0043](./0043-portable-runtime-provider-spi.md) | Keep reactive provider and authored boundary contracts outside runtime implementations and platform integrations. |
 
 ## Maintenance
 

@@ -18,6 +18,10 @@
       "packaging": "jar"
     },
     {
+      "artifactId": "pipelineframework-runtime-spi",
+      "packaging": "jar"
+    },
+    {
       "artifactId": "pipelineframework-runtime-spring",
       "packaging": "jar"
     },
