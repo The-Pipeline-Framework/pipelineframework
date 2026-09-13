@@ -36,7 +36,9 @@ class CompilerDependencyGuardTest {
     @Test
     void compilerSourcesDoNotImportQuarkusOrJandex() {
         assertNoForbiddenImport("io.quarkus.");
+        assertNoForbiddenImport("io.smallrye.jandex.");
         assertNoForbiddenImport("org.jboss.jandex.");
+        assertNoForbiddenImport("org.pipelineframework.extension.");
     }
 
     @Test
