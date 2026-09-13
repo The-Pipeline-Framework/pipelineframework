@@ -27,6 +27,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.phase.NamingPolicy;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 
 /**
@@ -718,8 +719,8 @@ public class PipelineTelemetryMetadataGenerator {
             String stepName = toPascalStepName(configStep.name());
             PipelineStepModel model = remainingByToken.remove(toClassToken(stepName));
             if (model == null) {
-                String generatedName = "Process" + org.pipelineframework.processor.phase.NamingPolicy.formatForClassName(
-                    org.pipelineframework.processor.phase.NamingPolicy.stripProcessPrefix(configStep.name()));
+                String generatedName = "Process" + NamingPolicy.formatForClassName(
+                    NamingPolicy.stripProcessPrefix(configStep.name()));
                 model = remainingByToken.remove(toClassToken(generatedName));
             }
             if (model != null) {

@@ -2,7 +2,6 @@ package org.pipelineframework.processor.util;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
-import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 
@@ -10,6 +9,8 @@ import org.pipelineframework.processor.ir.ServiceApiKind;
  * Resolves generated service types used by transport adapters.
  */
 public final class GeneratedServiceTypeResolver {
+
+    private static final String PIPELINE_PACKAGE_SUFFIX = ".pipeline";
 
     private GeneratedServiceTypeResolver() {
     }
@@ -30,7 +31,7 @@ public final class GeneratedServiceTypeResolver {
         }
         if (model.sideEffect()) {
             return ClassName.get(
-                model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+                model.servicePackage() + PIPELINE_PACKAGE_SUFFIX,
                 model.serviceName());
         }
         boolean useBlockingBridge = (model.serviceApiKind() == ServiceApiKind.BLOCKING
@@ -48,7 +49,7 @@ public final class GeneratedServiceTypeResolver {
 
     public static ClassName blockingReactiveBridgeClassName(PipelineStepModel model) {
         return ClassName.get(
-            model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            model.servicePackage() + PIPELINE_PACKAGE_SUFFIX,
             model.generatedName() + "BlockingReactiveBridge");
     }
 }
