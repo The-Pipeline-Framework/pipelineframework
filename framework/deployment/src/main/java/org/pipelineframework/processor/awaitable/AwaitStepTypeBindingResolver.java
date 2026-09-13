@@ -19,7 +19,6 @@ import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
-import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
@@ -260,6 +259,6 @@ public final class AwaitStepTypeBindingResolver {
     }
 
     private void error(PipelineCompilationContext ctx, String message) {
-        ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR, message);
+        ctx.getCompilerDiagnostics().error(message);
     }
 }

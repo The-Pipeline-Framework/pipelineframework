@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
@@ -16,15 +17,18 @@ import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
  * Loads pipeline step configuration metadata from a YAML file.
  */
 public class PipelineStepConfigLoader {
+    private static final Consumer<String> DEFAULT_WARNING_SINK =
+        message -> System.err.println(Diagnostic.Kind.WARNING + ": " + message);
+
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
-    private final Messager messager;
+    private final Consumer<String> warningSink;
 
     /**
      * Construct a PipelineStepConfigLoader that uses system properties and environment variables.
      */
     public PipelineStepConfigLoader() {
-        this(System::getProperty, System::getenv, null);
+        this(System::getProperty, System::getenv, DEFAULT_WARNING_SINK);
     }
 
     /**
@@ -34,7 +38,7 @@ public class PipelineStepConfigLoader {
      * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
      */
     public PipelineStepConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
-        this(propertyLookup, envLookup, null);
+        this(propertyLookup, envLookup, DEFAULT_WARNING_SINK);
     }
 
     /**
@@ -48,9 +52,33 @@ public class PipelineStepConfigLoader {
             Function<String, String> propertyLookup,
             Function<String, String> envLookup,
             Messager messager) {
+        this(propertyLookup, envLookup, messager == null
+            ? DEFAULT_WARNING_SINK
+            : warning -> messager.printMessage(Diagnostic.Kind.WARNING, warning));
+    }
+
+    /**
+     * Create a loader with a host-neutral warning sink.
+     *
+     * @param propertyLookup property lookup
+     * @param envLookup environment lookup
+     * @param warningSink optional warning sink
+     * @return a loader using the supplied warning sink
+     */
+    public static PipelineStepConfigLoader withWarningSink(
+            Function<String, String> propertyLookup,
+            Function<String, String> envLookup,
+            Consumer<String> warningSink) {
+        return new PipelineStepConfigLoader(propertyLookup, envLookup, warningSink);
+    }
+
+    private PipelineStepConfigLoader(
+            Function<String, String> propertyLookup,
+            Function<String, String> envLookup,
+            Consumer<String> warningSink) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
-        this.messager = messager;
+        this.warningSink = warningSink == null ? DEFAULT_WARNING_SINK : warningSink;
     }
 
     /**
@@ -194,10 +222,6 @@ public class PipelineStepConfigLoader {
     }
 
     private void warn(String message) {
-        if (messager != null) {
-            messager.printMessage(Diagnostic.Kind.WARNING, message);
-        } else {
-            System.err.println(Diagnostic.Kind.WARNING + ": " + message);
-        }
+        warningSink.accept(message);
     }
 }

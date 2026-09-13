@@ -19,7 +19,6 @@ package org.pipelineframework.processor.phase;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.TypeName;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
@@ -52,8 +51,7 @@ final class PipelineStepContractValidator {
                 || Objects.equals(previousOutput.get(), currentInput.get())) {
                 continue;
             }
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Step '" + stepName(config, index, current) + "' resolves Java input '" + currentInput.get()
                     + "', but previous step '" + stepName(config, index - 1, previous)
                     + "' resolves Java output '"
@@ -80,7 +78,7 @@ final class PipelineStepContractValidator {
             }
             if (streaming && model.deferredCompletionSelection()
                 .filter(completion -> completion.callback().isPresent()).isPresent()) {
-                ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Command callback step '" + model.serviceName()
                         + "' cannot consume an upstream stream; aggregate into one canonical value before dispatch.");
             }
@@ -104,7 +102,7 @@ final class PipelineStepContractValidator {
                 .anyMatch(contract -> streamingContracts.getOrDefault(contract, false));
             if (streamingInput && model.deferredCompletionSelection()
                 .filter(completion -> completion.callback().isPresent()).isPresent()) {
-                ctx.getProcessingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR,
+                ctx.getCompilerDiagnostics().error(
                     "Command callback step '" + model.serviceName()
                         + "' cannot consume an upstream stream; aggregate into one canonical value before dispatch.");
             }

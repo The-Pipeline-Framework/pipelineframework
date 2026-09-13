@@ -1,12 +1,10 @@
 package org.pipelineframework.processor.routing;
 
 import java.util.*;
-import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.CardinalitySemantics;
@@ -361,7 +359,7 @@ public final class PipelineBranchRoutingPlanner {
             if (isResolvable(ctx, variantRuntimeType)) {
                 contractRuntimeTypes.putIfAbsent(variant.type(), variantRuntimeType);
             } else {
-                report(ctx, Diagnostic.Kind.WARNING, "Union contract '" + contractTypeName
+                ctx.getCompilerDiagnostics().warning("Union contract '" + contractTypeName
                     + "' variant '" + variantName + "' maps to unresolved runtime type '"
                     + variantRuntimeType.canonicalName() + "'; skipping runtime type indexing.");
             }
@@ -406,7 +404,7 @@ public final class PipelineBranchRoutingPlanner {
             if (isResolvable(ctx, payloadRuntimeType)) {
                 contractRuntimeTypes.putIfAbsent(payloadContract, payloadRuntimeType);
             } else {
-                report(ctx, Diagnostic.Kind.WARNING, "V3 union contract '" + contractTypeName
+                ctx.getCompilerDiagnostics().warning("V3 union contract '" + contractTypeName
                     + "' variant '" + variant.discriminator() + "' maps to unresolved canonical runtime type '"
                     + payloadRuntimeType.canonicalName() + "'; skipping runtime type indexing.");
             }
@@ -632,16 +630,8 @@ public final class PipelineBranchRoutingPlanner {
     }
 
     private void error(PipelineCompilationContext ctx, String message) {
-        report(ctx, Diagnostic.Kind.ERROR, message);
-    }
-
-    private void report(PipelineCompilationContext ctx, Diagnostic.Kind kind, String message) {
-        if (ctx == null || ctx.getProcessingEnv() == null) {
-            return;
-        }
-        Messager messager = ctx.getProcessingEnv().getMessager();
-        if (messager != null) {
-            messager.printMessage(kind, message);
+        if (ctx != null) {
+            ctx.getCompilerDiagnostics().error(message);
         }
     }
 

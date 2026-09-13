@@ -85,9 +85,6 @@ class StepBindingConstructionService {
     }
 
     private void warnIfDelegatedStepHasServerTargets(PipelineCompilationContext ctx, PipelineStepModel model) {
-        if (ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getMessager() == null) {
-            return;
-        }
         Set<GenerationTarget> ignoredTargets = model.enabledTargets().stream()
             .filter(target -> target == GenerationTarget.GRPC_SERVICE || target == GenerationTarget.REST_RESOURCE)
             .collect(Collectors.toSet());
@@ -96,8 +93,7 @@ class StepBindingConstructionService {
         }
 
         String ignoredTargetsMessage = ignoredTargets.stream().map(Enum::name).sorted().collect(Collectors.joining(", "));
-        ctx.getProcessingEnv().getMessager().printMessage(
-            javax.tools.Diagnostic.Kind.WARNING,
+        ctx.getCompilerDiagnostics().warning(
             "Delegated step '" + model.serviceName() + "' ignores server targets ["
                 + ignoredTargetsMessage
                 + "]. Delegated steps generate external adapters plus client bindings.");

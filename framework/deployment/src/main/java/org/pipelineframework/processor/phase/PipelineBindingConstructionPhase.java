@@ -189,7 +189,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             .map(PipelineStepModel::serviceName)
             .collect(Collectors.toSet());
         return locator.locateAndLoadDescriptors(
-            ctx.getProcessingEnv().getOptions(),
+            ctx.getCompilerOptions().asMap(),
             expectedServices,
             ctx.getProcessingEnv().getMessager());
     }

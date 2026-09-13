@@ -20,14 +20,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.contains;
@@ -41,7 +40,7 @@ class DiscoveryConfigLoaderTest {
     private final DiscoveryConfigLoader loader = new DiscoveryConfigLoader();
 
     @Mock
-    private Messager messager;
+    private PipelineCompilerDiagnostics diagnostics;
 
     @TempDir
     Path tempDir;
@@ -54,7 +53,7 @@ class DiscoveryConfigLoaderTest {
         Files.writeString(configFile, "pipeline: {}");
 
         Optional<Path> result = loader.resolvePipelineConfigPath(
-            Map.of("pipeline.config", configFile.toString()), tempDir, messager);
+            Map.of("pipeline.config", configFile.toString()), tempDir, diagnostics);
 
         assertTrue(result.isPresent());
         assertEquals(configFile, result.get());
@@ -63,10 +62,10 @@ class DiscoveryConfigLoaderTest {
     @Test
     void resolvePipelineConfigPath_explicitMissingPath_emitsError() {
         Optional<Path> result = loader.resolvePipelineConfigPath(
-            Map.of("pipeline.config", "/nonexistent/pipeline.yaml"), tempDir, messager);
+            Map.of("pipeline.config", "/nonexistent/pipeline.yaml"), tempDir, diagnostics);
 
         assertTrue(result.isEmpty());
-        verify(messager).printMessage(eq(Diagnostic.Kind.ERROR), contains("pipeline.config points to a missing path"));
+        verify(diagnostics).error(contains("pipeline.config points to a missing path"));
     }
 
     @Test
@@ -76,7 +75,7 @@ class DiscoveryConfigLoaderTest {
         Files.writeString(configFile, "pipeline: {}");
 
         Optional<Path> result = loader.resolvePipelineConfigPath(
-            Map.of("pipeline.config", "config/pipeline.yaml"), tempDir, messager);
+            Map.of("pipeline.config", "config/pipeline.yaml"), tempDir, diagnostics);
 
         assertTrue(result.isPresent());
         assertEquals(configFile, result.get());
@@ -84,13 +83,13 @@ class DiscoveryConfigLoaderTest {
 
     @Test
     void resolvePipelineConfigPath_noExplicit_noModuleDir_empty() {
-        Optional<Path> result = loader.resolvePipelineConfigPath(Map.of(), null, messager);
+        Optional<Path> result = loader.resolvePipelineConfigPath(Map.of(), null, diagnostics);
         assertTrue(result.isEmpty());
     }
 
     @Test
     void resolvePipelineConfigPath_noExplicit_moduleDirWithNoYaml_empty() {
-        Optional<Path> result = loader.resolvePipelineConfigPath(Map.of(), tempDir, messager);
+        Optional<Path> result = loader.resolvePipelineConfigPath(Map.of(), tempDir, diagnostics);
         assertTrue(result.isEmpty());
     }
 
@@ -98,12 +97,12 @@ class DiscoveryConfigLoaderTest {
 
     @Test
     void loadRuntimeMapping_nullModuleDir_returnsNull() {
-        assertNull(loader.loadRuntimeMapping(null, messager));
+        assertNull(loader.loadRuntimeMapping(null, diagnostics));
     }
 
     @Test
     void loadRuntimeMapping_noMappingFile_returnsNull() {
-        assertNull(loader.loadRuntimeMapping(tempDir, messager));
+        assertNull(loader.loadRuntimeMapping(tempDir, diagnostics));
     }
 
     // --- Null safety tests ---
@@ -111,21 +110,21 @@ class DiscoveryConfigLoaderTest {
     @Test
     void loadAspects_withNullConfigPath_throwsIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class, () -> {
-            loader.loadAspects(null, messager);
+            loader.loadAspects(null, diagnostics);
         });
     }
 
     @Test
     void loadTemplateConfig_withNullConfigPath_throwsIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class, () -> {
-            loader.loadTemplateConfig(null, messager);
+            loader.loadTemplateConfig(null, diagnostics);
         });
     }
 
     @Test
     void loadStepConfig_withNullConfigPath_throwsIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class, () -> {
-            loader.loadStepConfig(null, System::getProperty, System::getenv, messager);
+            loader.loadStepConfig(null, System::getProperty, System::getenv, diagnostics);
         });
     }
 
@@ -135,7 +134,7 @@ class DiscoveryConfigLoaderTest {
     void loadTemplateConfig_throwsExceptionWhenYamlIsInvalid() throws Exception {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, "this is: [invalid: yaml: content: {{{");
-        assertTemplateConfigLoadFails(badYaml, messager);
+        assertTemplateConfigLoadFails(badYaml, diagnostics);
     }
 
     @Test
@@ -143,11 +142,9 @@ class DiscoveryConfigLoaderTest {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, "this is: [invalid: yaml: content: {{{");
 
-        assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, messager));
+        assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, diagnostics));
 
-        verify(messager).printMessage(
-            eq(Diagnostic.Kind.ERROR),
-            contains("Failed to load pipeline template config from"));
+        verify(diagnostics).error(contains("Failed to load pipeline template config from"));
     }
 
     @Test
@@ -165,7 +162,7 @@ class DiscoveryConfigLoaderTest {
                 outputTypeName: "com.example.OrderResponse"
             """);
 
-        var config = loader.loadTemplateConfig(validYaml, messager);
+        var config = loader.loadTemplateConfig(validYaml, diagnostics);
 
         assertNotNull(config);
         assertEquals("TestApp", config.appName());
@@ -176,7 +173,7 @@ class DiscoveryConfigLoaderTest {
     void loadTemplateConfig_doesNotReturnNullOnFailureThrowsInstead() throws Exception {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, ": invalid yaml without key");
-        assertTemplateConfigLoadFails(badYaml, null);
+        assertTemplateConfigLoadFails(badYaml, (severity, message) -> { });
     }
 
     @Test
@@ -200,7 +197,7 @@ class DiscoveryConfigLoaderTest {
                 output: PaymentOutcome
             """);
 
-        var config = loader.loadTemplateConfig(yaml, null);
+        var config = loader.loadTemplateConfig(yaml, (severity, message) -> { });
 
         assertNotNull(config);
         assertEquals(3, config.version());
@@ -232,13 +229,13 @@ class DiscoveryConfigLoaderTest {
                     urlConfigKey: tpf.remote-operators.charge-card.url
             """);
 
-        var config = loader.loadTemplateConfig(yaml, messager);
+        var config = loader.loadTemplateConfig(yaml, diagnostics);
 
         assertEquals(3, config.version());
         assertTrue(config.steps().getFirst().execution().isRemote());
     }
 
-    private void assertTemplateConfigLoadFails(Path yamlPath, Messager msg) {
+    private void assertTemplateConfigLoadFails(Path yamlPath, PipelineCompilerDiagnostics msg) {
         Exception caught = assertThrows(Exception.class, () -> loader.loadTemplateConfig(yamlPath, msg));
         assertNotNull(caught, "An exception must be thrown instead of returning null");
     }

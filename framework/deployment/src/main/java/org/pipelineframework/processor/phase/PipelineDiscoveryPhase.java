@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import javax.annotation.processing.Messager;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
@@ -26,6 +25,7 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlDocumentLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
@@ -138,8 +138,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         Set<? extends Element> pluginElements =
             ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelinePlugin.class) : Set.of();
 
-        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
-        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null;
+        Map<String, String> options = ctx.getCompilerOptions().asMap();
+        PipelineCompilerDiagnostics diagnostics = ctx.getCompilerDiagnostics();
 
         // Resolve generated sources root and module directory early (needed for config discovery)
         Path generatedSourcesRoot = discoveryPathResolver.resolveGeneratedSourcesRoot(options);
@@ -149,7 +149,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setModuleDir(moduleDir);
         ctx.setModuleName(discoveryPathResolver.resolveModuleName(options));
 
-        Optional<Path> configPath = discoveryConfigLoader.resolvePipelineConfigPath(options, moduleDir, messager);
+        Optional<Path> configPath = discoveryConfigLoader.resolvePipelineConfigPath(options, moduleDir, diagnostics);
 
         // Check if this is a plugin host
         boolean isPluginHost = !pluginElements.isEmpty();
@@ -170,20 +170,20 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 ctx.setEffectivePipelineConfig(new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(
                     options::get, System::getenv).load(imported.configPath()));
 
-                List<PipelineAspectModel> aspects = loadPipelineAspects(effectiveConfigPath, messager);
+                List<PipelineAspectModel> aspects = loadPipelineAspects(effectiveConfigPath, diagnostics);
                 ctx.setAspectModels(aspects);
 
-                templateConfig = loadPipelineTemplateConfig(effectiveConfigPath, messager);
+                templateConfig = loadPipelineTemplateConfig(effectiveConfigPath, diagnostics);
                 ctx.setPipelineTemplateConfig(templateConfig);
 
                 ParsedPipelineDefinitionCatalog parsedDefinitions = parseStepDefinitions(
-                    effectiveConfigPath, messager, imported.definitions().stream()
+                    effectiveConfigPath, diagnostics, imported.definitions().stream()
                         .map(org.pipelineframework.processor.block.ImportedPipelineDefinition::qualifiedId)
                         .collect(java.util.stream.Collectors.toUnmodifiableSet()));
                 ctx.setParsedPipelineDefinitionCatalog(parsedDefinitions);
                 ctx.setStepDefinitions(parsedDefinitions.rootSteps());
-                validateCheckpointBoundaries(templateConfig, ctx, messager);
-                stepConfig = loadPipelineStepConfig(effectiveConfigPath, options, messager);
+                validateCheckpointBoundaries(templateConfig, ctx, diagnostics);
+                stepConfig = loadPipelineStepConfig(effectiveConfigPath, options, diagnostics);
             }
         } else {
             ctx.setAspectModels(List.of());
@@ -198,13 +198,13 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
 
         // Load runtime mapping config (optional)
-        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
+        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, diagnostics);
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport and platform modes
-        PipelineTransport transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
+        PipelineTransport transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), diagnostics);
         ctx.setTransportMode(transportMode);
-        PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
+        PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), diagnostics);
         ctx.setPlatformMode(platformMode);
 
         // Discover orchestrator models if present
@@ -338,11 +338,13 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param messager the messager used to report diagnostics, may be null
      * @return a list of loaded {@code PipelineAspectModel} instances; an empty list if no pipeline config is found
      */
-    private List<PipelineAspectModel> loadPipelineAspects(Optional<Path> configPath, Messager messager) {
+    private List<PipelineAspectModel> loadPipelineAspects(
+            Optional<Path> configPath,
+            PipelineCompilerDiagnostics diagnostics) {
         if (configPath.isEmpty()) {
             return List.of();
         }
-        return discoveryConfigLoader.loadAspects(configPath.get(), messager);
+        return discoveryConfigLoader.loadAspects(configPath.get(), diagnostics);
     }
 
     /**
@@ -352,11 +354,13 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param messager used to report diagnostics; may be null
      * @return the loaded PipelineTemplateConfig, or `null` if no configuration path was provided or if loading fails; when loading fails a diagnostic is reported via `messager` if available
      */
-    private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
+    private PipelineTemplateConfig loadPipelineTemplateConfig(
+            Optional<Path> configPath,
+            PipelineCompilerDiagnostics diagnostics) {
         if (configPath.isEmpty()) {
             return null;
         }
-        return discoveryConfigLoader.loadTemplateConfig(configPath.get(), messager);
+        return discoveryConfigLoader.loadTemplateConfig(configPath.get(), diagnostics);
     }
 
     /**
@@ -370,7 +374,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private void validateCheckpointBoundaries(
         PipelineTemplateConfig templateConfig,
         PipelineCompilationContext ctx,
-        Messager messager
+        PipelineCompilerDiagnostics diagnostics
     ) {
         if (templateConfig == null) {
             return;
@@ -380,12 +384,9 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 templateConfig,
                 ctx.getModuleDir(),
                 ctx.getProcessingEnv(),
-                messager);
+                diagnostics);
         } catch (RuntimeException e) {
-            if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to validate checkpoint boundary declarations: " + e.getMessage());
-            }
+            diagnostics.error("Failed to validate checkpoint boundary declarations: " + e.getMessage());
             throw e;
         }
     }
@@ -402,7 +403,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param messager the messager used to report warnings, may be null
      * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
-    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Map<String, String> options, Messager messager) {
+    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(
+            Optional<Path> configPath,
+            Map<String, String> options,
+            PipelineCompilerDiagnostics diagnostics) {
         if (configPath.isEmpty()) {
             return DEFAULT_STEP_CONFIG;
         }
@@ -412,7 +416,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             configPath.get(),
             options::get,
             System::getenv,
-            messager);
+            diagnostics);
         return loaded != null ? loaded : DEFAULT_STEP_CONFIG;
     }
 
@@ -481,8 +485,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         return orchestratorElement.getAnnotation(PipelineOrchestrator.class);
     }
 
-    private PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, Messager messager) {
-        return discoveryConfigLoader.loadRuntimeMapping(moduleDir, messager);
+    private PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, PipelineCompilerDiagnostics diagnostics) {
+        return discoveryConfigLoader.loadRuntimeMapping(moduleDir, diagnostics);
     }
 
     /**
@@ -498,7 +502,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      */
     private ParsedPipelineDefinitionCatalog parseStepDefinitions(
         Optional<Path> configPath,
-        Messager messager,
+        PipelineCompilerDiagnostics diagnostics,
         Set<String> definitionsRequiringExactOperationTypes
     ) {
         if (configPath.isEmpty()) {
@@ -506,27 +510,29 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
 
         StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
-            reportDiagnostic(messager, kind, message));
+            reportDiagnostic(diagnostics, kind, message));
         try {
             return parser.parseDefinitionCatalog(configPath.get(), definitionsRequiringExactOperationTypes);
         } catch (IOException e) {
             reportDiagnostic(
-                messager,
+                diagnostics,
                 Diagnostic.Kind.ERROR,
                 "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         } catch (Exception e) {
             reportDiagnostic(
-                messager,
+                diagnostics,
                 Diagnostic.Kind.ERROR,
                 "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             return new ParsedPipelineDefinitionCatalog(List.of(), Map.of());
         }
     }
 
-    private void reportDiagnostic(Messager messager, Diagnostic.Kind kind, String message) {
-        if (messager != null) {
-            messager.printMessage(kind, message);
-        }
+    private void reportDiagnostic(PipelineCompilerDiagnostics diagnostics, Diagnostic.Kind kind, String message) {
+        diagnostics.report(switch (kind) {
+            case ERROR -> PipelineCompilerDiagnostics.Severity.ERROR;
+            case WARNING, MANDATORY_WARNING -> PipelineCompilerDiagnostics.Severity.WARNING;
+            default -> PipelineCompilerDiagnostics.Severity.NOTE;
+        }, message);
     }
 }

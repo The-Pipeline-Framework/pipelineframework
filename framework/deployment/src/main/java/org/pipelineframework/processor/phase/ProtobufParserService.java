@@ -82,8 +82,7 @@ public class ProtobufParserService {
                 JavaFile.builder(parserPackage, parserClass).build().writeTo(outputDir);
             } catch (IOException e) {
                 if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.WARNING,
+                    ctx.getCompilerDiagnostics().warning(
                         "Failed to generate protobuf parser for '" + candidate.messageType() + "': " + e.getMessage());
                 } else {
                     LOG.warnf(e,

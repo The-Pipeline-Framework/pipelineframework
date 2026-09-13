@@ -2,7 +2,6 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.util.Objects;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateDialect;
@@ -74,8 +73,7 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
 
         if (request.grpcBinding() == null) {
             if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                ctx.getCompilerDiagnostics().warning(
                     "Skipping gRPC service generation for '" + model.generatedName()
                         + "' because no gRPC binding is available.");
             }

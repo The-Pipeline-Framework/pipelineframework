@@ -1,10 +1,9 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.Optional;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
@@ -17,18 +16,17 @@ class TransportPlatformResolver {
      * Resolve the transport mode from a configuration value.
      *
      * @param value the raw transport string, may be null or blank
-     * @param messager the messager for warning reporting, may be null
+     * @param diagnostics the compiler diagnostics for warning reporting, may be null
      * @return the resolved transport mode, defaults to GRPC
      */
-    PipelineTransport resolveTransport(String value, Messager messager) {
+    PipelineTransport resolveTransport(String value, PipelineCompilerDiagnostics diagnostics) {
         if (value == null || value.isBlank()) {
             return PipelineTransport.GRPC;
         }
         Optional<PipelineTransport> mode = PipelineTransport.fromStringOptional(value);
         if (mode.isEmpty()) {
-            if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
+            if (diagnostics != null) {
+                diagnostics.warning("Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
             }
             return PipelineTransport.GRPC;
         }
@@ -39,18 +37,17 @@ class TransportPlatformResolver {
      * Resolve the platform mode from a configuration value.
      *
      * @param value the raw platform string, may be null or blank
-     * @param messager the messager for warning reporting, may be null
+     * @param diagnostics the compiler diagnostics for warning reporting, may be null
      * @return the resolved platform mode, defaults to COMPUTE
      */
-    PlatformMode resolvePlatform(String value, Messager messager) {
+    PlatformMode resolvePlatform(String value, PipelineCompilerDiagnostics diagnostics) {
         if (value == null || value.isBlank()) {
             return PlatformMode.COMPUTE;
         }
         Optional<PlatformMode> mode = PlatformMode.fromStringOptional(value);
         if (mode.isEmpty()) {
-            if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
+            if (diagnostics != null) {
+                diagnostics.warning("Unknown pipeline platform '" + value + "'; defaulting to COMPUTE.");
             }
             return PlatformMode.COMPUTE;
         }

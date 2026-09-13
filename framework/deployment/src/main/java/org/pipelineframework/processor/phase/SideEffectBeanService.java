@@ -110,7 +110,7 @@ public class SideEffectBeanService {
                 .build()
                 .writeTo(outputDir);
         } catch (IOException e) {
-            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+            ctx.getCompilerDiagnostics().error(
                 "Failed to generate side-effect bean for '" + model.serviceName() + "' at '" + outputDir
                     + "': " + e.getMessage());
         }

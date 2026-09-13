@@ -9,13 +9,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.processor.config.PipelineAspectConfigLoader;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.config.PipelineRuntimeMappingLoader;
 import org.pipelineframework.processor.config.PipelineRuntimeMappingLocator;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
@@ -37,7 +36,10 @@ class DiscoveryConfigLoader {
      * @param messager the messager for diagnostics, may be null
      * @return an Optional containing the resolved config Path if found
      */
-    Optional<Path> resolvePipelineConfigPath(Map<String, String> options, Path moduleDir, Messager messager) {
+    Optional<Path> resolvePipelineConfigPath(
+            Map<String, String> options,
+            Path moduleDir,
+            PipelineCompilerDiagnostics diagnostics) {
         Objects.requireNonNull(options, "options must not be null");
         String explicitConfig = options.get("pipeline.config");
         if (explicitConfig != null && !explicitConfig.isBlank()) {
@@ -48,12 +50,8 @@ class DiscoveryConfigLoader {
             if (Files.exists(explicitPath)) {
                 return Optional.of(explicitPath);
             }
-            if (messager != null) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "pipeline.config points to a missing path: '" + explicitConfig + "' (resolved to '" +
-                        explicitPath + "')");
-            }
+            diagnostics.error("pipeline.config points to a missing path: '" + explicitConfig + "' (resolved to '" +
+                explicitPath + "')");
             return Optional.empty();
         }
         if (moduleDir == null) {
@@ -70,7 +68,7 @@ class DiscoveryConfigLoader {
      * @param messager the messager for error reporting, may be null
      * @return a list of loaded aspect models
      */
-    List<PipelineAspectModel> loadAspects(Path configPath, Messager messager) {
+    List<PipelineAspectModel> loadAspects(Path configPath, PipelineCompilerDiagnostics diagnostics) {
         if (configPath == null) {
             throw new IllegalArgumentException("configPath must not be null");
         }
@@ -78,13 +76,11 @@ class DiscoveryConfigLoader {
         try {
             return loader.load(configPath);
         } catch (Exception e) {
-            if (messager != null) {
-                String errorMessage = "Failed to load pipeline aspects from " + configPath + ": " + e.toString();
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                e.printStackTrace(pw);
-                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
-            }
+            String errorMessage = "Failed to load pipeline aspects from " + configPath + ": " + e.toString();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            diagnostics.error(errorMessage + "\n" + sw);
             throw e;
         }
     }
@@ -96,26 +92,22 @@ class DiscoveryConfigLoader {
      * @param messager the messager for error reporting, may be null
      * @return the loaded template config
      */
-    PipelineTemplateConfig loadTemplateConfig(Path configPath, Messager messager) {
+    PipelineTemplateConfig loadTemplateConfig(Path configPath, PipelineCompilerDiagnostics diagnostics) {
         if (configPath == null) {
             throw new IllegalArgumentException("configPath must not be null");
         }
-        PipelineTemplateConfigLoader loader = messager == null
-            ? new PipelineTemplateConfigLoader()
-            : new PipelineTemplateConfigLoader(
-                System::getProperty,
-                System::getenv,
-                warning -> messager.printMessage(Diagnostic.Kind.WARNING, warning));
+        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader(
+            System::getProperty,
+            System::getenv,
+            diagnostics::warning);
         try {
             return loader.load(configPath);
         } catch (Exception e) {
-            if (messager != null) {
-                String errorMessage = "Failed to load pipeline template config from " + configPath + ": " + e.toString();
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                e.printStackTrace(pw);
-                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
-            }
+            String errorMessage = "Failed to load pipeline template config from " + configPath + ": " + e.toString();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            diagnostics.error(errorMessage + "\n" + sw);
             throw e;
         }
     }
@@ -133,21 +125,20 @@ class DiscoveryConfigLoader {
             Path configPath,
             Function<String, String> propertyLookup,
             Function<String, String> envLookup,
-            Messager messager) {
+            PipelineCompilerDiagnostics diagnostics) {
         if (configPath == null) {
             throw new IllegalArgumentException("configPath must not be null");
         }
-        PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(propertyLookup, envLookup, messager);
+        PipelineStepConfigLoader stepLoader = PipelineStepConfigLoader.withWarningSink(
+            propertyLookup, envLookup, diagnostics::warning);
         try {
             return stepLoader.load(configPath);
         } catch (Exception e) {
-            if (messager != null) {
-                String errorMessage = "Failed to load pipeline transport/platform from " + configPath + ": " + e.toString();
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                e.printStackTrace(pw);
-                messager.printMessage(Diagnostic.Kind.WARNING, errorMessage + "\n" + sw.toString());
-            }
+            String errorMessage = "Failed to load pipeline transport/platform from " + configPath + ": " + e.toString();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            diagnostics.warning(errorMessage + "\n" + sw);
             return null;
         }
     }
@@ -159,7 +150,7 @@ class DiscoveryConfigLoader {
      * @param messager the messager for error reporting, may be null
      * @return the loaded runtime mapping, or null if none found
      */
-    PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, Messager messager) {
+    PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, PipelineCompilerDiagnostics diagnostics) {
         if (moduleDir == null) {
             return null;
         }
@@ -173,13 +164,11 @@ class DiscoveryConfigLoader {
         try {
             return loader.load(configPath.get());
         } catch (Exception e) {
-            if (messager != null) {
-                String errorMessage = "Failed to load runtime mapping from " + configPath.get() + ": " + e.toString();
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                e.printStackTrace(pw);
-                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
-            }
+            String errorMessage = "Failed to load runtime mapping from " + configPath.get() + ": " + e.toString();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            diagnostics.error(errorMessage + "\n" + sw);
             throw e;
         }
     }

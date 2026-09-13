@@ -2,7 +2,6 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.util.Objects;
-import javax.tools.Diagnostic;
 
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -85,8 +84,7 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
         }
 
         if (request.localBinding() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                Diagnostic.Kind.WARNING,
+            ctx.getCompilerDiagnostics().warning(
                 "Skipping local client step generation for '" + model.generatedName()
                     + "' because no local binding is available.");
             return;

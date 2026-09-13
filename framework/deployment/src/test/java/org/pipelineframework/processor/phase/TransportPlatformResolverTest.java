@@ -16,14 +16,12 @@
 
 package org.pipelineframework.processor.phase;
 
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 import org.pipelineframework.processor.ir.PipelineTransport;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -40,101 +38,103 @@ class TransportPlatformResolverTest {
     private final TransportPlatformResolver resolver = new TransportPlatformResolver();
 
     @Mock
-    private Messager messager;
+    private PipelineCompilerDiagnostics diagnostics;
 
     // --- Transport ---
 
     @Test
     void resolveTransport_grpc() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("GRPC", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("GRPC", diagnostics));
     }
 
     @Test
     void resolveTransport_rest() {
-        assertEquals(PipelineTransport.REST, resolver.resolveTransport("REST", messager));
+        assertEquals(PipelineTransport.REST, resolver.resolveTransport("REST", diagnostics));
     }
 
     @Test
     void resolveTransport_local() {
-        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("LOCAL", messager));
+        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("LOCAL", diagnostics));
     }
 
     @Test
     void resolveTransport_null_defaultsToGrpc() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport(null, messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport(null, diagnostics));
     }
 
     @Test
     void resolveTransport_blank_defaultsToGrpc() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("  ", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("  ", diagnostics));
     }
 
     @Test
     void resolveTransport_unknown_warnsAndDefaultsToGrpc() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("UNKNOWN", messager));
-        verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown pipeline transport"));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("UNKNOWN", diagnostics));
+        verify(diagnostics).warning(contains("Unknown pipeline transport"));
     }
 
     @Test
-    void resolveTransport_nullMessager_noException() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("INVALID", null));
+    void resolveTransport_nullDiagnostics_noException() {
+        assertEquals(PipelineTransport.GRPC,
+            resolver.resolveTransport("INVALID", null));
     }
 
     // --- Platform ---
 
     @Test
     void resolvePlatform_compute() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("COMPUTE", messager));
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("COMPUTE", diagnostics));
     }
 
     @Test
     void resolvePlatform_function() {
-        assertEquals(PlatformMode.FUNCTION, resolver.resolvePlatform("FUNCTION", messager));
+        assertEquals(PlatformMode.FUNCTION, resolver.resolvePlatform("FUNCTION", diagnostics));
     }
 
     @Test
     void resolvePlatform_null_defaultsToCompute() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform(null, messager));
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform(null, diagnostics));
     }
 
     @Test
     void resolvePlatform_blank_defaultsToCompute() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("  ", messager));
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("  ", diagnostics));
     }
 
     @Test
     void resolvePlatform_unknown_warnsAndDefaultsToCompute() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("UNKNOWN", messager));
-        verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown pipeline platform"));
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("UNKNOWN", diagnostics));
+        verify(diagnostics).warning(contains("Unknown pipeline platform"));
     }
 
     @Test
-    void resolvePlatform_nullMessager_noException() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("INVALID", null));
+    void resolvePlatform_nullDiagnostics_noException() {
+        assertEquals(PlatformMode.COMPUTE,
+            resolver.resolvePlatform("INVALID", null));
     }
 
     @Test
     void resolveTransport_caseInsensitive() {
-        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("grpc", messager));
-        assertEquals(PipelineTransport.REST, resolver.resolveTransport("rest", messager));
-        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("local", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("grpc", diagnostics));
+        assertEquals(PipelineTransport.REST, resolver.resolveTransport("rest", diagnostics));
+        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("local", diagnostics));
     }
 
     @Test
     void resolvePlatform_caseInsensitive() {
-        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("compute", messager));
-        assertEquals(PlatformMode.FUNCTION, resolver.resolvePlatform("function", messager));
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("compute", diagnostics));
+        assertEquals(PlatformMode.FUNCTION, resolver.resolvePlatform("function", diagnostics));
     }
 
     @Test
     void resolveTransport_validValues_noWarning() {
-        resolver.resolveTransport("GRPC", messager);
-        verify(messager, never()).printMessage(any(), any(String.class));
+        resolver.resolveTransport("GRPC", diagnostics);
+        verify(diagnostics, never()).report(any(), any(String.class));
     }
 
     @Test
     void resolvePlatform_validValues_noWarning() {
-        resolver.resolvePlatform("COMPUTE", messager);
-        verify(messager, never()).printMessage(any(), any(String.class));
+        resolver.resolvePlatform("COMPUTE", diagnostics);
+        verify(diagnostics, never()).report(any(), any(String.class));
     }
 }

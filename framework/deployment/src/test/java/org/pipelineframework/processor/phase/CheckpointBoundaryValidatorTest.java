@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -27,6 +26,7 @@ import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.processor.PipelineCompilerDiagnostics;
 
 class CheckpointBoundaryValidatorTest {
 
@@ -71,14 +71,14 @@ class CheckpointBoundaryValidatorTest {
     @Test
     void validateReportsCheckpointPublicationNoteToMessager() throws IOException {
         writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
-        Messager messager = mock(Messager.class);
+        PipelineCompilerDiagnostics diagnostics = mock(PipelineCompilerDiagnostics.class);
         PipelineTemplateConfig templateConfig = templateConfig(
             null,
             new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of())),
             PipelinePlatform.COMPUTE);
 
-        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, messager));
-        verify(messager).printMessage(eq(javax.tools.Diagnostic.Kind.NOTE), contains("orders-dispatched"));
+        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, diagnostics));
+        verify(diagnostics).note(contains("orders-dispatched"));
     }
 
     @Test
@@ -130,13 +130,13 @@ class CheckpointBoundaryValidatorTest {
     @Test
     void validateSucceedsWhenQueueAsyncModeReadFromModuleDir() throws IOException {
         writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
-        Messager messager = mock(Messager.class);
+        PipelineCompilerDiagnostics diagnostics = mock(PipelineCompilerDiagnostics.class);
         PipelineTemplateConfig templateConfig = templateConfig(
             null,
             new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of("orderId"))),
             PipelinePlatform.COMPUTE);
 
-        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, messager));
+        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, diagnostics));
     }
 
     @Test
