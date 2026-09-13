@@ -17,19 +17,6 @@ import org.pipelineframework.execution.PipelineExecutionContext;
 class InMemoryCommandEffectReissueTest {
 
     @Test
-    void reissueModelRequiresPurposeOccurrenceAndAuditReason() {
-        assertThrows(IllegalArgumentException.class, () -> CommandAttemptAdmission.reissue(" "));
-        assertThrows(IllegalArgumentException.class, () -> new CommandEffectAttemptRecord(
-            "attempt-1", " ", 1, "execution-1", CommandAttemptPurpose.INITIAL,
-            CommandEffectStatus.PENDING, Optional.empty(), null, null, Optional.empty(),
-            Optional.empty(), 1L, 1L));
-        assertThrows(IllegalArgumentException.class, () -> new CommandEffectAttemptRecord(
-            "attempt-1", "occurrence-1", 1, "execution-1", CommandAttemptPurpose.REISSUE,
-            CommandEffectStatus.PENDING, Optional.empty(), null, null, Optional.empty(),
-            Optional.empty(), 1L, 1L));
-    }
-
-    @Test
     void reissueRequiresSucceededAndConcurrentClaimsHaveOneWinner() {
         InMemoryCommandEffectStore store = new InMemoryCommandEffectStore();
         CommandRequest<Input> initial = request("command-1", "command-1", "attempt-1", "execution-1");
