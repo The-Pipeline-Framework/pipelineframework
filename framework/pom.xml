@@ -87,7 +87,6 @@
         <module>runtime-api</module>
         <module>runtime-protocol</module>
         <module>dsl</module>
-        <module>compiler</module>
         <module>connector-maven-plugin</module>
         <module>connector-import-tooling</module>
         <module>connector-mcp-maven-plugin</module>
