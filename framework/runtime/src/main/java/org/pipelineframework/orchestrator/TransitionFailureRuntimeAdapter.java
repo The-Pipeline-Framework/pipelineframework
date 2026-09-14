@@ -1,7 +1,10 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.pipelineframework.command.CommandRetryableEffectException;
 import org.pipelineframework.step.NonRetryableException;
 
@@ -12,12 +15,27 @@ final class TransitionFailureRuntimeAdapter {
 
     static TransitionFailureEnvelope from(Throwable failure, int failedStepIndex) {
         Objects.requireNonNull(failure, "failure");
+        Throwable classifiedFailure = findNonRetryable(failure)
+            .<Throwable>map(nonRetryable -> nonRetryable)
+            .orElse(failure);
         return new TransitionFailureEnvelope(
-            failure.getClass().getName(),
-            Optional.ofNullable(failure.getMessage()).orElse(""),
+            classifiedFailure.getClass().getName(),
+            Optional.ofNullable(classifiedFailure.getMessage()).orElse(""),
             failedStepIndex,
             CommandRetryableEffectException.find(failure)
                 .map(CommandRetryableEffectException::commandId));
+    }
+
+    private static Optional<NonRetryableException> findNonRetryable(Throwable failure) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        Throwable current = failure;
+        while (current != null && seen.add(current)) {
+            if (current instanceof NonRetryableException nonRetryable) {
+                return Optional.of(nonRetryable);
+            }
+            current = current.getCause();
+        }
+        return Optional.empty();
     }
 
     static RuntimeException toException(TransitionFailureEnvelope failure) {
