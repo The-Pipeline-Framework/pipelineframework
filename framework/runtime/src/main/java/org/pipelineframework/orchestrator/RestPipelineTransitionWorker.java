@@ -229,7 +229,7 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
             String nonce = UUID.randomUUID().toString();
             String signature = TransitionWorkerSignature.sign(
                 sharedSecret(),
-                "POST",
+                RestTransitionWorkerProtocol.EXECUTE_METHOD,
                 orchestratorConfig.workerRest().path(),
                 timestamp,
                 nonce,
@@ -255,7 +255,7 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
         String nonce = UUID.randomUUID().toString();
         String signature = TransitionWorkerSignature.sign(
             sharedSecret(),
-            "GET",
+            RestTransitionWorkerProtocol.CAPABILITIES_METHOD,
             orchestratorConfig.workerRest().capabilitiesPath(),
             timestamp,
             nonce,

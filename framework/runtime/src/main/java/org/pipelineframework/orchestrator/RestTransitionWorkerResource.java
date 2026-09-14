@@ -26,14 +26,10 @@ import org.pipelineframework.config.pipeline.PipelineJson;
  * Default-disabled REST endpoint for executing transition worker commands.
  */
 @ApplicationScoped
-@Path("/pipeline/worker")
+@Path(RestTransitionWorkerProtocol.RESOURCE_ROOT)
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class RestTransitionWorkerResource {
-
-    static final String RESOURCE_ROOT = "/pipeline/worker";
-    static final String EXECUTE_PATH = RESOURCE_ROOT + "/transitions/execute";
-    static final String CAPABILITIES_PATH = RESOURCE_ROOT + "/capabilities";
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
 
@@ -56,13 +52,15 @@ public class RestTransitionWorkerResource {
         if (!orchestratorConfig.workerRest().serverEnabled()) {
             return;
         }
-        if (!EXECUTE_PATH.equals(orchestratorConfig.workerRest().path())) {
+        if (!RestTransitionWorkerProtocol.EXECUTE_PATH.equals(orchestratorConfig.workerRest().path())) {
             throw new IllegalStateException("REST transition worker server only supports "
-                + "pipeline.orchestrator.worker.rest.path=" + EXECUTE_PATH);
+                + "pipeline.orchestrator.worker.rest.path=" + RestTransitionWorkerProtocol.EXECUTE_PATH);
         }
-        if (!CAPABILITIES_PATH.equals(orchestratorConfig.workerRest().capabilitiesPath())) {
+        if (!RestTransitionWorkerProtocol.CAPABILITIES_PATH.equals(
+            orchestratorConfig.workerRest().capabilitiesPath())) {
             throw new IllegalStateException("REST transition worker server only supports "
-                + "pipeline.orchestrator.worker.rest.capabilities-path=" + CAPABILITIES_PATH);
+                + "pipeline.orchestrator.worker.rest.capabilities-path="
+                + RestTransitionWorkerProtocol.CAPABILITIES_PATH);
         }
         WorkerSecretSupport.validationError(
             orchestratorConfig.workerRest().sharedSecret(),
@@ -76,7 +74,7 @@ public class RestTransitionWorkerResource {
     }
 
     @POST
-    @Path("/transitions/execute")
+    @Path(RestTransitionWorkerProtocol.EXECUTE_RESOURCE_PATH)
     @Blocking
     public Uni<Response> execute(
         @HeaderParam(TransitionWorkerSignature.TIMESTAMP_HEADER) String timestamp,
@@ -88,8 +86,8 @@ public class RestTransitionWorkerResource {
             return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
         }
         Response authFailure = authenticate(
-            "POST",
-            EXECUTE_PATH,
+            RestTransitionWorkerProtocol.EXECUTE_METHOD,
+            RestTransitionWorkerProtocol.EXECUTE_PATH,
             timestamp,
             nonce,
             signature,
@@ -111,7 +109,7 @@ public class RestTransitionWorkerResource {
     }
 
     @GET
-    @Path("/capabilities")
+    @Path(RestTransitionWorkerProtocol.CAPABILITIES_RESOURCE_PATH)
     @Blocking
     public Uni<Response> capabilities(
         @HeaderParam(TransitionWorkerSignature.TIMESTAMP_HEADER) String timestamp,
@@ -122,8 +120,8 @@ public class RestTransitionWorkerResource {
             return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND).build());
         }
         Response authFailure = authenticate(
-            "GET",
-            CAPABILITIES_PATH,
+            RestTransitionWorkerProtocol.CAPABILITIES_METHOD,
+            RestTransitionWorkerProtocol.CAPABILITIES_PATH,
             timestamp,
             nonce,
             signature,

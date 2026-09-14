@@ -7,18 +7,25 @@ import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-final class TransitionWorkerSignature {
+/** Shared HMAC signature contract for authenticated transition-worker protocols. */
+public final class TransitionWorkerSignature {
 
-    static final String TIMESTAMP_HEADER = "X-TPF-Worker-Timestamp";
-    static final String NONCE_HEADER = "X-TPF-Worker-Nonce";
-    static final String SIGNATURE_HEADER = "X-TPF-Worker-Signature";
+    public static final String TIMESTAMP_HEADER = "X-TPF-Worker-Timestamp";
+    public static final String NONCE_HEADER = "X-TPF-Worker-Nonce";
+    public static final String SIGNATURE_HEADER = "X-TPF-Worker-Signature";
 
     private static final HexFormat HEX = HexFormat.of();
 
     private TransitionWorkerSignature() {
     }
 
-    static String sign(String secret, String method, String path, String timestamp, String nonce, byte[] body) {
+    public static String sign(
+        String secret,
+        String method,
+        String path,
+        String timestamp,
+        String nonce,
+        byte[] body) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
@@ -29,7 +36,7 @@ final class TransitionWorkerSignature {
         }
     }
 
-    static boolean matches(String expected, String actual) {
+    public static boolean matches(String expected, String actual) {
         if (expected == null || actual == null) {
             return false;
         }
@@ -38,7 +45,7 @@ final class TransitionWorkerSignature {
             actual.getBytes(StandardCharsets.UTF_8));
     }
 
-    static long parseTimestamp(String timestamp) {
+    public static long parseTimestamp(String timestamp) {
         try {
             return Instant.parse(timestamp).toEpochMilli();
         } catch (Exception e) {
