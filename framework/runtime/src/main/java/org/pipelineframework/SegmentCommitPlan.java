@@ -46,7 +46,7 @@ sealed interface SegmentCommitPlan permits CompletedSegment, SuspendedSegment, F
     if (result.outcome() == TransitionWorkerOutcome.WAITING_EXTERNAL) {
       return new SuspendedSegment(segment, result.awaitSuspension());
     }
-    return new FailedSegment(segment, result.failure().toException());
+    return new FailedSegment(segment, result.failureException());
   }
 
   static CompletedSegment completed(

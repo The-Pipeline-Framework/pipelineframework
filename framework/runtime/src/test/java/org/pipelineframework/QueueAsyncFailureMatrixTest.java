@@ -23,6 +23,7 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.RemoteTransitionOutcomeUnknownException;
 import org.pipelineframework.orchestrator.TransitionFailureEnvelope;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
 import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJournal;
@@ -271,7 +272,8 @@ class QueueAsyncFailureMatrixTest {
         assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
             record,
             "exec-13:0:0",
-            new TransitionFailureEnvelope(NonRetryableException.class.getName(), "do not retry").toException(),
+            TransitionResultEnvelope.failed(new TransitionFailureEnvelope(
+                NonRetryableException.class.getName(), "do not retry")).failureException(),
             executionStateStore,
             workDispatcher,
             deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
@@ -291,9 +293,9 @@ class QueueAsyncFailureMatrixTest {
 
     @Test
     void transitionFailureEnvelopePreservesNonRetryableSubclassClassification() {
-        RuntimeException exception = new TransitionFailureEnvelope(
+        RuntimeException exception = TransitionResultEnvelope.failed(new TransitionFailureEnvelope(
             CustomNonRetryableException.class.getName(),
-            "custom non-retryable").toException();
+            "custom non-retryable")).failureException();
 
         assertTrue(exception instanceof NonRetryableException);
         assertEquals("custom non-retryable", exception.getMessage());
@@ -420,11 +422,11 @@ class QueueAsyncFailureMatrixTest {
             anyInt(), any(), anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(record)));
         when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
-        RuntimeException failure = new TransitionFailureEnvelope(
+        RuntimeException failure = TransitionResultEnvelope.failed(new TransitionFailureEnvelope(
             IllegalStateException.class.getName(),
             "archive failed",
             6,
-            Optional.of("archive:confirmation-7")).toException();
+            Optional.of("archive:confirmation-7"))).failureException();
 
         failureHandler.handleExecutionFailure(
             record,

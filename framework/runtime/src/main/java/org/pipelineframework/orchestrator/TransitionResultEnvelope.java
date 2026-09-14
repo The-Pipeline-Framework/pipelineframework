@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Portable result returned across the transition-worker seam.
+ * Runtime-local transition result. Remote transports exchange {@link TransitionWireResult}.
  *
  * @param outcome transition outcome
  * @param outputPayloads serialized output payloads
@@ -171,7 +171,7 @@ public record TransitionResultEnvelope(
             TransitionWorkerOutcome.FAILED,
             List.of(),
             null,
-            TransitionFailureEnvelope.from(failure));
+            TransitionFailureRuntimeAdapter.from(failure, -1));
     }
 
     public static TransitionResultEnvelope failed(Throwable failure, int failedStepIndex) {
@@ -179,10 +179,68 @@ public record TransitionResultEnvelope(
             TransitionWorkerOutcome.FAILED,
             List.of(),
             null,
-            TransitionFailureEnvelope.from(failure, failedStepIndex),
+            TransitionFailureRuntimeAdapter.from(failure, failedStepIndex),
             null,
             false,
             false);
+    }
+
+    public static TransitionResultEnvelope failed(TransitionFailureEnvelope failure) {
+        Objects.requireNonNull(failure, "failure must not be null");
+        return new TransitionResultEnvelope(
+            TransitionWorkerOutcome.FAILED,
+            List.of(),
+            null,
+            failure);
+    }
+
+    /**
+     * Converts this runtime-local result to its portable transport representation.
+     *
+     * @return portable transition result
+     */
+    public TransitionWireResult toWireResult() {
+        if (decodedOutputItems != null) {
+            throw new IllegalStateException(
+                "A transition result with decoded output items cannot cross a remote worker boundary");
+        }
+        return new TransitionWireResult(
+            outcome,
+            outputPayloads,
+            awaitSuspension,
+            failure,
+            terminalOutputPublished,
+            terminalInputPassthrough);
+    }
+
+    /**
+     * Converts a portable transport result to the runtime-local representation.
+     *
+     * @param result portable transition result
+     * @return runtime-local transition result
+     */
+    public static TransitionResultEnvelope fromWireResult(TransitionWireResult result) {
+        Objects.requireNonNull(result, "result must not be null");
+        return new TransitionResultEnvelope(
+            result.outcome(),
+            result.outputPayloads(),
+            result.awaitSuspension(),
+            result.failure(),
+            null,
+            result.terminalOutputPublished(),
+            result.terminalInputPassthrough());
+    }
+
+    /**
+     * Reconstructs the runtime exception represented by a failed result.
+     *
+     * @return runtime failure
+     */
+    public RuntimeException failureException() {
+        if (outcome != TransitionWorkerOutcome.FAILED) {
+            throw new IllegalStateException("Only FAILED transition results contain a runtime failure");
+        }
+        return TransitionFailureRuntimeAdapter.toException(failure);
     }
 
     /**

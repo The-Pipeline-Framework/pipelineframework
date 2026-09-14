@@ -182,7 +182,10 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker, T
                     + " for execution " + command.executionId());
         }
         try {
-            return JSON.readValue(response.getResultEnvelope().toByteArray(), TransitionResultEnvelope.class);
+            TransitionWireResult result = JSON.readValue(
+                response.getResultEnvelope().toByteArray(),
+                TransitionWireResult.class);
+            return TransitionResultEnvelope.fromWireResult(result);
         } catch (IOException e) {
             throw new TransitionWorkerFailureException(
                 "gRPC transition worker returned malformed JSON for execution " + command.executionId(),

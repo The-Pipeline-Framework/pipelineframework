@@ -149,7 +149,7 @@ public class GrpcTransitionWorkerService
 
     private TransitionWorkerResponse response(TransitionResultEnvelope result) {
         try {
-            byte[] body = JSON.writeValueAsBytes(result);
+            byte[] body = JSON.writeValueAsBytes(result.toWireResult());
             return TransitionWorkerResponse.newBuilder()
                 .setProtocolVersion(GrpcTransitionWorkerProtocol.PROTOCOL_VERSION)
                 .setPayloadEncoding(GrpcTransitionWorkerProtocol.PAYLOAD_ENCODING)

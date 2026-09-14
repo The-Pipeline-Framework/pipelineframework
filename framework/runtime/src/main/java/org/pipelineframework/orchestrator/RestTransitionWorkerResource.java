@@ -107,7 +107,7 @@ public class RestTransitionWorkerResource {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST).build());
         }
         return executionService.executePortableTransition(envelope)
-            .onItem().transform(result -> Response.ok(result).build());
+            .onItem().transform(result -> Response.ok(result.toWireResult()).build());
     }
 
     @GET

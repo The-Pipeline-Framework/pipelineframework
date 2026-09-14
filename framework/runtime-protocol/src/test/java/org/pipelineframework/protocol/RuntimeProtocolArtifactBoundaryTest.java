@@ -29,6 +29,10 @@ class RuntimeProtocolArtifactBoundaryTest {
         assertNotNull(CLASS_LOADER.getResource("checkpoint_publication.proto"));
         assertNotNull(CLASS_LOADER.getResource("payload_reference_storage.proto"));
         assertNotNull(CLASS_LOADER.getResource("transition_worker.proto"));
+        assertNotNull(CLASS_LOADER.getResource(
+            "org/pipelineframework/orchestrator/TransitionWireResult.class"));
+        assertNotNull(CLASS_LOADER.getResource(
+            "org/pipelineframework/orchestrator/TransitionFailureEnvelope.class"));
 
         assertNull(CLASS_LOADER.getResource(
             "org/pipelineframework/checkpoint/grpc/MutinyCheckpointPublicationServiceGrpc.class"));

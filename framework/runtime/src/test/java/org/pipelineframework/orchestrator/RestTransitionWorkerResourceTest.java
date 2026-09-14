@@ -75,7 +75,7 @@ class RestTransitionWorkerResourceTest {
             request.body()).await().indefinitely();
 
         assertEquals(200, response.getStatus());
-        assertEquals(TransitionWorkerOutcome.COMPLETED, ((TransitionResultEnvelope) response.getEntity()).outcome());
+        assertEquals(TransitionWorkerOutcome.COMPLETED, ((TransitionWireResult) response.getEntity()).outcome());
     }
 
     @Test

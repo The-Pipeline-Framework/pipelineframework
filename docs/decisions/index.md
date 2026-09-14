@@ -57,6 +57,7 @@ authoritative for exact syntax and release support.
 | [0046](./0046-execution-state-store-is-portable-runtime-spi.md) | Keep durable execution state contracts portable while runtime hosts own provider configuration and implementations. |
 | [0047](./0047-transition-requests-are-shared-runtime-protocol.md) | Keep transition request and payload contracts shared while runtime hosts own transport and worker implementations. |
 | [0048](./0048-quarkus-hosts-generated-grpc-adapters.md) | Publish portable protobuf schemas while Quarkus owns generation of its Java and Mutiny adapters. |
+| [0049](./0049-transition-results-separate-wire-data-from-runtime-outcomes.md) | Share portable transition result data while keeping decoded outcomes and executable failures runtime-local. |
 
 ## Maintenance
 

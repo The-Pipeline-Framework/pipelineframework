@@ -227,7 +227,8 @@ class GrpcPipelineTransitionWorkerTest {
             return TransitionWorkerResponse.newBuilder()
                 .setProtocolVersion(GrpcTransitionWorkerProtocol.PROTOCOL_VERSION)
                 .setPayloadEncoding(GrpcTransitionWorkerProtocol.PAYLOAD_ENCODING)
-                .setResultEnvelope(ByteString.copyFrom(PipelineJson.mapper().writeValueAsBytes(result)))
+                .setResultEnvelope(ByteString.copyFrom(
+                    PipelineJson.mapper().writeValueAsBytes(result.toWireResult())))
                 .build();
         } catch (Exception e) {
             throw new IllegalStateException(e);
