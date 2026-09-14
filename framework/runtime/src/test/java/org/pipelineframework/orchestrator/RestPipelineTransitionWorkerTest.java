@@ -73,7 +73,7 @@ class RestPipelineTransitionWorkerTest {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes()));
             signature.set(exchange.getRequestHeaders().getFirst(TransitionWorkerSignature.SIGNATURE_HEADER));
             byte[] response = PipelineJson.mapper()
-                .writeValueAsBytes(TransitionResultEnvelope.completed(payloadCodec, List.of("ok")));
+                .writeValueAsBytes(TransitionResultEnvelope.completed(payloadCodec, List.of("ok")).toWireResult());
             exchange.sendResponseHeaders(200, response.length);
             try (OutputStream output = exchange.getResponseBody()) {
                 output.write(response);
@@ -128,7 +128,7 @@ class RestPipelineTransitionWorkerTest {
             exchange.getRequestBody().readAllBytes();
             signature.set(exchange.getRequestHeaders().getFirst(TransitionWorkerSignature.SIGNATURE_HEADER));
             byte[] response = PipelineJson.mapper()
-                .writeValueAsBytes(TransitionResultEnvelope.completed(payloadCodec, List.of("ok")));
+                .writeValueAsBytes(TransitionResultEnvelope.completed(payloadCodec, List.of("ok")).toWireResult());
             exchange.sendResponseHeaders(200, response.length);
             try (OutputStream output = exchange.getResponseBody()) {
                 output.write(response);

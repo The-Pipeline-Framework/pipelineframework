@@ -202,15 +202,15 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
                     + " with response body omitted");
         }
         try {
-            TransitionResultEnvelope envelope = JSON.readValue(response.body(), TransitionResultEnvelope.class);
-            if (envelope == null) {
+            TransitionWireResult result = JSON.readValue(response.body(), TransitionWireResult.class);
+            if (result == null) {
                 throw new TransitionWorkerFailureException(
                     "REST transition worker returned an empty result for execution "
                         + command.executionId()
                         + " with HTTP " + response.statusCode()
                         + " and response body omitted");
             }
-            return envelope;
+            return TransitionResultEnvelope.fromWireResult(result);
         } catch (IOException e) {
             throw new TransitionWorkerFailureException(
                 "REST transition worker returned malformed JSON for execution "

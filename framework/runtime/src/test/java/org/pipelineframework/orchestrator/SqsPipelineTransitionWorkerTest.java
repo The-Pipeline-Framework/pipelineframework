@@ -223,7 +223,7 @@ class SqsPipelineTransitionWorkerTest {
 
     private Message responseMessage(String receiptHandle, String requestId, TransitionResultEnvelope result) {
         try {
-            String resultJson = PipelineJson.mapper().writeValueAsString(result);
+            String resultJson = PipelineJson.mapper().writeValueAsString(result.toWireResult());
             String timestamp = Instant.now().toString();
             String nonce = UUID.randomUUID().toString();
             String signature = TransitionWorkerSignature.sign(

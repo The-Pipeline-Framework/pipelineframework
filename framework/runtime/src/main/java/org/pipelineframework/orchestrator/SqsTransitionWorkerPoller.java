@@ -199,7 +199,7 @@ public class SqsTransitionWorkerPoller {
 
     private void sendResponse(String requestId, TransitionResultEnvelope result) {
         try {
-            String resultJson = JSON.writeValueAsString(result);
+            String resultJson = JSON.writeValueAsString(result.toWireResult());
             String timestamp = Instant.now().toString();
             String nonce = UUID.randomUUID().toString();
             String signature = TransitionWorkerSignature.sign(

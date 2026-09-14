@@ -226,7 +226,8 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker, Tr
 
     private TransitionResultEnvelope decodeResult(SqsTransitionWorkerResponse response, TransitionCommandEnvelope command) {
         try {
-            return JSON.readValue(response.resultEnvelope(), TransitionResultEnvelope.class);
+            TransitionWireResult result = JSON.readValue(response.resultEnvelope(), TransitionWireResult.class);
+            return TransitionResultEnvelope.fromWireResult(result);
         } catch (Exception e) {
             throw new TransitionWorkerFailureException(
                 "SQS transition worker returned malformed result envelope for execution " + command.executionId(), e);

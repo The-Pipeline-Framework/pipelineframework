@@ -10,12 +10,12 @@ class TransitionFailureEnvelopeTest {
 
   @Test
   void preservesFailedStepAcrossWorkerFailureEnvelope() {
-    TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(
+    TransitionFailureEnvelope envelope = TransitionFailureRuntimeAdapter.from(
         new IllegalStateException("archive failed"),
         13);
 
     TransitionWorkerFailureException failure =
-        (TransitionWorkerFailureException) envelope.toException();
+        (TransitionWorkerFailureException) TransitionFailureRuntimeAdapter.toException(envelope);
 
     assertEquals(13, envelope.failedStepIndex());
     assertEquals(13, failure.failedStepIndex());
@@ -23,7 +23,7 @@ class TransitionFailureEnvelopeTest {
 
   @Test
   void normalizesMissingThrowableMessage() {
-    TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(new IllegalStateException());
+    TransitionFailureEnvelope envelope = TransitionFailureRuntimeAdapter.from(new IllegalStateException(), -1);
 
     assertEquals("", envelope.message());
   }
@@ -33,9 +33,9 @@ class TransitionFailureEnvelopeTest {
     Throwable retryable = CommandRetryTestAccess.retryableFailure(
         "archive:confirmation-7", new IllegalStateException("archive failed"));
 
-    TransitionFailureEnvelope envelope = TransitionFailureEnvelope.from(retryable, 3);
+    TransitionFailureEnvelope envelope = TransitionFailureRuntimeAdapter.from(retryable, 3);
     TransitionWorkerFailureException decoded =
-        (TransitionWorkerFailureException) envelope.toException();
+        (TransitionWorkerFailureException) TransitionFailureRuntimeAdapter.toException(envelope);
 
     assertEquals(3, envelope.failedStepIndex());
     assertEquals(Optional.of("archive:confirmation-7"), envelope.failedCommandId());

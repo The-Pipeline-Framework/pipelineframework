@@ -410,8 +410,31 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void portableResultRoundTripsThroughWireBoundary() {
+        TransitionResultEnvelope portable = TransitionResultEnvelope.completed(
+            payloadCodec,
+            List.of("output"),
+            true);
+
+        TransitionResultEnvelope decoded = TransitionResultEnvelope.fromWireResult(portable.toWireResult());
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, decoded.outcome());
+        assertEquals(List.of("output"), decoded.decodeOutputItems(payloadCodec));
+        assertEquals(true, decoded.terminalOutputPublished());
+    }
+
+    @Test
+    void decodedInProcessResultCannotCrossRemoteBoundary() {
+        TransitionResultEnvelope local = TransitionResultEnvelope.completedInProcess(List.of("output"));
+
+        assertThrows(IllegalStateException.class, local::toWireResult);
+    }
+
+    @Test
     void rejectsMutuallyExclusiveTransitionResultStates() {
-        TransitionFailureEnvelope failure = TransitionFailureEnvelope.from(new IllegalStateException("boom"));
+        TransitionFailureEnvelope failure = TransitionFailureRuntimeAdapter.from(
+            new IllegalStateException("boom"),
+            -1);
         TransitionAwaitSuspension suspension = new TransitionAwaitSuspension("tenant-1", "exec-1", "unit-1", 0);
 
         assertThrows(IllegalArgumentException.class, () ->

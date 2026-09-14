@@ -77,11 +77,11 @@ class GrpcTransitionWorkerServiceTest {
             .thenReturn(Uni.createFrom().item(result));
 
         TransitionWorkerResponse response = service.execute(signed(envelope)).await().indefinitely();
-        TransitionResultEnvelope decoded = PipelineJson.mapper()
-            .readValue(response.getResultEnvelope().toByteArray(), TransitionResultEnvelope.class);
+        TransitionWireResult decoded = PipelineJson.mapper()
+            .readValue(response.getResultEnvelope().toByteArray(), TransitionWireResult.class);
 
         assertEquals(TransitionWorkerOutcome.COMPLETED, decoded.outcome());
-        assertEquals(List.of("ok"), decoded.decodeOutputItems(payloadCodec));
+        assertEquals(List.of("ok"), decoded.outputPayloads().stream().map(payloadCodec::decode).toList());
     }
 
     @Test
@@ -97,8 +97,8 @@ class GrpcTransitionWorkerServiceTest {
         try {
             System.setProperty("tpf.grpc.worker.secret", "worker-secret");
             TransitionWorkerResponse response = service.execute(signed(envelope)).await().indefinitely();
-            TransitionResultEnvelope decoded = PipelineJson.mapper()
-                .readValue(response.getResultEnvelope().toByteArray(), TransitionResultEnvelope.class);
+            TransitionWireResult decoded = PipelineJson.mapper()
+                .readValue(response.getResultEnvelope().toByteArray(), TransitionWireResult.class);
 
             assertEquals(TransitionWorkerOutcome.COMPLETED, decoded.outcome());
         } finally {
