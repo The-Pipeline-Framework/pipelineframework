@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator.release;
 import java.util.Objects;
 
 /**
- * Local/dev registry record for one activated pipeline release.
+ * Registered state for one pipeline release.
  */
 public record PipelineReleaseRecord(
     String tenantId,
