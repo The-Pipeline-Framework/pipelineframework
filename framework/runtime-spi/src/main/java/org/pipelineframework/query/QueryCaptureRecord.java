@@ -4,8 +4,6 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import org.pipelineframework.connector.QueryObservation;
 import org.pipelineframework.connector.QueryObservationOrigin;
 
@@ -57,45 +55,6 @@ public record QueryCaptureRecord(
             throw new IllegalArgumentException("not-found query captures must not contain output data");
         }
         capturedAt = capturedAt == null ? Instant.now() : capturedAt;
-    }
-
-    /**
-     * Reads both the current outcome-aware shape and the legacy Found-only JSON shape.
-     */
-    @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public static QueryCaptureRecord fromJson(
-        @JsonProperty("tenantId") String tenantId,
-        @JsonProperty("executionId") String executionId,
-        @JsonProperty("stepIndex") int stepIndex,
-        @JsonProperty("queryId") String queryId,
-        @JsonProperty("queryVersion") String queryVersion,
-        @JsonProperty("captureKey") String captureKey,
-        @JsonProperty("inputJson") String inputJson,
-        @JsonProperty("outputJson") String outputJson,
-        @JsonProperty("outputType") String outputType,
-        @JsonProperty("capturedAt") Instant capturedAt,
-        @JsonProperty("status") QueryCaptureStatus status,
-        @JsonProperty("outcomeCode") String outcomeCode,
-        @JsonProperty("observation") QueryObservation observation
-    ) {
-        QueryCaptureStatus resolvedStatus = status == null ? QueryCaptureStatus.FOUND : status;
-        String resolvedCode = outcomeCode == null && resolvedStatus == QueryCaptureStatus.FOUND
-            ? "found"
-            : outcomeCode;
-        return new QueryCaptureRecord(
-            tenantId,
-            executionId,
-            stepIndex,
-            queryId,
-            queryVersion,
-            captureKey,
-            inputJson,
-            outputJson,
-            outputType,
-            capturedAt,
-            resolvedStatus,
-            resolvedCode,
-            Optional.ofNullable(observation));
     }
 
     public QueryCaptureRecord(

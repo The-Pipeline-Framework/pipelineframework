@@ -20,7 +20,7 @@ Customer pipeline execution and separately operated infrastructure may need comp
 
 Their existing packages, public signatures, defaults, validation, and authored behavior remain unchanged. `pipelineframework` consumes these contracts and continues to own in-memory and Dynamo implementations, configuration mapping, provider selection, CDI wiring, telemetry, coordinators, and recovery mechanics.
 
-Query capture storage is not included in this decision. Its durable record currently embeds Jackson-specific legacy decoding behavior, which must move to the serialization boundary before the Query store contract can be portable without adding a serialization implementation dependency to runtime-spi.
+Query capture storage is not included in this decision; ADR-0045 records its subsequent extraction after removing record-level Jackson coupling.
 
 Execution-state storage is also excluded. Its interface currently accepts Quarkus runtime configuration in startup validation and requires a separate dependency inversion before extraction.
 
@@ -35,4 +35,4 @@ Keeping the FQCNs and method contracts stable makes this an artifact-ownership c
 - Runtime hosts and provider libraries can implement Command effect and Await persistence without depending on the Quarkus runtime artifact.
 - Source, binary, replay, and serialized compatibility apply to the moved records and store methods.
 - Runtime implementation tests continue to prove in-memory, Dynamo, retry, completion, timeout, and recovery behavior; pure contract validation tests live with runtime-spi.
-- Query capture and execution-state storage remain explicit follow-up boundary defects rather than broadening runtime-spi with Jackson or runtime configuration dependencies.
+- Execution-state storage remains an explicit follow-up boundary defect rather than broadening runtime-spi with runtime configuration dependencies.
