@@ -15,7 +15,7 @@ Those generated classes are Quarkus build and runtime integration mechanics. Kee
 
 `pipelineframework-runtime-protocol` publishes the `.proto` schemas as resources and does not generate or package Java transport adapters. It rejects Quarkus dependencies.
 
-The Quarkus `pipelineframework` runtime scans the released protocol artifact and generates its Java, gRPC, and Mutiny adapters during its own build. Existing generated package and class names remain unchanged, so runtime services and application-authored behaviour do not change.
+The Quarkus `pipelineframework` runtime scans the released protocol artifact and generates its Java, gRPC, and Mutiny adapters during its own build. The scan setting is Maven-build-local to that module and must not be shipped as application configuration, where consuming applications would inherit it and regenerate duplicate bindings. Existing generated package and class names remain unchanged, so runtime services and application-authored behaviour do not change.
 
 A separate Quarkus protocol-adapter artifact is not introduced. The adapters belong to the existing Quarkus runtime integration unless another independently versioned consumer demonstrates that a distinct artifact is necessary.
 

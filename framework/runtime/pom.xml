@@ -30,6 +30,10 @@
     <version>26.9.4-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
+    <properties>
+        <quarkus.generate-code.grpc.scan-for-proto>org.pipelineframework:pipelineframework-runtime-protocol</quarkus.generate-code.grpc.scan-for-proto>
+    </properties>
+
     <name>The Pipeline Framework Extension (Runtime)</name>
     <description>Runtime module for The Pipeline Framework Extension</description>
     <url>https://pipelineframework.org/</url>
