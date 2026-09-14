@@ -43,11 +43,21 @@
                                     <searchTransitive>true</searchTransitive>
                                     <excludes>
                                         <exclude>io.quarkus:*</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-runtime-spi</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-compiler</exclude>
+                                        <exclude>jakarta.enterprise:*</exclude>
+                                        <exclude>jakarta.inject:*</exclude>
+                                        <exclude>javax.enterprise:*</exclude>
+                                        <exclude>javax.inject:*</exclude>
+                                        <exclude>org.jboss.weld:*</exclude>
+                                        <exclude>org.springframework:*</exclude>
+                                        <exclude>org.springframework.*:*</exclude>
+                                        <exclude>com.fasterxml.jackson.*:*</exclude>
+                                        <exclude>io.smallrye.reactive:*</exclude>
+                                        <exclude>org.pipelineframework:*</exclude>
                                     </excludes>
+                                    <includes>
+                                        <include>org.pipelineframework:pipelineframework-runtime-core</include>
+                                        <include>org.pipelineframework:pipelineframework-semantic-model</include>
+                                    </includes>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

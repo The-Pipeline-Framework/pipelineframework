@@ -82,8 +82,13 @@
                                         <exclude>org.pipelineframework:*</exclude>
                                         <exclude>io.quarkus:*</exclude>
                                         <exclude>jakarta.enterprise:*</exclude>
+                                        <exclude>jakarta.inject:*</exclude>
                                         <exclude>javax.enterprise:*</exclude>
+                                        <exclude>javax.inject:*</exclude>
                                         <exclude>org.jboss.weld:*</exclude>
+                                        <exclude>org.springframework:*</exclude>
+                                        <exclude>org.springframework.*:*</exclude>
+                                        <exclude>io.smallrye.reactive:*</exclude>
                                     </excludes>
                                     <includes>
                                         <include>org.pipelineframework:pipelineframework-semantic-model</include>
