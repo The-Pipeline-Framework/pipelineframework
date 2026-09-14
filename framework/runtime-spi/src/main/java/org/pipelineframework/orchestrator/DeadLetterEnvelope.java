@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator;
 import java.util.Objects;
 
 /**
- * Terminal failure payload for dead-letter publishing.
+ * Portable terminal failure payload for dead-letter publishing.
  *
  * @param tenantId tenant identifier
  * @param executionId execution identifier

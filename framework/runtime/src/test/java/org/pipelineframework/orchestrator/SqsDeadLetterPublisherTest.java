@@ -26,7 +26,7 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.empty());
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(null, config);
 
-        var validationError = publisher.startupValidationError(config);
+        var validationError = publisher.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("dlq-url"));
@@ -72,7 +72,7 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/dlq"));
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(null, config);
 
-        var validationError = publisher.startupValidationError(config);
+        var validationError = publisher.startupValidationError();
 
         assertTrue(validationError.isEmpty());
     }
@@ -81,7 +81,7 @@ class SqsDeadLetterPublisherTest {
     void startupValidationFailsWhenConfigIsNull() {
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher();
 
-        var validationError = publisher.startupValidationError(null);
+        var validationError = publisher.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("dlq-url"));
@@ -92,7 +92,7 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of(""));
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(null, config);
 
-        var validationError = publisher.startupValidationError(config);
+        var validationError = publisher.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("dlq-url"));

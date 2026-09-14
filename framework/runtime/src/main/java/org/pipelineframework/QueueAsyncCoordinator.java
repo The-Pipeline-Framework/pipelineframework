@@ -171,7 +171,7 @@ class QueueAsyncCoordinator {
     workDispatcher.startupValidationError(orchestratorConfig)
         .ifPresent(error -> providerReadinessErrors
             .add("WorkDispatcher(" + workDispatcher.providerName() + "): " + error));
-    deadLetterPublisher.startupValidationError(orchestratorConfig)
+    deadLetterPublisher.startupValidationError()
         .ifPresent(error -> providerReadinessErrors
             .add("DeadLetterPublisher(" + deadLetterPublisher.providerName() + "): " + error));
     if (!providerReadinessErrors.isEmpty()) {

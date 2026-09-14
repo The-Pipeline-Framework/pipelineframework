@@ -52,8 +52,10 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
     }
 
     @Override
-    public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
-        if (config == null || config.dlqUrl().isEmpty() || config.dlqUrl().get().isBlank()) {
+    public Optional<String> startupValidationError() {
+        if (orchestratorConfig == null
+            || orchestratorConfig.dlqUrl().isEmpty()
+            || orchestratorConfig.dlqUrl().get().isBlank()) {
             return Optional.of("pipeline.orchestrator.dlq-url must be configured when dlq-provider=sqs.");
         }
         return Optional.empty();
