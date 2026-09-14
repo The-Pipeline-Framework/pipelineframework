@@ -33,6 +33,10 @@ class RuntimeProtocolArtifactBoundaryTest {
             "org/pipelineframework/orchestrator/TransitionWireResult.class"));
         assertNotNull(CLASS_LOADER.getResource(
             "org/pipelineframework/orchestrator/TransitionFailureEnvelope.class"));
+        assertNotNull(CLASS_LOADER.getResource(
+            "org/pipelineframework/orchestrator/TransitionWorkerSignature.class"));
+        assertNotNull(CLASS_LOADER.getResource(
+            "org/pipelineframework/orchestrator/worker/PipelineWorkerCapability.class"));
 
         assertNull(CLASS_LOADER.getResource(
             "org/pipelineframework/checkpoint/grpc/MutinyCheckpointPublicationServiceGrpc.class"));
