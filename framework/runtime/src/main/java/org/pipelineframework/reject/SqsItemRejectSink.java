@@ -94,17 +94,19 @@ public class SqsItemRejectSink implements ItemRejectSink {
     }
 
     /**
-     * Validates that the SQS queue URL is configured in the provided item-reject configuration.
+     * Validates that the SQS queue URL is configured in the injected item-reject configuration.
      *
-     * @param config the item-reject configuration to validate; if `null` it is treated as missing configuration
      * @return an `Optional` containing an error message if the SQS queue URL is missing or blank, otherwise an empty `Optional`
      */
     @Override
-    public Optional<String> startupValidationError(ItemRejectConfig config) {
-        if (config == null || config.sqs().queueUrl().isEmpty() || config.sqs().queueUrl().get().isBlank()) {
+    public Optional<String> startupValidationError() {
+        if (itemRejectConfig == null
+            || itemRejectConfig.sqs() == null
+            || itemRejectConfig.sqs().queueUrl().isEmpty()
+            || itemRejectConfig.sqs().queueUrl().get().isBlank()) {
             return Optional.of("pipeline.item-reject.sqs.queue-url must be configured when provider=sqs.");
         }
-        String queueUrl = config.sqs().queueUrl().get();
+        String queueUrl = itemRejectConfig.sqs().queueUrl().get();
         if (queueUrl.endsWith(".fifo")) {
             return Optional.of(
                 "pipeline.item-reject.sqs.queue-url currently does not support FIFO queues for provider=sqs.");

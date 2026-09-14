@@ -15,8 +15,9 @@ class InMemoryItemRejectSinkTest {
     void startupValidationFailsForNonPositiveCapacity() {
         ItemRejectConfig config = mockConfig(0);
         InMemoryItemRejectSink sink = new InMemoryItemRejectSink();
+        sink.itemRejectConfig = config;
 
-        var validationError = sink.startupValidationError(config);
+        var validationError = sink.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("memory-capacity"));
@@ -26,10 +27,21 @@ class InMemoryItemRejectSinkTest {
     void startupValidationPassesForPositiveCapacity() {
         ItemRejectConfig config = mockConfig(3);
         InMemoryItemRejectSink sink = new InMemoryItemRejectSink();
+        sink.itemRejectConfig = config;
 
-        var validationError = sink.startupValidationError(config);
+        var validationError = sink.startupValidationError();
 
         assertTrue(validationError.isEmpty());
+    }
+
+    @Test
+    void startupValidationFailsWhenConfigurationWasNotInjected() {
+        InMemoryItemRejectSink sink = new InMemoryItemRejectSink();
+
+        var validationError = sink.startupValidationError();
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("memory-capacity"));
     }
 
     @Test

@@ -114,7 +114,7 @@ public class ItemRejectRouter {
      */
     void initialize() {
         ItemRejectSink selected = selectSink(itemRejectConfig.provider());
-        selected.startupValidationError(itemRejectConfig).ifPresent(message -> {
+        selected.startupValidationError().ifPresent(message -> {
             if (itemRejectConfig.strictStartup()) {
                 throw new IllegalStateException(message);
             }

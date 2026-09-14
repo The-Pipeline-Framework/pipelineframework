@@ -58,14 +58,14 @@ public interface ItemRejectSink {
     /**
      * Validate whether the provider is ready to operate at startup.
      *
-     * <p>When the provider is selected but cannot safely operate with the given runtime
-     * configuration, return a non-empty Optional containing a user-facing validation error
-     * message; return an empty Optional when no startup error is detected.</p>
+     * <p>Providers validate the configuration supplied at construction or injection.
+     * When a selected provider cannot safely operate with that configuration, return a
+     * non-empty Optional containing a user-facing validation error message; return an
+     * empty Optional when no startup error is detected.</p>
      *
-     * @param config the reject sink configuration to validate
      * @return an Optional with a startup validation error message if validation fails, empty otherwise
      */
-    default Optional<String> startupValidationError(ItemRejectConfig config) {
+    default Optional<String> startupValidationError() {
         return Optional.empty();
     }
 

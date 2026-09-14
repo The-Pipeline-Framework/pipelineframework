@@ -36,7 +36,17 @@ class SqsItemRejectSinkTest {
         ItemRejectConfig config = mockConfig(Optional.empty());
         SqsItemRejectSink sink = new SqsItemRejectSink(null, config);
 
-        var validationError = sink.startupValidationError(config);
+        var validationError = sink.startupValidationError();
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("queue-url"));
+    }
+
+    @Test
+    void startupValidationRequiresInjectedConfiguration() {
+        SqsItemRejectSink sink = new SqsItemRejectSink();
+
+        var validationError = sink.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("queue-url"));
@@ -88,7 +98,7 @@ class SqsItemRejectSinkTest {
         ItemRejectConfig config = mockConfig(Optional.of("https://sqs.local/123/reject.fifo"));
         SqsItemRejectSink sink = new SqsItemRejectSink(null, config);
 
-        var validationError = sink.startupValidationError(config);
+        var validationError = sink.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("FIFO"));
