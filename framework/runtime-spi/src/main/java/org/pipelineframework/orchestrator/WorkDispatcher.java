@@ -33,15 +33,14 @@ public interface WorkDispatcher {
     }
 
     /**
-     * Validates provider readiness for queue-async orchestrator mode startup.
+     * Validates provider readiness for startup.
      *
      * <p>Return a non-empty value when the provider is selected but cannot safely operate
-     * with the current runtime configuration.</p>
+     * with the configuration supplied when the provider was constructed.</p>
      *
-     * @param config orchestrator configuration
      * @return optional startup validation error
      */
-    default Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
+    default Optional<String> startupValidationError() {
         return Optional.empty();
     }
 

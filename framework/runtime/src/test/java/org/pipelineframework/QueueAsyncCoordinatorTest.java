@@ -247,7 +247,7 @@ class QueueAsyncCoordinatorTest {
         when(workDispatcher.providerName()).thenReturn("memory");
         when(deadLetterPublisher.providerName()).thenReturn("log");
         when(executionStateStore.startupValidationError()).thenReturn(Optional.empty());
-        when(workDispatcher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(workDispatcher.startupValidationError()).thenReturn(Optional.empty());
         when(deadLetterPublisher.startupValidationError()).thenReturn(Optional.empty());
         when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));
         when(workDispatchers.stream()).thenReturn(Stream.of(workDispatcher));

@@ -61,6 +61,7 @@ authoritative for exact syntax and release support.
 | [0050](./0050-remote-worker-protocols-are-shared-runtime-contracts.md) | Share remote-worker capabilities, wire identities, envelopes, and signature canonicalization without sharing runtime implementations. |
 | [0051](./0051-release-identity-is-shared-runtime-model.md) | Share release, contract, artifact, and digest identity without sharing control-plane implementations. |
 | [0052](./0052-dead-letter-publication-is-portable-runtime-spi.md) | Let dead-letter providers consume a portable failure-publication contract without runtime-host configuration leakage. |
+| [0053](./0053-work-dispatch-is-portable-runtime-spi.md) | Let durable queue and scheduler providers consume portable work-dispatch identity and operations. |
 
 ## Maintenance
 
