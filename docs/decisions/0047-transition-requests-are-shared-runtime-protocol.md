@@ -21,7 +21,7 @@ These types retain their packages, constructors, validation, encoding identity, 
 
 Transport clients and services, worker execution, provider selection, signing, nonce replay protection, telemetry, and runtime payload codec implementations remain in `pipelineframework`. `TransitionResultEnvelope` and its failure conversion remain there until wire results and in-process execution results are separated without changing authored behaviour.
 
-The Quarkus Maven code-generation host and generated Mutiny gRPC adapters currently remain build/integration mechanics of the protocol module. They do not own the request semantics introduced here and must not become dependencies of the handwritten Java request contract.
+ADR-0048 assigns the Quarkus Maven code-generation host and generated Mutiny gRPC adapters to the Quarkus runtime integration. They do not own the request semantics introduced here and are not dependencies of the handwritten Java request contract.
 
 ## Rationale
 

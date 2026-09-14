@@ -24,14 +24,9 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-        </dependency>
-        <!-- Generated transport adapters are linked by the consuming runtime integration. -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-grpc</artifactId>
-            <optional>true</optional>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -52,6 +47,7 @@
                                 <bannedDependencies>
                                     <searchTransitive>true</searchTransitive>
                                     <excludes>
+                                        <exclude>io.quarkus:*</exclude>
                                         <exclude>org.pipelineframework:pipelineframework</exclude>
                                         <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
                                         <exclude>org.pipelineframework:pipelineframework-compiler</exclude>
@@ -66,19 +62,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
-            <plugin>
-                <groupId>io.quarkus</groupId>
-                <artifactId>quarkus-maven-plugin</artifactId>
-                <extensions>true</extensions>
-                <executions>
-                    <execution>
-                        <goals combine.self="override">
-                            <goal>generate-code</goal>
-                            <goal>generate-code-tests</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
+        <resources>
+            <resource>
+                <directory>src/main/proto</directory>
+            </resource>
+        </resources>
     </build>
 </project>
