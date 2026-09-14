@@ -54,6 +54,7 @@ authoritative for exact syntax and release support.
 | [0043](./0043-portable-runtime-provider-spi.md) | Keep reactive provider and authored boundary contracts outside runtime implementations and platform integrations. |
 | [0044](./0044-durable-effect-and-await-stores-are-portable-runtime-spi.md) | Keep durable Command effect and Await store contracts outside runtime implementations and platform integrations. |
 | [0045](./0045-query-capture-store-is-portable-runtime-spi.md) | Keep Query capture store contracts portable while the runtime codec owns durable event serialization. |
+| [0046](./0046-execution-state-store-is-portable-runtime-spi.md) | Keep durable execution state contracts portable while runtime hosts own provider configuration and implementations. |
 
 ## Maintenance
 

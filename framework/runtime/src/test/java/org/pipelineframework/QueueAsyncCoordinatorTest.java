@@ -226,7 +226,7 @@ class QueueAsyncCoordinatorTest {
         when(orchestratorConfig.strictStartup()).thenReturn(true);
         when(executionStateStore.providerName()).thenReturn("legacy");
         when(executionStateStore.supportsLeaseRenewal()).thenReturn(false);
-        when(executionStateStore.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(executionStateStore.startupValidationError()).thenReturn(Optional.empty());
 
         when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));
         when(workDispatchers.stream()).thenReturn(Stream.of(new EventWorkDispatcher()));
@@ -246,7 +246,7 @@ class QueueAsyncCoordinatorTest {
         when(executionStateStore.providerName()).thenReturn("memory");
         when(workDispatcher.providerName()).thenReturn("memory");
         when(deadLetterPublisher.providerName()).thenReturn("log");
-        when(executionStateStore.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(executionStateStore.startupValidationError()).thenReturn(Optional.empty());
         when(workDispatcher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
         when(deadLetterPublisher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
         when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));

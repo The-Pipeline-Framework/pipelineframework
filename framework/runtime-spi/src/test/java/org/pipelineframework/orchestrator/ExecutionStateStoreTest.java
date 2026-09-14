@@ -57,7 +57,7 @@ class ExecutionStateStoreTest {
         ExecutionCreateCommand command = new ExecutionCreateCommand(
             "tenant1",
             "key1",
-            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "input"),
+            "input",
             ExecutionResultShape.SINGLE,
             now,
             now / 1000 + 86400

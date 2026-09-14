@@ -392,7 +392,7 @@ class DynamoExecutionStateStoreTest {
         PipelineOrchestratorConfig config = mockConfig("", "tpf_execution_key");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
 
-        var validationError = store.startupValidationError(config);
+        var validationError = store.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("execution-table"));
@@ -404,7 +404,7 @@ class DynamoExecutionStateStoreTest {
         when(config.dynamo().executionPayloadTable()).thenReturn("");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
 
-        var validationError = store.startupValidationError(config);
+        var validationError = store.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("execution-payload-table"));
@@ -415,7 +415,7 @@ class DynamoExecutionStateStoreTest {
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
 
-        var validationError = store.startupValidationError(config);
+        var validationError = store.startupValidationError();
 
         assertTrue(validationError.isEmpty());
     }
@@ -1206,7 +1206,7 @@ class DynamoExecutionStateStoreTest {
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
 
-        var validationError = store.startupValidationError(config);
+        var validationError = store.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("execution-key-table"));
@@ -1218,7 +1218,7 @@ class DynamoExecutionStateStoreTest {
         when(config.dynamo()).thenReturn(null);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
 
-        var validationError = store.startupValidationError(config);
+        var validationError = store.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("dynamo.* configuration"));
