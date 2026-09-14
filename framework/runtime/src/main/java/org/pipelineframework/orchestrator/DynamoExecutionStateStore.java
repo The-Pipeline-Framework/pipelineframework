@@ -166,13 +166,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
-        if (config == null || config.dynamo() == null) {
+    public Optional<String> startupValidationError() {
+        if (orchestratorConfig == null || orchestratorConfig.dynamo() == null) {
             return Optional.of("Dynamo provider requires pipeline.orchestrator.dynamo.* configuration.");
         }
-        String executionTable = config.dynamo().executionTable();
-        String keyTable = config.dynamo().executionKeyTable();
-        String payloadTable = config.dynamo().executionPayloadTable();
+        String executionTable = orchestratorConfig.dynamo().executionTable();
+        String keyTable = orchestratorConfig.dynamo().executionKeyTable();
+        String payloadTable = orchestratorConfig.dynamo().executionPayloadTable();
         if (executionTable == null || executionTable.isBlank()) {
             return Optional.of("pipeline.orchestrator.dynamo.execution-table must not be blank.");
         }

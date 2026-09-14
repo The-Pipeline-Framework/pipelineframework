@@ -36,12 +36,11 @@ public interface ExecutionStateStore {
      * Validates provider readiness for queue-async orchestrator mode startup.
      *
      * <p>Return a non-empty value when the provider is selected but cannot safely operate
-     * with the current runtime configuration.</p>
+     * with its configured resources.</p>
      *
-     * @param config orchestrator configuration
      * @return optional startup validation error
      */
-    default Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
+    default Optional<String> startupValidationError() {
         return Optional.empty();
     }
 

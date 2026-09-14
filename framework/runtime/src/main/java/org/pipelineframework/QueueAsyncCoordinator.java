@@ -165,7 +165,7 @@ class QueueAsyncCoordinator {
       providerReadinessErrors.add(
           "ExecutionStateStore(" + executionStateStore.providerName() + "): live lease renewal is not supported");
     }
-    executionStateStore.startupValidationError(orchestratorConfig)
+    executionStateStore.startupValidationError()
         .ifPresent(error -> providerReadinessErrors
             .add("ExecutionStateStore(" + executionStateStore.providerName() + "): " + error));
     workDispatcher.startupValidationError(orchestratorConfig)
