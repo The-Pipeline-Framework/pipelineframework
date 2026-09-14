@@ -19,11 +19,6 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>pipelineframework-runtime-spi</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
@@ -49,6 +44,7 @@
                                     <excludes>
                                         <exclude>io.quarkus:*</exclude>
                                         <exclude>org.pipelineframework:pipelineframework</exclude>
+                                        <exclude>org.pipelineframework:pipelineframework-runtime-spi</exclude>
                                         <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
                                         <exclude>org.pipelineframework:pipelineframework-compiler</exclude>
                                     </excludes>

@@ -63,6 +63,7 @@ authoritative for exact syntax and release support.
 | [0052](./0052-dead-letter-publication-is-portable-runtime-spi.md) | Let dead-letter providers consume a portable failure-publication contract without runtime-host configuration leakage. |
 | [0053](./0053-work-dispatch-is-portable-runtime-spi.md) | Let durable queue and scheduler providers consume portable work-dispatch identity and operations. |
 | [0054](./0054-item-reject-publication-is-portable-runtime-spi.md) | Let item-reject destinations consume portable rejection facts and publication operations. |
+| [0055](./0055-await-lifecycle-values-are-shared-runtime-model.md) | Keep protocol-carried lifecycle values in shared runtime model while provider operations remain SPI. |
 
 ## Maintenance
 
