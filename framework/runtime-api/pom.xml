@@ -29,6 +29,11 @@
     <name>The Pipeline Framework Customer Runtime API</name>
     <description>Customer-authored reactive service and failure contracts for Pipeline applications</description>
 
+    <!-- Source mirror during the contracts-repository publisher handoff. -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.smallrye.reactive</groupId>
