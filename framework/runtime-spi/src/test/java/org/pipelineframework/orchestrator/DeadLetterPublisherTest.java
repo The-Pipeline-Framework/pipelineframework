@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import io.smallrye.mutiny.Uni;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,8 +21,20 @@ class DeadLetterPublisherTest {
     }
 
     @Test
-    void defaultStartupValidationIsReady() {
+    void legacyProviderWithoutCurrentReadinessOverrideFailsClosed() {
         DeadLetterPublisher publisher = new TestPublisher();
+        IllegalStateException error = assertThrows(IllegalStateException.class, publisher::startupValidationError);
+        assertTrue(error.getMessage().contains("must implement startupValidationError()"));
+    }
+
+    @Test
+    void explicitReadinessOverrideCanReportReady() {
+        DeadLetterPublisher publisher = new TestPublisher() {
+            @Override
+            public Optional<String> startupValidationError() {
+                return Optional.empty();
+            }
+        };
         assertTrue(publisher.startupValidationError().isEmpty());
     }
 

@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class WorkDispatcherTest {
 
@@ -24,8 +26,20 @@ class WorkDispatcherTest {
     }
 
     @Test
-    void defaultStartupValidationIsReady() {
+    void legacyProviderWithoutCurrentReadinessOverrideFailsClosed() {
         WorkDispatcher dispatcher = new TestWorkDispatcher();
+        IllegalStateException error = assertThrows(IllegalStateException.class, dispatcher::startupValidationError);
+        assertTrue(error.getMessage().contains("must implement startupValidationError()"));
+    }
+
+    @Test
+    void explicitReadinessOverrideCanReportReady() {
+        WorkDispatcher dispatcher = new TestWorkDispatcher() {
+            @Override
+            public Optional<String> startupValidationError() {
+                return Optional.empty();
+            }
+        };
         assertTrue(dispatcher.startupValidationError().isEmpty());
     }
 

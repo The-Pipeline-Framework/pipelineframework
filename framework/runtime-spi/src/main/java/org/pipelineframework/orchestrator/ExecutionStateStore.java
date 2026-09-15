@@ -41,7 +41,8 @@ public interface ExecutionStateStore {
      * @return optional startup validation error
      */
     default Optional<String> startupValidationError() {
-        return Optional.empty();
+        throw new IllegalStateException("Execution state store '" + providerName()
+            + "' must implement startupValidationError() and be rebuilt against the current runtime SPI");
     }
 
     /**

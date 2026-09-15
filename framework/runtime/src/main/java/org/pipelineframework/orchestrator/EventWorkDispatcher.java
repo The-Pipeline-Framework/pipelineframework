@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,6 +42,11 @@ public class EventWorkDispatcher implements WorkDispatcher {
     @Override
     public int priority() {
         return -100;
+    }
+
+    @Override
+    public Optional<String> startupValidationError() {
+        return Optional.empty();
     }
 
     /**
