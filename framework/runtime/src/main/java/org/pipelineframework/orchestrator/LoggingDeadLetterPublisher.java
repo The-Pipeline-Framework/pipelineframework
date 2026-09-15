@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Uni;
@@ -21,6 +22,11 @@ public class LoggingDeadLetterPublisher implements DeadLetterPublisher {
     @Override
     public int priority() {
         return -100;
+    }
+
+    @Override
+    public Optional<String> startupValidationError() {
+        return Optional.empty();
     }
 
     @Override

@@ -2,6 +2,7 @@ package org.pipelineframework.reject;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import io.quarkus.runtime.LaunchMode;
 import io.smallrye.mutiny.Uni;
@@ -71,6 +72,36 @@ class ItemRejectRouterTest {
             LaunchMode.TEST);
 
         assertDoesNotThrow(router::initialize);
+    }
+
+    @Test
+    void providerWithPreExtractionReadinessShapeCannotSkipStartupValidation() {
+        ItemRejectConfig config = mockBaseConfig(false, ItemRejectFailurePolicy.CONTINUE, false, "old-provider");
+        PipelineStepConfig stepConfig = mockStepConfig(false);
+        ItemRejectSink oldProviderShape = new ItemRejectSink() {
+            @Override
+            public String providerName() {
+                return "old-provider";
+            }
+
+            public Optional<String> startupValidationError(ItemRejectConfig ignored) {
+                return Optional.of("old readiness method is not called");
+            }
+
+            @Override
+            public Uni<Void> publish(ItemRejectEnvelope envelope) {
+                return Uni.createFrom().voidItem();
+            }
+        };
+
+        ItemRejectRouter router = new ItemRejectRouter(
+            config,
+            stepConfig,
+            mockSinks(oldProviderShape),
+            LaunchMode.TEST);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, router::initialize);
+        assertTrue(error.getMessage().contains("must implement startupValidationError()"));
     }
 
     @Test
@@ -245,6 +276,11 @@ class ItemRejectRouterTest {
         @Override
         public boolean durable() {
             return durable;
+        }
+
+        @Override
+        public Optional<String> startupValidationError() {
+            return Optional.empty();
         }
 
         @Override

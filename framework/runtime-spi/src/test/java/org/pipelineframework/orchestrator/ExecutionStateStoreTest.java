@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutionStateStoreTest {
 
@@ -23,6 +24,24 @@ class ExecutionStateStoreTest {
     void defaultPriorityIsZero() {
         ExecutionStateStore store = new TestExecutionStateStore();
         assertEquals(0, store.priority());
+    }
+
+    @Test
+    void legacyProviderWithoutCurrentReadinessOverrideFailsClosed() {
+        ExecutionStateStore store = new TestExecutionStateStore();
+        IllegalStateException error = assertThrows(IllegalStateException.class, store::startupValidationError);
+        assertTrue(error.getMessage().contains("must implement startupValidationError()"));
+    }
+
+    @Test
+    void explicitReadinessOverrideCanReportReady() {
+        ExecutionStateStore store = new TestExecutionStateStore() {
+            @Override
+            public Optional<String> startupValidationError() {
+                return Optional.empty();
+            }
+        };
+        assertTrue(store.startupValidationError().isEmpty());
     }
 
     @Test

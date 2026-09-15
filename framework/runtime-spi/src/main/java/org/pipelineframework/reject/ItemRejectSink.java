@@ -61,12 +61,16 @@ public interface ItemRejectSink {
      * <p>Providers validate the configuration supplied at construction or injection.
      * When a selected provider cannot safely operate with that configuration, return a
      * non-empty Optional containing a user-facing validation error message; return an
-     * empty Optional when no startup error is detected.</p>
+     * empty Optional when no startup error is detected. Providers must override this
+     * method explicitly: a provider compiled against the earlier config-parameter
+     * signature must fail startup rather than silently skip its readiness check.</p>
      *
      * @return an Optional with a startup validation error message if validation fails, empty otherwise
      */
     default Optional<String> startupValidationError() {
-        return Optional.empty();
+        throw new IllegalStateException(
+            "Item reject sink provider '" + providerName()
+                + "' must implement startupValidationError() against the current runtime SPI");
     }
 
     /**

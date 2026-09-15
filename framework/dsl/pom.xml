@@ -74,6 +74,48 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <id>enforce-dsl-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <exclude>org.pipelineframework:*</exclude>
+                                        <exclude>io.quarkus:*</exclude>
+                                        <exclude>jakarta.enterprise:*</exclude>
+                                        <exclude>jakarta.inject:*</exclude>
+                                        <exclude>javax.enterprise:*</exclude>
+                                        <exclude>javax.inject:*</exclude>
+                                        <exclude>org.jboss.weld:*</exclude>
+                                        <exclude>org.springframework:*</exclude>
+                                        <exclude>org.springframework.*:*</exclude>
+                                        <exclude>com.fasterxml.jackson.*:*</exclude>
+                                        <exclude>com.google.protobuf:*</exclude>
+                                        <exclude>io.smallrye.reactive:*</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>org.pipelineframework:pipelineframework-semantic-model</include>
+                                        <include>org.pipelineframework:pipelineframework-runtime-core</include>
+                                        <include>com.fasterxml.jackson.core:jackson-annotations</include>
+                                        <include>com.fasterxml.jackson.core:jackson-databind:*:*:test</include>
+                                        <include>com.fasterxml.jackson.core:jackson-core:*:*:test</include>
+                                        <include>com.fasterxml.jackson.datatype:jackson-datatype-jdk8:*:*:test</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
             <plugin>

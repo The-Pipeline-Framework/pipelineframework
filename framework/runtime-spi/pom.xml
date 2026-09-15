@@ -73,19 +73,22 @@
                                 <bannedDependencies>
                                     <searchTransitive>true</searchTransitive>
                                     <excludes>
-                                        <exclude>org.pipelineframework:pipelineframework</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-runtime*</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-dsl</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-deployment</exclude>
-                                        <exclude>org.pipelineframework:pipelineframework-compiler</exclude>
+                                        <exclude>org.pipelineframework:*</exclude>
                                         <exclude>io.quarkus:*</exclude>
                                         <exclude>jakarta.enterprise:*</exclude>
+                                        <exclude>jakarta.inject:*</exclude>
+                                        <exclude>javax.enterprise:*</exclude>
+                                        <exclude>javax.inject:*</exclude>
+                                        <exclude>org.jboss.weld:*</exclude>
                                         <exclude>org.springframework:*</exclude>
+                                        <exclude>org.springframework.*:*</exclude>
                                         <exclude>com.google.protobuf:*</exclude>
                                         <exclude>com.fasterxml.jackson.*:*</exclude>
                                     </excludes>
                                     <includes>
+                                        <include>org.pipelineframework:pipelineframework-api</include>
                                         <include>org.pipelineframework:pipelineframework-runtime-core</include>
+                                        <include>org.pipelineframework:pipelineframework-semantic-model</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

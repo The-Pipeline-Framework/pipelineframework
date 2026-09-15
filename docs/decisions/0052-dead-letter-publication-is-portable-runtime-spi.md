@@ -13,7 +13,7 @@ That ownership forced an independently implemented dead-letter destination to de
 
 ## Decision
 
-`pipelineframework-runtime-spi` owns `DeadLetterPublisher` and `DeadLetterEnvelope`. They retain their packages, provider defaults, publication signature, envelope record components, builder, validation, and serialized shape.
+`pipelineframework-runtime-spi` owns `DeadLetterPublisher` and `DeadLetterEnvelope`. They retain their packages, selection defaults, publication signature, envelope record components, builder, validation, and serialized shape. The readiness default fails closed when a provider has not implemented the new operation.
 
 Provider readiness becomes a zero-argument operation. A selected provider validates the configuration supplied when it was constructed or injected. The runtime coordinator continues to select the provider and aggregate readiness failures without passing runtime-host configuration through the portable SPI.
 
@@ -28,7 +28,7 @@ The envelope is semantic publication data rather than a transport protocol: it i
 ## Consequences
 
 - Dead-letter providers can compile against `pipelineframework-runtime-spi` without depending on `pipelineframework`.
-- Java source and binary compatibility apply to the publisher and envelope contracts.
+- The migration from the published 26.9.1–26.9.3 `startupValidationError(PipelineOrchestratorConfig)` operation to the 26.9.4 zero-argument operation intentionally breaks source and binary compatibility for existing publisher providers and callers. Rebuild both against matching runtime/SPI artifacts and implement the new readiness operation; mixed old provider binaries fail closed at startup rather than silently reporting ready. Other publisher operations and envelope shape are unchanged. After this migration, Java source and binary compatibility require explicit review.
 - Serialized compatibility applies wherever a provider persists or transmits the envelope; changes to its fields require explicit compatibility review.
 - Tenant, execution, correlation, transition, failure, retry, transport, platform, and timestamp values remain data supplied by the runtime; the SPI does not acquire tenant resolution, credentials, or connection lifecycle.
 - Existing runtime tests continue to prove provider selection, readiness aggregation, SQS serialization, offloading, metrics, and terminal-failure routing.

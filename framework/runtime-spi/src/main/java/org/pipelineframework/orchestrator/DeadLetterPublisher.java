@@ -39,7 +39,8 @@ public interface DeadLetterPublisher {
      * @return optional startup validation error
      */
     default Optional<String> startupValidationError() {
-        return Optional.empty();
+        throw new IllegalStateException("Dead-letter publisher '" + providerName()
+            + "' must implement startupValidationError() and be rebuilt against the current runtime SPI");
     }
 
     /**

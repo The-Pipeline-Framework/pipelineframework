@@ -37,6 +37,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Optional<String> startupValidationError() {
+        return Optional.empty();
+    }
+
+    @Override
     public boolean supportsLeaseRenewal() {
         return true;
     }
