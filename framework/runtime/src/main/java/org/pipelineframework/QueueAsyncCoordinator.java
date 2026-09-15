@@ -168,7 +168,7 @@ class QueueAsyncCoordinator {
     executionStateStore.startupValidationError()
         .ifPresent(error -> providerReadinessErrors
             .add("ExecutionStateStore(" + executionStateStore.providerName() + "): " + error));
-    workDispatcher.startupValidationError(orchestratorConfig)
+    workDispatcher.startupValidationError()
         .ifPresent(error -> providerReadinessErrors
             .add("WorkDispatcher(" + workDispatcher.providerName() + "): " + error));
     deadLetterPublisher.startupValidationError()

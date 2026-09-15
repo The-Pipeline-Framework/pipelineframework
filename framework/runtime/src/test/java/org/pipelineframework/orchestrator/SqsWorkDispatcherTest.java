@@ -29,7 +29,7 @@ class SqsWorkDispatcherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.empty(), true);
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(null, config, null);
 
-        var validationError = dispatcher.startupValidationError(config);
+        var validationError = dispatcher.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("queue-url"));
@@ -116,9 +116,19 @@ class SqsWorkDispatcherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(null, config, null);
 
-        var validationError = dispatcher.startupValidationError(config);
+        var validationError = dispatcher.startupValidationError();
 
         assertTrue(validationError.isEmpty());
+    }
+
+    @Test
+    void startupValidationFailsWhenConfigurationIsNotInjected() {
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher();
+
+        var validationError = dispatcher.startupValidationError();
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("queue-url"));
     }
 
     @SuppressWarnings("unchecked")
@@ -189,7 +199,7 @@ class SqsWorkDispatcherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of(""), true);
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(null, config, null);
 
-        var validationError = dispatcher.startupValidationError(config);
+        var validationError = dispatcher.startupValidationError();
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("queue-url"));

@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator;
 import java.util.Objects;
 
 /**
- * Queue-dispatched work item for progressing one execution.
+ * Portable queue-dispatched work item for progressing one execution.
  *
  * @param tenantId tenant identifier
  * @param executionId execution identifier

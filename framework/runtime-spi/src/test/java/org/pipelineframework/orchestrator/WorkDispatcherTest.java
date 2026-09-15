@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorkDispatcherTest {
 
@@ -20,6 +21,12 @@ class WorkDispatcherTest {
     void defaultPriorityIsZero() {
         WorkDispatcher dispatcher = new TestWorkDispatcher();
         assertEquals(0, dispatcher.priority());
+    }
+
+    @Test
+    void defaultStartupValidationIsReady() {
+        WorkDispatcher dispatcher = new TestWorkDispatcher();
+        assertTrue(dispatcher.startupValidationError().isEmpty());
     }
 
     @Test

@@ -58,8 +58,10 @@ public class SqsWorkDispatcher implements WorkDispatcher {
     }
 
     @Override
-    public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
-        if (config == null || config.queueUrl().isEmpty() || config.queueUrl().get().isBlank()) {
+    public Optional<String> startupValidationError() {
+        if (orchestratorConfig == null
+            || orchestratorConfig.queueUrl().isEmpty()
+            || orchestratorConfig.queueUrl().get().isBlank()) {
             return Optional.of("pipeline.orchestrator.queue-url must be configured when dispatcher-provider=sqs.");
         }
         return Optional.empty();
