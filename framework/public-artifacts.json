@@ -10,10 +10,6 @@
       "packaging": "jar"
     },
     {
-      "artifactId": "pipelineframework-api",
-      "packaging": "jar"
-    },
-    {
       "artifactId": "pipelineframework-runtime-core",
       "packaging": "jar"
     },
@@ -109,6 +105,13 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "pipelineframework-api",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Temporary non-deployable source mirror during the standalone contracts publisher handoff"
+    },
     {
       "artifactId": "pipelineframework-compiler",
       "packaging": "jar",

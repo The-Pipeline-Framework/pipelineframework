@@ -29,6 +29,10 @@
     <name>The Pipeline Framework API</name>
     <description>Framework-neutral API contracts for generated Pipeline applications</description>
 
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
