@@ -20,10 +20,9 @@ class DeadLetterPublisherTest {
     }
 
     @Test
-    void loggingPublisherExposesExpectedProviderContract() {
-        LoggingDeadLetterPublisher publisher = new LoggingDeadLetterPublisher();
-        assertEquals("log", publisher.providerName());
-        assertEquals(-100, publisher.priority());
+    void defaultStartupValidationIsReady() {
+        DeadLetterPublisher publisher = new TestPublisher();
+        assertTrue(publisher.startupValidationError().isEmpty());
     }
 
     @Test
