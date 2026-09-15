@@ -381,6 +381,9 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
+                            <excludeArtifacts>
+                                <excludeArtifact>pipelineframework-runtime-core</excludeArtifact>
+                            </excludeArtifacts>
                             <autoPublish>true</autoPublish>
                             <waitUntil>published</waitUntil>
                             <waitMaxTime>7200</waitMaxTime>

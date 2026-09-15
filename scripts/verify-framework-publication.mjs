@@ -88,6 +88,7 @@ for (const entry of expectedExternal) {
 }
 const publicArtifactIds = new Set(publicArtifacts.keys());
 const allDeclared = new Set([...publicArtifactIds, ...internalArtifacts, ...externalArtifacts]);
+let centralExcludedArtifacts = new Set();
 
 if (allDeclared.size !== publicArtifactIds.size + internalArtifacts.size + externalArtifacts.size) {
   failures.push('public/internal/external artifact declarations overlap');
@@ -124,10 +125,29 @@ function effectiveProjects() {
       throw new Error(`failed to render the central-publishing effective POM: ${reason}`);
     }
 
-    return parseEffectiveProjects(fs.readFileSync(effectivePom, 'utf8'));
+    const effectiveXml = fs.readFileSync(effectivePom, 'utf8');
+    centralExcludedArtifacts = centralExclusions(effectiveXml);
+    return parseEffectiveProjects(effectiveXml);
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
+}
+
+function centralExclusions(effectivePom) {
+  const projectPattern = /<project(?:\s[^>]*)?>([\s\S]*?)<\/project>/g;
+  const frameworkProject = [...effectivePom.matchAll(projectPattern)]
+    .map((match) => match[1].replace(/<parent>[\s\S]*?<\/parent>/, ''))
+    .find((project) => elementValue(project, 'artifactId') === 'framework-parent');
+  if (!frameworkProject) return new Set();
+
+  const pluginId = '<artifactId>central-publishing-maven-plugin</artifactId>';
+  const start = frameworkProject.indexOf(pluginId);
+  const end = frameworkProject.indexOf('</plugin>', start);
+  if (start < 0 || end < 0) return new Set();
+  const plugin = frameworkProject.slice(start, end);
+  const exclusions = plugin.match(/<excludeArtifacts>([\s\S]*?)<\/excludeArtifacts>/)?.[1] ?? '';
+  return new Set([...exclusions.matchAll(/<excludeArtifact>([^<]+)<\/excludeArtifact>/g)]
+    .map((match) => match[1].trim()));
 }
 
 function parseEffectiveProjects(effectivePom) {
@@ -188,6 +208,11 @@ function elementValue(xml, element) {
 }
 
 const reactorArtifacts = effectiveProjects();
+
+if (externalSourceMirrors.has('pipelineframework-runtime-core') &&
+    !centralExcludedArtifacts.has('pipelineframework-runtime-core')) {
+  failures.push('runtime-core source mirror is not excluded from the Central publishing bundle');
+}
 
 for (const [artifactId, artifact] of reactorArtifacts) {
   if (!allDeclared.has(artifactId)) {
