@@ -79,7 +79,6 @@
     </properties>
 
     <modules>
-        <module>api</module>
         <module>representation-provider-api</module>
         <module>runtime-core</module>
         <module>runtime-spi</module>

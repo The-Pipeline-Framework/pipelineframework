@@ -109,8 +109,7 @@
       "artifactId": "pipelineframework-api",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Temporary non-deployable source mirror during the standalone contracts publisher handoff"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "pipelineframework-compiler",
