@@ -29,6 +29,10 @@
     <name>The Pipeline Framework Semantic Model</name>
     <description>Stable framework-neutral semantic contracts shared by compiler and runtime</description>
 
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

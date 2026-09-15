@@ -29,6 +29,10 @@
     <name>The Pipeline Framework Runtime Serialization</name>
     <description>Canonical framework-neutral serialization policy shared by compiler, runtime, and customer code</description>
 
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
