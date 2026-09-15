@@ -15,9 +15,6 @@ The quality lane runs `clean verify`; publication then uses one separate
 Before deployment, `scripts/verify-framework-publication.mjs` checks the
 manifest against the reactor's effective `central-publishing` configuration
 and rejects undeclared deployable or externally owned reactor artifacts.
-During the `pipelineframework-runtime-api` publisher handoff, its classes remain
-in this reactor as a non-deployable source mirror. Once the contracts repository
-publishes the same coordinate, a consumer cutover removes this temporary mirror.
 
 Publishing TPF has five related but separate responsibilities:
 
