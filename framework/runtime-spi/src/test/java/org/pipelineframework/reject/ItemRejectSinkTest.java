@@ -27,18 +27,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ItemRejectSinkTest {
 
     @Test
-    void defaultsArePortableAndNotDurable() {
+    void defaultsArePortableNotDurableAndFailClosedWithoutReadinessOverride() {
         ItemRejectSink sink = envelope -> Uni.createFrom().voidItem();
 
         assertEquals("log", sink.providerName());
         assertEquals(-500, sink.priority());
         assertFalse(sink.durable());
-        assertTrue(sink.startupValidationError().isEmpty());
+        IllegalStateException error = assertThrows(IllegalStateException.class, sink::startupValidationError);
+        assertTrue(error.getMessage().contains("must implement startupValidationError()"));
     }
 
     @Test

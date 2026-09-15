@@ -15,7 +15,7 @@ The sink interface and envelope lived beside Quarkus routing and the in-memory, 
 
 `pipelineframework-runtime-spi` owns `ItemRejectSink` and `ItemRejectEnvelope`. They retain their packages, provider defaults, durability declaration, publication signature, envelope record components, validation, and serialized shape.
 
-Provider readiness becomes a zero-argument operation. A selected provider validates the configuration supplied when it was constructed or injected. `ItemRejectRouter` continues to select providers, aggregate readiness, enforce production durability, decide failure policy and payload inclusion, construct envelopes, and record routing outcomes.
+Provider readiness becomes a zero-argument operation. A selected provider validates the configuration supplied when it was constructed or injected. Providers must implement this operation explicitly; its default fails closed so an older provider binary cannot silently bypass validation. `ItemRejectRouter` continues to select providers, aggregate readiness, enforce production durability, decide failure policy and payload inclusion, construct envelopes, and record routing outcomes.
 
 The runtime retains `ItemRejectConfig`, the in-memory, logging, and SQS implementations, JSON serialization, metrics, AWS clients, worker-pool offloading, CDI lifecycle, launch-mode policy, and routing behavior.
 
@@ -28,7 +28,8 @@ The envelope is semantic publication data rather than a mandated wire protocol. 
 ## Consequences
 
 - Item-reject providers compile against `pipelineframework-runtime-spi` without depending on `pipelineframework`.
-- Java source and binary compatibility apply to the sink and envelope contracts.
+- Moving the sink from `pipelineframework` to `pipelineframework-runtime-spi` and replacing `startupValidationError(ItemRejectConfig)` with `startupValidationError()` is an intentional source and binary break from the published 26.9.1–26.9.3 runtime artifacts. Existing provider implementations must be rebuilt against the matching runtime SPI, move configuration capture to construction or injection, and explicitly implement the zero-argument readiness method. Existing callers must rebuild and invoke the new signature. Old binaries must not be mixed with 26.9.4 runtime artifacts; they fail startup rather than quietly skipping readiness checks.
+- Once the portable SPI is published, Java source and binary compatibility apply to its sink and envelope contracts; future incompatible changes require explicit artifact compatibility and migration review.
 - Serialized compatibility applies wherever a provider persists or transmits the envelope; changes to record components require explicit compatibility review.
 - Tenant and execution context remain optional data values in the envelope; the SPI does not acquire tenant resolution, credentials, connection lifecycle, retry policy, or routing authority.
 - Runtime tests continue to prove provider selection, strict startup, durability enforcement, failure policy, payload inclusion, memory retention, SQS serialization, and publication behavior.

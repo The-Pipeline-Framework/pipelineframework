@@ -16,6 +16,8 @@
 
 package org.pipelineframework.reject;
 
+import java.util.Optional;
+
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Uni;
@@ -47,6 +49,11 @@ public class LoggingItemRejectSink implements ItemRejectSink {
     @Override
     public int priority() {
         return -100;
+    }
+
+    @Override
+    public Optional<String> startupValidationError() {
+        return Optional.empty();
     }
 
     /**
