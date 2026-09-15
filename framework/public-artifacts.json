@@ -119,19 +119,17 @@
       "artifactId": "pipelineframework-semantic-model",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Standalone contracts publisher; non-deployable reactor source mirror until released-artifact consumer cutover"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "pipelineframework-runtime-serialization",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Standalone contracts publisher; non-deployable reactor source mirror until released-artifact consumer cutover"
+      "note": "Published from the standalone contracts repository"
     }
   ],
   "invariants": {
-    "description": "Canonical publication contract; externally owned contract source mirrors remain in this reactor only while non-deployable during consumer cutover.",
+    "description": "Canonical publication contract for the framework reactor and separately published compiler and contracts artifacts.",
     "source": "post-#846 compiler extraction"
   }
 }
