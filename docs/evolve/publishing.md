@@ -9,6 +9,9 @@ externally owned coordinates published from their standalone repositories;
 the framework reactor consumes them as released Maven artifacts. The
 representation-provider fixture and structural connector/plugin POMs retain
 local coordinates but are deliberately excluded from Maven Central.
+During the API publisher handoff, the reactor retains `pipelineframework-api`
+as a non-deployable source mirror until the standalone contracts artifact is
+published and the local module is removed.
 
 The quality lane runs `clean verify`; publication then uses one separate
 `clean deploy -Pcentral-publishing` invocation rooted at `framework/pom.xml`.
