@@ -62,12 +62,11 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
     /**
      * Validates configuration required for the in-memory reject sink.
      *
-     * @param config the item-reject configuration to validate
-     * @return an Optional containing an error message if `config` is null or `memoryCapacity()` is less than or equal to zero, or `Optional.empty()` when the configuration is valid
+     * @return an Optional containing an error message if injected configuration is missing or its `memoryCapacity()` is less than or equal to zero, or `Optional.empty()` when the configuration is valid
      */
     @Override
-    public Optional<String> startupValidationError(ItemRejectConfig config) {
-        if (config == null || config.memoryCapacity() <= 0) {
+    public Optional<String> startupValidationError() {
+        if (itemRejectConfig == null || itemRejectConfig.memoryCapacity() <= 0) {
             return Optional.of("pipeline.item-reject.memory-capacity must be > 0 when provider=memory.");
         }
         return Optional.empty();
