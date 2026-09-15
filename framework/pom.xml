@@ -82,7 +82,6 @@
         <module>representation-provider-api</module>
         <module>runtime-core</module>
         <module>runtime-spi</module>
-        <module>runtime-api</module>
         <module>runtime-protocol</module>
         <module>dsl</module>
         <module>connector-maven-plugin</module>

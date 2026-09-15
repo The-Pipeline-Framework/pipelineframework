@@ -76,16 +76,6 @@ function normalizeStringArtifacts(input, sectionName) {
 const publicArtifacts = normalizeArtifacts(expectedPublic, 'publicArtifacts');
 const internalArtifacts = normalizeStringArtifacts(expectedInternal, 'internalArtifacts');
 const externalArtifacts = normalizeStringArtifacts(expectedExternal, 'externalArtifacts');
-const externalSourceMirrors = new Set();
-for (const entry of expectedExternal) {
-  if (entry && typeof entry === 'object' && 'reactorSourceMirror' in entry) {
-    if (typeof entry.reactorSourceMirror !== 'boolean') {
-      failures.push(`external artifact ${entry.artifactId} has non-boolean reactorSourceMirror`);
-    } else if (entry.reactorSourceMirror && typeof entry.artifactId === 'string') {
-      externalSourceMirrors.add(entry.artifactId.trim());
-    }
-  }
-}
 const publicArtifactIds = new Set(publicArtifacts.keys());
 const allDeclared = new Set([...publicArtifactIds, ...internalArtifacts, ...externalArtifacts]);
 
@@ -196,12 +186,7 @@ for (const [artifactId, artifact] of reactorArtifacts) {
   }
 
   if (externalArtifacts.has(artifactId)) {
-    if (!externalSourceMirrors.has(artifactId)) {
-      failures.push(`externally owned artifact is still present in this reactor: ${artifactId}`);
-    }
-    if (artifact.deployable) {
-      failures.push(`externally owned artifact is deployable: ${artifactId}`);
-    }
+    failures.push(`externally owned artifact is still present in this reactor: ${artifactId}`);
   }
   if (internalArtifacts.has(artifactId) && artifact.deployable) {
     failures.push(`internal artifact is deployable: ${artifactId}`);
