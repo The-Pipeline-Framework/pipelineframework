@@ -175,10 +175,23 @@ function parseEffectiveProjects(effectivePom) {
       failures.push(`effective maven.deploy.skip for ${artifactId} is not boolean: ${deploySkip || '<unset>'}`);
     }
 
+    const centralPluginId = '<artifactId>central-publishing-maven-plugin</artifactId>';
+    const centralStart = project.lastIndexOf(centralPluginId);
+    const centralEnd = project.indexOf('</plugin>', centralStart);
+    const centralPlugin = centralStart >= 0 && centralEnd >= 0
+      ? project.slice(centralStart, centralEnd)
+      : '';
+    const exclusions = centralPlugin.match(/<excludeArtifacts>([\s\S]*?)<\/excludeArtifacts>/)?.[1] ?? '';
+    const centralExcluded = [...exclusions.matchAll(/<excludeArtifact>([^<]+)<\/excludeArtifact>/g)]
+      .some((match) => match[1].trim() === artifactId);
+
     projects.set(artifactId, {
       artifactId,
       packaging: elementValue(project, 'packaging') || 'jar',
       deployable: deploySkip === 'false',
+      centralPresent: Boolean(centralPlugin),
+      centralSkipped: elementValue(centralPlugin, 'skipPublishing') === 'true',
+      centralExcluded,
       dependencies: directDependencies(project),
     });
   }
@@ -214,6 +227,17 @@ if (externalSourceMirrors.has('pipelineframework-runtime-core') &&
   failures.push('runtime-core source mirror is not excluded from the Central publishing bundle');
 }
 
+for (const artifactId of centralExcludedArtifacts) {
+  if (!internalArtifacts.has(artifactId) && !externalSourceMirrors.has(artifactId)) {
+    failures.push(`Central bundle excludes an artifact outside the internal/source-mirror contract: ${artifactId}`);
+  }
+}
+for (const artifactId of internalArtifacts) {
+  if (!centralExcludedArtifacts.has(artifactId)) {
+    failures.push(`internal artifact is missing from Central bundle exclusions: ${artifactId}`);
+  }
+}
+
 for (const [artifactId, artifact] of reactorArtifacts) {
   if (!allDeclared.has(artifactId)) {
     failures.push(`undeclared reactor artifact: ${artifactId}`);
@@ -227,12 +251,22 @@ for (const [artifactId, artifact] of reactorArtifacts) {
     if (artifact.deployable) {
       failures.push(`externally owned artifact is deployable: ${artifactId}`);
     }
+    if (externalSourceMirrors.has(artifactId) && !artifact.centralExcluded) {
+      failures.push(`externally owned source mirror is included in Central bundle: ${artifactId}`);
+    }
   }
   if (internalArtifacts.has(artifactId) && artifact.deployable) {
     failures.push(`internal artifact is deployable: ${artifactId}`);
   }
+  if (internalArtifacts.has(artifactId) && !artifact.centralExcluded && !artifact.centralSkipped) {
+    failures.push(`internal artifact is included in Central bundle: ${artifactId}`);
+  }
   if (publicArtifactIds.has(artifactId) && !artifact.deployable) {
     failures.push(`declared public artifact is not deployable: ${artifactId}`);
+  }
+  if (publicArtifactIds.has(artifactId) &&
+      (!artifact.centralPresent || artifact.centralSkipped || artifact.centralExcluded)) {
+    failures.push(`declared public artifact is not publishable by Central plugin: ${artifactId}`);
   }
   if (publicArtifactIds.has(artifactId)) {
     for (const dependency of artifact.dependencies) {
