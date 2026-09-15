@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.util.Optional;
 
+import io.quarkus.arc.DefaultBean;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.ConfigProvider;
 
@@ -9,6 +10,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
  * Local secret resolver for runtime configuration references.
  */
 @ApplicationScoped
+@DefaultBean
 public class LocalControlPlaneSecretResolver implements ControlPlaneSecretResolver {
 
     private static final String ENV_PREFIX = "env:";

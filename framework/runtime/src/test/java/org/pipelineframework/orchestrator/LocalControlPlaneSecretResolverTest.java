@@ -1,16 +1,23 @@
 package org.pipelineframework.orchestrator;
 
+import io.quarkus.arc.DefaultBean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class LocalControlPlaneSecretResolverTest {
 
     private final LocalControlPlaneSecretResolver resolver = new LocalControlPlaneSecretResolver();
+
+    @Test
+    void builtInResolverIsDefaultBean() {
+        assertTrue(LocalControlPlaneSecretResolver.class.isAnnotationPresent(DefaultBean.class));
+    }
 
     @BeforeEach
     @AfterEach
