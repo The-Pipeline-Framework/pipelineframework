@@ -93,15 +93,13 @@
       "artifactId": "pipelineframework-runtime-protocol",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Non-deployable source mirror until the contracts-repository snapshot is published and consumers resolve it"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "pipelineframework-runtime-spi",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Non-deployable source mirror until the contracts-repository snapshot is published and consumers resolve it"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "pipelineframework-runtime-core",
