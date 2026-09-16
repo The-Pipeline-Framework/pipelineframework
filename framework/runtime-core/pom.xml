@@ -29,6 +29,11 @@
     <name>The Pipeline Framework Runtime Core</name>
     <description>Framework-neutral runtime abstractions used by the Pipeline runtime</description>
 
+    <!-- Source mirror during the contracts-repository publisher handoff. -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
