@@ -31,7 +31,7 @@ the retained failed resumable step; one `FAILED_RETRYABLE` logical effect may cl
 `CommandEffectStore` independently authorizes and records the new attempt under the
 unchanged logical effect identity.
 
-This decision governs failure contracts in `framework/runtime-core`, recovery and
+This decision governs failure contracts in `pipelineframework-runtime-core`, recovery and
 queue-async coordination in `framework/runtime`, checkpoint connectors, and runtime tests.
 
 ## Rationale

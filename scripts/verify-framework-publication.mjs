@@ -222,11 +222,6 @@ function elementValue(xml, element) {
 
 const reactorArtifacts = effectiveProjects();
 
-if (externalSourceMirrors.has('pipelineframework-runtime-core') &&
-    !centralExcludedArtifacts.has('pipelineframework-runtime-core')) {
-  failures.push('runtime-core source mirror is not excluded from the Central publishing bundle');
-}
-
 for (const artifactId of centralExcludedArtifacts) {
   if (!internalArtifacts.has(artifactId) && !externalSourceMirrors.has(artifactId)) {
     failures.push(`Central bundle excludes an artifact outside the internal/source-mirror contract: ${artifactId}`);

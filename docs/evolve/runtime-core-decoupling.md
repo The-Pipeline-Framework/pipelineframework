@@ -11,7 +11,8 @@ The goal is:
 
 ## New runtime boundary
 
-`framework/runtime-core` now holds framework-neutral contracts used by execution code:
+The `pipelineframework-runtime-core` artifact, published from the standalone
+`pipelineframework-contracts` repository, holds framework-neutral contracts used by execution code:
 
 - `BeanLookup`
 - `ConfigProvider`
@@ -28,7 +29,7 @@ The goal is:
 `framework/runtime-spring` provides the first Spring Boot adapter for these same contracts without depending on the
 Quarkus runtime artifact.
 
-When a concept moves into `framework/runtime-core`, the core type becomes the source of truth. Existing Quarkus runtime
+When a concept moves into `pipelineframework-runtime-core`, the core type becomes the source of truth. Existing Quarkus runtime
 types that expose the same concept should delegate to the core type, or the PR should explicitly justify why the concepts
 remain separate. Keep a compatibility test around delegated legacy constants or APIs so Spring support does not create a
 second parallel contract by accident.
@@ -89,7 +90,7 @@ Unsupported Spring profile combinations fail at build time instead of falling ba
 
 The important seam for future portability is where Vert.x is used:
 
-- `framework/runtime-core`: no direct `io.quarkus` / `io.vertx` references.
+- `pipelineframework-runtime-core`: no direct `io.quarkus` / `io.vertx` references.
 - `framework/runtime`: `io.vertx.core` remains in `RuntimeAdapterBootstrap` for context capture.
 
 To make this explicit and enforceable, this slice adds dependency-seam tests:

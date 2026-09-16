@@ -80,7 +80,6 @@
 
     <modules>
         <module>representation-provider-api</module>
-        <module>runtime-core</module>
         <module>runtime-spi</module>
         <module>runtime-protocol</module>
         <module>dsl</module>
@@ -408,7 +407,6 @@
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
                                 <excludeArtifact>representation-provider-http</excludeArtifact>
-                                <excludeArtifact>pipelineframework-runtime-core</excludeArtifact>
                                 <excludeArtifact>transport-completeness-tests</excludeArtifact>
                                 <excludeArtifact>vector-store-connector</excludeArtifact>
                                 <excludeArtifact>vector-store-pgvector-connector</excludeArtifact>
