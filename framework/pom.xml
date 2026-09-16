@@ -80,8 +80,6 @@
 
     <modules>
         <module>representation-provider-api</module>
-        <module>runtime-spi</module>
-        <module>runtime-protocol</module>
         <module>dsl</module>
         <module>connector-maven-plugin</module>
         <module>connector-import-tooling</module>
@@ -403,8 +401,6 @@
                                 <excludeArtifact>llm-query-langchain4j-connector</excludeArtifact>
                                 <excludeArtifact>mcp-connector</excludeArtifact>
                                 <excludeArtifact>mcp-contract</excludeArtifact>
-                                <excludeArtifact>pipelineframework-runtime-protocol</excludeArtifact>
-                                <excludeArtifact>pipelineframework-runtime-spi</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
