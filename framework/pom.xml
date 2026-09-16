@@ -382,7 +382,36 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <excludeArtifacts>
+                                <!-- Keep in sync with public-artifacts.json; the verifier checks the effective plugin configuration. -->
+                                <excludeArtifact>connector-import-tooling</excludeArtifact>
+                                <excludeArtifact>connector-maven-plugin</excludeArtifact>
+                                <excludeArtifact>connector-mcp-maven-plugin</excludeArtifact>
+                                <excludeArtifact>connector-openapi-maven-plugin</excludeArtifact>
+                                <excludeArtifact>embedding-query-connector</excludeArtifact>
+                                <excludeArtifact>embedding-query-langchain4j-connector</excludeArtifact>
+                                <excludeArtifact>framework-connectors</excludeArtifact>
+                                <excludeArtifact>framework-foundational-plugins</excludeArtifact>
+                                <excludeArtifact>framework-plugins</excludeArtifact>
+                                <excludeArtifact>gmail-query-connector</excludeArtifact>
+                                <excludeArtifact>graphql-connector</excludeArtifact>
+                                <excludeArtifact>graphql-smallrye-connector</excludeArtifact>
+                                <excludeArtifact>host-gmail</excludeArtifact>
+                                <excludeArtifact>host-microsoft-graph</excludeArtifact>
+                                <excludeArtifact>host-oidc-quarkus</excludeArtifact>
+                                <excludeArtifact>host-quickbooks-mcp</excludeArtifact>
+                                <excludeArtifact>http-connector</excludeArtifact>
+                                <excludeArtifact>llm-query-connector</excludeArtifact>
+                                <excludeArtifact>llm-query-langchain4j-connector</excludeArtifact>
+                                <excludeArtifact>mcp-connector</excludeArtifact>
+                                <excludeArtifact>mcp-contract</excludeArtifact>
+                                <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
+                                <excludeArtifact>representation-provider-file</excludeArtifact>
+                                <excludeArtifact>representation-provider-fixture</excludeArtifact>
+                                <excludeArtifact>representation-provider-http</excludeArtifact>
                                 <excludeArtifact>pipelineframework-runtime-core</excludeArtifact>
+                                <excludeArtifact>transport-completeness-tests</excludeArtifact>
+                                <excludeArtifact>vector-store-connector</excludeArtifact>
+                                <excludeArtifact>vector-store-pgvector-connector</excludeArtifact>
                             </excludeArtifacts>
                             <autoPublish>true</autoPublish>
                             <waitUntil>published</waitUntil>
