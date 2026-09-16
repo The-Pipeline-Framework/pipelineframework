@@ -22,7 +22,7 @@ metadata into the canonical output without asking the submitter to echo authorit
 
 Projection failure does not consume or corrupt the durable interaction. Surviving
 interactions remain pinned to their release/contract interpretation. This decision
-governs `framework/runtime-core` Await contracts, `framework/runtime` Await coordination,
+governs `pipelineframework-runtime-core` Await contracts, `framework/runtime` Await coordination,
 Await stores, adapters, and generated deferred-completion decorators.
 
 ## Rationale

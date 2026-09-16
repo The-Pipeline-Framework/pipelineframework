@@ -19,7 +19,7 @@ knows a fact, it carries that fact forward immutably instead of discarding and q
 it back. I/O, persistence, retries, correlation, replay, telemetry, transport, and
 deployment integration stay in framework-owned boundaries.
 
-This decision governs `framework/api`, `framework/runtime-core`,
+This decision governs `framework/api`, the `pipelineframework-runtime-core` artifact,
 `framework/deployment`, `examples`, and application authoring guidance.
 
 ## Rationale

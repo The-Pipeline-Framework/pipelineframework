@@ -40,7 +40,8 @@ ConnectorProvider<PC>
 
 A provider is the reusable packaging/lifecycle unit. It owns provider identity, provider-level configuration, shared resources and an operation catalog.
 
-The public SPI belongs in `framework/runtime-core` under `org.pipelineframework.connector` and subpackages. It must have no CDI, Quarkus or Mutiny dependency.
+The public SPI belongs in the `pipelineframework-runtime-core` artifact under
+`org.pipelineframework.connector` and subpackages. It must have no CDI, Quarkus or Mutiny dependency.
 
 Provider lifecycle uses a provider-lifetime `ConnectorRuntimeContext` and JDK async completion.
 

@@ -6,7 +6,8 @@ Keep the core pure, connect to reality.
 Core modules:
 - `framework/pom.xml`: Parent POM of the multi-module Maven project
 - `framework/deployment`: compiler and code generation phases (Quarkus/canonical)
-- `framework/runtime-core`: framework-neutral TPF abstractions
+- `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
+  `pipelineframework-contracts` repository and consumed here as a released dependency
 - `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
 - `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Spring Boot)
 - `framework/api`: framework-neutral API contracts for generated pipeline applications

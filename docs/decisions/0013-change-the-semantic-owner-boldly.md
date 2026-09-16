@@ -25,7 +25,7 @@ exists; otherwise prefer simplification, semantic consolidation, migration, and 
 Migration transfers responsibility. When TPF gains a native boundary, remove the
 application registry, client, retry ledger, duplicated configuration, glue, and obsolete
 tests it replaces. This decision governs framework-wide changes, `framework/api`,
-`framework/runtime-core`, `framework/runtime*`, `framework/deployment`, connectors,
+`pipelineframework-runtime-core`, `framework/runtime*`, `framework/deployment`, connectors,
 plugins, examples, and migrations.
 
 ## Rationale

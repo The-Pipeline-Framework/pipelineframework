@@ -28,7 +28,7 @@ one inference unless the pipeline explicitly models another turn. Required struc
 output means actual provider/schema enforcement; fallback and malformed-output handling
 are explicit rather than hidden repair inference.
 
-This decision governs `framework/runtime-core` Query contracts,
+This decision governs `pipelineframework-runtime-core` Query contracts,
 `framework/runtime/src/main/java/org/pipelineframework/query`, and Query connectors.
 
 ## Rationale

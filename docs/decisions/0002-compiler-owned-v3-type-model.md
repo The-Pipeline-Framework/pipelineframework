@@ -24,7 +24,7 @@ and wire representations as local pipeline execution.
 
 Repeated fields are finite ordered duplicate-preserving value shape. They do not imply
 streaming or fan-out, and TPF performs no implicit repeated-field/stream conversion.
-This decision governs `framework/runtime-core`, `framework/runtime`,
+This decision governs the `pipelineframework-runtime-core` artifact, `framework/runtime`,
 `framework/deployment`, and generated `META-INF/pipeline/` contracts.
 
 The `pipelineframework-semantic-model` artifact owns stable, JDK-only data

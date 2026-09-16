@@ -39,7 +39,7 @@ verify the admission. This is a framework API ownership boundary; it is not a cl
 arbitrary hostile code in the same JVM is isolated by JPMS, process boundaries, or a
 cryptographic capability.
 
-This decision governs `framework/runtime-core` Command contracts,
+This decision governs `pipelineframework-runtime-core` Command contracts,
 `framework/runtime` Command execution, Command connectors, and effect stores.
 
 ## Rationale
