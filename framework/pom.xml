@@ -404,6 +404,7 @@
                                 <excludeArtifact>mcp-connector</excludeArtifact>
                                 <excludeArtifact>mcp-contract</excludeArtifact>
                                 <excludeArtifact>pipelineframework-runtime-protocol</excludeArtifact>
+                                <excludeArtifact>pipelineframework-runtime-spi</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
