@@ -18,10 +18,6 @@
       "packaging": "jar"
     },
     {
-      "artifactId": "pipelineframework-runtime-protocol",
-      "packaging": "jar"
-    },
-    {
       "artifactId": "pipelineframework-dsl",
       "packaging": "jar"
     },
@@ -97,6 +93,13 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "pipelineframework-runtime-protocol",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Non-deployable source mirror until the contracts-repository snapshot is published and consumers resolve it"
+    },
     {
       "artifactId": "pipelineframework-runtime-core",
       "packaging": "jar",

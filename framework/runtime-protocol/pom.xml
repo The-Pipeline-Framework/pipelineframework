@@ -12,6 +12,11 @@
     <name>The Pipeline Framework Runtime Protocol</name>
     <description>Shared protobuf contracts for customer runtime and worker boundaries</description>
 
+    <!-- Source mirror during the contracts-repository publisher handoff. -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
