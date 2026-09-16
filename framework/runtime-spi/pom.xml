@@ -29,6 +29,11 @@
     <name>The Pipeline Framework Runtime SPI</name>
     <description>Framework-neutral reactive extension contracts implemented by runtime providers and customer integrations</description>
 
+    <!-- Source mirror during the contracts-repository publisher handoff. -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
