@@ -107,6 +107,23 @@ public record TransitionWorkerCommand(
         ExecutionRedriveIntent redriveIntent,
         Optional<String> redriveCommandId
     ) {
+        this(tenantId, executionId, currentStepIndex, attempt, resultShape, executionVersion,
+            transitionKey, inputPayload, redriveIntent, redriveCommandId, Optional.empty());
+    }
+
+    public TransitionWorkerCommand(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        Object inputPayload,
+        ExecutionRedriveIntent redriveIntent,
+        Optional<String> redriveCommandId,
+        Optional<String> redriveReason
+    ) {
         this(
             tenantId,
             executionId,
@@ -120,7 +137,7 @@ public record TransitionWorkerCommand(
             redriveIntent,
             redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND ? currentStepIndex : -1,
             redriveCommandId,
-            Optional.empty());
+            redriveReason);
     }
 
     public TransitionWorkerCommand {
@@ -148,6 +165,12 @@ public record TransitionWorkerCommand(
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND && redriveStepIndex < currentStepIndex) {
             throw new IllegalArgumentException(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
+        }
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+            && stopBeforeStepIndex >= 0
+            && redriveStepIndex >= stopBeforeStepIndex) {
+            throw new IllegalArgumentException(
+                "redriveStepIndex must identify a step before stopBeforeStepIndex for deliberate Command retry");
         }
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
             && redriveCommandId.filter(value -> !value.isBlank()).isEmpty()) {

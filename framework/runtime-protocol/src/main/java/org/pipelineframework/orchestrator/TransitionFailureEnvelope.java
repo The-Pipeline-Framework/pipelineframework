@@ -19,6 +19,9 @@ public record TransitionFailureEnvelope(
 ) {
     public TransitionFailureEnvelope {
         Objects.requireNonNull(failureClass, "failureClass");
+        if (failedStepIndex < -1) {
+            throw new IllegalArgumentException("failedStepIndex must be >= -1");
+        }
         failedCommandId = Optional.ofNullable(failedCommandId).orElseGet(Optional::empty);
     }
 

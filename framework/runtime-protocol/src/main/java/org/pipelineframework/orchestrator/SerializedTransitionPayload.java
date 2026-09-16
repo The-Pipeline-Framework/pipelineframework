@@ -18,6 +18,12 @@ public record SerializedTransitionPayload(
     public SerializedTransitionPayload {
         Objects.requireNonNull(payloadTypeId, "SerializedTransitionPayload.payloadTypeId must not be null");
         Objects.requireNonNull(payloadEncoding, "SerializedTransitionPayload.payloadEncoding must not be null");
+        if (payloadTypeId.isBlank()) {
+            throw new IllegalArgumentException("SerializedTransitionPayload.payloadTypeId must not be blank");
+        }
+        if (payloadEncoding.isBlank()) {
+            throw new IllegalArgumentException("SerializedTransitionPayload.payloadEncoding must not be blank");
+        }
         Objects.requireNonNull(payload, "SerializedTransitionPayload.payload must not be null");
     }
 

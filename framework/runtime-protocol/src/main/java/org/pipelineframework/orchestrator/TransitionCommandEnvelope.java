@@ -171,6 +171,12 @@ public record TransitionCommandEnvelope(
                 "redriveStepIndex must identify a step at or after currentStepIndex for deliberate Command retry");
         }
         if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
+            && stopBeforeStepIndex >= 0
+            && redriveStepIndex >= stopBeforeStepIndex) {
+            throw new IllegalArgumentException(
+                "redriveStepIndex must identify a step before stopBeforeStepIndex for deliberate Command retry");
+        }
+        if (redriveIntent == ExecutionRedriveIntent.RETRY_FAILED_COMMAND
             && redriveCommandId.filter(value -> !value.isBlank()).isEmpty()) {
             throw new IllegalArgumentException(
                 "redriveCommandId must identify the exact logical effect for deliberate Command retry");

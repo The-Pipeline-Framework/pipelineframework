@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class TransitionWorkerProtocolContractTest {
@@ -52,5 +53,44 @@ class TransitionWorkerProtocolContractTest {
             null, "1", "json", "{}", "timestamp", "nonce", "signature"));
         assertThrows(NullPointerException.class, () -> new SqsTransitionWorkerResponse(
             "request-1", "1", "json", "{}", "timestamp", "nonce", null));
+    }
+
+    @Test
+    void shorterWorkerConstructorPreservesCommandReissueReason() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "execution-1",
+            2,
+            1,
+            ExecutionResultShape.SINGLE,
+            4L,
+            "transition-1",
+            "payload",
+            ExecutionRedriveIntent.REISSUE_COMMAND,
+            Optional.of("command-1"),
+            Optional.of("operator approved reissue"));
+
+        assertEquals(ExecutionRedriveIntent.REISSUE_COMMAND, command.redriveIntent());
+        assertEquals(-1, command.redriveStepIndex());
+        assertEquals(Optional.of("operator approved reissue"), command.redriveReason());
+    }
+
+    @Test
+    void retryTargetMustPrecedeExclusiveStopBoundary() {
+        TransitionWorkerCommand validCommand = new TransitionWorkerCommand(
+            "tenant-1", "execution-1", 2, 4, 1, ExecutionResultShape.SINGLE, 4L,
+            "transition-1", "payload", ExecutionRedriveIntent.RETRY_FAILED_COMMAND, 3,
+            Optional.of("command-1"), Optional.empty());
+        assertEquals(3, validCommand.redriveStepIndex());
+
+        assertThrows(IllegalArgumentException.class, () -> new TransitionWorkerCommand(
+            "tenant-1", "execution-1", 2, 4, 1, ExecutionResultShape.SINGLE, 4L,
+            "transition-1", "payload", ExecutionRedriveIntent.RETRY_FAILED_COMMAND, 4,
+            Optional.of("command-1"), Optional.empty()));
+        assertThrows(IllegalArgumentException.class, () -> new TransitionCommandEnvelope(
+            "tenant-1", "execution-1", "pipeline-1", "contract-1", "release-1",
+            2, 4, 1, ExecutionResultShape.SINGLE, 4L, "transition-1", "trace-1",
+            "example.Payload", "JSON", "{}", ExecutionRedriveIntent.RETRY_FAILED_COMMAND, 4,
+            Optional.of("command-1"), Optional.empty()));
     }
 }
