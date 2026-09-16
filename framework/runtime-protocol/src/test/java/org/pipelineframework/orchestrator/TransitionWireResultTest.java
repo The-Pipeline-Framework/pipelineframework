@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class TransitionWireResultTest {
@@ -48,5 +50,29 @@ class TransitionWireResultTest {
             failure,
             false,
             false));
+    }
+
+    @Test
+    void rejectsBlankSerializedPayloadIdentity() {
+        assertThrows(IllegalArgumentException.class, () -> new SerializedTransitionPayload(" ", "JSON", "{}"));
+        assertThrows(IllegalArgumentException.class, () -> new SerializedTransitionPayload("example.Output", " ", "{}"));
+
+        assertEquals(Optional.empty(), SerializedTransitionPayload.fromDurableValue(Map.of(
+            "payloadTypeId", " ",
+            "payloadEncoding", "JSON",
+            "payload", "{}")));
+        assertEquals(Optional.empty(), SerializedTransitionPayload.fromDurableValue(Map.of(
+            "payloadTypeId", "example.Output",
+            "payloadEncoding", " ",
+            "payload", "{}")));
+    }
+
+    @Test
+    void validatesFailureStepIndexSentinel() {
+        assertEquals(-1, new TransitionFailureEnvelope("failure", "message").failedStepIndex());
+        assertEquals(0, new TransitionFailureEnvelope("failure", "message", 0).failedStepIndex());
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new TransitionFailureEnvelope("failure", "message", -2));
     }
 }
