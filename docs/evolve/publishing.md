@@ -4,14 +4,18 @@
 
 `framework/pom.xml` is the Maven reactor for the supported TPF distribution.
 Its explicit public coordinate set, including artifact packaging, lives in
-`framework/public-artifacts.json`. The compiler and shared contracts are
-externally owned coordinates published from their standalone repositories;
-the framework reactor consumes them as released Maven artifacts. The
+`framework/public-artifacts.json`. The compiler, shared contracts, authored
+DSL, and representation-provider API are externally owned coordinates published
+from their standalone repositories; the framework reactor consumes them as released Maven artifacts. The
 representation-provider fixture and structural connector/plugin POMs retain
 local coordinates but are deliberately excluded from Maven Central.
 
 The quality lane runs `clean verify`; publication then uses one separate
 `clean deploy -Pcentral-publishing` invocation rooted at `framework/pom.xml`.
+`central-publishing` is the sole permitted Maven profile: it attaches and signs
+publication artifacts without selecting another source universe, module graph,
+or build topology. Development and verification use the canonical reactor with
+no profile selection.
 Before deployment, `scripts/verify-framework-publication.mjs` checks the
 manifest against the reactor's effective `central-publishing` configuration
 and rejects undeclared deployable or externally owned reactor artifacts.

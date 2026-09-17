@@ -10,6 +10,10 @@
     <artifactId>representation-provider-api</artifactId>
     <name>TPF Representation Provider API</name>
     <description>Host-neutral contracts for representation providers.</description>
+    <!-- Source mirror during the contracts-repository publisher handoff. -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
