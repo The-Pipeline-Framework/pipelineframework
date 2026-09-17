@@ -29,6 +29,9 @@
     <artifactId>pipelineframework-deployment</artifactId>
     <version>26.9.4-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
 
     <name>The Pipeline Framework Extension (Deployment)</name>
     <description>Deployment module for The Pipeline Framework Extension</description>
