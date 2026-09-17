@@ -46,7 +46,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>cache-plugin</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.runtime.version}</version>
         </dependency>
 
         <!-- Quarkus dependencies -->

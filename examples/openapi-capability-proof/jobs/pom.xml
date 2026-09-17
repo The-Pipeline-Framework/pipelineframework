@@ -16,7 +16,7 @@
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
     </properties>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>openapi-capability-proof-contracts</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>http-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>representation-provider-http</artifactId><version>${project.version}</version><scope>provided</scope></dependency>

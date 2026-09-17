@@ -330,9 +330,11 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
 
 ### Publishing scope
 
-The publish workflow deploys only the framework artifacts (parent, runtime, deployment) and skips examples:
+The publish workflow deploys the framework reactor's remaining artifacts and skips examples. The
+runtime, deployment, Spring runtime, and foundational plugin artifacts are published by the
+standalone `pipelineframework-runtime` repository:
 
-- Maven runs from the repo root with `-pl framework,framework/runtime,framework/deployment -am`.
+- Maven runs from this repository's `framework/pom.xml` reactor.
 - The root POM is included in the reactor but is **not deployed** (`maven.deploy.skip=true` in the root, overridden to false in `framework/pom.xml`).
 
 Note: Publishing the `framework-parent` artifact is expected. It is the BOM/parent POM that consumers import for dependency management, so it will appear in Maven Central autocomplete results.

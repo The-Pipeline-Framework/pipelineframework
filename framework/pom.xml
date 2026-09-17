@@ -83,20 +83,16 @@
         <module>connector-import-tooling</module>
         <module>connector-mcp-maven-plugin</module>
         <module>connector-openapi-maven-plugin</module>
-        <module>runtime-spring</module>
-        <module>runtime</module>
         <module>representation-provider-fixture</module>
         <module>representation-provider-opencsv</module>
         <module>representation-provider-file</module>
         <module>representation-provider-http</module>
-        <module>deployment</module>
         <module>connectors</module>
         <module>host-oidc-quarkus</module>
         <module>host-gmail</module>
         <module>host-microsoft-graph</module>
         <module>host-quickbooks-mcp</module>
         <module>transport-completeness-tests</module>
-        <module>plugins</module>
     </modules>
 
     <dependencyManagement>
@@ -378,7 +374,6 @@
                             <publishingServerId>central</publishingServerId>
                             <excludeArtifacts>
                                 <!-- Keep in sync with public-artifacts.json; the verifier checks the effective plugin configuration. -->
-                                <excludeArtifact>cache-plugin</excludeArtifact>
                                 <excludeArtifact>connector-import-tooling</excludeArtifact>
                                 <excludeArtifact>connector-maven-plugin</excludeArtifact>
                                 <excludeArtifact>connector-mcp-maven-plugin</excludeArtifact>
@@ -386,8 +381,6 @@
                                 <excludeArtifact>embedding-query-connector</excludeArtifact>
                                 <excludeArtifact>embedding-query-langchain4j-connector</excludeArtifact>
                                 <excludeArtifact>framework-connectors</excludeArtifact>
-                                <excludeArtifact>framework-foundational-plugins</excludeArtifact>
-                                <excludeArtifact>framework-plugins</excludeArtifact>
                                 <excludeArtifact>gmail-query-connector</excludeArtifact>
                                 <excludeArtifact>graphql-connector</excludeArtifact>
                                 <excludeArtifact>graphql-smallrye-connector</excludeArtifact>
@@ -400,15 +393,10 @@
                                 <excludeArtifact>llm-query-langchain4j-connector</excludeArtifact>
                                 <excludeArtifact>mcp-connector</excludeArtifact>
                                 <excludeArtifact>mcp-contract</excludeArtifact>
-                                <excludeArtifact>pipelineframework</excludeArtifact>
-                                <excludeArtifact>pipelineframework-deployment</excludeArtifact>
-                                <excludeArtifact>pipelineframework-runtime-spring</excludeArtifact>
-                                <excludeArtifact>persistence-plugin</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
                                 <excludeArtifact>representation-provider-http</excludeArtifact>
-                                <excludeArtifact>repository-plugin</excludeArtifact>
                                 <excludeArtifact>transport-completeness-tests</excludeArtifact>
                                 <excludeArtifact>vector-store-connector</excludeArtifact>
                                 <excludeArtifact>vector-store-pgvector-connector</excludeArtifact>

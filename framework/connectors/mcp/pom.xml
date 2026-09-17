@@ -7,7 +7,7 @@
     <description>Invokes pinned MCP tools as ordinary TPF Query and Command operations.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>mcp-contract</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
         <dependency><groupId>io.modelcontextprotocol.sdk</groupId><artifactId>mcp-core</artifactId></dependency>
         <dependency><groupId>io.modelcontextprotocol.sdk</groupId><artifactId>mcp-json-jackson2</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><scope>test</scope></dependency>

@@ -25,7 +25,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.runtime.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

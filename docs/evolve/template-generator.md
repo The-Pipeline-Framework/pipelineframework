@@ -1,7 +1,7 @@
 # Template Generator (Reference)
 
 ::: tip Repository Boundary
-The generator-facing schema is exported from this repository. The template generator tooling that consumes it lives in a separate, internal repository.
+The standalone `pipelineframework-runtime` repository owns the generator-facing schema. It is published in the released `pipelineframework-deployment` artifact. The template generator tooling that consumes it lives in a separate, internal repository.
 :::
 
 This guide explains how to use the Pipeline Framework template generator to create complete pipeline applications from YAML configuration files.
@@ -18,13 +18,15 @@ The template generator creates a complete Maven multi-module pipeline project fr
 
 The generator source lives in a separate repository. The source in this repository no longer carries a local `template-generator-node` checkout.
 
-The generator-facing schema authority remains in this repository: `framework/deployment` packages `META-INF/pipeline/pipeline-template-schema.json` in the deployment artifact.
+The generator-facing schema authority is published by the standalone `pipelineframework-runtime`
+repository as `META-INF/pipeline/pipeline-template-schema.json` in its deployment artifact.
 
 ## Schema Reference
 
 Use the exported JSON schema for automation:
 
-- `framework/deployment/target/classes/META-INF/pipeline/pipeline-template-schema.json`
+- `META-INF/pipeline/pipeline-template-schema.json` in the released
+  `pipelineframework-deployment` artifact
 
 ## v2 Template Shape
 

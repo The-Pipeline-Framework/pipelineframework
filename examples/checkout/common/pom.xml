@@ -18,7 +18,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.runtime.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

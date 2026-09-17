@@ -34,8 +34,6 @@
     "embedding-query-connector",
     "embedding-query-langchain4j-connector",
     "framework-connectors",
-    "framework-foundational-plugins",
-    "framework-plugins",
     "gmail-query-connector",
     "graphql-connector",
     "graphql-smallrye-connector",
@@ -61,42 +59,36 @@
       "artifactId": "pipelineframework",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "pipelineframework-deployment",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "pipelineframework-runtime-spring",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "persistence-plugin",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "cache-plugin",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "repository-plugin",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {

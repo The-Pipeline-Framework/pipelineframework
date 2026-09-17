@@ -41,7 +41,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.runtime.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

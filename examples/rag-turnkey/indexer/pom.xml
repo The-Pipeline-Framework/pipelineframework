@@ -10,7 +10,7 @@
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
     </properties>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-turnkey-support</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>document-text-extraction</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>embedding-query-langchain4j-connector</artifactId><version>${project.version}</version></dependency>
