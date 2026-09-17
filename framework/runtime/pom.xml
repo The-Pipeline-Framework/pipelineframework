@@ -78,11 +78,6 @@
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
-            <artifactId>http-contract</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-api</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -300,6 +295,35 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <id>enforce-runtime-boundary</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules><bannedDependencies>
+                                <searchTransitive>true</searchTransitive>
+                                <excludes>
+                                    <exclude>org.pipelineframework:*</exclude>
+                                </excludes>
+                                <includes>
+                                    <include>org.pipelineframework:pipelineframework-runtime-api</include>
+                                    <include>org.pipelineframework:pipelineframework-runtime-serialization</include>
+                                    <include>org.pipelineframework:pipelineframework-runtime-protocol</include>
+                                    <include>org.pipelineframework:pipelineframework-api</include>
+                                    <include>org.pipelineframework:pipelineframework-runtime-core</include>
+                                    <include>org.pipelineframework:pipelineframework-runtime-spi</include>
+                                    <include>org.pipelineframework:pipelineframework-dsl</include>
+                                    <include>org.pipelineframework:pipelineframework-semantic-model</include>
+                                </includes>
+                            </bannedDependencies></rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
