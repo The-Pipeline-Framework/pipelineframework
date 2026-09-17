@@ -6,7 +6,7 @@
     <name>The Pipeline Framework - Gmail Query Connector</name>
     <description>Tenant-aware Gmail read-only Query operations over host-provided authenticated Gmail clients.</description>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
         <dependency><groupId>com.google.apis</groupId><artifactId>google-api-services-gmail</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-api</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter-engine</artifactId><scope>test</scope></dependency>

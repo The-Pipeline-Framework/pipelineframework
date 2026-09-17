@@ -11,7 +11,7 @@
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
     </properties>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>rag-composition-proof-connectors</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>

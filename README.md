@@ -165,15 +165,12 @@ README in the repository.
 ## Repository Map
 
 - [`framework/api`](framework/api/) — framework-neutral contracts for generated applications.
-- [`framework/runtime-core`](framework/runtime-core/) — framework-neutral TPF semantics.
-- [`framework/deployment`](framework/deployment/) — compilation, validation, and code generation.
-- [`framework/runtime`](framework/runtime/) — the canonical Quarkus runtime, execution engine,
-  telemetry, and configuration.
-- [`framework/runtime-spring`](framework/runtime-spring/) — the emerging Spring runtime surface.
+- The standalone [`pipelineframework-contracts`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts)
+  repository owns the framework-neutral `pipelineframework-runtime-core` artifact.
 - [`framework/connectors`](framework/connectors/) — typed I/O and external-observation/effect
   boundaries.
-- [`framework/plugins`](framework/plugins/) — cross-cutting persistence, caching, materialisation,
-  telemetry, and related capabilities.
+- The standalone [`pipelineframework-runtime`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime)
+  repository owns the Quarkus runtime, deployment, Spring runtime, and foundational plugins.
 - [`blocks`](blocks/) — reusable compile-time Pipeline definitions, including packaged specialised
   loops.
 - [`examples`](examples/) — reference applications and end-to-end compatibility proofs.

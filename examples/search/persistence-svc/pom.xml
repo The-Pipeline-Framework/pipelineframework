@@ -43,7 +43,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.runtime.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.quarkus</groupId>

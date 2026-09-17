@@ -68,7 +68,8 @@ The foundational persistence plugin is intentionally small and expects the host 
 
 In practice, you wire this as:
 
-1. `framework/plugins/foundational/persistence` (library, no generated transport code)
+1. `org.pipelineframework:persistence-plugin` from the standalone `pipelineframework-runtime`
+   repository (library, no generated transport code)
 2. `examples/.../persistence-svc` (service host module with the marker annotation)
 
 For a complete walkthrough, see the dedicated persistence plugin page.
@@ -79,7 +80,7 @@ To generate plugin-server artifacts in a dedicated module, add a marker class an
 inside that module. This tells the annotation processor to emit the transport adapters and CDI producers there.
 
 The host module should depend on:
-- Your plugin library (e.g., `framework/plugins/foundational/persistence`)
+- Your plugin library (for example, `org.pipelineframework:persistence-plugin`)
 - The `common` module that owns your domain types
 - Any persistence provider dependencies (reactive or blocking)
 

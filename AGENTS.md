@@ -5,15 +5,13 @@ Keep the core pure, connect to reality.
 
 Core modules:
 - `framework/pom.xml`: Parent POM of the multi-module Maven project
-- `framework/deployment`: compiler and code generation phases (Quarkus/canonical)
 - `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
   `pipelineframework-contracts` repository and consumed here as a released dependency
-- `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
-- `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Spring Boot)
 - `framework/api`: framework-neutral API contracts for generated pipeline applications
 
-Plugins:
-- `framework/plugins`: cross-cutting side-effect capabilities (persistence, caching, materialisation)
+The standalone `pipelineframework-runtime` repository owns the Quarkus runtime, deployment,
+Spring runtime adapter, and foundational persistence/cache/repository plugins consumed here as
+released artifacts.
 
 Connectors:
 - `framework/connectors`: Admit or publish files, object-store entries, and external payloads, or provide
@@ -205,7 +203,7 @@ For planning, PR slicing, roadmap, or architecture tradeoff work, load `AGENTS.p
 
 TPF-specific scoping rules:
 
-- Core semantics live under `framework/api`, `framework/runtime`, `framework/runtime-*`, and `framework/deployment`.
+- Core semantics live under `framework/api` and released runtime/contract artifacts owned by their standalone repositories.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.
