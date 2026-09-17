@@ -6,7 +6,7 @@ Plugins extend pipeline behavior without changing step inputs or outputs. They a
 
 The framework distinguishes between:
 
-1. **Foundational plugins**: Built-in plugins maintained in the core repository
+1. **Foundational plugins**: TPF-owned plugins maintained with the framework surface that owns their behavior. The persistence plugin, for example, is owned by the standalone `pipelineframework-runtime` repository.
 2. **Community plugins**: External plugins authored and versioned independently
 
 Foundational plugins are stable and opinionated. Community plugins are encouraged for organization-specific needs.

@@ -1,7 +1,7 @@
 # Template Generator (Reference)
 
 ::: tip Repository Boundary
-The generator-facing schema is exported from this repository. The template generator tooling that consumes it lives in a separate, internal repository.
+The standalone `pipelineframework-runtime` repository owns the generator-facing schema. It is published in the released `pipelineframework-deployment` artifact. The template generator tooling that consumes it lives in a separate, internal repository.
 :::
 
 This guide explains how to use the Pipeline Framework template generator to create complete pipeline applications from YAML configuration files.
