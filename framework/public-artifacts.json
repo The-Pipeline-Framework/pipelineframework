@@ -85,15 +85,13 @@
       "artifactId": "pipelineframework-dsl",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Non-deployable source mirror until consumers resolve the contracts-repository snapshot"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "representation-provider-api",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
-      "note": "Non-deployable source mirror until consumers resolve the contracts-repository snapshot"
+      "note": "Published from the standalone contracts repository"
     },
     {
       "artifactId": "pipelineframework-runtime-protocol",
