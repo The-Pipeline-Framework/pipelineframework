@@ -7,7 +7,7 @@
     <name>Pipeline Block - GraphQL Agent</name>
     <description>Reusable bounded GraphQL agent composition over application-bound LLM and GraphQL capabilities.</description>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>llm-query-connector</artifactId>
