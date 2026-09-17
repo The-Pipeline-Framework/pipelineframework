@@ -1,3 +1,0 @@
-org.pipelineframework.connector.objectingest.FilesystemObjectSourceProvider
-org.pipelineframework.connector.objectingest.S3ObjectSourceProvider
-org.pipelineframework.connector.objectingest.StdioObjectSourceProvider
