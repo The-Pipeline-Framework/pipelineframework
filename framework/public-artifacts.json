@@ -7,10 +7,6 @@
     }
   ],
   "internalArtifacts": [
-    "connector-import-tooling",
-    "connector-maven-plugin",
-    "connector-mcp-maven-plugin",
-    "connector-openapi-maven-plugin",
     "embedding-query-connector",
     "embedding-query-langchain4j-connector",
     "framework-connectors",
@@ -25,7 +21,6 @@
     "llm-query-connector",
     "llm-query-langchain4j-connector",
     "mcp-connector",
-    "mcp-contract",
     "query-hibernate-reactive-connector",
     "representation-provider-file",
     "representation-provider-fixture",
@@ -61,6 +56,36 @@
     },
     {
       "artifactId": "query-hibernate-common",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "connector-import-tooling",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "connector-maven-plugin",
+      "packaging": "maven-plugin",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "connector-mcp-maven-plugin",
+      "packaging": "maven-plugin",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "connector-openapi-maven-plugin",
+      "packaging": "maven-plugin",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "mcp-contract",
       "packaging": "jar",
       "ownership": "external",
       "note": "Published from the standalone connectors repository"

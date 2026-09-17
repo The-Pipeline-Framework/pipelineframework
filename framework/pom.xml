@@ -79,10 +79,6 @@
     </properties>
 
     <modules>
-        <module>connector-maven-plugin</module>
-        <module>connector-import-tooling</module>
-        <module>connector-mcp-maven-plugin</module>
-        <module>connector-openapi-maven-plugin</module>
         <module>representation-provider-fixture</module>
         <module>representation-provider-file</module>
         <module>representation-provider-http</module>
@@ -373,10 +369,6 @@
                             <publishingServerId>central</publishingServerId>
                             <excludeArtifacts>
                                 <!-- Keep in sync with public-artifacts.json; the verifier checks the effective plugin configuration. -->
-                                <excludeArtifact>connector-import-tooling</excludeArtifact>
-                                <excludeArtifact>connector-maven-plugin</excludeArtifact>
-                                <excludeArtifact>connector-mcp-maven-plugin</excludeArtifact>
-                                <excludeArtifact>connector-openapi-maven-plugin</excludeArtifact>
                                 <excludeArtifact>embedding-query-connector</excludeArtifact>
                                 <excludeArtifact>embedding-query-langchain4j-connector</excludeArtifact>
                                 <excludeArtifact>framework-connectors</excludeArtifact>
@@ -391,7 +383,6 @@
                                 <excludeArtifact>llm-query-connector</excludeArtifact>
                                 <excludeArtifact>llm-query-langchain4j-connector</excludeArtifact>
                                 <excludeArtifact>mcp-connector</excludeArtifact>
-                                <excludeArtifact>mcp-contract</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>

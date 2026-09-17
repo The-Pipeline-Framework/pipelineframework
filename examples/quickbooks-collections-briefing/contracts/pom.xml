@@ -15,7 +15,7 @@
             <plugin>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>connector-mcp-maven-plugin</artifactId>
-                <version>${project.version}</version>
+                <version>${pipelineframework.connectors.version}</version>
                 <configuration>
                     <transport>stdio</transport>
                     <command>node</command>

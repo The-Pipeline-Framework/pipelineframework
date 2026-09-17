@@ -45,7 +45,7 @@
             <plugin>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>connector-maven-plugin</artifactId>
-                <version>${project.version}</version>
+                <version>${pipelineframework.connectors.version}</version>
                 <executions>
                     <execution>
                         <goals><goal>generate-provider-artifacts</goal></goals>
