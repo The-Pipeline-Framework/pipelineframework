@@ -31,12 +31,12 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>embedding-query-connector</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>vector-store-connector</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.testing.compile</groupId>

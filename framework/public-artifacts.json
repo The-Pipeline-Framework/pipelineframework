@@ -7,25 +7,14 @@
     }
   ],
   "internalArtifacts": [
-    "embedding-query-connector",
-    "embedding-query-langchain4j-connector",
-    "framework-connectors",
-    "gmail-query-connector",
     "host-gmail",
     "host-microsoft-graph",
     "host-oidc-quarkus",
     "host-quickbooks-mcp",
-    "http-connector",
-    "llm-query-connector",
-    "llm-query-langchain4j-connector",
-    "mcp-connector",
-    "query-hibernate-reactive-connector",
     "representation-provider-file",
     "representation-provider-fixture",
     "representation-provider-http",
-    "transport-completeness-tests",
-    "vector-store-connector",
-    "vector-store-pgvector-connector"
+    "transport-completeness-tests"
   ],
   "externalArtifacts": [
     {
@@ -195,6 +184,66 @@
       "packaging": "jar",
       "ownership": "external",
       "note": "Published from the standalone contracts repository"
+    },
+    {
+      "artifactId": "query-hibernate-reactive-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "embedding-query-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "embedding-query-langchain4j-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "vector-store-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "vector-store-pgvector-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "llm-query-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "llm-query-langchain4j-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "gmail-query-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "http-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "mcp-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
     }
   ],
   "invariants": {
