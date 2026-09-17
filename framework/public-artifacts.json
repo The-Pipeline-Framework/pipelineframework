@@ -14,19 +14,11 @@
       "packaging": "jar"
     },
     {
-      "artifactId": "pipelineframework-dsl",
-      "packaging": "jar"
-    },
-    {
       "artifactId": "pipelineframework-deployment",
       "packaging": "jar"
     },
     {
       "artifactId": "http-contract",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "representation-provider-api",
       "packaging": "jar"
     },
     {
@@ -89,6 +81,20 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "pipelineframework-dsl",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Non-deployable source mirror until consumers resolve the contracts-repository snapshot"
+    },
+    {
+      "artifactId": "representation-provider-api",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Non-deployable source mirror until consumers resolve the contracts-repository snapshot"
+    },
     {
       "artifactId": "pipelineframework-runtime-protocol",
       "packaging": "jar",

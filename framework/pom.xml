@@ -402,6 +402,8 @@
                                 <excludeArtifact>mcp-connector</excludeArtifact>
                                 <excludeArtifact>mcp-contract</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
+                                <excludeArtifact>pipelineframework-dsl</excludeArtifact>
+                                <excludeArtifact>representation-provider-api</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
                                 <excludeArtifact>representation-provider-http</excludeArtifact>

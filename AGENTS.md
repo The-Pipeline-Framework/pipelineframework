@@ -239,8 +239,9 @@ TPF-specific scoping rules:
 
 ## Maven discipline
 
-- Maven profiles must not be used in this repository (except when forced by dependencies and there is no
-  alternative)
+- Maven profiles must not be used in this repository except for `central-publishing`, the sole publication
+  exception. It may attach/sign deployable artifacts and apply publication eligibility, but must not select
+  another source universe, module graph, or build topology.
 - Do not replace profiles with Maven properties that select source universes.
 - Do not replace profiles with environment variables that select source universes.
 - Do not hide dead Java files using compiler <excludes>.
