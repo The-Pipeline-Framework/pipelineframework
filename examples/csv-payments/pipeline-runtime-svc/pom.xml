@@ -31,7 +31,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>representation-provider-opencsv</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework.csv</groupId>
@@ -47,7 +47,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>object-ingest-connector</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

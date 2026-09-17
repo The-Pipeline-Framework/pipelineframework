@@ -22,7 +22,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>query-hibernate-common</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

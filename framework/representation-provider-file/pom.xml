@@ -31,7 +31,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>object-ingest-connector</artifactId>
-            <version>${project.version}</version>
+            <version>${pipelineframework.connectors.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

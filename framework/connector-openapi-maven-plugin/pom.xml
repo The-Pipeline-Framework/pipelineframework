@@ -9,7 +9,7 @@
     <description>Imports selected OpenAPI operations into release-pinned HTTP Connector capabilities.</description>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>connector-import-tooling</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-contract</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-contract</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-runtime-core</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>io.swagger.parser.v3</groupId><artifactId>swagger-parser-v3</artifactId><version>${swagger.parser.version}</version></dependency>
         <dependency><groupId>com.fasterxml.jackson.dataformat</groupId><artifactId>jackson-dataformat-yaml</artifactId></dependency>

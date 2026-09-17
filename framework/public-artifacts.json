@@ -39,35 +39,30 @@
       "artifactId": "http-contract",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone connectors repository"
     },
     {
       "artifactId": "representation-provider-opencsv",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone connectors repository"
     },
     {
       "artifactId": "object-ingest-connector",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone connectors repository"
     },
     {
       "artifactId": "query-jpa-connector",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone connectors repository"
     },
     {
       "artifactId": "query-hibernate-common",
       "packaging": "jar",
       "ownership": "external",
-      "reactorSourceMirror": true,
       "note": "Published from the standalone connectors repository"
     },
     {
