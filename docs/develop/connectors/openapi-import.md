@@ -373,7 +373,7 @@ writes the selected provider manifest, HTTP pins, and provenance resources. Its 
 reports how many operations were imported.
 
 The importer tests also vendor the upstream Swagger
-[Petstore 3.0 contract](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/framework/connector-openapi-maven-plugin/src/test/resources/petstore3-openapi.yaml).
+[Petstore 3.0 contract](https://github.com/The-Pipeline-Framework/pipelineframework-connectors/blob/main/framework/connector-openapi-maven-plugin/src/test/resources/petstore3-openapi.yaml).
 It is currently a conformance fixture rather than an end-to-end example. The focused test discovers
 `GET /user/logout` and proves that an effectful `GET` does not silently acquire Query authority when
 the import omits `kind`. It does not invoke the mapper Block or produce a recommendation.
