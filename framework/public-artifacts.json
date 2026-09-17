@@ -6,18 +6,6 @@
       "packaging": "pom"
     },
     {
-      "artifactId": "pipelineframework",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "pipelineframework-runtime-spring",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "pipelineframework-deployment",
-      "packaging": "jar"
-    },
-    {
       "artifactId": "http-contract",
       "packaging": "jar"
     },
@@ -35,18 +23,6 @@
     },
     {
       "artifactId": "query-hibernate-common",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "persistence-plugin",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "cache-plugin",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "repository-plugin",
       "packaging": "jar"
     }
   ],
@@ -81,6 +57,48 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "pipelineframework",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "pipelineframework-deployment",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "pipelineframework-runtime-spring",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "persistence-plugin",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "cache-plugin",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "repository-plugin",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
     {
       "artifactId": "pipelineframework-dsl",
       "packaging": "jar",

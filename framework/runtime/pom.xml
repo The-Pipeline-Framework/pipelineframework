@@ -31,6 +31,7 @@
     <!-- version is not needed as it is automatically inherited from the parent-->
 
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
         <quarkus.generate-code.grpc.scan-for-proto>org.pipelineframework:pipelineframework-runtime-protocol</quarkus.generate-code.grpc.scan-for-proto>
     </properties>
 
