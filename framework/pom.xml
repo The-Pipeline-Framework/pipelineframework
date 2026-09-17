@@ -84,7 +84,6 @@
         <module>connector-mcp-maven-plugin</module>
         <module>connector-openapi-maven-plugin</module>
         <module>representation-provider-fixture</module>
-        <module>representation-provider-opencsv</module>
         <module>representation-provider-file</module>
         <module>representation-provider-http</module>
         <module>connectors</module>
@@ -374,8 +373,6 @@
                             <publishingServerId>central</publishingServerId>
                             <excludeArtifacts>
                                 <!-- Keep in sync with public-artifacts.json; the verifier checks the effective plugin configuration. -->
-                                <excludeArtifact>http-contract</excludeArtifact>
-                                <excludeArtifact>object-ingest-connector</excludeArtifact>
                                 <excludeArtifact>connector-import-tooling</excludeArtifact>
                                 <excludeArtifact>connector-maven-plugin</excludeArtifact>
                                 <excludeArtifact>connector-mcp-maven-plugin</excludeArtifact>
@@ -396,12 +393,9 @@
                                 <excludeArtifact>mcp-connector</excludeArtifact>
                                 <excludeArtifact>mcp-contract</excludeArtifact>
                                 <excludeArtifact>query-hibernate-reactive-connector</excludeArtifact>
-                                <excludeArtifact>query-hibernate-common</excludeArtifact>
-                                <excludeArtifact>query-jpa-connector</excludeArtifact>
                                 <excludeArtifact>representation-provider-file</excludeArtifact>
                                 <excludeArtifact>representation-provider-fixture</excludeArtifact>
                                 <excludeArtifact>representation-provider-http</excludeArtifact>
-                                <excludeArtifact>representation-provider-opencsv</excludeArtifact>
                                 <excludeArtifact>transport-completeness-tests</excludeArtifact>
                                 <excludeArtifact>vector-store-connector</excludeArtifact>
                                 <excludeArtifact>vector-store-pgvector-connector</excludeArtifact>

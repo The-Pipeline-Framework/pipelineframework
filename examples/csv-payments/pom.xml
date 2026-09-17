@@ -327,7 +327,7 @@
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>representation-provider-opencsv</artifactId>
-                                <version>${project.version}</version>
+                                <version>${pipelineframework.connectors.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

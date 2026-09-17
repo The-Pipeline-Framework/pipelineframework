@@ -7,7 +7,7 @@
     <name>Pipeline Block - OpenAPI Representation Mapper</name>
     <description>Reviewable LLM-assisted proposals for deterministic imported HTTP representation mappings.</description>
     <dependencies>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-contract</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-contract</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>llm-query-connector</artifactId>
