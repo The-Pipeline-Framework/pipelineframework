@@ -15,7 +15,7 @@
             <plugin>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>connector-openapi-maven-plugin</artifactId>
-                <version>${project.version}</version>
+                <version>${pipelineframework.connectors.version}</version>
                 <executions>
                     <execution>
                         <id>verify-release-pinned-openapi-import</id>
