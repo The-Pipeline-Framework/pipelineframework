@@ -4,26 +4,6 @@
     {
       "artifactId": "framework-parent",
       "packaging": "pom"
-    },
-    {
-      "artifactId": "http-contract",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "representation-provider-opencsv",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "object-ingest-connector",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "query-jpa-connector",
-      "packaging": "jar"
-    },
-    {
-      "artifactId": "query-hibernate-common",
-      "packaging": "jar"
     }
   ],
   "internalArtifacts": [
@@ -55,6 +35,41 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "http-contract",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "representation-provider-opencsv",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "object-ingest-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "query-jpa-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "query-hibernate-common",
+      "packaging": "jar",
+      "ownership": "external",
+      "reactorSourceMirror": true,
+      "note": "Published from the standalone connectors repository"
+    },
     {
       "artifactId": "pipelineframework",
       "packaging": "jar",

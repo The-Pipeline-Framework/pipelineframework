@@ -11,7 +11,7 @@
 
     <artifactId>query-jpa-connector</artifactId>
     <properties>
-        <maven.deploy.skip>false</maven.deploy.skip>
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
     <name>The Pipeline Framework - JPA Query Connector</name>

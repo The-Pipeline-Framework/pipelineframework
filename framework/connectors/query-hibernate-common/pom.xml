@@ -9,6 +9,7 @@
     </parent>
 
     <artifactId>query-hibernate-common</artifactId>
+    <properties><maven.deploy.skip>true</maven.deploy.skip></properties>
     <name>The Pipeline Framework - Hibernate Query Common</name>
     <description>Shared HQL planning, binding, cardinality, and projection model for Hibernate Query connectors.</description>
 
