@@ -11,8 +11,6 @@
     "embedding-query-langchain4j-connector",
     "framework-connectors",
     "gmail-query-connector",
-    "graphql-connector",
-    "graphql-smallrye-connector",
     "host-gmail",
     "host-microsoft-graph",
     "host-oidc-quarkus",
@@ -30,6 +28,18 @@
     "vector-store-pgvector-connector"
   ],
   "externalArtifacts": [
+    {
+      "artifactId": "graphql-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "graphql-smallrye-connector",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
     {
       "artifactId": "http-contract",
       "packaging": "jar",
