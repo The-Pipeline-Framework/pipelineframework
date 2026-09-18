@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v7.0.0
 
       - name: Setup JDK 21
-        uses: actions/setup-java@8e24fa2fa62734188701837c35bd28b7e80f12fa # v6.0.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
@@ -113,7 +113,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v7.0.0
 
       - name: Setup JDK 21
-        uses: actions/setup-java@8e24fa2fa62734188701837c35bd28b7e80f12fa # v6.0.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
@@ -154,7 +154,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v7.0.0
 
       - name: Setup JDK 21
-        uses: actions/setup-java@8e24fa2fa62734188701837c35bd28b7e80f12fa # v6.0.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
@@ -199,7 +199,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup JDK 21
-        uses: actions/setup-java@8e24fa2fa62734188701837c35bd28b7e80f12fa # v6.0.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
@@ -242,7 +242,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup JDK 21
-        uses: actions/setup-java@8e24fa2fa62734188701837c35bd28b7e80f12fa # v6.0.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
