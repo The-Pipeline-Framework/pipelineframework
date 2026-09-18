@@ -96,7 +96,7 @@ jobs:
         run: echo "artifact_name=${{ env.BOOTSTRAP_ARTIFACT }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload framework artifacts
-        uses: actions/upload-artifact@b5f36e3c0b8b603842c33211516e81f185c7cb52 # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.BOOTSTRAP_ARTIFACT }}
           path: /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz
@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload canonical build log
         if: failure()
-        uses: actions/upload-artifact@b5f36e3c0b8b603842c33211516e81f185c7cb52 # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: canonical-fresh-checkout-log
           path: ${{ runner.temp }}/canonical-fresh-checkout.log
