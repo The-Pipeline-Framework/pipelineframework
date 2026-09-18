@@ -43,7 +43,6 @@
                                 <path><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${pipelineframework.connectors.version}</version></path>
                                 <path><groupId>org.pipelineframework</groupId><artifactId>callable-loop-proof-connectors</artifactId><version>${project.version}</version></path>
                                 <path><groupId>org.pipelineframework</groupId><artifactId>representation-provider-http</artifactId><version>${project.version}</version></path>
-                                <path><groupId>org.pipelineframework</groupId><artifactId>openapi-capability-proof-contracts</artifactId><version>${project.version}</version></path>
                             </annotationProcessorPaths>
                             <compilerArgs>
                                 <arg>${pipeline.configArg}</arg>
