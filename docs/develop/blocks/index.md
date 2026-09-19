@@ -19,7 +19,7 @@ and an operator for a reusable/delegated execution unit that owns its own model 
 
 Continue with [Use a Block](./use) or [Publish a Block](./publish). The repository currently ships
 document text extraction and GraphQL Blocks under
-[`blocks/`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/blocks).
+[`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks).
 
 Blocks first shipped as packaged pipeline segments in v26.9.1 and were renamed to Blocks in v26.9.2.
 Current terminology is **Block**. Historical release notes and frozen version snapshots keep their

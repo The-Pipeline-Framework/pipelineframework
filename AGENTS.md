@@ -18,8 +18,9 @@ Connectors:
   replay-safe Query and Command boundaries for external observations and effects.
 
 Blocks:
-- `blocks`: Reusable, compile-time pipeline definitions distributed as ordinary dependencies. Applications own
-  connector bindings and Command authority for any capabilities a Block requires.
+- The standalone `pipelineframework-blocks` repository owns reusable, compile-time pipeline definitions
+  distributed as ordinary dependencies. Applications own connector bindings and Command authority for any
+  capabilities a Block requires.
 
 Expansions:
 - Versioned distribution packages that can group related Blocks, Connectors, types, configuration, examples,

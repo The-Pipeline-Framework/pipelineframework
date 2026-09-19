@@ -43,7 +43,8 @@ must not collide with local definitions or another package's qualified identity.
 `namespace/name` references when ambiguity is possible.
 
 Use the shipped
-[`document-text-extraction`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/blocks/document-text-extraction)
-and [`graphql`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/blocks/graphql)
+[`document-text-extraction`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks/tree/main/document-text-extraction)
+and [`graphql`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks/tree/main/graphql)
 artifacts as current examples. The durable rationale is recorded in [ADR-0024](/decisions/0024-packaged-blocks-are-static-composition-imports)
-and [ADR-0028](/decisions/0028-block-connector-capabilities-are-application-bound).
+and [ADR-0028](/decisions/0028-block-connector-capabilities-are-application-bound). Repository
+ownership is recorded in [ADR-0057](/decisions/0057-packaged-blocks-have-independent-release-ownership).
