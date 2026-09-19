@@ -66,7 +66,7 @@
                                 <path>
                                     <groupId>org.pipelineframework</groupId>
                                     <artifactId>llm-query-connector</artifactId>
-                                    <version>${project.version}</version>
+                                    <version>${pipelineframework.connectors.version}</version>
                                 </path>
                                 <path>
                                     <groupId>org.pipelineframework</groupId>

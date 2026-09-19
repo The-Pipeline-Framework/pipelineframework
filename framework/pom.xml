@@ -82,7 +82,6 @@
         <module>representation-provider-fixture</module>
         <module>representation-provider-file</module>
         <module>representation-provider-http</module>
-        <module>connectors</module>
         <module>host-oidc-quarkus</module>
         <module>host-gmail</module>
         <module>host-microsoft-graph</module>

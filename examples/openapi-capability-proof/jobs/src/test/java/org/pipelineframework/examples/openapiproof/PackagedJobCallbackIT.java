@@ -117,12 +117,17 @@ class PackagedJobCallbackIT {
         JsonNode accepted = json(request("POST", "/executions", submission), 200);
         String id = accepted.required("executionId").textValue();
         Dispatch dispatch = dispatches.poll(15, TimeUnit.SECONDS);
-        assertNotNull(dispatch, "packaged native Command never reached the provider");
+        var effects = new DynamoCommandEffectStore(database.orElseThrow(), "tpf_command_effect");
+        if (dispatch == null) {
+            var effect = effects.find("default", "job-" + jobId).await().atMost(WAIT);
+            fail("packaged native Command never reached the provider; effect=" + effect
+                .map(record -> record.status() + ":" + record.errorClass() + ":" + record.errorMessage())
+                .orElse("missing"));
+        }
         assertEquals(3, dispatch.request().size());
         assertEquals(jobId, dispatch.request().required("jobId").textValue());
         assertEquals(appPort, dispatch.callback().getPort());
         awaitStatus(id, "WAITING_EXTERNAL");
-        var effects = new DynamoCommandEffectStore(database.orElseThrow(), "tpf_command_effect");
         var before = effects.find("default", "job-" + jobId).await().atMost(WAIT).orElseThrow();
         assertEquals(CommandEffectStatus.SUCCEEDED, before.status());
         assertEquals(1, before.attempts().size());
