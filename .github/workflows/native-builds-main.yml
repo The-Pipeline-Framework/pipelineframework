@@ -46,13 +46,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v7.0.0
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Set up Mandrel (GraalVM) with Java 25
+        uses: graalvm/setup-graalvm@0426e2e191540e8514dff98dc52a5f5146a2a276 # v1.6.6
         with:
-          java-version: 21
-          distribution: temurin
+          java-version: '25'
+          distribution: 'mandrel' # Install Mandrel
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
@@ -70,11 +71,12 @@ jobs:
             -DskipTests \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \
-            -Dquarkus.native.container-build=true \
+            -Dquarkus.native.container-build=false \ # Use native runner Mandrel
+            -Dquarkus.native.native-image-xmx=12g \ # 12GB for Mandrel
             clean package
 
       - name: Upload native artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b5f36e3c0b8b603842c33211516e81f185c7cb52 # v7.0.0
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -90,13 +92,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v7.0.0
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Set up Mandrel (GraalVM) with Java 25
+        uses: graalvm/setup-graalvm@0426e2e191540e8514dff98dc52a5f5146a2a276 # v1.6.6
         with:
-          java-version: 21
-          distribution: temurin
+          java-version: '25'
+          distribution: 'mandrel' # Install Mandrel
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
@@ -120,5 +123,6 @@ jobs:
             -Dquarkus.profile=lambda \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \
-            -Dquarkus.native.container-build=true \
+            -Dquarkus.native.container-build=false \ # Use native runner Mandrel
+            -Dquarkus.native.native-image-xmx=12g \ # 12GB for Mandrel
             clean package
