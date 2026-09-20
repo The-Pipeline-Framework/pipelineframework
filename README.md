@@ -182,8 +182,8 @@ README in the repository.
 - [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) and
   [`rag-turnkey`](https://github.com/The-Pipeline-Framework/rag-turnkey) own the real applications formerly built in this reactor.
 - [`docs`](docs/) — the VitePress documentation site.
-- [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport
-  exercises.
+- [`pipelineframework-examples/ai-sdk`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/ai-sdk)
+  owns the AI-shaped delegation, mapping, and transport stress test.
 
 ## Build and Validation
 

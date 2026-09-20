@@ -29,8 +29,8 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
      -Darguments="-DskipTests"
    ```
 
-2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and consumer repositories moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `pipelineframework-reference-implementations/checkout/pom.xml`, and `ai-sdk/pom.xml`.
-3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
+2. **Record downstream version targets**: identify the compiler, contracts, runtime, connector, Block, and Expansion versions that the examples, reference implementations, CSV Kafka Payments, and RAG Turnkey repositories must consume after publication.
+3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, and the docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
 
@@ -62,13 +62,13 @@ The Pipeline Framework is published to Maven Central to make it available to dev
 
 ## Version Management
 
-The framework release version is defined in the root POM (`pom.xml`) as the root reactor's `<version>`. Most root-reactor modules inherit that version through parent links, but several compatibility and reference surfaces are intentionally outside that reactor or use alternate top-level POMs.
+The framework release version is defined in the root POM (`pom.xml`) as the root reactor's `<version>`. Compatibility and reference surfaces consume that version from their owning repositories rather than participating in this reactor.
 
 Keep these categories aligned during every release:
 
-1. **Root reactor**: root, framework, main examples, and plugins listed in the root `pom.xml`.
-2. **Alternate topology POMs**: build-entry POMs such as `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`.
-3. **Standalone compatibility surfaces**: POMs such as `ai-sdk/pom.xml` and reference examples outside the root reactor.
+1. **Root reactor**: framework and framework-owned tooling listed in the root `pom.xml`.
+2. **Published repositories**: compiler, contracts, runtime, connectors, Blocks, and Expansions release their own artifact sets.
+3. **Downstream compatibility surfaces**: examples (including `ai-sdk`), reference implementations, CSV Kafka Payments, and RAG Turnkey consume released artifacts in their own reactors.
 
 ### Version Property Definition
 
@@ -271,38 +271,20 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
 
    ```bash
    git log --oneline --decorate -n 5
-   git diff HEAD~2..HEAD -- pom.xml framework/pom.xml examples ai-sdk plugins
+   git diff HEAD~2..HEAD -- pom.xml framework/pom.xml
    ```
 
    The release commit should contain the release version. The next-development commit should contain the next `-SNAPSHOT` version.
 
-4. **Synchronize release-coupled POMs outside the root reactor**:
-   The release plugin only updates POMs in the Maven reactor it runs. After `release:prepare`, check and fix alternate topology and standalone POMs so they match the next development version on `main`.
-
-   Required checks:
-
-   ```bash
-   rg -n "X\\.Y\\.Z-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"
-   rg -n "X\\.Y\\.Z" examples ai-sdk --glob "pom*.xml"
-   ```
-
-   Replace `X.Y.Z` with the just-released version. There should be no remaining references to the old snapshot in active POMs after the next-development commit.
-
-   At minimum, check:
-   - `examples/csv-payments/pom.pipeline-runtime.xml`
-   - `examples/csv-payments/pom.monolith.xml`
-   - `examples/csv-payments/pipeline-runtime-svc/pom.xml`
-   - `examples/csv-payments/monolith-svc/pom.xml`
-   - `pipelineframework-reference-implementations/checkout/pom.xml` and its child modules
-   - `ai-sdk/pom.xml`
+4. **Update downstream repositories after publication**:
+   The release plugin only updates this repository. Once the new snapshot exists, open ordinary dependency-version
+   updates in the examples, reference implementations, CSV Kafka Payments, and RAG Turnkey repositories. Their CI
+   is the compatibility gate; do not recreate their reactors inside this release build.
 
 5. **Run the release validation gate before pushing**:
 
    ```bash
    ./mvnw -f framework/pom.xml verify
-   ./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify
-   ./examples/csv-payments/build-monolith.sh -DskipTests
-   ./mvnw -f ai-sdk/pom.xml test
    npm --prefix docs run build
    ```
 
@@ -339,7 +321,8 @@ standalone `pipelineframework-runtime` repository:
 
 Note: Publishing the `framework-parent` artifact is expected. It is the BOM/parent POM that consumers import for dependency management, so it will appear in Maven Central autocomplete results.
 
-Publishing only framework artifacts does not mean example and SDK versions can drift. The E2E CI lanes build compatibility surfaces from the same checkout and expect their parent versions and `tpf.version` properties to match the root development version. A stale alternate POM can fail before tests start with `Non-resolvable parent POM` because its `relativePath` points to the checked-out root POM at a different version.
+Publishing only framework artifacts does not remove downstream compatibility obligations. Each consumer repository
+pins released TPF versions and proves those coordinates in its own CI.
 
 ### Main-branch E2E impact
 
@@ -429,10 +412,9 @@ This approach allows manual control over when releases happen.
 - Ensure all required artifacts (JARs, sources, javadoc, signatures) are present
 - Check that artifacts meet Maven Central requirements
 
-**Main E2E Fails Before Tests Start**:
-- Check for stale parent versions in alternate POMs: `rg -n "OLD_VERSION-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"`
-- Check standalone TPF dependency properties such as `ai-sdk/pom.xml`'s `tpf.version`
-- Confirm the local root POM version matches the parent version in `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`
+**Downstream CI Fails Before Tests Start**:
+- Check the owning repository's pinned compiler, runtime, connector, Block, and Expansion versions.
+- Confirm the required snapshot has actually been published before rerunning the whole downstream CI lane.
 
 ### Testing the Setup
 
@@ -445,7 +427,7 @@ Before pushing a tag that triggers the release workflow:
 ## Important Notes
 
 - Only the framework artifacts are published to Maven Central.
-- Examples and SDK surfaces are not Central artifacts, but they are release-coupled because CI and users build them against the checked-out framework version.
-- The root POM orchestrates the main build while the framework POM handles publishing.
-- Prefer parent inheritance inside the root reactor. Check alternate top-level POMs and standalone POM properties separately during release preparation.
+- Examples and SDK surfaces are not Central artifacts; their owning repositories pin and test released TPF coordinates.
+- The root POM orchestrates this repository's framework build while the framework POM handles publishing.
+- Prefer parent inheritance inside each repository's canonical reactor. Update downstream dependency versions through ordinary reviewed changes after publication.
 - Always verify release artifacts on Maven Central after a successful deployment.
