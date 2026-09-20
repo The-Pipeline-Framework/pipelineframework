@@ -35,11 +35,6 @@ install_csv_prereqs() {
   mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install -Dgpg.skip
 }
 
-install_search_prereqs() {
-  mvn -N install -Dgpg.skip
-  mvn -f "$ROOT_DIR/examples/search/pom.xml" -N install -Dgpg.skip
-}
-
 case "$SCOPE" in
   framework)
     install_framework_plugins_and_connectors
@@ -47,16 +42,12 @@ case "$SCOPE" in
   csv)
     install_csv_prereqs
     ;;
-  search)
-    install_search_prereqs
-    ;;
   all)
     install_framework_plugins_and_connectors
     install_csv_prereqs
-    install_search_prereqs
     ;;
   *)
-    echo "Unknown scope '$SCOPE'. Use one of: framework, csv, search, all." >&2
+    echo "Unknown scope '$SCOPE'. Use one of: framework, csv, all." >&2
     exit 1
     ;;
 esac

@@ -29,7 +29,7 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
      -Darguments="-DskipTests"
    ```
 
-2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and standalone reference POMs moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
+2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and consumer repositories moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `pipelineframework-reference-implementations/checkout/pom.xml`, and `ai-sdk/pom.xml`.
 3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
@@ -293,7 +293,7 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    - `examples/csv-payments/pom.monolith.xml`
    - `examples/csv-payments/pipeline-runtime-svc/pom.xml`
    - `examples/csv-payments/monolith-svc/pom.xml`
-   - `examples/checkout/pom.xml` and its child modules
+   - `pipelineframework-reference-implementations/checkout/pom.xml` and its child modules
    - `ai-sdk/pom.xml`
 
 5. **Run the release validation gate before pushing**:

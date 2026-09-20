@@ -1,9 +1,13 @@
 # Search Azure Functions Verification Lane
 
-This page is the bounded verification lane for `examples/search` in Function mode on Azure Functions.
+This page is the bounded verification lane for `search` in Function mode on Azure Functions.
+
+The runnable project and commands live in the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository; run command snippets from that repository root.
 
 ::: warning Preview Verification Lane
-Azure Functions support for `examples/search` is preview, manual, and optional for CI. Treat this page as a verification path, not as a general production deployment recipe.
+Azure Functions support for `search` is preview, manual, and optional for CI. Treat this page as a verification path, not as a general production deployment recipe.
 :::
 
 ## What This Lane Proves
@@ -16,7 +20,7 @@ Azure Functions support for `examples/search` is preview, manual, and optional f
 ## Run The Local Build
 
 ```bash
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
@@ -27,7 +31,7 @@ Azure Functions support for `examples/search` is preview, manual, and optional f
 ## Run The Smoke Test
 
 ```bash
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \

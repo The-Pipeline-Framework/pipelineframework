@@ -4,13 +4,17 @@
 This is the original long-form Search Azure Functions reference. Start with [Search Azure Functions Verification Lane](/deploy/search-azure-functions), [Azure Functions Deployment Walkthrough](/deploy/azure-functions-deployment-walkthrough), or [Azure Functions Troubleshooting](/deploy/azure-functions-troubleshooting) for the shorter canonical path.
 :::
 
-This page is a reference testing guide for `examples/search` in Function mode (Azure Functions target).
+This page is a reference testing guide for `search` in Function mode (Azure Functions target).
+
+The runnable project and commands live in the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository; run command snippets from that repository root.
 
 ::: warning Preview Verification Lane
 This page documents a manual verification lane, not a mature deployment recipe. Treat Azure Functions support as preview until the Spring and non-Quarkus function paths have equivalent generated handler coverage and CI coverage.
 :::
 
-Azure support in `examples/search` is currently:
+Azure support in `search` is currently:
 
 - preview
 - manual
@@ -76,7 +80,7 @@ This means:
 ### Local Build with Azure Functions Profile
 
 ```bash
-./examples/search/build-azure.sh -DskipTests
+./search/build-azure.sh -DskipTests
 ```
 
 This sets:
@@ -92,7 +96,7 @@ The helper now defaults `tpf.build.azure.scope` to `compile` so local package an
 ### Manual Build with Maven
 
 ```bash
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
@@ -111,7 +115,7 @@ Verify that Azure Functions extension compiles and loads correctly:
 ```bash
 ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-./mvnw -f examples/search/orchestrator-svc/pom.xml \
+./mvnw -f pom.xml -pl search/orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
@@ -134,7 +138,7 @@ Expected result:
 For local runtime testing with Azure Functions Core Tools, use the helper script to prepare the project structure:
 
 ```bash
-cd examples/search
+cd search
 
 # Build the package
 ./mvnw clean package \
@@ -148,7 +152,7 @@ cd examples/search
 # Prepare Azure Functions project structure (creates host.json, local.settings.json)
 ./prepare-azure-functions-local.sh
 
-# Run with Azure Functions Core Tools (from examples/search directory where host.json lives)
+# Run with Azure Functions Core Tools (from search directory where host.json lives)
 func host start --java
 ```
 
@@ -182,7 +186,7 @@ sudo apt-get update && sudo apt-get install azure-functions-core-tools-4
 The Search pipeline uses Terraform to provision Azure Functions infrastructure for E2E testing:
 
 ```bash
-cd examples/search/terraform
+cd search/terraform
 
 # Initialize Terraform
 terraform init
@@ -204,7 +208,7 @@ After Terraform provisions infrastructure:
 
 ```bash
 # Deploy using the repo Maven wrapper and the orchestrator module POM
-./mvnw -f examples/search/orchestrator-svc/pom.xml quarkus:deploy \
+./mvnw -f pom.xml -pl search/orchestrator-svc -am quarkus:deploy \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
@@ -219,7 +223,7 @@ After Terraform provisions infrastructure:
 ```bash
 export AZURE_FUNCTION_APP_URL="https://funcsearchtest.azurewebsites.net"
 
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc \
   -am \
   -DskipUnitTests=true \
@@ -232,7 +236,7 @@ export AZURE_FUNCTION_APP_URL="https://funcsearchtest.azurewebsites.net"
 ### Cleanup Resources
 
 ```bash
-cd examples/search/terraform
+cd search/terraform
 
 # Destroy all provisioned resources
 terraform destroy \
@@ -250,13 +254,13 @@ The Azure Functions workflow is available for manual preview testing:
 name: Reusable — Search Azure Functions E2E
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      artifact_name:
-        description: 'Name of the Maven artifacts tarball'
+      terraform_destroy:
+        description: 'Destroy Terraform resources after tests'
         required: false
-        default: 'framework-m2-cache'
-        type: string
+        default: true
+        type: boolean
 ```
 
 ### Workflow Steps
@@ -280,9 +284,8 @@ This workflow is optional and should be used for manual verification only.
 
 ### Manual GitHub Validation
 
-Prefer manually dispatching `CI — E2E Test Matrix` when validating this lane in GitHub, because it builds the framework artifact once and passes it into the reusable Azure workflow.
-
-If you dispatch `e2e-search-azure-functions.yml` directly, keep `download_artifacts=false` unless a matching `artifact_name` tarball was uploaded by an earlier workflow run. Direct dispatch now defaults to local bootstrap for that reason.
+Dispatch `e2e-search-azure-functions.yml` from the reference-implementations repository. The workflow resolves
+released TPF artifacts directly and does not require a monorepo artifact tarball or source bootstrap.
 
 Maintainer-only notes for GitHub OIDC subjects and workflow dispatch details live in [CI Guidelines](/evolve/ci-guidelines#search-cloud-example-workflows).
 

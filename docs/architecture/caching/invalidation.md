@@ -64,7 +64,7 @@ Bulk invalidation also requires `x-pipeline-replay: true`.
 
 ## Search example snippets
 
-From `examples/search/config/pipeline.yaml`:
+From [`search/config/pipeline.yaml`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/config/pipeline.yaml):
 
 ```yaml
 aspects:

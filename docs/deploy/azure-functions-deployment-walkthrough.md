@@ -2,6 +2,10 @@
 
 This page keeps the deployment steps separate from the Search verification lane.
 
+Run the Search commands from the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository root.
+
 ::: warning Preview Scope
 The current path is Quarkus Azure Functions based. Spring/Azure function renderer parity is not available yet.
 :::
@@ -18,7 +22,7 @@ The current path is Quarkus Azure Functions based. Spring/Azure function rendere
 Build the Search orchestrator with the function platform settings:
 
 ```bash
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \

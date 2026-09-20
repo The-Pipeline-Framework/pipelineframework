@@ -29,8 +29,12 @@ Use this matrix for compile-time/operator-resolution failures.
 
 ### Optional Reference Lane (Search Example)
 
+Run this lane from the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository root.
+
 ```bash
-./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
+./mvnw -f search/pom.xml -pl orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \

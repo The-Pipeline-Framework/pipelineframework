@@ -2,12 +2,16 @@
 
 This page is the canonical The Pipeline Framework (TPF) guide for `FUNCTION` platform builds that target Azure Functions. For the broader provider matrix, pair it with the [Multi-Cloud Function Providers Guide](/deploy/function-providers).
 
+Search verification commands on this page run from the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository root.
+
 ## What TPF Supports Today
 
 - Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
 - Transport mode: `REST` (required in Function mode)
 - Azure-specific handlers: generated HTTP-trigger handlers using Azure Functions bindings
-- Local verification: Azure Functions Core Tools and the Search example in `examples/search`
+- Local verification: Azure Functions Core Tools and the Search example in `search`
 
 `FUNCTION` does not currently support `gRPC` transport. If you select `FUNCTION`, the generated runtime must use `REST`.
 
@@ -44,12 +48,12 @@ For the future all-serverless durable coordinator design track, see [All-Serverl
 
 ## Example verification surface
 
-The current repo verification surface for Azure is located in `examples/search`.
+The current repo verification surface for Azure is located in `search`.
 
 Build:
 
 ```bash
-./examples/search/build-azure.sh -DskipTests
+./search/build-azure.sh -DskipTests
 ```
 
 Bootstrap smoke:
@@ -57,7 +61,7 @@ Bootstrap smoke:
 ```bash
 ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-./mvnw -f examples/search/orchestrator-svc/pom.xml \
+./mvnw -f pom.xml -pl search/orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \

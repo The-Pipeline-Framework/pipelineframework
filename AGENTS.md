@@ -32,8 +32,10 @@ Expansions:
 Supporting repo surfaces:
 
 - The standalone `pipelineframework-examples` repository owns learning examples and architectural proofs over
-  released artifacts. This repository's remaining `examples/` tree contains real applications and long-lived
-  reference implementations awaiting their own ownership moves.
+  released artifacts.
+- The standalone `pipelineframework-reference-implementations` repository owns the long-lived Checkout/TPFGo,
+  Search, and QuickBooks Collections Briefing systems over released artifacts.
+- This repository's remaining `examples/` tree contains real applications awaiting their own ownership moves.
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
 - `web-ui`: SvelteKit Canvas/web UI (unmaintained)
