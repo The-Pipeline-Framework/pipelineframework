@@ -7,7 +7,6 @@ on:
     paths:
       - 'framework/**'
       - 'examples/csv-payments/**'
-      - 'examples/search/**'
       - 'plugins/**'
       - 'connectors/**'
       - 'pom.xml'
@@ -18,7 +17,6 @@ on:
       - '.github/workflows/build.yml'
       - '.github/workflows/ci-e2e-matrix.yml'
       - '.github/workflows/e2e-csv-*.yml'
-      - '.github/workflows/e2e-search-resource-it.yml'
       - '.github/workflows/full-tests.yml'
   workflow_dispatch:
 
@@ -79,7 +77,7 @@ jobs:
           cd ~/.m2/repository
           # Build list of existing pipelineframework directories
           dirs=()
-          for d in org/pipelineframework org.pipelineframework.csv org.pipelineframework.search; do
+          for d in org/pipelineframework org.pipelineframework.csv; do
             [ -d "$d" ] && dirs+=("$d")
           done
           # Tar them if any exist
@@ -130,54 +128,6 @@ jobs:
     name: CSV Tempo Verification E2E
     needs: build-framework
     uses: ./.github/workflows/e2e-csv-tempo-verification.yml
-    with:
-      artifact_name: framework-m2-cache
-    secrets: inherit
-
-  e2e-search-lambda:
-    name: Search Lambda Smoke
-    needs: build-framework
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/e2e-search-lambda-smoke.yml
-    with:
-      artifact_name: framework-m2-cache
-    secrets: inherit
-
-  e2e-search-azure-functions:
-    name: Search Azure Functions Preview (Optional)
-    needs: build-framework
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    permissions:
-      id-token: write
-      contents: read
-    uses: ./.github/workflows/e2e-search-azure-functions.yml
-    with:
-      artifact_name: framework-m2-cache
-      terraform_destroy: true
-    secrets: inherit
-
-  e2e-search-resource-it:
-    name: Search Resource IT
-    needs: build-framework
-    uses: ./.github/workflows/e2e-search-resource-it.yml
-    with:
-      artifact_name: framework-m2-cache
-    secrets: inherit
-
-  e2e-search-pipeline:
-    name: Search Pipeline E2E
-    needs: build-framework
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/e2e-search-pipeline-e2e.yml
-    with:
-      artifact_name: framework-m2-cache
-    secrets: inherit
-
-  e2e-checkout-tpfgo:
-    name: Checkout TPFGo Smoke
-    needs: build-framework
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/e2e-checkout-tpfgo-smoke.yml
     with:
       artifact_name: framework-m2-cache
     secrets: inherit

@@ -1,6 +1,8 @@
 # TPFGo Example
 
-The TPFGo example under `examples/checkout` is the canonical reference for reliable cross-pipeline handoff in TPF.
+The TPFGo system under [`pipelineframework-reference-implementations/checkout`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/checkout)
+is the canonical reference for reliable cross-pipeline handoff in TPF. Run command snippets from that standalone
+repository root.
 
 It models a full multi-pipeline checkout application without app-owned bridge code. Each pipeline publishes its final stable checkpoint under a logical publication name, and the next pipeline subscribes to that publication through framework-owned checkpoint admission.
 
@@ -91,13 +93,13 @@ Ownership is explicit:
 Build and verify the full example:
 
 ```bash
-./mvnw -f examples/checkout/pom.xml verify
+./mvnw -f checkout/pom.xml verify
 ```
 
 Run the end-to-end checkpoint suite only:
 
 ```bash
-./mvnw -f examples/checkout/pom.xml \
+./mvnw -f checkout/pom.xml \
   -pl tpfgo-e2e-tests \
   -am \
   -Dtest=NoMatchingUnitTest \
@@ -111,7 +113,7 @@ For runtime semantics and limits, see [Orchestrator Runtime](/deploy/orchestrato
 
 ## Service introduction UI
 
-The checkout example now includes `examples/checkout/nextjs-ui` as a service-map oriented intro surface.
+The checkout example now includes `checkout/nextjs-ui` as a service-map oriented intro surface.
 It is intended to help people understand the topology and service responsibilities, while still using
 the real generated TPF gRPC endpoints:
 

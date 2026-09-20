@@ -112,9 +112,7 @@
         <module>framework</module>
         <!-- Example projects -->
         <module>examples/csv-payments</module>
-        <module>examples/search</module>
         <module>examples/rag-turnkey</module>
-        <module>examples/quickbooks-collections-briefing</module>
     </modules>
 
     <dependencyManagement>

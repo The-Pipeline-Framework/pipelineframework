@@ -68,6 +68,7 @@ authoritative for exact syntax and release support.
 | [0057](./0057-packaged-blocks-have-independent-release-ownership.md) | Give packaged Blocks independent release ownership over released framework and Connector contracts. |
 | [0058](./0058-expansions-own-version-aligned-distributions.md) | Publish Expansions as independently released dependency distributions without creating new semantics or authority. |
 | [0059](./0059-learning-examples-consume-released-artifacts.md) | Build learning examples and architectural proofs as clean consumers of released TPF artifacts. |
+| [0060](./0060-reference-implementations-consume-released-artifacts.md) | Build long-lived reference systems as clean consumers of released TPF artifacts. |
 
 ## Maintenance
 

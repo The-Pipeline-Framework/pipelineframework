@@ -395,6 +395,6 @@ Also test replay behavior through `CommandStepSupport`: with `RETURN_RECORDED`, 
 
 The Search example implements an OpenSearch command connector:
 
-- `examples/search/common/src/main/java/org/pipelineframework/search/common/command/SearchIndexDocumentCommandIdGenerator.java`
-- `examples/search/common/src/main/java/org/pipelineframework/search/common/command/OpenSearchIndexDocumentCommandConnector.java`
-- `examples/search/common/src/test/java/org/pipelineframework/search/common/command/OpenSearchIndexDocumentCommandConnectorTest.java`
+- [`SearchIndexDocumentCommandIdGenerator.java`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/common/src/main/java/org/pipelineframework/search/common/command/SearchIndexDocumentCommandIdGenerator.java)
+- [`OpenSearchIndexDocumentCommandConnector.java`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/common/src/main/java/org/pipelineframework/search/common/command/OpenSearchIndexDocumentCommandConnector.java)
+- [`OpenSearchIndexDocumentCommandConnectorTest.java`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/common/src/test/java/org/pipelineframework/search/common/command/OpenSearchIndexDocumentCommandConnectorTest.java)

@@ -20,17 +20,19 @@ Use the same command families used in validation lanes (command paths):
 ./mvnw -f framework/pom.xml verify
 ```
 
-Optional example path (Search reference project):
+Optional reference-system commands below run from the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository root:
 
 ```bash
-./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
+./mvnw -f search/pom.xml -pl orchestrator-svc -am \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
   -DskipTests compile
 ```
 
-TPFGo reference command paths:
+TPFGo reference command paths in that repository:
 
 ```bash
 # Lineage determinism checks (runtime focus)
@@ -40,7 +42,7 @@ TPFGo reference command paths:
 ./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportContextTest,InvocationModeRoutingParityTest test
 
 # Checkout checkpoint-handoff flow
-./mvnw -f examples/checkout/pom.xml \
+./mvnw -f checkout/pom.xml \
   -pl tpfgo-e2e-tests \
   -am \
   -Dtest=NoMatchingUnitTest \
@@ -50,8 +52,8 @@ TPFGo reference command paths:
   verify
 
 # Branching lane reliability checks
-./mvnw -f examples/search/common/pom.xml install -DskipTests
-./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
+./mvnw -f search/common/pom.xml install -DskipTests
+./mvnw -f search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
 ```
 
 ## Run Modes and Command Paths

@@ -133,13 +133,13 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
 - [`openapi-capability-proof`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof) proves synchronous Query
   and Command import plus a callback-completed Command with signed endpoint injection, durable Await
   state, replay, retry, timeout, duplicate admission, and restart recovery.
-- [`examples/quickbooks-collections-briefing`](examples/quickbooks-collections-briefing/) imports one
+- [`quickbooks-collections-briefing`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/quickbooks-collections-briefing) imports one
   pinned QuickBooks MCP Query and turns its unstructured result into a typed collections plan.
 - [`examples/csv-payments`](examples/csv-payments/) is the broad runtime proof for streaming,
   rejection, Await, lineage, replay, telemetry, performance, and multiple runtime layouts.
 - [`restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) demonstrates durable human
   interaction and resume through the interaction API.
-- [`examples/search`](examples/search/) covers fan-out/fan-in, REST and gRPC, functions, generated
+- [`search`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/search) covers fan-out/fan-in, REST and gRPC, functions, generated
   workers, caching, persistence, replay, and branch-aware execution.
 - [`examples/rag-turnkey`](examples/rag-turnkey/) composes separate indexing and query applications
   backed by Ollama and PostgreSQL/pgvector.
@@ -177,8 +177,9 @@ README in the repository.
   repository owns version-aligned GraphQL and OpenAPI distribution POMs over released Blocks and Connectors.
 - The standalone [`pipelineframework-examples`](https://github.com/The-Pipeline-Framework/pipelineframework-examples)
   repository owns learning examples and architectural proofs over released TPF artifacts.
-- [`examples`](examples/) temporarily retains real applications and long-lived reference implementations pending
-  their own ownership moves.
+- The standalone [`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+  repository owns Checkout/TPFGo, Search, and QuickBooks Collections Briefing.
+- [`examples`](examples/) temporarily retains real applications pending their own ownership moves.
 - [`docs`](docs/) — the VitePress documentation site.
 - [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport
   exercises.

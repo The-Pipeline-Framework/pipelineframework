@@ -715,6 +715,6 @@ See [Metrics](/operate/observability/metrics), [Await Boundary Operations](/oper
 ## Example Configs
 
 - CSV Payments connector-owned input/output path: `examples/csv-payments/config/pipeline.yaml`
-- Search S3 text ingest: `examples/search/config/pipeline.s3-object-ingest.yaml`
+- Search S3 text ingest: [`search/config/pipeline.s3-object-ingest.yaml`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/config/pipeline.s3-object-ingest.yaml)
 
 See [Field Materialization](/architecture/materialization) for related claim-check payload representation.

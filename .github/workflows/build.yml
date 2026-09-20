@@ -19,10 +19,6 @@ on:
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
       - '.github/workflows/e2e-csv-tempo-verification.yml'
-      - '.github/workflows/e2e-checkout-tpfgo-smoke.yml'
-      - '.github/workflows/e2e-search-pipeline-e2e.yml'
-      - '.github/workflows/e2e-search-resource-it.yml'
-      - '.github/workflows/e2e-search-lambda-smoke.yml'
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
@@ -30,9 +26,8 @@ env:
   MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
   QUARKUS_JIB_BASE_JVM_IMAGE: "registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24@sha256:41cfee8b4373d0be1c6724ab80a9942e1e4d10bba62c5876455a8028a7a953a2"
-  UNIT_TEST_PATTERN: "*,!*IT,!*ITCase,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
-  # Dedicated Search E2E and resource IT workflows own the excluded Search classes below.
-  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!CsvPaymentsTempoVerificationEndToEndIT,!SearchPipelineEndToEndIT,!SearchReplayEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
+  UNIT_TEST_PATTERN: "*,!*IT,!*ITCase"
+  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!CsvPaymentsTempoVerificationEndToEndIT"
 
 jobs:
   bootstrap:
@@ -277,19 +272,3 @@ jobs:
 
   # Tempo verification runs after merge from ci-e2e-matrix.yml so its
   # registry-heavy image build does not gate pull requests.
-
-  e2e-search-lambda:
-    name: Search Lambda Smoke
-    needs: bootstrap
-    uses: ./.github/workflows/e2e-search-lambda-smoke.yml
-    with:
-      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
-    secrets: inherit
-
-  e2e-checkout-tpfgo:
-    name: Checkout TPFGo Smoke
-    needs: bootstrap
-    uses: ./.github/workflows/e2e-checkout-tpfgo-smoke.yml
-    with:
-      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
-    secrets: inherit

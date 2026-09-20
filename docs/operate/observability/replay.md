@@ -253,7 +253,7 @@ Example commands and artifact locations are intentionally kept out of this page.
 Use the example READMEs for concrete generation flows:
 
 - `examples/csv-payments/README.md`
-- `examples/search/README.md`
+- [`search/README.md`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/README.md)
 
 ## LGTM / Grafana discovery
 

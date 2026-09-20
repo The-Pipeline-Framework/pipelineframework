@@ -46,7 +46,7 @@ types. Runtime execution uses the ordinary Connector path whether the implementa
 or MCP-backed.
 
 The
-[QuickBooks Collections Briefing](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/quickbooks-collections-briefing)
+[QuickBooks Collections Briefing](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/quickbooks-collections-briefing)
 demonstrates a read-only QuickBooks Online report through one imported Query. It deliberately does
 not claim broad QuickBooks write coverage.
 

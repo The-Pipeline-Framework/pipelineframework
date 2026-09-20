@@ -1,6 +1,10 @@
 # Search Modular AWS Lambda Guide
 
-This page describes the supported AWS Lambda deployment path for `examples/search`.
+This page describes the supported AWS Lambda deployment path for `search`.
+
+The runnable project and commands live in the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository; run command snippets from that repository root.
 
 Canonical Lambda development and operations guidance lives here:
 
@@ -26,15 +30,15 @@ Canonical Lambda development and operations guidance lives here:
 
 The modular AWS deployment path separates runtime placement from the pipeline definition:
 
-- Runtime placement: `examples/search/config/pipeline.runtime.yaml`
-- AWS-specific aspect-free pipeline definition: `examples/search/config/pipeline.modular-lambda.yaml`
+- Runtime placement: `search/config/pipeline.runtime.yaml`
+- AWS-specific aspect-free pipeline definition: `search/config/pipeline.modular-lambda.yaml`
 
 `pipeline.runtime.yaml` remains the canonical runtime-mapping filename. The dedicated AWS config is a separate pipeline definition and does not replace it.
 
 ## Build The 5 Lambda Artifacts
 
 ```bash
-./examples/search/build-lambda-modular.sh -DskipTests -Dquarkus.container-image.build=false
+./search/build-lambda-modular.sh -DskipTests -Dquarkus.container-image.build=false
 ```
 
 This sets:
@@ -45,16 +49,16 @@ This sets:
 - `tpf.build.lambda.scope=test`
 - `tpf.build.lambda.http.scope=compile`
 - `quarkus.profile=lambda-modular`
-- `-Apipeline.config=examples/search/config/pipeline.modular-lambda.yaml`
+- `-Apipeline.config=search/config/pipeline.modular-lambda.yaml`
 
 After the build, each deployable module emits a `target/function.zip`.
 
 ## Manual AWS Deployment
 
-Terraform for the modular lane lives under `examples/search/terraform/aws-modular`.
+Terraform for the modular lane lives under `search/terraform/aws-modular`.
 
 ```bash
-cd examples/search/terraform/aws-modular
+cd search/terraform/aws-modular
 
 terraform init
 terraform apply \
@@ -67,9 +71,9 @@ Outputs include the orchestrator Function URL and all downstream step Function U
 ## Run The Modular AWS E2E Test
 
 ```bash
-export AWS_LAMBDA_ORCHESTRATOR_URL="$(terraform -chdir=examples/search/terraform/aws-modular output -raw orchestrator_function_url)"
+export AWS_LAMBDA_ORCHESTRATOR_URL="$(terraform -chdir=search/terraform/aws-modular output -raw orchestrator_function_url)"
 
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc \
   -am \
   -DskipUnitTests=true \
@@ -84,7 +88,7 @@ The test invokes only the orchestrator URL. Downstream routing is driven by the 
 ## Destroy The AWS Resources
 
 ```bash
-terraform -chdir=examples/search/terraform/aws-modular destroy \
+terraform -chdir=search/terraform/aws-modular destroy \
   -var="aws_region=us-east-1" \
   -var="name_prefix=<the-same-prefix>"
 ```
@@ -102,7 +106,7 @@ This workflow uses GitHub OIDC and must be triggered manually with `workflow_dis
 
 ## Historical Single-Lambda Smoke Path
 
-The older `./examples/search/build-lambda.sh` path remains useful as a local wiring smoke test for the orchestrator module and the generated direct-handler path.
+The older `./search/build-lambda.sh` path remains useful as a local wiring smoke test for the orchestrator module and the generated direct-handler path.
 
 If you invoke the `lambda` Quarkus profile (`%lambda`) outside the local smoke test,
 the client truststore password can be overridden with `CLIENT_TRUSTSTORE_PASSWORD`;

@@ -210,7 +210,7 @@ Completion criteria:
 Evidence used for the DONE statuses above:
 
 - `./mvnw -f framework/pom.xml verify`
-- `./mvnw -f examples/checkout/pom.xml -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc -am -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
+- `./mvnw -f checkout/pom.xml -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc -am -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
 - `./scripts/ci/bootstrap-local-repo-prereqs.sh framework`
 - `./mvnw -f framework/pom.xml -pl deployment -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,OrchestratorFunctionHandlerRendererTest test`
 - `./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest test`

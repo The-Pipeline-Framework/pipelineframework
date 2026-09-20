@@ -2,6 +2,10 @@
 
 This page is the canonical TPF guide for `FUNCTION` platform builds that target Google Cloud Run functions. For the broader provider matrix, pair it with the [Multi-Cloud Function Providers Guide](/deploy/function-providers).
 
+Search verification commands on this page run from the standalone
+[`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
+repository root.
+
 ## What TPF Supports Today
 
 - Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
@@ -42,18 +46,18 @@ For the future all-serverless durable coordinator design track, see [All-Serverl
 
 ## Example verification surface
 
-The current repo verification surface for Google Cloud Run functions is located in `examples/search`.
+The current repo verification surface for Google Cloud Run functions is located in `search`.
 
 Build:
 
 ```bash
-./examples/search/build-gcp.sh -DskipTests
+./search/build-gcp.sh -DskipTests
 ```
 
 Bootstrap smoke:
 
 ```bash
-./mvnw -f examples/search/pom.xml \
+./mvnw -f search/pom.xml \
   -pl orchestrator-svc \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
