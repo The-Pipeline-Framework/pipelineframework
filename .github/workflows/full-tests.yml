@@ -55,17 +55,6 @@ jobs:
             -Dquarkus.container-image.build=false \
             -Dquarkus.container-image.push=false
 
-      - name: CSV payments clean install (JVM only)
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          # CSV E2E/Failsafe ownership lives in the dedicated CSV workflows, not in full-tests.
-          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml clean install \
-            -DskipITs=true \
-            -DskipNative=true \
-            -Dquarkus.package.type=fast-jar \
-            -Dquarkus.container-image.build=false \
-            -Dquarkus.container-image.push=false
-
       - name: Dump test reports on failure
         if: failure()
         run: |

@@ -28,26 +28,15 @@ install_framework_plugins_and_connectors() {
   mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests -Dgpg.skip
 }
 
-install_csv_prereqs() {
-  mvn -N install -Dgpg.skip
-  mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests -Dgpg.skip
-  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -N install -Dgpg.skip
-  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install -Dgpg.skip
-}
-
 case "$SCOPE" in
   framework)
     install_framework_plugins_and_connectors
     ;;
-  csv)
-    install_csv_prereqs
-    ;;
   all)
     install_framework_plugins_and_connectors
-    install_csv_prereqs
     ;;
   *)
-    echo "Unknown scope '$SCOPE'. Use one of: framework, csv, all." >&2
+    echo "Unknown scope '$SCOPE'. Use one of: framework, all." >&2
     exit 1
     ;;
 esac
