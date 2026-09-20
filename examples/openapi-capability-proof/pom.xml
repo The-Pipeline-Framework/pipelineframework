@@ -20,8 +20,7 @@
         <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>callable-loop-proof-block</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>callable-loop-proof-connectors</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>openapi-capability-proof-contracts</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>http-connector</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>representation-provider-http</artifactId><version>${project.version}</version><scope>provided</scope></dependency>
+        <dependency><groupId>org.pipelineframework.expansions</groupId><artifactId>openapi</artifactId><version>${pipelineframework.expansions.version}</version><type>pom</type></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit-mockito</artifactId><scope>test</scope></dependency>
@@ -42,7 +41,7 @@
                                 <path><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-compiler</artifactId><version>${pipelineframework.compiler.version}</version></path>
                                 <path><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${pipelineframework.connectors.version}</version></path>
                                 <path><groupId>org.pipelineframework</groupId><artifactId>callable-loop-proof-connectors</artifactId><version>${project.version}</version></path>
-                                <path><groupId>org.pipelineframework</groupId><artifactId>representation-provider-http</artifactId><version>${project.version}</version></path>
+                                <path><groupId>org.pipelineframework</groupId><artifactId>representation-provider-http</artifactId><version>${pipelineframework.connectors.version}</version></path>
                                 <path><groupId>org.pipelineframework</groupId><artifactId>openapi-capability-proof-contracts</artifactId><version>${project.version}</version></path>
                             </annotationProcessorPaths>
                             <compilerArgs>

@@ -23,8 +23,10 @@ Blocks:
   capabilities a Block requires.
 
 Expansions:
-- Versioned distribution packages that can group related Blocks, Connectors, types, configuration, examples,
-  operational assets, and documentation. An Expansion does not create a new runtime step kind.
+- The standalone `pipelineframework-expansions` repository owns version-aligned distribution POMs that group
+  related Blocks, Connectors, and supporting integration assets. Compiler/DSL semantics remain with their semantic
+  owners, and applications retain bindings, credentials, configuration, and Command authority. An Expansion does
+  not create a new runtime step kind.
 
 Supporting repo surfaces:
 

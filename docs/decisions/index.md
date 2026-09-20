@@ -65,6 +65,8 @@ authoritative for exact syntax and release support.
 | [0054](./0054-item-reject-publication-is-portable-runtime-spi.md) | Let item-reject destinations consume portable rejection facts and publication operations. |
 | [0055](./0055-await-lifecycle-values-are-shared-runtime-model.md) | Keep protocol-carried lifecycle values in shared runtime model while provider operations remain SPI. |
 | [0056](./0056-secret-resolution-is-portable-runtime-spi.md) | Let runtime hosts provide secret lookup without leaking provider policy or resolved values into shared contracts. |
+| [0057](./0057-packaged-blocks-have-independent-release-ownership.md) | Give packaged Blocks independent release ownership over released framework and Connector contracts. |
+| [0058](./0058-expansions-own-version-aligned-distributions.md) | Publish Expansions as independently released dependency distributions without creating new semantics or authority. |
 
 ## Maintenance
 

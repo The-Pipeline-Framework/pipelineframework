@@ -173,6 +173,8 @@ README in the repository.
   repository owns the Quarkus runtime, deployment, Spring runtime, and foundational plugins.
 - The standalone [`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks)
   repository owns reusable compile-time Pipeline definitions, including packaged specialised loops.
+- The standalone [`pipelineframework-expansions`](https://github.com/The-Pipeline-Framework/pipelineframework-expansions)
+  repository owns version-aligned GraphQL and OpenAPI distribution POMs over released Blocks and Connectors.
 - [`examples`](examples/) — reference applications and end-to-end compatibility proofs.
 - [`docs`](docs/) — the VitePress documentation site.
 - [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport

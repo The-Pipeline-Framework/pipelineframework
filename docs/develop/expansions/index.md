@@ -37,6 +37,22 @@ Read [Package an Expansion](./author) for the publication model. Use the
 [Blocks Guide](../blocks/) and [Connectors Guide](../connectors/) for the contracts contained in an
 Expansion.
 
+TPF publishes the current distribution POMs from the
+[`pipelineframework-expansions`](https://github.com/The-Pipeline-Framework/pipelineframework-expansions)
+repository. Add one of these ordinary dependencies to receive its release-aligned runtime and Block artifacts:
+
+```xml
+<dependency>
+  <groupId>org.pipelineframework.expansions</groupId>
+  <artifactId>graphql</artifactId> <!-- or openapi -->
+  <version>${pipelineframework.expansions.version}</version>
+  <type>pom</type>
+</dependency>
+```
+
+Build plugins and compiler processor paths remain explicit application build configuration. In particular, the
+OpenAPI distribution cannot activate `connector-openapi-maven-plugin` transitively.
+
 ## GraphQL Expansion
 
 The GraphQL Expansion is the first concrete proof of this package boundary. Its release-aligned
