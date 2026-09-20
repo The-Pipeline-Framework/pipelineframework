@@ -1,6 +1,0 @@
-mutation CustomerUpdate($id: ID!, $name: String!) {
-  updateCustomer(id: $id, name: $name) {
-    id
-    name
-  }
-}

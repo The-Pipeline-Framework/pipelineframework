@@ -253,5 +253,6 @@ client generation, runtime catalogue updates, arbitrary raw GraphQL, endpoint se
 data, and provider-specific Shopify or QuickBooks semantics. Pagination follows TPF's paging work;
 it is not implemented by the GraphQL Blocks.
 
-See `examples/graphql-block-proof` for a packaged Query → Mutation → typed completion loop using
+See the [GraphQL Block Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/graphql-block-proof)
+for a packaged Query → Mutation → typed completion loop using
 application-owned documents, connection resolution, LLM binding, and Command authority.

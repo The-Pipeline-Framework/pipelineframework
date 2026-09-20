@@ -9,7 +9,7 @@ Users can run the durable coordinator, activate a release, register a worker, su
 Use the restaurant approval reference first. It is the smallest human-await path:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+./restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
 ```
 
 Use CSV Payments after that when you need the stream-await/provider proof:

@@ -22,7 +22,7 @@ early callback cannot advance execution until Command dispatch settles; a late c
 through ordinary Await admission. See [callback setup](/develop/connectors/openapi-import#command-completion-callbacks).
 
 For restart recovery, retain the execution state, Await state, Command effect history, deployed
-release, and resume-token secret. The [packaged callback proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof/jobs)
+release, and resume-token secret. The [packaged callback proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof/jobs)
 restarts the JVM against the same Dynamo tables and admits the original callback without another
 provider dispatch. A successful callback after ambiguous dispatch does not turn the effect history
 into a confirmed provider acknowledgement.

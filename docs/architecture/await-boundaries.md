@@ -112,7 +112,7 @@ See [Command Steps](/deploy/orchestrator-runtime/command#callback-completion) fo
 the declaration and [ADR-0037](/decisions/0037-command-deferred-completion-joins-effect-and-callback)
 for the durable outcome table.
 
-The [OpenAPI callback example](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof/jobs)
+The [OpenAPI callback example](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof/jobs)
 uses this contract as one native Command. Its packaged restart test retains the same signed
 callback and durable interaction, and completion leaves the recorded effect history unchanged.
 

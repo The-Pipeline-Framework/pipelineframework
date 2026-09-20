@@ -2,7 +2,7 @@
 
 This page describes the current production-ish self-host shape for the durable coordinator. It is not a deployment stack or a managed service contract. It is a recipe for operators who want to run a compute-first coordinator with durable stores, explicit worker boundaries, and known manual procedures.
 
-The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process. The containerized HA reference in `examples/restaurant-approval/self-host/container` runs the same flow with a coordinator container, REST worker container, and LocalStack-backed DynamoDB/SQS/S3-compatible services.
+The runnable starting point is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host). That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process. Its containerized HA reference runs the same flow with a coordinator container, REST worker container, and LocalStack-backed DynamoDB/SQS/S3-compatible services. Commands below run from the root of that standalone examples repository.
 
 `examples/csv-payments/self-host/container` is the advanced container reference. It adds stream input, app persistence, a REST transition worker, and a grouped `pipeline-runtime-svc` gRPC step runtime on top of the same durable coordinator pattern. The default lane uses SQS to stay within the LocalStack-backed AWS-shaped substrate; `TPF_CSV_AWAIT_TRANSPORT=kafka` runs the same self-host topology with Kafka await completions.
 
@@ -132,7 +132,7 @@ The S3-compatible provider is therefore a shared blob-store option, not the defa
 The restaurant container reference demonstrates this baseline locally:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+./restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
 ```
 
 It uses LocalStack to create the required DynamoDB tables, SQS work/DLQ queues, and S3-compatible release artifact bucket. Treat that as local verification of the topology, not production AWS provisioning.
@@ -140,7 +140,7 @@ It uses LocalStack to create the required DynamoDB tables, SQS work/DLQ queues, 
 The same reference includes a process-restart recovery proof:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
+./restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
 ```
 
 That script submits an execution, waits until it is parked on an await unit, restarts the coordinator, verifies status and pending await state are still readable, completes the await, and verifies the terminal result. It then repeats the flow with a worker restart before await completion. This proves recovery at a deterministic await boundary; it does not claim arbitrary mid-transition crash injection.
@@ -206,13 +206,13 @@ The containerized HA reference demonstrates the same flow through `self-host/con
 Use the restaurant incident demo as the current failure-visibility proof:
 
 ```bash
-./examples/restaurant-approval/self-host/run-self-hosted-incident.sh --ci
+./restaurant-approval/self-host/run-self-hosted-incident.sh --ci
 ```
 
 For the containerized HA reference:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
+./restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
 ```
 
 For real incidents:
@@ -231,7 +231,7 @@ Re-drive reads the durable execution record and re-enqueues the original executi
 Use the restaurant recovery proof as the current restart runbook:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
+./restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
 ```
 
 For coordinator restarts:

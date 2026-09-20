@@ -221,7 +221,7 @@ most one release-pinned capability and never chooses whether another turn is nee
 alone interprets the observation and advances application state; the existing recursive pipeline
 depth limit provides the framework-owned safety bound.
 
-The offline [Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/callable-loop-proof)
+The offline [Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/callable-loop-proof)
 packages the complete topology in a fixture Block. The consuming application supplies only bindings
 and Command authority. It exercises a Query `NotFound` observation, a durable Command with a trusted
 model-invisible argument, typed completion, generated metadata, and a stateless adapter whose

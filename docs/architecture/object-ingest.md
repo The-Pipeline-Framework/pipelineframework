@@ -515,7 +515,8 @@ TPF flushes the output session at completion and never closes stdout. Standard o
 cannot be rolled back after a failure. Keep diagnostics and framework logs on stderr so a command such as
 `echo '{"name":"Mariano"}' | ./run-demo | jq .` remains machine-readable.
 
-The `examples/stdio-object-demo` stdio object pipeline demo is the Unix endpoint reference. CSV
+The [Stdio Object Demo](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/stdio-object-demo)
+is the Unix endpoint reference. CSV
 Payments remains the filesystem object ingest/publish reference, while Search includes the S3 object-ingest mapping.
 
 ```yaml

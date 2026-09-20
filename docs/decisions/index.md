@@ -67,6 +67,7 @@ authoritative for exact syntax and release support.
 | [0056](./0056-secret-resolution-is-portable-runtime-spi.md) | Let runtime hosts provide secret lookup without leaking provider policy or resolved values into shared contracts. |
 | [0057](./0057-packaged-blocks-have-independent-release-ownership.md) | Give packaged Blocks independent release ownership over released framework and Connector contracts. |
 | [0058](./0058-expansions-own-version-aligned-distributions.md) | Publish Expansions as independently released dependency distributions without creating new semantics or authority. |
+| [0059](./0059-learning-examples-consume-released-artifacts.md) | Build learning examples and architectural proofs as clean consumers of released TPF artifacts. |
 
 ## Maintenance
 

@@ -45,5 +45,5 @@ blockBindings:
 Missing, unknown, mismatched, or extra requirement mappings fail compilation. Generated contract
 metadata records package and linked fingerprints plus sanitised requirement resolution; it does not
 record raw connector configuration or credentials. See the
-[GraphQL Block proof](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/examples/graphql-block-proof/README.md)
+[GraphQL Block proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/blob/main/graphql-block-proof/README.md)
 for a complete Query-and-Command consumer.

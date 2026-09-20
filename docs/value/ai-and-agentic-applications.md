@@ -96,9 +96,9 @@ business arguments; it cannot invent GraphQL, choose an endpoint or account, or 
 effect identity.
 
 The generic
-[Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/callable-loop-proof)
+[Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/callable-loop-proof)
 shows that the composition is domain-neutral. The
-[GraphQL Block Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/graphql-block-proof)
+[GraphQL Block Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/graphql-block-proof)
 then shows the specialised production Block executing persisted Query → partial-error Mutation →
 typed completion while the application retains external authority.
 
