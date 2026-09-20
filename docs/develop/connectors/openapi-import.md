@@ -334,26 +334,18 @@ needs none of the source contract, parser, importer, or mapping model.
 
 ### Run the checked-in example
 
-The [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof)
-vendors its source at `examples/openapi-capability-proof/contracts/contract/openapi.yaml` and its
-selection at `examples/openapi-capability-proof/contracts/openapi-import.yaml`. In a fresh source
-worktree, first install the snapshot importer into the isolated Maven repository:
+The [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof)
+vendors its source at `openapi-capability-proof/contracts/contract/openapi.yaml` and its
+selection at `openapi-capability-proof/contracts/openapi-import.yaml`. In a fresh source
+worktree of the standalone examples repository, run discovery against its released importer dependency:
 
 ```bash
-./mvnw -f framework/pom.xml -pl connector-openapi-maven-plugin -am \
-  install -DskipTests -Dgpg.skip \
-  -Dmaven.repo.local="$PWD/.m2/repository"
-```
-
-Then run discovery:
-
-```bash
-./mvnw -f examples/openapi-capability-proof/contracts/pom.xml \
+./mvnw -f openapi-capability-proof/contracts/pom.xml \
   openapi:discover \
   -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-It writes `examples/openapi-capability-proof/contracts/target/openapi-discovery.json`:
+It writes `openapi-capability-proof/contracts/target/openapi-discovery.json`:
 
 ```json
 {
@@ -417,7 +409,7 @@ closure, operation, security, wire, pin, and accepted mapping fingerprints. Thos
 in the existing contract hash. Documents, base URLs, credentials, authorization values, tenant data,
 and response bodies do not.
 
-See the [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof)
+See the [OpenAPI Capability Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof)
 for a Query and synchronous Command used directly and through the packaged callable loop, plus a
 `job.start` Command with a required body callback URI and external completion schema. Its sibling
 jobs application proves callback completion after a real JVM restart using TPF's Dynamo stores,

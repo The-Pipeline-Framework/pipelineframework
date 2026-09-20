@@ -190,9 +190,9 @@ or [hiding I/O without hiding reality](/architecture/coffee-machine/why-tpf-exis
 
 ## Working Proofs
 
-- [Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/callable-loop-proof) — a reusable Block owning typed decision, dynamic Query/Command routing, trusted context, reduction, completion, and bounded recursion while the application supplies authority.
+- [Callable Loop Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/callable-loop-proof) — a reusable Block owning typed decision, dynamic Query/Command routing, trusted context, reduction, completion, and bounded recursion while the application supplies authority.
 - [QuickBooks Collections Briefing](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/quickbooks-collections-briefing) — a read-only QuickBooks Online briefing through an imported MCP operation and a host-managed process boundary.
-- [GraphQL Block Proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/graphql-block-proof) — the production `graphql-agent` Block running persisted Query → Mutation → typed completion with application-owned documents, connections, and Command authority.
+- [GraphQL Block Proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/graphql-block-proof) — the production `graphql-agent` Block running persisted Query → Mutation → typed completion with application-owned documents, connections, and Command authority.
 - [CSV Payments](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) — the broader runtime proof for streaming, rejection, async provider work, lineage, replay, and operational evidence.
 
 Browse the [Examples Guide](/develop/examples/) for the complete catalogue and what each example

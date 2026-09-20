@@ -126,18 +126,18 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
 
 ## Start from Working Proof
 
-- [`examples/callable-loop-proof`](examples/callable-loop-proof/) packages a domain-neutral typed
+- [`callable-loop-proof`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/callable-loop-proof) packages a domain-neutral typed
   callable loop while the application supplies bindings and Command authority.
-- [`examples/graphql-block-proof`](examples/graphql-block-proof/) runs the production GraphQL agent
+- [`graphql-block-proof`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/graphql-block-proof) runs the production GraphQL agent
   through persisted Query → partial-error Mutation → typed completion.
-- [`examples/openapi-capability-proof`](examples/openapi-capability-proof/) proves synchronous Query
+- [`openapi-capability-proof`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof) proves synchronous Query
   and Command import plus a callback-completed Command with signed endpoint injection, durable Await
   state, replay, retry, timeout, duplicate admission, and restart recovery.
 - [`examples/quickbooks-collections-briefing`](examples/quickbooks-collections-briefing/) imports one
   pinned QuickBooks MCP Query and turns its unstructured result into a typed collections plan.
 - [`examples/csv-payments`](examples/csv-payments/) is the broad runtime proof for streaming,
   rejection, Await, lineage, replay, telemetry, performance, and multiple runtime layouts.
-- [`examples/restaurant-approval`](examples/restaurant-approval/) demonstrates durable human
+- [`restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) demonstrates durable human
   interaction and resume through the interaction API.
 - [`examples/search`](examples/search/) covers fan-out/fan-in, REST and gRPC, functions, generated
   workers, caching, persistence, replay, and branch-aware execution.
@@ -167,15 +167,18 @@ README in the repository.
 - [`framework/api`](framework/api/) — framework-neutral contracts for generated applications.
 - The standalone [`pipelineframework-contracts`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts)
   repository owns the framework-neutral `pipelineframework-runtime-core` artifact.
-- [`framework/connectors`](framework/connectors/) — typed I/O and external-observation/effect
-  boundaries.
+- The standalone [`pipelineframework-connectors`](https://github.com/The-Pipeline-Framework/pipelineframework-connectors)
+  repository owns typed I/O and external-observation/effect boundaries.
 - The standalone [`pipelineframework-runtime`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime)
   repository owns the Quarkus runtime, deployment, Spring runtime, and foundational plugins.
 - The standalone [`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks)
   repository owns reusable compile-time Pipeline definitions, including packaged specialised loops.
 - The standalone [`pipelineframework-expansions`](https://github.com/The-Pipeline-Framework/pipelineframework-expansions)
   repository owns version-aligned GraphQL and OpenAPI distribution POMs over released Blocks and Connectors.
-- [`examples`](examples/) — reference applications and end-to-end compatibility proofs.
+- The standalone [`pipelineframework-examples`](https://github.com/The-Pipeline-Framework/pipelineframework-examples)
+  repository owns learning examples and architectural proofs over released TPF artifacts.
+- [`examples`](examples/) temporarily retains real applications and long-lived reference implementations pending
+  their own ownership moves.
 - [`docs`](docs/) — the VitePress documentation site.
 - [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport
   exercises.

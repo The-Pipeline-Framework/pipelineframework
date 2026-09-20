@@ -6,7 +6,7 @@ It owns execution state, leases, retry/DLQ, await units, release activation, wor
 
 If you are trying to understand what happened to the old "orchestrator", start with [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology). The short version is that `orchestrator-svc` and `pipeline.orchestrator.*` remain historical module/config names, while self-host HA splits runtime responsibility into a coordinator role and one or more transition worker roles.
 
-This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/deploy/orchestrator-runtime/). The first runnable reference is `examples/restaurant-approval/self-host`.
+This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/deploy/orchestrator-runtime/). The first runnable reference is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host).
 
 The current self-host HA path is compute-first. For the future FUNCTION/all-serverless HA design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
 

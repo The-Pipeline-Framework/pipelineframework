@@ -126,7 +126,7 @@ the same interaction and deadline for deliberate Command retry. A callback follo
 by a definite rejection fails closed. Timeout and cancellation retain their normal
 Await semantics. See [deferred completion](/architecture/await-boundaries#command-callback-completion).
 
-The [OpenAPI callback proof](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/openapi-capability-proof/jobs)
+The [OpenAPI callback proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/openapi-capability-proof/jobs)
 demonstrates early completion, ambiguity, deliberate retry, and a packaged restart. After a retried
 Command completes, continuation past that step no longer carries its consumed retry authority.
 

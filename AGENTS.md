@@ -14,8 +14,9 @@ Spring runtime adapter, and foundational persistence/cache/repository plugins co
 released artifacts.
 
 Connectors:
-- `framework/connectors`: Admit or publish files, object-store entries, and external payloads, or provide
-  replay-safe Query and Command boundaries for external observations and effects.
+- The standalone `pipelineframework-connectors` repository owns implementations that admit or publish files,
+  object-store entries, and external payloads, or provide replay-safe Query and Command boundaries for external
+  observations and effects.
 
 Blocks:
 - The standalone `pipelineframework-blocks` repository owns reusable, compile-time pipeline definitions
@@ -30,7 +31,9 @@ Expansions:
 
 Supporting repo surfaces:
 
-- `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
+- The standalone `pipelineframework-examples` repository owns learning examples and architectural proofs over
+  released artifacts. This repository's remaining `examples/` tree contains real applications and long-lived
+  reference implementations awaiting their own ownership moves.
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
 - `web-ui`: SvelteKit Canvas/web UI (unmaintained)
