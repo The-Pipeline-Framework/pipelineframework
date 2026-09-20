@@ -7,13 +7,6 @@
     }
   ],
   "internalArtifacts": [
-    "host-gmail",
-    "host-microsoft-graph",
-    "host-oidc-quarkus",
-    "host-quickbooks-mcp",
-    "representation-provider-file",
-    "representation-provider-fixture",
-    "representation-provider-http",
     "transport-completeness-tests"
   ],
   "externalArtifacts": [
@@ -40,6 +33,48 @@
       "packaging": "jar",
       "ownership": "external",
       "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "representation-provider-http",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone connectors repository"
+    },
+    {
+      "artifactId": "representation-provider-file",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal module by the standalone connectors repository"
+    },
+    {
+      "artifactId": "representation-provider-fixture",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal test fixture by the standalone connectors repository"
+    },
+    {
+      "artifactId": "host-oidc-quarkus",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal authorized-host module by the standalone connectors repository"
+    },
+    {
+      "artifactId": "host-gmail",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal authorized-host module by the standalone connectors repository"
+    },
+    {
+      "artifactId": "host-microsoft-graph",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal authorized-host module by the standalone connectors repository"
+    },
+    {
+      "artifactId": "host-quickbooks-mcp",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Owned as an internal authorized-host module by the standalone connectors repository"
     },
     {
       "artifactId": "object-ingest-connector",
@@ -247,7 +282,7 @@
     }
   ],
   "invariants": {
-    "description": "Canonical publication contract for the framework reactor and separately published compiler and contracts artifacts.",
-    "source": "post-#846 compiler extraction"
+    "description": "Canonical publication contract for the framework reactor and artifacts published or owned by standalone TPF repositories.",
+    "source": "post repository-boundary extraction"
   }
 }
