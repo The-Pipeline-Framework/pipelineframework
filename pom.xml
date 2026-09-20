@@ -23,7 +23,7 @@
     <version>26.9.4-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>The Pipeline Framework - Root POM</name>
-    <description>The root POM for the Pipeline Framework project, managing both framework components and example applications</description>
+    <description>The root POM for the Pipeline Framework project and its framework tooling</description>
     <url>https://pipelineframework.org/</url>
     <licenses>
         <license>
@@ -108,10 +108,7 @@
     </pluginRepositories>
 
     <modules>
-        <!-- Framework modules -->
         <module>framework</module>
-        <!-- Example projects -->
-        <module>examples/rag-turnkey</module>
     </modules>
 
     <dependencyManagement>

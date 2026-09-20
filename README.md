@@ -141,7 +141,7 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
   interaction and resume through the interaction API.
 - [`search`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/search) covers fan-out/fan-in, REST and gRPC, functions, generated
   workers, caching, persistence, replay, and branch-aware execution.
-- [`examples/rag-turnkey`](examples/rag-turnkey/) composes separate indexing and query applications
+- [`rag-turnkey`](https://github.com/The-Pipeline-Framework/rag-turnkey) composes separate indexing and query applications
   backed by Ollama and PostgreSQL/pgvector.
 
 The [Examples Guide](https://pipelineframework.org/develop/examples/) links and briefs every example
@@ -179,7 +179,8 @@ README in the repository.
   repository owns learning examples and architectural proofs over released TPF artifacts.
 - The standalone [`pipelineframework-reference-implementations`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations)
   repository owns Checkout/TPFGo, Search, and QuickBooks Collections Briefing.
-- [`examples`](examples/) temporarily retains real applications pending their own ownership moves.
+- [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) and
+  [`rag-turnkey`](https://github.com/The-Pipeline-Framework/rag-turnkey) own the real applications formerly built in this reactor.
 - [`docs`](docs/) — the VitePress documentation site.
 - [`ai-sdk`](ai-sdk/) — the standalone Java SDK used for delegation, mapping, and transport
   exercises.
