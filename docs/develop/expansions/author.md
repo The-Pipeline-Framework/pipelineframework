@@ -31,9 +31,10 @@ provider binding and continues to own Command authority.
 ## Publish and consume explicit artefacts
 
 Publish the contained Blocks and Connectors under their own Maven coordinates and compatible
-versions. The consumer installs the artefacts it needs, includes any required build-time processor
-paths, and selects Connector providers in its own configuration. Do not invent an `expansion:`
-section in `pipeline.yaml` or imply that an Expansion creates a hidden runtime.
+versions. A distribution POM in `pipelineframework-expansions` may make that verified set available through one
+ordinary dependency. The consumer still includes any required build-time plugins and processor paths explicitly
+and selects Connector providers in its own configuration. Maven dependencies cannot activate build plugins. Do not
+invent an `expansion:` section in `pipeline.yaml` or imply that an Expansion creates a hidden runtime.
 
 Keep all artefacts in the Expansion release-compatible. State which combinations were verified and
 link each contained capability to its dedicated reference page.

@@ -177,10 +177,11 @@ class GraphQlBlockProofIT {
     @Test
     void consumerOwnsOnlyBindingsConnectionAndPersistedDocuments() throws Exception {
         String pom = Files.readString(Path.of("pom.xml"));
+        assertTrue(pom.contains("<groupId>org.pipelineframework.expansions</groupId><artifactId>graphql</artifactId>"), pom);
         assertTrue(pom.contains("<artifactId>graphql-agent</artifactId>"), pom);
         assertTrue(pom.contains("<artifactId>graphql-block-proof-connectors</artifactId>"), pom);
         assertTrue(pom.contains("<artifactId>graphql-smallrye-connector</artifactId>"), pom);
-        assertFalse(pom.contains("<artifactId>graphql</artifactId>"), pom);
+        assertFalse(pom.contains("<groupId>org.pipelineframework.blocks</groupId><artifactId>graphql</artifactId>"), pom);
         try (var files = Files.list(Path.of("src/main/java/org/pipelineframework/examples/graphqlproof"))) {
             assertEquals(List.of("PrimaryGraphQlConnectionResolver.java"),
                 files.map(path -> path.getFileName().toString()).sorted().toList());

@@ -12,11 +12,8 @@
     </properties>
     <dependencies>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>${pipelineframework.runtime.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-connector</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-smallrye-connector</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework</groupId><artifactId>llm-query-connector</artifactId><version>${pipelineframework.connectors.version}</version></dependency>
+        <dependency><groupId>org.pipelineframework.expansions</groupId><artifactId>graphql</artifactId><version>${pipelineframework.expansions.version}</version><type>pom</type></dependency>
         <dependency><groupId>org.pipelineframework</groupId><artifactId>graphql-block-proof-connectors</artifactId><version>${project.version}</version></dependency>
-        <dependency><groupId>org.pipelineframework.blocks</groupId><artifactId>graphql-agent</artifactId><version>${pipelineframework.blocks.version}</version></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-arc</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-graphql-client</artifactId></dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
