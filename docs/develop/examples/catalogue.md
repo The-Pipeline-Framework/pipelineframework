@@ -28,7 +28,7 @@ flowchart TB
 - [QuickBooks Collections Briefing](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/quickbooks-collections-briefing/README.md) — imports one pinned MCP tool and turns an unstructured report into a typed collections plan.
 - [Restaurant Approval](https://github.com/The-Pipeline-Framework/pipelineframework-examples/blob/main/restaurant-approval/README.md) — canonical interaction-API Await application with a small UI.
 - [Search](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/search/README.md) — generated search pipeline covering fan-out/fan-in, replay, REST/gRPC, function providers, and branch-aware execution.
-- [Turnkey RAG](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/examples/rag-turnkey/README.md) — separate indexing and query applications backed by Ollama and PostgreSQL/pgvector.
+- [Turnkey RAG](https://github.com/The-Pipeline-Framework/rag-turnkey/blob/main/README.md) — separate indexing and query applications backed by Ollama and PostgreSQL/pgvector.
 
 ## Companion READMEs
 

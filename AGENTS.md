@@ -35,7 +35,7 @@ Supporting repo surfaces:
   released artifacts.
 - The standalone `pipelineframework-reference-implementations` repository owns the long-lived Checkout/TPFGo,
   Search, and QuickBooks Collections Briefing systems over released artifacts.
-- This repository's remaining `examples/` tree contains real applications awaiting their own ownership moves.
+- The standalone `csv-kafka-payments` and `rag-turnkey` repositories own the real applications formerly built here.
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
 - `web-ui`: SvelteKit Canvas/web UI (unmaintained)
