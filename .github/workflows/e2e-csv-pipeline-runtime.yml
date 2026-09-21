@@ -43,6 +43,7 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
+          cache-path: ${{ github.workspace }}/.m2/repository
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress -Dmaven.repo.local=$HOME/.m2/repository" >> $GITHUB_ENV
