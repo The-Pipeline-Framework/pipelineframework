@@ -24,7 +24,8 @@ Run the release gate appropriate to the slice. At minimum:
 - CSV topology checks,
 - docs build.
 
-Also verify release-coupled standalone POMs, including alternate CSV topology POMs, checkout examples, and `ai-sdk`.
+After publishing the snapshot, verify the downstream consumer repositories against it: examples (including
+`ai-sdk`), reference implementations, CSV Kafka Payments, and RAG Turnkey.
 
 ## Publish
 

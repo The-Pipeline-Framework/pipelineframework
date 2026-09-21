@@ -135,7 +135,7 @@ steps:
     operator: "com.example.ai.sdk.service.LLMCompletionService::process"
 ```
 
-This exact chain is available in [`ai-sdk/config/pipeline.yaml`](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/ai-sdk/config/pipeline.yaml).
+This exact chain is available in [`pipelineframework-examples/ai-sdk/config/pipeline.yaml`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/blob/main/ai-sdk/config/pipeline.yaml).
 
 ## Build-Time Contract
 

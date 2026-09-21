@@ -22,8 +22,8 @@ execution boundary—not for a helper method or one application's policy. Reacti
 serve asynchronous/backpressured work; synchronous libraries use explicit blocking and
 framework offload. Query, Command, and Await remain semantic boundaries, not operators.
 
-This decision governs `framework/api`, `framework/deployment`, `framework/runtime`,
-`ai-sdk`, and `examples`.
+This decision governs the released compiler/runtime contracts and their compatibility surfaces in
+`pipelineframework-examples`, including `ai-sdk`.
 
 ## Rationale
 

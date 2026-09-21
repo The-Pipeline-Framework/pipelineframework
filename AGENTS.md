@@ -32,11 +32,10 @@ Expansions:
 Supporting repo surfaces:
 
 - The standalone `pipelineframework-examples` repository owns learning examples and architectural proofs over
-  released artifacts.
+  released artifacts, including the AI-shaped delegation/operator stress-test SDK.
 - The standalone `pipelineframework-reference-implementations` repository owns the long-lived Checkout/TPFGo,
   Search, and QuickBooks Collections Briefing systems over released artifacts.
 - The standalone `csv-kafka-payments` and `rag-turnkey` repositories own the real applications formerly built here.
-- `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
 - `web-ui`: SvelteKit Canvas/web UI (unmaintained)
 
@@ -221,7 +220,8 @@ TPF-specific scoping rules:
 - When changing Await/replay lifecycle semantics or refreshing the CSV Payments built-in replay, update the canonical dataset, its docs copy and analysis sidecar, the canonical replay docs, and homepage replay-video assets together. Read `tools/replay-viewer/README.md` before regenerating; validate the live-path event invariants and regenerate `tools/homepage-replay-video` outputs.
 - `app-generator` is separate; only involve it when template generation, schema export, scaffold generation, or
   generated project behavior changes.
-- Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
+- Treat the standalone examples, reference implementations, and real applications as compatibility surfaces,
+  not disposable demos, when framework semantics change.
 - Keep user-facing docs (`architecture`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
 - Prefer enriching existing canonical docs pages over introducing standalone “feature islands” that duplicate navigation.
 - Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right canonical docs area:
