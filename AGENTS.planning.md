@@ -46,7 +46,7 @@ Use this when a semantic change touches compiler/runtime behavior:
 - replay viewer node rendering or legend,
 - docs under the right top-level route,
 
-For `examples/csv-payments` runtime-layout work, keep all of these aligned:
+For `csv-kafka-payments` runtime-layout work in its standalone repository, keep all of these aligned:
 
 1. topology POM/script,
 2. runtime mapping YAML,

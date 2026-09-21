@@ -14,13 +14,8 @@ Root project:
 - Build: `./mvnw clean package -Dmaven.repo.local="$PWD/.m2/repository"`
 - Verify: `./mvnw verify -Dmaven.repo.local="$PWD/.m2/repository"`
 
-CSV payments targeted examples:
-
-- Pipeline-runtime orchestrator verification:
-  `./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify`
-
-- Monolith verification:
-  `./examples/csv-payments/build-monolith.sh -DskipTests`
+CSV Kafka Payments validation is owned by the standalone
+[`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) repository.
 
 Search targeted example:
 

@@ -111,7 +111,6 @@
         <!-- Framework modules -->
         <module>framework</module>
         <!-- Example projects -->
-        <module>examples/csv-payments</module>
         <module>examples/rag-turnkey</module>
     </modules>
 

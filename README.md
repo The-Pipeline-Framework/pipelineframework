@@ -135,7 +135,7 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
   state, replay, retry, timeout, duplicate admission, and restart recovery.
 - [`quickbooks-collections-briefing`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/quickbooks-collections-briefing) imports one
   pinned QuickBooks MCP Query and turns its unstructured result into a typed collections plan.
-- [`examples/csv-payments`](examples/csv-payments/) is the broad runtime proof for streaming,
+- [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) is the broad runtime proof for streaming,
   rejection, Await, lineage, replay, telemetry, performance, and multiple runtime layouts.
 - [`restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) demonstrates durable human
   interaction and resume through the interaction API.
