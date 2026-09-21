@@ -7,7 +7,7 @@ Core modules:
 - `framework/pom.xml`: Parent POM of the multi-module Maven project
 - `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
   `pipelineframework-contracts` repository and consumed here as a released dependency
-- `framework/api`: framework-neutral API contracts for generated pipeline applications
+- `framework/transport-completeness-tests`: cross-artifact compiler/runtime/connector compatibility coverage
 
 The standalone `pipelineframework-runtime` repository owns the Quarkus runtime, deployment,
 Spring runtime adapter, and foundational persistence/cache/repository plugins consumed here as
@@ -16,7 +16,7 @@ released artifacts.
 Connectors:
 - The standalone `pipelineframework-connectors` repository owns implementations that admit or publish files,
   object-store entries, and external payloads, or provide replay-safe Query and Command boundaries for external
-  observations and effects.
+  observations and effects. It also owns representation providers and authorized external-service host adapters.
 
 Blocks:
 - The standalone `pipelineframework-blocks` repository owns reusable, compile-time pipeline definitions

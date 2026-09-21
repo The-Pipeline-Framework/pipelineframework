@@ -164,11 +164,10 @@ README in the repository.
 
 ## Repository Map
 
-- [`framework/api`](framework/api/) — framework-neutral contracts for generated applications.
 - The standalone [`pipelineframework-contracts`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts)
-  repository owns the framework-neutral `pipelineframework-runtime-core` artifact.
+  repository owns framework-neutral model, DSL, API, SPI, serialization, and protocol contracts.
 - The standalone [`pipelineframework-connectors`](https://github.com/The-Pipeline-Framework/pipelineframework-connectors)
-  repository owns typed I/O and external-observation/effect boundaries.
+  repository owns typed I/O, representation providers, authorized hosts, and external-observation/effect boundaries.
 - The standalone [`pipelineframework-runtime`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime)
   repository owns the Quarkus runtime, deployment, Spring runtime, and foundational plugins.
 - The standalone [`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks)
