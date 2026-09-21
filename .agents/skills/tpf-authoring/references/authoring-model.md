@@ -110,3 +110,49 @@ Then compile the real `pipeline.yaml` so service resolution, type applicability,
 cardinality, mapper pairs, provider capabilities, and generated artifacts are checked.
 Add an integration/topology test only for the boundary/layout the application uses.
 Treat compiler diagnostics as design feedback, not a reason to add reflection or glue.
+
+### Model distributed consistency as business flow, not a local transaction
+
+Do not project local database ACID semantics across a distributed TPF business process.
+
+A local transaction is appropriate inside one genuine local persistence/provider authority. It is not the consistency model for a business operation that crosses Pipelines, Commands, providers, runtimes, or independently durable boundaries.
+
+For distributed business progress, prefer TPF's native model:
+
+```text
+stable typed result
+    -> durable checkpoint/publication
+    -> framework-owned downstream admission
+    -> stable logical identity / idempotent boundary
+    -> next Pipeline
+```
+
+Each successfully admitted checkpoint establishes durable business progress. Downstream retry and failure ownership begin at the appropriate handoff boundary; do not hold database locks, invent an application transaction coordinator, or require unrelated TPF authorities to participate in one ACID commit.
+
+When a later business action can fail after earlier durable effects have become authoritative, model the required reversal or resolution explicitly as business semantics. Use a compensation Pipeline when the domain requires compensating previously committed business progress.
+
+```text
+Pipeline A succeeds
+    -> checkpoint A
+
+Pipeline B succeeds
+    -> checkpoint B
+
+Pipeline C fails
+    -> compensation Pipeline
+    -> explicit compensating business outcome
+```
+
+Compensation is not technical rollback and does not pretend that earlier distributed effects never happened. It is a typed, observable business process that restores or establishes an acceptable business state.
+
+Before inventing a transactional application store, distributed lock, rollback coordinator, or provider that atomically spans multiple business authorities, ask:
+
+1. Is this genuinely one local persistence aggregate under one provider authority? If so, local transactional persistence may be appropriate.
+2. Has business progress already crossed an independently durable TPF or external-effect boundary? If so, use stable identity, idempotent handoff, retry/replay and explicit compensation where the domain requires reversal.
+3. Is the requested "atomicity" actually a terminal business invariant that can be represented by typed intermediate/terminal states rather than one technical transaction?
+4. Does an existing TPF checkpoint/publication, persistence, Command effect, Await, retry/DLQ, or compensation pattern already own the required guarantee?
+
+Do not call the absence of one global ACID authority a framework gap merely because several durable business facts participate in one user journey. Prove that the required business invariant cannot be expressed through existing TPF authorities and compensation semantics before proposing new framework or application transaction infrastructure.
+
+For the canonical cross-Pipeline precedent, inspect the TPFGo checkout flow: typed checkpoint publications/subscriptions provide reliable cross-Pipeline progress with explicit idempotency at handoff boundaries, while the compensation Pipeline models business recovery after previously committed progress.
+

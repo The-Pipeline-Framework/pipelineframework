@@ -19,21 +19,22 @@ TPF is a functional core with a framework-owned imperative shell:
 - Connector/provider setup, suspension, durability, replay, retries, telemetry, and placement stay around the authored function.
 
 ```text
-known execution-local data        -> carry immutably through typed pipeline state
-large immutable content           -> PayloadReference / representation
-fresh external observation        -> Query
-external side effect              -> Command
-deferred external completion      -> await: on the initiating operation
-orthogonal persistence/history    -> persistence aspect
-pipeline-result replay            -> generic cache
-external-observation replay       -> Query capture
-external-effect authority         -> CommandEffectStore
+known execution-local data         -> carry immutably through typed pipeline state
+large immutable content            -> PayloadReference / representation
+fresh external observation         -> Query
+external side effect               -> Command
+deferred external completion       -> await: on the initiating operation
+orthogonal persistence/history     -> persistence aspect
+pipeline-result replay             -> generic cache
+external-observation replay        -> Query capture
+external-effect authority          -> CommandEffectStore
+distributed business consistency   -> typed checkpoints + idempotent handoff + compensation
 branching                          -> typed unions / accepts
 one input to many outputs          -> ONE_TO_MANY
 local composition                  -> pipeline step / nested pipeline
 reusable packaged composition      -> Block
 capability distribution            -> Expansion package
-typed iteration / agentic looping -> bounded recursive nested pipeline
+typed iteration / agentic looping  -> bounded recursive nested pipeline
 ```
 
 Do not introduce repositories/services/providers as architectural seams merely because implementation APIs exist. In TPF applications, first express persistence, Queries, Commands, nested pipelines and other execution semantics in pipeline.yaml. Application code should implement domain transformations and adapters behind those compiler-owned boundaries.
@@ -201,3 +202,5 @@ Do not overfit. TPF is not mandatory for simple local code; existing controllers
 - Did I add application infrastructure instead of reporting a framework gap?
 - Did this migration remove obsolete application responsibility?
 - Did I verify current TPF reality before claiming a missing capability?
+- Did I impose one local ACID transaction across independently durable business boundaries instead of modeling stable progress, idempotent handoff and compensation?
+- Did I declare a framework gap merely because TPF intentionally keeps persistence, external-effect authority, execution durability and distributed business recovery as separate authorities?

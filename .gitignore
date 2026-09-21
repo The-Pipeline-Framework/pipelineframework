@@ -95,3 +95,8 @@ __pycache__/
 
 # Cloudflare Wrangler local cache
 .wrangler/
+
+# Next.js build output
+.next/
+
+.factory/
