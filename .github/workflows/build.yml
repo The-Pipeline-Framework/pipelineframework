@@ -8,8 +8,6 @@ on:
   pull_request:
     paths:
       - 'framework/**'
-      - 'plugins/**'
-      - 'connectors/**'
       - 'pom.xml'
       - 'mvnw'
       - '.mvn/**'
@@ -19,8 +17,8 @@ on:
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
-  MAVEN_ARGS_BOOTSTRAP: -B -U -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
-  MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  MAVEN_ARGS_BOOTSTRAP: -B -U -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  MAVEN_ARGS_PR: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
   UNIT_TEST_PATTERN: "*,!*IT,!*ITCase"
   GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase"
@@ -48,7 +46,7 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BOOTSTRAP }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Install root POM, framework, and foundational plugins to local repository
+      - name: Install coordination artifacts to local repository
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Package framework artifacts
@@ -113,9 +111,7 @@ jobs:
           ./mvnw "${maven_args[@]}" clean test \
             "-Dtest=${{ env.UNIT_TEST_PATTERN }}" \
             -Dsurefire.failIfNoSpecifiedTests=false \
-            -DskipITs=true \
-            -DskipNative=true \
-            -Dquarkus.container-image.build=false
+            -DskipITs=true
 
   generic-verify:
     name: Generic Verify
@@ -156,9 +152,7 @@ jobs:
           ./mvnw "${maven_args[@]}" clean verify \
             -DskipUnitTests=true \
             -Dfailsafe.failIfNoSpecifiedTests=false \
-            -DskipNative=true \
-            "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}" \
-            -Dquarkus.container-image.build=false
+            "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}"
 
   canonical-fresh-checkout:
     name: Canonical Fresh Checkout Build

@@ -17,22 +17,8 @@ Root project:
 CSV Kafka Payments validation is owned by the standalone
 [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) repository.
 
-Search targeted example:
-
-- Function platform smoke verification (build-switch based; no Lambda Maven profile):
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -DskipTests compile -Dmaven.repo.local="$PWD/.m2/repository"`
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -Dtest=LambdaMockEventServerSmokeTest test -Dmaven.repo.local="$PWD/.m2/repository"`
-
-Targeted unit-test coverage helper:
-
-- Generate deterministic JaCoCo coverage for a single framework module + test slice:
-  `./scripts/coverage-targeted.sh runtime FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest`
-  `./scripts/coverage-targeted.sh deployment RestFunctionHandlerRendererTest`
-- Helper output includes report path and LINE/BRANCH percentages from module-local `target/site/jacoco/jacoco.xml`.
-
 Node/docs surfaces:
 
-- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test -Dmaven.repo.local="$PWD/.m2/repository"`
 - Docs tests: `npm --prefix docs test`
 - Docs build: `npm --prefix docs run build`
 

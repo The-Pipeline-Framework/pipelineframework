@@ -86,9 +86,7 @@ Pick the smallest validation set that proves the planned slice. Common gates:
 
 - framework: `./mvnw -f framework/pom.xml verify`;
 - root: `./mvnw verify`;
-- AI SDK: `./mvnw -f ai-sdk/pom.xml test`;
 - docs: `npm --prefix docs test` and `npm --prefix docs run build`;
 - web UI: `npm --prefix web-ui run check` and `npm --prefix web-ui run build`;
-- targeted coverage: `./scripts/coverage-targeted.sh <module> <tests>`.
 
 If a planned change affects release notes, version snapshots, routes, or docs IA, include docs build and route/link checks in the validation gate.

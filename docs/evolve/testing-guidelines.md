@@ -1,110 +1,31 @@
-# Testing Guidelines for This Project
+# Coordination Repository Testing
 
-This document defines how all tests must be organized and executed.
-These rules apply to all contributors — humans and AI-based agents.
+The `pipelineframework` repository no longer owns compiler, runtime, Connector, Block, Expansion, example, or
+application implementation source. Testing here is intentionally narrow: it proves that independently released
+artifacts compose into the tested product set published by `pipelineframework-bom`.
 
-## 1. POM files must be 100% declarative
+## Compatibility module
 
-POM files must not contain any logic. This means:
+`framework/transport-completeness-tests` consumes released artifacts selected by the product BOM. Its current
+fixtures verify contributed protocol values across serialization/runtime boundaries and exercise compiler transport
+generation with real Connector-owned types.
 
-- No profiles that enable or disable tests
-- No activation blocks
-- No properties that control test inclusion/exclusion
-- No conditional XML or inline expressions
-- No behavioral branching inside plugin configuration
-- No dynamic behavior based on flags or environment variables
+Tests use the `*Test` suffix and run with Maven Surefire. Runtime integration, native-image, container, Spring smoke,
+example, and application tests remain with the repositories that own those behaviours.
 
-POM files must define only static configuration for:
-- Maven Surefire
-- Maven Failsafe
-- Jacoco (configured to apply to Surefire only)
+## Validation
 
-All behavioral differences belong in CI/CD, not in POMs.
+```bash
+./mvnw -f framework/pom.xml verify \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-## 2. Test naming conventions (the only mechanism for test selection)
+The root reactor provides the equivalent aggregate gate:
 
-Test execution is determined exclusively by file naming.
+```bash
+./mvnw verify \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-Surefire (unit tests and `@QuarkusTest`) runs during the test phase and includes:
-- Any test class whose name ends with Test
-
-Failsafe (integration tests and `@QuarkusIntegrationTest`) runs during integration-test and verify and includes:
-- Any test class whose name ends with IT
-
-Do not override these conventions:
-- No includes/excludes in POM
-- No custom patterns
-- No profile-based switching
-
-Naming conventions are the single source of truth.
-
-## 3. Coverage rules (Jacoco)
-
-Coverage applies only to tests run by Maven Surefire.
-
-Types of tests and coverage:
-- Unit tests: covered
-- `@QuarkusTest`: covered
-- Integration tests (names ending with IT): not covered
-- `@QuarkusIntegrationTest`: not covered
-
-Rules:
-- Jacoco must never instrument Failsafe executions
-- No conditional logic to include/exclude integration tests
-- Coverage must be enabled by CI only using the coverage profile
-
-## 4. CI-driven behavior
-
-CI/CD is the only place where behavior changes based on workflow type.
-
-PR builds (fast CI) should run with:
-- mvn verify -Pcoverage -DskipITs -Dquarkus.container-image.build=false
-
-Effect:
-- Only Surefire tests run
-- Integration tests are skipped
-- No container images are built
-- Coverage includes only unit + `@QuarkusTest`
-
-Main branch / Release builds should run with:
-- mvn verify -Pcoverage
-
-Effect:
-- Surefire and Failsafe both run
-- Integration tests run
-- Coverage still only from Surefire tests
-
-What not to do:
-- Do not add POM profiles to switch behavior
-- Do not add activation logic
-- Do not use properties inside POM to exclude tests
-- Do not manipulate plugins conditionally inside XML
-
-## 5. Integration tests (names ending with IT)
-
-Integration tests must:
-- Require Testcontainers or external infra
-- Use `@QuarkusIntegrationTest` when applicable
-- Run only in main-branch CI builds
-- Avoid Jacoco entirely
-
-Integration tests must not run on PRs.
-
-## 6. Before adding any new tests
-
-Follow this decision tree:
-
-1. Pure business logic? → write a unit test (name ends with Test)
-2. Needs Quarkus runtime, DI, config, serialization, etc? → use `@QuarkusTest` (name ends with Test)
-3. Requires containers, external services, or full bootstrap? → use `@QuarkusIntegrationTest` (name ends with IT)
-
-Name tests accordingly and let CI enforce execution.
-
-## 7. Golden rules
-
-POM = Declarative only
-CI = Controls behavior
-Naming = Determines test type
-Coverage = Surefire only
-
-If a change violates any of these principles, it must be corrected before merging.
+No test-selection or coverage Maven profile is permitted. `central-publishing` is the sole profile and may only
+attach, sign, and deploy publication-eligible artifacts without changing the reactor or source universe.
