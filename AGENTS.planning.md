@@ -34,6 +34,9 @@ Before proposing a PR, identify:
 - CI workflows or smoke paths that prove it,
 - unresolved risks that should remain out of scope.
 
+For cross-repository changes, also identify the published artifact hand-off and the downstream compatibility/E2E
+lane that consumes it. A green owner repository is not proof that a released boundary remains compatible.
+
 ## Cross-Surface Change Checklist
 
 Use this when a semantic change touches compiler/runtime behavior:

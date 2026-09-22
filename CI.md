@@ -3,6 +3,10 @@
 This repository coordinates released TPF components. It publishes the tested component BOM and runs the
 cross-repository compatibility tests; implementation builds belong to their standalone repositories.
 
+This CI is a released-artifact composition gate, not a replacement for the owner-local runtime, Connector,
+example, reference-implementation or application suites. See [Testing Guidelines](TESTING.md) and the
+[repository-split test assessment](docs/evolve/repository-split-migration.md).
+
 ## Workflows
 
 1. **build.yml** — pull-request validation
@@ -32,3 +36,11 @@ node scripts/verify-framework-publication.mjs "$PWD/.m2/repository"
 
 `central-publishing` is the only Maven profile. It attaches and signs publishable artifacts; it does not select a
 different source universe, module graph, or build topology.
+
+## Cross-repository evidence
+
+The coordination reactor proves the BOM-managed compiler/runtime/Connector seam. It does not currently trigger the
+downstream repositories after every snapshot publication. Until the compatibility train tracked by
+[#930](https://github.com/The-Pipeline-Framework/pipelineframework/issues/930) is automated, boundary-changing
+snapshot releases require an explicit downstream run in dependency order. Do not describe a green coordination
+build as full E2E coverage.
