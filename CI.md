@@ -44,3 +44,7 @@ downstream repositories after every snapshot publication. Until the compatibilit
 [#930](https://github.com/The-Pipeline-Framework/pipelineframework/issues/930) is automated, boundary-changing
 snapshot releases require an explicit downstream run in dependency order. Do not describe a green coordination
 build as full E2E coverage.
+
+Source coverage likewise belongs to the standalone source owners. The former monorepo coverage workflow is not a
+valid coordination-repository gate; [#933](https://github.com/The-Pipeline-Framework/pipelineframework/issues/933)
+tracks owner-local replacement coverage.

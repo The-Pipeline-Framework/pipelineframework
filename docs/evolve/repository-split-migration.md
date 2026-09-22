@@ -104,6 +104,11 @@ the application repository. However, CSV's former monolith, alternate pipeline-r
 verification and native-build lanes do not currently have equivalent owner-repository workflows. Issue #929 tracks
 their restoration or an explicit decision to retire a lane.
 
+The former root Sonar/JaCoCo workflow and targeted coverage helper cannot measure source that now lives elsewhere.
+Removing them from the coordination repository is correct, but equivalent compiler/contracts/runtime/Connector
+coverage has not yet been established in the owner repositories. [#933](https://github.com/The-Pipeline-Framework/pipelineframework/issues/933)
+tracks that migration without reintroducing a coverage Maven profile or a composite source reactor.
+
 ## Cross-repository regression gap
 
 Each repository currently verifies its own checkout, but publishing a new upstream snapshot does not automatically
@@ -130,5 +135,5 @@ scheduled, but they must be named as outstanding evidence rather than silently t
 The physical source split is complete, and the overwhelming majority of tests moved with their owners. The testing
 migration is not yet complete: three test sources and several distinct CSV CI variants need owner-local successors,
 Connector pull-request CI currently skips its transferred tests, and the released-artifact compatibility train is
-still manual. PRs and releases should not claim comprehensive cross-repository regression coverage until those
-follow-ups are closed.
+still manual. Owner-repository coverage reporting also remains to be restored. PRs and releases should not claim
+comprehensive cross-repository regression coverage until those follow-ups are closed.
