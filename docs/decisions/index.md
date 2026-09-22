@@ -69,6 +69,7 @@ authoritative for exact syntax and release support.
 | [0058](./0058-expansions-own-version-aligned-distributions.md) | Publish Expansions as independently released dependency distributions without creating new semantics or authority. |
 | [0059](./0059-learning-examples-consume-released-artifacts.md) | Build learning examples and architectural proofs as clean consumers of released TPF artifacts. |
 | [0060](./0060-reference-implementations-consume-released-artifacts.md) | Build long-lived reference systems as clean consumers of released TPF artifacts. |
+| [0061](./0061-product-bom-pins-the-tested-component-set.md) | Publish the exact independently released TPF component versions verified together. |
 
 ## Maintenance
 

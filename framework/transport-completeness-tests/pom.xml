@@ -12,31 +12,40 @@
     <artifactId>transport-completeness-tests</artifactId>
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>
+        <tpf.flatten.skip>true</tpf.flatten.skip>
     </properties>
     <name>The Pipeline Framework - Contributed Protocol Transport Compatibility Tests</name>
     <description>Compiler transport regression fixtures that exercise real contributed connector contracts.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-compiler</artifactId>
-            <version>${pipelineframework.compiler.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
-            <version>${pipelineframework.runtime.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>embedding-query-connector</artifactId>
-            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>vector-store-connector</artifactId>
-            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.testing.compile</groupId>

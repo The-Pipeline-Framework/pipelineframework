@@ -184,6 +184,26 @@ README in the repository.
 - [`pipelineframework-examples/ai-sdk`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/ai-sdk)
   owns the AI-shaped delegation, mapping, and transport stress test.
 
+## Compatible Artifact Set
+
+Import `pipelineframework-bom` to use the component versions verified together by this repository:
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-bom</artifactId>
+            <version>26.9.4-SNAPSHOT</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+Application dependencies covered by the BOM then omit their individual versions. The BOM records a tested compatible set; it does not require every component repository to share one release lifecycle.
+
 ## Build and Validation
 
 This repository uses an isolated Maven local repository per worktree.

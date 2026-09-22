@@ -4,6 +4,10 @@
     {
       "artifactId": "framework-parent",
       "packaging": "pom"
+    },
+    {
+      "artifactId": "pipelineframework-bom",
+      "packaging": "pom"
     }
   ],
   "internalArtifacts": [
