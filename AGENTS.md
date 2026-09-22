@@ -5,6 +5,7 @@ Keep the core pure, connect to reality.
 
 Core modules:
 - `framework/pom.xml`: Parent POM of the multi-module Maven project
+- `framework/bom`: published compatible component set for independently released TPF artifacts
 - `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
   `pipelineframework-contracts` repository and consumed here as a released dependency
 - `framework/transport-completeness-tests`: cross-artifact compiler/runtime/connector compatibility coverage
