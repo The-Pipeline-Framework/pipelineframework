@@ -235,7 +235,11 @@ function verifyBomCoordinates(effectiveProject) {
       );
     }
   }
-  if (!managed.length || failures.length > initialFailureCount) return;
+  if (!managed.length) {
+    failures.push('BOM does not declare any managed dependencies');
+    return;
+  }
+  if (failures.length > initialFailureCount) return;
 
   const repositories = effectiveProject.match(/<repositories>([\s\S]*?)<\/repositories>/)?.[0] ?? '';
   const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tpf-bom-availability-'));
