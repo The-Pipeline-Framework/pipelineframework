@@ -187,6 +187,7 @@ function parseEffectiveProjects(effectivePom) {
 
     projects.set(artifactId, {
       artifactId,
+      effectiveProject: project,
       packaging: elementValue(project, 'packaging') || 'jar',
       deployable: deploySkip === 'false',
       centralPresent: Boolean(centralPlugin),
@@ -197,6 +198,136 @@ function parseEffectiveProjects(effectivePom) {
   }
 
   return projects;
+}
+
+function verifyBomCoordinates(effectiveProject) {
+  const initialFailureCount = failures.length;
+  const bomPom = fs.readFileSync(path.join(root, 'framework', 'bom', 'pom.xml'), 'utf8');
+  const managedSection = bomPom.match(/<dependencyManagement>([\s\S]*?)<\/dependencyManagement>/)?.[1] ?? '';
+  const dependencyPattern = /<dependency>([\s\S]*?)<\/dependency>/g;
+  const propertiesSection = effectiveProject.match(/<properties>([\s\S]*?)<\/properties>/)?.[1] ?? '';
+  const properties = new Map(
+    [...propertiesSection.matchAll(/<([A-Za-z0-9_.-]+)>([^<]+)<\/\1>/g)]
+      .map((match) => [match[1], match[2].trim()]),
+  );
+  const managed = [...managedSection.matchAll(dependencyPattern)].map((match) => {
+    const dependency = match[1];
+    return {
+      groupId: resolveProperties(elementValue(dependency, 'groupId'), properties),
+      artifactId: resolveProperties(elementValue(dependency, 'artifactId'), properties),
+      version: resolveProperties(elementValue(dependency, 'version'), properties),
+      type: resolveProperties(elementValue(dependency, 'type') || 'jar', properties),
+      classifier: resolveProperties(elementValue(dependency, 'classifier'), properties),
+    };
+  });
+
+  for (const dependency of managed) {
+    if (!dependency.groupId || !dependency.artifactId || !dependency.version || !dependency.type) {
+      failures.push(
+        `BOM contains an incomplete managed coordinate: ${dependency.groupId || '<groupId>'}:` +
+          `${dependency.artifactId || '<artifactId>'}:${dependency.type || '<type>'}:` +
+          `${dependency.version || '<version>'}`,
+      );
+    } else if (Object.values(dependency).some((value) => /\$\{[^}]+}/.test(value))) {
+      failures.push(
+        `BOM contains an unresolved managed coordinate: ${dependency.groupId}:` +
+          `${dependency.artifactId}:${dependency.type}:${dependency.version}`,
+      );
+    }
+  }
+  if (!managed.length || failures.length > initialFailureCount) return;
+
+  const repositories = effectiveProject.match(/<repositories>([\s\S]*?)<\/repositories>/)?.[0] ?? '';
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tpf-bom-availability-'));
+  const verificationPom = path.join(temporaryDirectory, 'pom.xml');
+  const isolatedRepository = path.join(temporaryDirectory, 'repository');
+
+  try {
+    // Resolve only the advertised files. Transitive graphs are not part of the BOM availability contract.
+    const executions = managed.map((dependency, index) => {
+      const coordinate = [
+        dependency.groupId,
+        dependency.artifactId,
+        dependency.version,
+        dependency.type,
+        dependency.classifier,
+      ].filter(Boolean).join(':');
+      return `
+        <execution>
+          <id>verify-managed-artifact-${index}</id>
+          <phase>validate</phase>
+          <goals><goal>get</goal></goals>
+          <configuration>
+            <artifact>${escapeXml(coordinate)}</artifact>
+            <transitive>false</transitive>
+          </configuration>
+        </execution>`;
+    }).join('');
+    fs.writeFileSync(
+      verificationPom,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.pipelineframework.verification</groupId>
+  <artifactId>pipelineframework-bom-availability</artifactId>
+  <version>1</version>
+  ${repositories}
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.9.0</version>
+        <executions>${executions}
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+`,
+    );
+
+    const result = spawnSync(
+      path.join(root, 'mvnw'),
+      [
+        '-q',
+        '-f',
+        verificationPom,
+        'validate',
+        // A fresh cache prevents locally installed or previously downloaded artifacts from hiding publication gaps.
+        `-Dmaven.repo.local=${isolatedRepository}`,
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 32 * 1024 * 1024,
+      },
+    );
+
+    if (result.status !== 0) {
+      const output = `${result.stderr || ''}\n${result.stdout || ''}`.trim();
+      failures.push(
+        `BOM managed artifact availability check failed against configured repositories:\n` +
+          `${output || `Maven exited with code ${result.status}`}`,
+      );
+    }
+  } finally {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
+function resolveProperties(value, properties) {
+  return value.replace(/\$\{([^}]+)}/g, (expression, property) => properties.get(property) ?? expression);
+}
+
+function escapeXml(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 function directDependencies(project) {
@@ -221,6 +352,10 @@ function elementValue(xml, element) {
 }
 
 const reactorArtifacts = effectiveProjects();
+const bomArtifact = reactorArtifacts.get('pipelineframework-bom');
+if (bomArtifact) {
+  verifyBomCoordinates(bomArtifact.effectiveProject);
+}
 
 for (const artifactId of centralExcludedArtifacts) {
   if (!internalArtifacts.has(artifactId) && !externalSourceMirrors.has(artifactId)) {
