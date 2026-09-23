@@ -125,6 +125,8 @@ For a long-running REST transition worker call, the coordinator logs `remote_tra
 
 If the caller deadline expires, the coordinator logs `remote_transition_outcome_unknown` and persists `REMOTE_OUTCOME_UNKNOWN` instead of scheduling an ordinary retry. The event contains execution id, tenant id, attempt, transition key, worker protocol/target, elapsed duration, configured deadline, and the decision. It excludes payload data.
 
+For a paged source, confirmed owner loss replays only the current page from its stored page-start checkpoint. A completed page has already committed its successor checkpoint and is not reread. Paging does not change uncertain remote outcomes: a REST timeout still requires reconciliation before re-drive because the original worker may still commit effects or page parts.
+
 Treat this state as an ambiguous external-effect boundary:
 
 1. do not infer worker death from `HttpTimeoutException`;
