@@ -82,7 +82,6 @@ module to one runtime role:
 
 In this repository, monolith support is demonstrated by:
 
-- `pom.monolith.xml`
 - `monolith-svc/pom.xml`
 - `build-monolith.sh`
 

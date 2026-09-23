@@ -6,7 +6,7 @@ below are relative to that repository's root.
 
 ## What exists
 
-- Pipeline-runtime parent POM: `pom.pipeline-runtime.xml`
+- Grouped-build root POM: `pom.xml`
 - Grouped pipeline runtime module: `pipeline-runtime-svc/pom.xml`
 - Runtime mapping scenario: `config/runtime-mapping/pipeline-runtime.yaml`
 - Build script: `build-pipeline-runtime.sh`
@@ -27,14 +27,16 @@ What the script does:
 
 - Applies `pipeline-runtime.yaml` as active runtime mapping.
 - Installs `pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
-- Builds `pom.pipeline-runtime.xml`.
+- Builds the pipeline-runtime module selection from `pom.xml`.
 - Uses `GRPC` transport by default (override with `PIPELINE_TRANSPORT=REST|LOCAL` if needed).
 - Restores the previous active mapping file after the build.
 
 ## Verification smoke check
 
 ```bash
-./mvnw -f pom.pipeline-runtime.xml -DskipTests compile
+./mvnw -f pom.xml \
+  -pl common,payments-processing-svc,pipeline-runtime-svc,persistence-svc,orchestrator-svc \
+  -Dcsv.runtime.layout=pipeline-runtime -DskipTests compile
 ```
 
 ## Required runtime environment

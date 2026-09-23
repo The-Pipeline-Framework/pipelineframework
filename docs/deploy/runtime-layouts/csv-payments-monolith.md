@@ -6,7 +6,7 @@ below are relative to that repository's root.
 
 ## What exists today
 
-- Monolith parent POM: `pom.monolith.xml`
+- Root POM used by `build-monolith.sh`: `pom.xml`
 - Monolith runtime module: `monolith-svc/pom.xml`
 - Runtime mapping scenario: `config/runtime-mapping/monolith.yaml`
 - Build script: `build-monolith.sh`
@@ -42,7 +42,7 @@ What the script does:
 - Applies monolith runtime mapping.
 - Installs `pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
 - Ensures development certificates exist for module-local test/runtime launches.
-- Builds `pom.monolith.xml`.
+- Builds the monolith module selection from `pom.xml`.
 - Uses local transport for in-process step calls.
 - Restores previous runtime mapping file after build.
 

@@ -29,7 +29,7 @@ Typical Maven changes:
 In the standalone [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments)
 application, the concrete migration assets are:
 
-- `pom.pipeline-runtime.xml`
+- `pom.xml` (with the pipeline-runtime module selection)
 - `pipeline-runtime-svc/pom.xml`
 - `build-pipeline-runtime.sh`
 
@@ -65,7 +65,8 @@ Prefer explicit flags/scripts over profiles for clarity. Example pattern:
 
 ```bash
 ./build-pipeline-runtime.sh -DskipTests
-./mvnw -f pom.pipeline-runtime.xml -pl orchestrator-svc \
+./mvnw -f pom.xml \
+  -pl common,payments-processing-svc,pipeline-runtime-svc,persistence-svc,orchestrator-svc \
   -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest test
 ```
 
