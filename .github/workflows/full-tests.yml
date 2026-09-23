@@ -6,8 +6,6 @@ on:
       - main
     paths:
       - 'framework/**'
-      - 'plugins/**'
-      - 'connectors/**'
       - 'mvnw'
       - '.mvn/**'
       - 'pom.xml'
@@ -26,14 +24,15 @@ jobs:
   full-test-suite:
     name: Full Test Suite
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
@@ -42,17 +41,13 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Bootstrap framework and foundational plugins
+      - name: Bootstrap coordination artifacts
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-      - name: Framework clean install (JVM only)
+      - name: Coordination reactor clean install
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install \
-            -DskipNative=true \
-            -Dquarkus.package.type=fast-jar \
-            -Dquarkus.container-image.build=false \
-            -Dquarkus.container-image.push=false
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install
 
       - name: Dump test reports on failure
         if: failure()

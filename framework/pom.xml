@@ -27,11 +27,9 @@
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>26.9.4-SNAPSHOT</version>
-    <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
-    <name>The Pipeline Framework (Parent)</name>
-    <description>A Quarkus extension for building reactive pipeline processing systems</description>
+    <name>The Pipeline Framework - Coordination Parent</name>
+    <description>Publication and compatibility coordination for the tested TPF component set.</description>
     <url>https://pipelineframework.org/</url>
     <licenses>
         <license>
@@ -57,71 +55,14 @@
     </scm>
 
     <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <mapstruct.version>1.6.3</mapstruct.version>
-        <enablePreview>true</enablePreview>
-        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <version.jandex>3.5.0</version.jandex>
-        <langchain4j.version>1.19.0</langchain4j.version>
-        <quarkus-langchain4j.version>1.13.1</quarkus-langchain4j.version>
-        <google.gmail.api.version>v1-rev20260727-2.0.0</google.gmail.api.version>
-        <mcp.java.sdk.version>2.0.1</mcp.java.sdk.version>
-        <swagger.parser.version>2.1.48</swagger.parser.version>
-        <re2j.version>1.8</re2j.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>
-        <skipUnitTests>false</skipUnitTests>
-        <argLine />
-        <surefireArgLine />
     </properties>
 
     <modules>
         <module>bom</module>
         <module>transport-completeness-tests</module>
     </modules>
-
-    <dependencyManagement>
-        <dependencies>
-            <!-- Quarkus BOM -->
-            <dependency>
-                <groupId>io.quarkus.platform</groupId>
-                <artifactId>quarkus-bom</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.quarkus.platform</groupId>
-                <artifactId>quarkus-amazon-services-bom</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-core</artifactId>
-                <version>${mcp.java.sdk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-json-jackson2</artifactId>
-                <version>${mcp.java.sdk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.apis</groupId>
-                <artifactId>google-api-services-gmail</artifactId>
-                <version>${google.gmail.api.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.re2j</groupId>
-                <artifactId>re2j</artifactId>
-                <version>${re2j.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <build>
         <pluginManagement>
@@ -136,77 +77,10 @@
                     <artifactId>maven-deploy-plugin</artifactId>
                     <version>3.1.4</version>
                 </plugin>
-                <plugin>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-maven-plugin</artifactId>
-                    <version>${quarkus.platform.version}</version>
-                    <extensions>true</extensions>
-                    <configuration>
-                        <jvmArgs>--enable-preview</jvmArgs>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.1</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.ow2.asm</groupId>
-                            <artifactId>asm</artifactId>
-                            <version>9.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mockito</groupId>
-                            <artifactId>mockito-core</artifactId>
-                            <version>${mockito.version}</version>
-                        </dependency>
-                    </dependencies>
-                    <configuration>
-                        <useSystemClassLoader>true</useSystemClassLoader>
-                        <!--
-                          skipUnitTests is a Surefire-only CI switch for verify lanes that should run Failsafe ITs
-                          without rerunning unit tests. skipTests preserves standard Maven bootstrap/dev behavior.
-                        -->
-                        <skip>${skipUnitTests}</skip>
-                        <skipTests>${skipTests}</skipTests>
-                        <forkCount>1</forkCount>
-                        <reuseForks>true</reuseForks>
-                        <systemPropertyVariables>
-                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-                        </systemPropertyVariables>
-                        <argLine>@{argLine} ${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>io.smallrye</groupId>
-                    <artifactId>jandex-maven-plugin</artifactId>
-                    <version>${version.jandex}</version>
-                    <executions>
-                        <execution>
-                            <id>make-index</id>
-                            <goals>
-                                <goal>jandex</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-extension-maven-plugin</artifactId>
-                    <version>${quarkus.platform.version}</version>
-                </plugin>
             </plugins>
         </pluginManagement>
 
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>com.diffplug.spotless</groupId>
-                <artifactId>spotless-maven-plugin</artifactId>
-            </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
@@ -233,69 +107,10 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Versions Maven Plugin for consistent version management across modules -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>versions-maven-plugin</artifactId>
-                <version>2.19.1</version>
-            </plugin>
-            <!-- Release Plugin for automating releases to Maven Central -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-release-plugin</artifactId>
-                <version>3.0.1</version>
-            </plugin>
         </plugins>
     </build>
-    
+
     <profiles>
-        <profile>
-            <id>coverage</id>
-            <activation>
-                <property>
-                    <name>!skipTests</name>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.12</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-agent</id>
-                                <goals>
-                                    <goal>prepare-agent</goal>
-                                </goals>
-                                <configuration>
-                                    <!-- Write to a shared location for aggregation -->
-                                    <destFile>${session.executionRootDirectory}/target/jacoco.exec</destFile>
-                                    <propertyName>surefireArgLine</propertyName>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-            <reporting>
-                <plugins>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.12</version>
-                        <reportSets>
-                            <reportSet>
-                                <reports>
-                                    <!-- Include individual reports but not aggregate in submodules -->
-                                    <report>report</report>
-                                </reports>
-                            </reportSet>
-                        </reportSets>
-                    </plugin>
-                </plugins>
-            </reporting>
-        </profile>
         <profile>
             <id>central-publishing</id>
             <properties>

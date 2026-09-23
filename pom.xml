@@ -56,28 +56,13 @@
         <pipelineframework.blocks.version>26.9.4-SNAPSHOT</pipelineframework.blocks.version>
         <pipelineframework.expansions.version>26.9.4-SNAPSHOT</pipelineframework.expansions.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.39.2</quarkus.platform.version>
-        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.java.source>21</quarkus.java.source>
-        <quarkus.java.target>21</quarkus.java.target>
-        <version.jandex>3.5.0</version.jandex>
+        <maven.compiler.release>21</maven.compiler.release>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
-        <jakarta.cdi.version>4.0.1</jakarta.cdi.version>
-        <junit-pioneer.version>2.3.0</junit-pioneer.version>
         <compile.testing.version>0.23.0</compile.testing.version>
-        <mockito.version>5.21.0</mockito.version>
+        <junit.version>6.1.3</junit.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <skipTests>false</skipTests>
         <skipUnitTests>false</skipUnitTests>
-        <argLine />
-        <surefireArgLine />
-        <tpf.build.parallelism>AUTO</tpf.build.parallelism>
-        <tpf.build.transport>GRPC</tpf.build.transport>
-        <tpf.build.platform>COMPUTE</tpf.build.platform>
     </properties>
 
     <repositories>
@@ -94,51 +79,9 @@
         </repository>
     </repositories>
 
-    <pluginRepositories>
-        <pluginRepository>
-            <id>central-snapshot-plugins</id>
-            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </pluginRepository>
-    </pluginRepositories>
-
     <modules>
         <module>framework</module>
     </modules>
-
-    <dependencyManagement>
-        <dependencies>
-            <!-- Quarkus BOM -->
-            <dependency>
-                <groupId>${quarkus.platform.group-id}</groupId>
-                <artifactId>${quarkus.platform.artifact-id}</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.quarkus.platform</groupId>
-                <artifactId>quarkus-amazon-services-bom</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <dependencies>
-        <dependency>
-            <groupId>org.jboss.logmanager</groupId>
-            <artifactId>jboss-logmanager</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
 
     <build>
         <defaultGoal>clean install</defaultGoal>
@@ -149,70 +92,14 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.14.0</version>
                     <configuration>
-                        <source>21</source>
-                        <target>21</target>
-                        <release>21</release>
-                        <enablePreview>true</enablePreview>
-                        <annotationProcessorPaths>
-                            <!-- lombok must come first -->
-                            <path>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok</artifactId>
-                                <version>1.18.36</version>
-                            </path>
-                            <path>
-                                <groupId>org.mapstruct</groupId>
-                                <artifactId>mapstruct-processor</artifactId>
-                                <version>1.5.5.Final</version>
-                            </path>
-                            <path>
-                                <groupId>io.quarkus</groupId>
-                                <artifactId>quarkus-extension-processor</artifactId>
-                                <version>${quarkus.platform.version}</version>
-                            </path>
-                        </annotationProcessorPaths>
+                        <release>${maven.compiler.release}</release>
                     </configuration>
                 </plugin>
-                <plugin>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-maven-plugin</artifactId>
-                    <version>${quarkus.platform.version}</version>
-                    <configuration>
-                        <jvmArgs>--enable-preview</jvmArgs>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>build</goal>
-                                <goal>generate-code</goal>
-                                <goal>generate-code-tests</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.1</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.ow2.asm</groupId>
-                            <artifactId>asm</artifactId>
-                            <version>9.5</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>org.mockito</groupId>
-                            <artifactId>mockito-core</artifactId>
-                            <version>${mockito.version}</version>
-                        </dependency>
-                    </dependencies>
                     <configuration>
-                        <useSystemClassLoader>true</useSystemClassLoader>
-                        <!--
-                          skipUnitTests is a Surefire-only CI switch for verify lanes that should run Failsafe ITs
-                          without rerunning unit tests. skipTests preserves standard Maven bootstrap/dev behavior.
-                        -->
                         <skip>${skipUnitTests}</skip>
                         <skipTests>${skipTests}</skipTests>
                         <forkCount>1</forkCount>
@@ -220,7 +107,6 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
-                        <argLine>@{argLine} ${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
 
@@ -257,95 +143,7 @@
                         </execution>
                     </executions>
                 </plugin>
-                <plugin>
-                    <groupId>io.smallrye</groupId>
-                    <artifactId>jandex-maven-plugin</artifactId>
-                    <version>${version.jandex}</version>
-                    <executions>
-                        <execution>
-                            <id>make-index</id>
-                            <goals>
-                                <goal>jandex</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                
-                <!-- Versions Maven Plugin for consistent version management across modules -->
-                <plugin>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>versions-maven-plugin</artifactId>
-                    <version>2.16.2</version>
-                    <configuration>
-                        <generateBackupPoms>false</generateBackupPoms>
-                    </configuration>
-                </plugin>
-                
-                <!-- Release Plugin for automating releases to Maven Central -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-release-plugin</artifactId>
-                    <version>3.0.1</version>
-                    <configuration>
-                        <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <pushChanges>false</pushChanges>
-                        <useReleaseProfile>false</useReleaseProfile>
-                        <releaseProfiles>release</releaseProfiles>
-                        <goals>deploy</goals>
-                        <tagNameFormat>v@{project.version}</tagNameFormat>
-                    </configuration>
-                </plugin>
             </plugins>
         </pluginManagement>
     </build>
-
-    <profiles>
-        <profile>
-            <id>coverage</id>
-            <activation>
-                <property>
-                    <name>!skipTests</name>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.12</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-agent</id>
-                                <goals>
-                                    <goal>prepare-agent</goal>
-                                </goals>
-                                <configuration>
-                                    <!-- Write to a shared location for aggregation -->
-                                    <destFile>${session.executionRootDirectory}/target/jacoco.exec</destFile>
-                                    <propertyName>surefireArgLine</propertyName>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-            <reporting>
-                <plugins>
-                    <plugin>
-                        <groupId>org.jacoco</groupId>
-                        <artifactId>jacoco-maven-plugin</artifactId>
-                        <version>0.8.12</version>
-                        <reportSets>
-                            <reportSet>
-                                <reports>
-                                    <!-- Include only individual report in root -->
-                                    <report>report</report>
-                                </reports>
-                            </reportSet>
-                        </reportSets>
-                    </plugin>
-                </plugins>
-            </reporting>
-        </profile>
-    </profiles>
 </project>

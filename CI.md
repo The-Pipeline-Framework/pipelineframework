@@ -1,106 +1,50 @@
-# Builds and Continuous Integration (CI)
-The project uses three independent workflows:
+# Builds and Continuous Integration
 
-1. **build.yml** — PR/non‑main builds
-    - Fast build
-    - Unit tests only
-    - No Jib, no native, no integration tests
+This repository coordinates released TPF components. It publishes the tested component BOM and runs the
+cross-repository compatibility tests; implementation builds belong to their standalone repositories.
 
-2. **full-tests.yml** — push to `main`
-    - Full clean build
-    - Jib Docker images
-    - Integration tests
-    - Native builds (matrix)
+This CI is a released-artifact composition gate, not a replacement for the owner-local runtime, Connector,
+example, reference-implementation or application suites. See [Testing Guidelines](TESTING.md) and the
+[repository-split test assessment](docs/evolve/repository-split-migration.md).
 
-3. **publish.yml** — `v*` tags
-    - Release build
-    - Deploys to Maven Central
-    - No tests (already validated in main)
+## Workflows
 
-## 📛 CI Status
-[![Build (PR)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/build.yml/badge.svg)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/build.yml)
-[![Full Tests (Main)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/full-tests.yml/badge.svg)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/full-tests.yml)
-[![Release](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/publish.yml/badge.svg)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/publish.yml)
+1. **build.yml** — pull-request validation
+   - builds the canonical two-module coordination reactor;
+   - runs the transport compatibility unit tests;
+   - verifies a fresh checkout against released snapshot artifacts.
+2. **full-tests.yml** — `main` validation
+   - installs the coordination parent and BOM;
+   - runs the complete compatibility-test module.
+3. **publish-snapshots.yml** — snapshot publication
+   - verifies every BOM-managed coordinate against configured snapshot repositories;
+   - publishes only artifacts declared public in `framework/public-artifacts.json`.
+4. **publish.yml** — tagged Central publication
+   - performs the same publication-contract verification;
+   - signs and publishes the coordination parent and product BOM.
+5. **docs.yml** — documentation build and link validation.
 
-## Container-backed CI caching
+## Local gates
 
-The container-backed CSV Payments, Restaurant Approval, and Search E2E lanes
-cache the expensive inputs that are safe to reuse:
+Use the worktree-local Maven repository on every invocation:
 
-- Jib layer cache, scoped by runner OS and architecture.
-- Testcontainers and Compose base-image sets, keyed by their exact image list.
-- Built topology images for the CSV, Restaurant, and Search stacks, keyed by
-  their relevant source inputs. CSV and Restaurant bundles also include the
-  generated release artifact needed to register the pipeline after a cache hit.
-
-The first run that encounters a new cache key still pulls or builds the image,
-then saves it for later jobs. Re-runs of the same PR reuse its cache. Caches
-warmed on `main` are also available to later PRs when their exact keys match;
-topology-image caches intentionally miss when their application or framework
-inputs change.
-
-Container bootstrap scripts use quieter pull output only in CI. Local runs keep
-their normal Docker output for diagnosis. The shared CI setup does not set a
-global Java logging-manager option: Quarkus test JVMs configure JBoss LogManager
-through their Maven test configuration, while Maven bootstrap JVMs must not try
-to load it.
-
-## 🛠️ Build Flags Cheat Sheet
-
-- `-DskipITs` — Skip integration tests
-- `-DskipNative=true` — Skip native builds
-- `-Dquarkus.container-image.build=false` — Skips building Jib image
-- `-Pcoverage` — Enable coverage for unit tests only
-- `-Pcentral-publishing` — Release mode for Maven Central deploy
-- Avoid mixing `skipTests` and `skipITs`
-- Quarkus extensions require full reactor builds (`clean install`)
-
-## CI Architecture Diagram
-```mermaid
-flowchart TD
-
-   subgraph Release_Flow["Tag v* — Publishing"]
-      D1[Checkout] --> D2[Maven Clean Install]
-      D2 --> D3[Release Build -Pcentral-publishing]
-      D3 --> D4[Deploy to Maven Central]
-      D4 --> D5[GitHub Release]
-   end
-
-   subgraph Main_Flow["Push to Main"]
-      B1[Checkout] --> B2[Maven Clean Install]
-      B2 --> B3[Build Jib Images]
-      B3 --> B4[Integration Tests - Failsafe]
-
-      B4 --> C1_Orch[Native Build - Orchestrator]
-      B4 --> C2_In[Native Build - Input Service]
-      B4 --> C3_Proc[Native Build - Processing Service]
-      B4 --> C4_Stat[Native Build - Status Service]
-      B4 --> C5_Out[Native Build - Output Service]
-   end
-
-   subgraph PR_Flow["PR / Non-Main Branches"]
-      A1[Checkout] --> A2[Maven Clean Install]
-      A2 --> A3[Run Unit Tests - Surefire]
-      A3 --> A4[Skip ITs and Native]
-      A4 --> A5[Done]
-   end
+```bash
+./mvnw verify -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw -f framework/pom.xml verify -Dmaven.repo.local="$PWD/.m2/repository"
+node scripts/verify-framework-publication.mjs "$PWD/.m2/repository"
 ```
 
-## 🧩 CLI Flags — TL;DR
+`central-publishing` is the only Maven profile. It attaches and signs publishable artifacts; it does not select a
+different source universe, module graph, or build topology.
 
-| Flag                                    | Meaning                                   | When to Use               |
-|-----------------------------------------|-------------------------------------------|---------------------------|
-| `-DskipITs`                             | Skips `*IT.java`                          | PRs, fast builds          |
-| `-DskipNative=true`                     | Skips native images                       | Everything except main    |
-| `-Dquarkus.container-image.build=false` | Skips Jib images (but uses Docker builds) | Full tests on main        |
-| `-Pcoverage`                            | Run coverage on unit tests                | PRs, quality gates        |
-| `-Pcentral-publishing`                  | Release signing + GPG + deploy            | Only on tags              |
-| `-DskipTests`                           | Skips **all** tests                       | ⚠️ Avoid — rarely correct |
-| `-Dquarkus.native.enabled=true`         | Enables native build                      | Native matrix stage       |
+## Cross-repository evidence
 
-### Golden Rules
-- ❌ **Never** mix `skipTests` + `skipITs`.
-- ✔ Always run framework builds with:
-  `mvn clean install`
-- ✔ Examples (CSV Payments) may be built individually.
-- ✔ Native builds must run after integration tests.
+The coordination reactor proves the BOM-managed compiler/runtime/Connector seam. It does not currently trigger the
+downstream repositories after every snapshot publication. Until the compatibility train tracked by
+[#930](https://github.com/The-Pipeline-Framework/pipelineframework/issues/930) is automated, boundary-changing
+snapshot releases require an explicit downstream run in dependency order. Do not describe a green coordination
+build as full E2E coverage.
+
+Source coverage likewise belongs to the standalone source owners. The former monorepo coverage workflow is not a
+valid coordination-repository gate; [#933](https://github.com/The-Pipeline-Framework/pipelineframework/issues/933)
+tracks owner-local replacement coverage.

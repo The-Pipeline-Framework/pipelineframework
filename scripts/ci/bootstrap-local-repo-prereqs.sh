@@ -23,17 +23,17 @@ mvn() {
   fi
 }
 
-install_framework_plugins_and_connectors() {
+install_coordination_artifacts() {
   mvn -N install -Dgpg.skip
   mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests -Dgpg.skip
 }
 
 case "$SCOPE" in
   framework)
-    install_framework_plugins_and_connectors
+    install_coordination_artifacts
     ;;
   all)
-    install_framework_plugins_and_connectors
+    install_coordination_artifacts
     ;;
   *)
     echo "Unknown scope '$SCOPE'. Use one of: framework, all." >&2
