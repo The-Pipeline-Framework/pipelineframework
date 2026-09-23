@@ -92,8 +92,9 @@ current standalone repositories by content hash and filename:
 
 The missing sources are:
 
-1. `CurrentAuthoredSurfacesGuardTest` — its docs/web UI and examples responsibilities now need separate owner-local
-   guards ([#931](https://github.com/The-Pipeline-Framework/pipelineframework/issues/931));
+1. `CurrentAuthoredSurfacesGuardTest` — its docs/web UI and examples responsibilities now have separate owner-local
+   guards. `pipelineframework` guards current documentation and the web UI, while `pipelineframework-examples`
+   guards authored YAML and Java ([#931](https://github.com/The-Pipeline-Framework/pipelineframework/issues/931));
 2. `CsvPaymentsTelemetryDashboardContractTest`;
 3. its test-only `ObservabilityObligations` model — both belong in `csv-kafka-payments`
    ([#929](https://github.com/The-Pipeline-Framework/pipelineframework/issues/929)).
