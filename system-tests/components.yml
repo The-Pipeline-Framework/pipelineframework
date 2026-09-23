@@ -43,16 +43,12 @@
       "repository": "The-Pipeline-Framework/pipelineframework-runtime",
       "kind": "maven",
       "allowedCoordinates": [
-        "org.pipelineframework:cache-plugin:jar",
-        "org.pipelineframework:framework-foundational-plugins:pom",
-        "org.pipelineframework:framework-plugins:pom",
-        "org.pipelineframework:persistence-plugin:jar",
-        "org.pipelineframework:pipelineframework-deployment:jar",
-        "org.pipelineframework:pipelineframework-runtime-parent:pom",
-        "org.pipelineframework:pipelineframework-runtime-spring:jar",
-        "org.pipelineframework:pipelineframework-spring-blocking-smoke-tests:jar",
-        "org.pipelineframework:pipelineframework-spring-smoke-tests:jar",
-        "org.pipelineframework:pipelineframework:jar",
+      "org.pipelineframework:cache-plugin:jar",
+      "org.pipelineframework:persistence-plugin:jar",
+      "org.pipelineframework:pipelineframework-deployment:jar",
+      "org.pipelineframework:pipelineframework-runtime-parent:pom",
+      "org.pipelineframework:pipelineframework-runtime-spring:jar",
+      "org.pipelineframework:pipelineframework:jar",
         "org.pipelineframework:repository-plugin:jar"
       ],
       "consumerVersionProperties": {

@@ -44,8 +44,11 @@ for (const [component, property] of Object.entries(versionProperties)) {
 }
 versionArguments.sort();
 const [command, ...arguments_] = suite.command;
-const mavenArguments = [...versionArguments, `-Dmaven.repo.local=${values.mavenRepository}`].join(' ');
-const child = spawn(command, arguments_, {
+const injectedMavenArguments = [...versionArguments, `-Dmaven.repo.local=${values.mavenRepository}`];
+const mavenArguments = injectedMavenArguments.join(' ');
+const directMavenCommand = /(?:^|[\\/])mvnw(?:\.cmd)?$/.test(command);
+const commandArguments = directMavenCommand ? [...arguments_, ...injectedMavenArguments] : arguments_;
+const child = spawn(command, commandArguments, {
   cwd: values.cwd,
   env: {
     ...process.env,

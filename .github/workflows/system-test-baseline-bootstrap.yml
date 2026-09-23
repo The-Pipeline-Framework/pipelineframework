@@ -65,7 +65,7 @@ jobs:
             exit 1
           fi
           oras push --format json \
-            "$image:bootstrap-${{ github.run_id }}" \
+            "$image:bootstrap-${{ github.run_id }}-${{ github.run_attempt }}" \
             baseline.json:application/vnd.tpf.system-test-baseline.v1+json \
             > baseline-oci.json
           digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' baseline-oci.json)"

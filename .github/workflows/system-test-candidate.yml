@@ -18,9 +18,9 @@ jobs:
       contents: read
     outputs:
       component: ${{ steps.event.outputs.component }}
-      repository: ${{ steps.event.outputs.repository }}
-      repository_name: ${{ steps.event.outputs.repository_name }}
-      source_sha: ${{ steps.event.outputs.source_sha }}
+      repository: ${{ steps.target.outputs.repository }}
+      repository_name: ${{ steps.target.outputs.repository_name }}
+      source_sha: ${{ steps.target.outputs.source_sha }}
       pull_request_number: ${{ steps.event.outputs.pull_request_number }}
       publication_run_id: ${{ steps.event.outputs.publication_run_id }}
       candidate_version: ${{ steps.event.outputs.candidate_version }}
@@ -31,12 +31,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Write and validate dispatch event
-        id: event
+      - name: Write dispatch event
         env:
           EVENT_JSON: ${{ toJson(github.event.client_payload) }}
+        run: printf '%s\n' "$EVENT_JSON" > event.json
+
+      - name: Extract trusted status target
+        id: target
         run: |
-          printf '%s\n' "$EVENT_JSON" > event.json
+          node system-tests/scripts/extract-status-target.mjs \
+            --components system-tests/components.yml \
+            --event event.json > status-target.json
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' status-target.json >> "$GITHUB_OUTPUT"
+
+      - name: Validate complete dispatch event
+        id: event
+        run: |
           node system-tests/scripts/validate-event.mjs \
             --components system-tests/components.yml \
             --event event.json > event-summary.json
@@ -52,6 +62,7 @@ jobs:
 
   pending:
     name: Post pending status
+    if: always() && needs.intake.outputs.repository != '' && needs.intake.outputs.source_sha != ''
     needs: intake
     runs-on: ubuntu-latest
     permissions:
@@ -119,12 +130,14 @@ jobs:
           SOURCE_RUN_ID: ${{ needs.intake.outputs.publication_run_id }}
           PULL_REQUEST_NUMBER: ${{ needs.intake.outputs.pull_request_number }}
         run: |
-          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > intake/workflow-run.json
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > intake/publication-workflow-run.json
           gh run download "$SOURCE_RUN_ID" \
             --repo "$SOURCE_REPOSITORY" \
             --name tpf-candidate-manifest \
             --dir intake/candidate
           test -f intake/candidate/candidate-manifest.json
+          build_run_id="$(jq -er '.provenance.build.runId | select(type == "number" and . > 0)' intake/candidate/candidate-manifest.json)"
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$build_run_id" > intake/build-workflow-run.json
           if [ -n "$PULL_REQUEST_NUMBER" ]; then
             gh api "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" > intake/pull-request.json
             gh api --paginate "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/files?per_page=100" \
@@ -141,7 +154,8 @@ jobs:
             --components system-tests/components.yml
             --event intake/event.json
             --manifest intake/candidate/candidate-manifest.json
-            --run intake/workflow-run.json
+            --publicationRun intake/publication-workflow-run.json
+            --buildRun intake/build-workflow-run.json
           )
           if [ -n "$PULL_REQUEST_NUMBER" ]; then
             args+=(--pullRequest intake/pull-request.json)
@@ -166,7 +180,7 @@ jobs:
             oras push --format json \
               --annotation "org.opencontainers.image.revision=$SOURCE_SHA" \
               --annotation "org.pipelineframework.component=$COMPONENT" \
-              "$image:$COMPONENT-$SOURCE_SHA-$SOURCE_RUN_ID" \
+              "$image:$COMPONENT-$SOURCE_SHA-$SOURCE_RUN_ID-${{ github.run_id }}-${{ github.run_attempt }}" \
               candidate-manifest.json:application/vnd.tpf.candidate-manifest.v1+json
           ) > intake/candidate-oci.json
           digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' intake/candidate-oci.json)"
@@ -240,6 +254,7 @@ jobs:
             --resolvedSet resolved/resolved-set.json \
             --component "$COMPONENT" \
             --changedPaths intake/changed-paths.txt \
+            --hints "$(jq -r '.suiteHints // [] | join(",")' intake/candidate/candidate-manifest.json)" \
             --output resolved/suite-matrix.json
           cp intake/event.json resolved/event.json
           cp resolved/baseline/baseline.json resolved/baseline.json
@@ -431,10 +446,38 @@ jobs:
           name: tpf-resolved-system-test-set
           path: resolved
 
+      - name: Create source-repository read token
+        id: source-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.intake.outputs.repository_name }}
+          permission-contents: read
+
+      - name: Confirm candidate is still the default-branch head
+        id: current-main
+        env:
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+        run: |
+          default_branch="$(gh api "repos/$SOURCE_REPOSITORY" --jq '.default_branch')"
+          current_sha="$(gh api "repos/$SOURCE_REPOSITORY/commits/$default_branch" --jq '.sha')"
+          if [ "$current_sha" = "$SOURCE_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'current=false' >> "$GITHUB_OUTPUT"
+            echo "Candidate $SOURCE_SHA is green but no longer the default-branch head; skipping baseline promotion."
+          fi
+
       - name: Install ORAS
+        if: steps.current-main.outputs.current == 'true'
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       - name: Compare and swap baseline
+        if: steps.current-main.outputs.current == 'true'
         id: cas
         env:
           GHCR_TOKEN: ${{ github.token }}
@@ -459,7 +502,7 @@ jobs:
           (
             cd resolved/promotion
             oras push --format json \
-              "$image:revision-$revision-${{ github.run_id }}" \
+              "$image:revision-$revision-${{ github.run_id }}-${{ github.run_attempt }}" \
               baseline.json:application/vnd.tpf.system-test-baseline.v1+json
           ) > resolved/promoted-oci.json
           promoted="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' resolved/promoted-oci.json)"
@@ -473,7 +516,7 @@ jobs:
     needs: [promote]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Download original event
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
@@ -481,14 +524,24 @@ jobs:
           name: tpf-candidate-event
           path: retry
 
+      - name: Create coordination-repository dispatch token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: pipelineframework
+          permission-contents: write
+
       - name: Dispatch against the winning baseline
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: jq -n --slurpfile payload retry/event.json '{event_type:"tpf-candidate-v1", client_payload:$payload[0]}' | gh api --method POST "repos/${{ github.repository }}/dispatches" --input -
 
   report:
     name: Report aggregate status
-    if: always() && needs.intake.result == 'success' && needs.pending.result == 'success'
+    if: always() && needs.pending.result == 'success'
     needs: [intake, pending, retrieve, baseline, materialize, run-suite, promote, retry-promotion]
     runs-on: ubuntu-latest
     permissions:

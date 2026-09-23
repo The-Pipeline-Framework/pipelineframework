@@ -4,7 +4,7 @@
   "title": "TPF candidate manifest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "repository", "component", "sourceSha", "pullRequestNumber", "candidateVersion", "workflow", "mavenArtifacts", "images"],
+  "required": ["schemaVersion", "repository", "component", "sourceSha", "pullRequestNumber", "candidateVersion", "provenance", "mavenArtifacts", "images"],
   "properties": {
     "schemaVersion": {"const": 1},
     "repository": {"type": "string"},
@@ -12,15 +12,18 @@
     "sourceSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "pullRequestNumber": {"type": ["integer", "null"], "minimum": 1},
     "candidateVersion": {"type": "string"},
-    "workflow": {
+    "suiteHints": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "runId", "runAttempt", "workflowRef"],
+      "required": ["build", "publication"],
       "properties": {
-        "repository": {"type": "string"},
-        "runId": {"type": "integer", "minimum": 1},
-        "runAttempt": {"type": "integer", "minimum": 1},
-        "workflowRef": {"type": "string", "minLength": 1}
+        "build": {"$ref": "#/$defs/workflowRun"},
+        "publication": {"$ref": "#/$defs/workflowRun"}
       }
     },
     "mavenArtifacts": {
@@ -60,6 +63,20 @@
           "repository": {"type": "string", "pattern": "^ghcr\\.io/"},
           "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
         }
+      }
+    }
+  },
+  "$defs": {
+    "workflowRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "runId", "runAttempt", "workflowPath", "event"],
+      "properties": {
+        "repository": {"type": "string"},
+        "runId": {"type": "integer", "minimum": 1},
+        "runAttempt": {"type": "integer", "minimum": 1},
+        "workflowPath": {"type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml$"},
+        "event": {"enum": ["pull_request", "push", "workflow_run"]}
       }
     }
   }

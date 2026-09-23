@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "suites": {
     "compatibility": {
-      "command": ["./mvnw", "-B", "-f", "framework/pom.xml", "clean", "verify", "--no-transfer-progress"],
+      "command": ["bash", "system-tests/scripts/run-coordination-suite.sh", "compatibility"],
       "timeoutMinutes": 45
     }
   }

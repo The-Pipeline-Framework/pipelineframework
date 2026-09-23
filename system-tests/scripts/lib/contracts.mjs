@@ -196,8 +196,8 @@ export function validateCandidateEvent(event, config) {
 export function validateCandidateManifest(manifest, config) {
   exactKeys(
     manifest,
-    ['schemaVersion', 'repository', 'component', 'sourceSha', 'pullRequestNumber', 'candidateVersion', 'workflow', 'mavenArtifacts', 'images'],
-    ['schemaVersion', 'repository', 'component', 'sourceSha', 'pullRequestNumber', 'candidateVersion', 'workflow', 'mavenArtifacts', 'images'],
+    ['schemaVersion', 'repository', 'component', 'sourceSha', 'pullRequestNumber', 'candidateVersion', 'suiteHints', 'provenance', 'mavenArtifacts', 'images'],
+    ['schemaVersion', 'repository', 'component', 'sourceSha', 'pullRequestNumber', 'candidateVersion', 'provenance', 'mavenArtifacts', 'images'],
     'candidate manifest'
   );
   if (manifest.schemaVersion !== 1) fail('candidate manifest schemaVersion must be 1');
@@ -214,11 +214,18 @@ export function validateCandidateManifest(manifest, config) {
       fail('candidate manifest version does not match pullRequestNumber');
     }
   }
-  exactKeys(manifest.workflow, ['repository', 'runId', 'runAttempt', 'workflowRef'], ['repository', 'runId', 'runAttempt', 'workflowRef'], 'candidate manifest workflow');
-  if (manifest.workflow.repository !== manifest.repository) fail('candidate manifest workflow.repository must equal repository');
-  integer(manifest.workflow.runId, 'candidate manifest workflow.runId');
-  integer(manifest.workflow.runAttempt, 'candidate manifest workflow.runAttempt');
-  nonBlank(manifest.workflow.workflowRef, 'candidate manifest workflow.workflowRef');
+  exactKeys(manifest.provenance, ['build', 'publication'], ['build', 'publication'], 'candidate manifest provenance');
+  validateWorkflowProvenance(manifest.provenance.build, manifest.repository, 'candidate manifest provenance.build');
+  validateWorkflowProvenance(manifest.provenance.publication, manifest.repository, 'candidate manifest provenance.publication');
+  const expectedBuildEvent = manifest.pullRequestNumber === null ? 'push' : 'pull_request';
+  if (manifest.provenance.build.event !== expectedBuildEvent) fail(`candidate build provenance event must be ${expectedBuildEvent}`);
+  if (manifest.provenance.build.workflowPath !== '.github/workflows/tpf-candidate-build.yml') fail('candidate build did not originate from the trusted build workflow');
+  if (manifest.provenance.publication.event !== 'workflow_run') fail('candidate publisher provenance event must be workflow_run');
+  if (manifest.provenance.publication.workflowPath !== '.github/workflows/tpf-candidate-publish.yml') fail('candidate did not originate from the trusted publisher workflow');
+  const suiteHints = manifest.suiteHints ?? [];
+  if (!Array.isArray(suiteHints)) fail('candidate manifest suiteHints must be an array');
+  suiteHints.forEach((hint, index) => nonBlank(hint, `candidate manifest suiteHints[${index}]`));
+  unique(suiteHints, 'candidate manifest suiteHints');
   if (!Array.isArray(manifest.mavenArtifacts)) fail('candidate manifest mavenArtifacts must be an array');
   if (!Array.isArray(manifest.images)) fail('candidate manifest images must be an array');
   const componentConfig = config.components[component];
@@ -260,6 +267,15 @@ export function validateCandidateManifest(manifest, config) {
   return manifest;
 }
 
+function validateWorkflowProvenance(provenance, repository, name) {
+  exactKeys(provenance, ['repository', 'runId', 'runAttempt', 'workflowPath', 'event'], ['repository', 'runId', 'runAttempt', 'workflowPath', 'event'], name);
+  if (provenance.repository !== repository) fail(`${name}.repository must equal candidate repository`);
+  integer(provenance.runId, `${name}.runId`);
+  integer(provenance.runAttempt, `${name}.runAttempt`);
+  if (!/^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/.test(provenance.workflowPath)) fail(`${name}.workflowPath is invalid`);
+  if (!['pull_request', 'push', 'workflow_run'].includes(provenance.event)) fail(`${name}.event is invalid`);
+}
+
 export function validateEventAgainstManifest(event, manifest, manifestSha256) {
   const comparisons = [
     ['source_repository', 'repository'],
@@ -267,7 +283,7 @@ export function validateEventAgainstManifest(event, manifest, manifestSha256) {
     ['pull_request_number', 'pullRequestNumber'],
     ['component', 'component'],
     ['candidate_version', 'candidateVersion'],
-    ['publication_run_id', ['workflow', 'runId']]
+    ['publication_run_id', ['provenance', 'publication', 'runId']]
   ];
   for (const [eventKey, manifestPath] of comparisons) {
     const manifestValue = Array.isArray(manifestPath)
@@ -278,23 +294,39 @@ export function validateEventAgainstManifest(event, manifest, manifestSha256) {
   if (event.manifest_sha256 !== manifestSha256) fail('candidate manifest checksum does not match dispatch event');
 }
 
-export function validateGitHubProvenance(event, workflowRun, pullRequest) {
-  object(workflowRun, 'workflow run');
-  if (workflowRun.id !== event.publication_run_id) fail('workflow run ID does not match event');
-  if (workflowRun.head_sha !== event.source_sha) fail('workflow run head SHA does not match event');
-  if (workflowRun.status !== 'completed' || workflowRun.conclusion !== 'success') fail('publication workflow run is not successful and complete');
-  if (workflowRun.path !== '.github/workflows/tpf-candidate-publish.yml') fail('candidate did not originate from the trusted publisher workflow');
-  if (workflowRun.event !== 'workflow_run') fail('candidate publisher must be triggered by workflow_run');
-  const workflowRepository = workflowRun.repository?.full_name ?? workflowRun.head_repository?.full_name;
-  if (workflowRepository !== event.source_repository) fail('workflow run repository does not match event');
+export function validateGitHubProvenance(event, manifest, publicationRun, buildRun, pullRequest) {
+  validateRunAgainstManifest(publicationRun, manifest.provenance.publication, 'publication');
+  validateRunAgainstManifest(buildRun, manifest.provenance.build, 'build');
+  if (publicationRun.id !== event.publication_run_id) fail('publication workflow run ID does not match event');
+  if (publicationRun.path !== '.github/workflows/tpf-candidate-publish.yml') fail('candidate did not originate from the trusted publisher workflow');
+  if (publicationRun.event !== 'workflow_run') fail('candidate publisher must be triggered by workflow_run');
+  if (publicationRun.head_branch !== publicationRun.repository?.default_branch) fail('candidate publisher did not run from the repository default branch');
+  if (buildRun.path !== '.github/workflows/tpf-candidate-build.yml') fail('candidate did not originate from the trusted build workflow');
   if (event.pull_request_number !== null) {
     object(pullRequest, 'pull request');
     if (pullRequest.number !== event.pull_request_number) fail('pull request number does not match event');
     if (pullRequest.head?.sha !== event.source_sha) fail('candidate source SHA is stale relative to the current pull request head');
     if (pullRequest.base?.repo?.full_name !== event.source_repository) fail('pull request base repository does not match event');
-  } else if (workflowRun.head_branch !== workflowRun.repository?.default_branch) {
-    fail('main candidate workflow did not run from the repository default branch');
+    if (buildRun.event !== 'pull_request') fail('PR candidate build must be triggered by pull_request');
+    const associatedPullRequest = buildRun.pull_requests?.find((candidate) => candidate.number === event.pull_request_number);
+    if (associatedPullRequest === undefined) fail('build workflow run is not associated with the candidate pull request');
+    if (associatedPullRequest.head?.sha !== event.source_sha) fail('build workflow run pull-request head does not match candidate source SHA');
+  } else {
+    if (buildRun.event !== 'push') fail('main candidate build must be triggered by push');
+    if (buildRun.head_sha !== event.source_sha) fail('main candidate build head SHA does not match event');
+    if (buildRun.head_branch !== buildRun.repository?.default_branch) fail('main candidate build did not run from the repository default branch');
   }
+}
+
+function validateRunAgainstManifest(run, provenance, label) {
+  object(run, `${label} workflow run`);
+  if (run.id !== provenance.runId) fail(`${label} workflow run ID does not match manifest`);
+  if (run.run_attempt !== provenance.runAttempt) fail(`${label} workflow run attempt does not match manifest`);
+  if (run.path !== provenance.workflowPath) fail(`${label} workflow path does not match manifest`);
+  if (run.event !== provenance.event) fail(`${label} workflow event does not match manifest`);
+  if (run.status !== 'completed' || run.conclusion !== 'success') fail(`${label} workflow run is not successful and complete`);
+  const workflowRepository = run.repository?.full_name ?? run.head_repository?.full_name;
+  if (workflowRepository !== provenance.repository) fail(`${label} workflow run repository does not match manifest`);
 }
 
 function immutableMavenVersion(value, name) {
@@ -419,7 +451,7 @@ export function overlayBaseline(baseline, baselineDigest, candidates, candidateD
       };
     }
     for (const image of candidate.images) result.images[image.repository] = image.digest;
-    overlays.push({component: candidate.component, repository: candidate.repository, sha: candidate.sourceSha, candidateVersion: candidate.candidateVersion, manifestDigest: digest});
+    overlays.push({component: candidate.component, repository: candidate.repository, sha: candidate.sourceSha, candidateVersion: candidate.candidateVersion, manifestDigest: digest, suiteHints: [...(candidate.suiteHints ?? [])]});
   });
   validateBaseline(result, config);
   return {

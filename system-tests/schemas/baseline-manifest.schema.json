@@ -12,12 +12,26 @@
     "components": {
       "type": "object",
       "required": ["contracts", "compiler", "runtime", "connectors", "blocks", "expansions"],
-      "additionalProperties": {"$ref": "#/$defs/mavenComponent"}
+      "additionalProperties": false,
+      "properties": {
+        "contracts": {"$ref": "#/$defs/mavenComponent"},
+        "compiler": {"$ref": "#/$defs/mavenComponent"},
+        "runtime": {"$ref": "#/$defs/mavenComponent"},
+        "connectors": {"$ref": "#/$defs/mavenComponent"},
+        "blocks": {"$ref": "#/$defs/mavenComponent"},
+        "expansions": {"$ref": "#/$defs/mavenComponent"}
+      }
     },
     "testHarnesses": {
       "type": "object",
       "required": ["examples", "references", "csvPayments", "ragTurnkey"],
-      "additionalProperties": {"$ref": "#/$defs/sourceComponent"}
+      "additionalProperties": false,
+      "properties": {
+        "examples": {"$ref": "#/$defs/sourceComponent"},
+        "references": {"$ref": "#/$defs/sourceComponent"},
+        "csvPayments": {"$ref": "#/$defs/sourceComponent"},
+        "ragTurnkey": {"$ref": "#/$defs/sourceComponent"}
+      }
     },
     "images": {
       "type": "object",
@@ -35,17 +49,15 @@
       }
     },
     "mavenComponent": {
-      "allOf": [
-        {"$ref": "#/$defs/sourceComponent"},
-        {
-          "type": "object",
-          "required": ["mavenVersion", "manifestDigest"],
-          "properties": {
-            "mavenVersion": {"type": "string", "minLength": 1},
-            "manifestDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
-          }
-        }
-      ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "sha", "mavenVersion", "manifestDigest"],
+      "properties": {
+        "repository": {"type": "string"},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "mavenVersion": {"type": "string", "minLength": 1},
+        "manifestDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
     }
   }
 }

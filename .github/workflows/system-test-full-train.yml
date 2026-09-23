@@ -12,6 +12,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve immutable baseline
+    if: github.event_name == 'workflow_dispatch' || vars.SYSTEM_TEST_FULL_TRAIN_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

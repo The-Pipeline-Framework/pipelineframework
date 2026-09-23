@@ -26,7 +26,9 @@ if (compatibilitySet.schemaVersion !== 1 || !Array.isArray(compatibilitySet.requ
 }
 const selected = new Set();
 for (const request of compatibilitySet.requests) {
-  for (const suite of selectSuites(request.component, policy)) selected.add(suite);
+  const candidate = resolvedSet.candidates.find((value) => value.component === request.component);
+  if (candidate === undefined) throw new Error(`resolved set is missing candidate ${request.component}`);
+  for (const suite of selectSuites(request.component, policy, [], candidate.suiteHints ?? [])) selected.add(suite);
 }
 const matrix = suiteMatrix([...selected].sort(), policy, resolvedSet, config);
 await writeFile(values.output, `${JSON.stringify({include: matrix}, null, 2)}\n`);

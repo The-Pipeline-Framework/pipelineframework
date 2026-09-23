@@ -165,14 +165,26 @@ jobs:
           while IFS=$'\t' read -r component repository number sha; do
             directory="candidates/$component"
             mkdir -p "$directory"
-            gh api "repos/$repository/actions/workflows/tpf-candidate-publish.yml/runs?head_sha=$sha&status=completed&per_page=20" \
+            gh api "repos/$repository/actions/workflows/tpf-candidate-publish.yml/runs?event=workflow_run&status=completed&per_page=50" \
               > "$directory/runs.json"
-            run_id="$(jq -er --arg sha "$sha" '[.workflow_runs[] | select(.conclusion == "success" and .head_sha == $sha)][0].id' "$directory/runs.json")"
-            gh run download "$run_id" --repo "$repository" --name tpf-candidate-event --dir "$directory/event"
+            run_id=''
+            while read -r candidate_run_id; do
+              rm -rf "$directory/event"
+              if gh run download "$candidate_run_id" --repo "$repository" --name tpf-candidate-event --dir "$directory/event" 2>/dev/null \
+                && jq -e --arg repository "$repository" --arg component "$component" --arg sha "$sha" --argjson number "$number" \
+                  '.source_repository == $repository and .component == $component and .source_sha == $sha and .pull_request_number == $number' \
+                  "$directory/event/event.json" > /dev/null; then
+                run_id="$candidate_run_id"
+                break
+              fi
+            done < <(jq -r '.workflow_runs[] | select(.conclusion == "success") | .id' "$directory/runs.json")
+            test -n "$run_id"
             gh run download "$run_id" --repo "$repository" --name tpf-candidate-manifest --dir "$directory/manifest"
             test -f "$directory/event/event.json"
             test -f "$directory/manifest/candidate-manifest.json"
-            gh api "repos/$repository/actions/runs/$run_id" > "$directory/workflow-run.json"
+            gh api "repos/$repository/actions/runs/$run_id" > "$directory/publication-workflow-run.json"
+            build_run_id="$(jq -er '.provenance.build.runId | select(type == "number" and . > 0)' "$directory/manifest/candidate-manifest.json")"
+            gh api "repos/$repository/actions/runs/$build_run_id" > "$directory/build-workflow-run.json"
             gh api "repos/$repository/pulls/$number" > "$directory/pull-request.json"
             jq -e --arg repository "$repository" --arg component "$component" --arg sha "$sha" --argjson number "$number" --arg set "$SET_ID" \
               '.source_repository == $repository and .component == $component and .source_sha == $sha and .pull_request_number == $number and (.compatibility_set_id == null or .compatibility_set_id == $set)' \
@@ -181,7 +193,8 @@ jobs:
               --components system-tests/components.yml \
               --event "$directory/event/event.json" \
               --manifest "$directory/manifest/candidate-manifest.json" \
-              --run "$directory/workflow-run.json" \
+              --publicationRun "$directory/publication-workflow-run.json" \
+              --buildRun "$directory/build-workflow-run.json" \
               --pullRequest "$directory/pull-request.json" \
               > "$directory/validated-candidate.json"
             (
@@ -189,7 +202,7 @@ jobs:
               oras push --format json \
                 --annotation "org.opencontainers.image.revision=$sha" \
                 --annotation "org.pipelineframework.component=$component" \
-                "$image:$component-$sha-$run_id" \
+                "$image:$component-$sha-$run_id-${{ github.run_id }}-${{ github.run_attempt }}" \
                 candidate-manifest.json:application/vnd.tpf.candidate-manifest.v1+json
             ) > "$directory/candidate-oci.json"
             digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' "$directory/candidate-oci.json")"

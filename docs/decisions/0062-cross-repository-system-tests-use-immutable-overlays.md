@@ -27,14 +27,16 @@ The coordination repository owns suite policy. A publisher may request additiona
 centrally required suite. Test commands remain owned by the repository that owns the behaviour and are executed at
 the exact source SHA recorded in the resolved set.
 
-Privileged intake jobs validate event identity, the current pull-request head, workflow provenance, manifest
-checksums and the repository/coordinate allowlist. They hydrate an isolated Maven repository and remove all package
+Privileged intake jobs validate event identity, the current pull-request head, both the unprivileged build run and
+the trusted default-branch publisher run, manifest checksums and the repository/coordinate allowlist. They hydrate
+an isolated Maven repository and remove all package
 credentials before tests run. Test jobs receive no package, dispatch or commit-status credential. A final trusted
 job reports the fixed `tpf/system-tests` status to every candidate SHA.
 
-Baseline promotion is serialized. A green `main` candidate may replace the `main` baseline tag only when the tag
-still resolves to the digest used by its test run. A compare-and-swap miss starts a new run against the winning
-baseline instead of promoting stale evidence.
+Baseline promotion is serialized. A green `main` candidate may replace the `main` baseline tag only while its SHA is
+still the source repository's default-branch head and the tag still resolves to the digest used by its test run.
+This prevents a slower, superseded build from moving a component backwards. A compare-and-swap miss starts a new
+run against the winning baseline instead of promoting stale evidence.
 
 ## Rationale
 

@@ -41,11 +41,21 @@ function manifest(overrides = {}) {
     sourceSha: sha,
     pullRequestNumber: 42,
     candidateVersion,
-    workflow: {
-      repository: 'The-Pipeline-Framework/pipelineframework-blocks',
-      runId: 123,
-      runAttempt: 1,
-      workflowRef: 'The-Pipeline-Framework/pipelineframework-blocks/.github/workflows/candidate.yml@refs/pull/42/merge'
+    provenance: {
+      build: {
+        repository: 'The-Pipeline-Framework/pipelineframework-blocks',
+        runId: 122,
+        runAttempt: 1,
+        workflowPath: '.github/workflows/tpf-candidate-build.yml',
+        event: 'pull_request'
+      },
+      publication: {
+        repository: 'The-Pipeline-Framework/pipelineframework-blocks',
+        runId: 123,
+        runAttempt: 1,
+        workflowPath: '.github/workflows/tpf-candidate-publish.yml',
+        event: 'workflow_run'
+      }
     },
     mavenArtifacts: config.components.blocks.allowedCoordinates.map((coordinate) => {
       const [groupId, artifactId, packaging] = coordinate.split(':');
@@ -101,6 +111,15 @@ function baseline() {
 test('configuration covers exactly the ten extracted repositories', () => {
   assert.equal(Object.keys(config.components).length, 10);
   assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 10);
+  assert.deepEqual(config.components.runtime.allowedCoordinates, [
+    'org.pipelineframework:cache-plugin:jar',
+    'org.pipelineframework:persistence-plugin:jar',
+    'org.pipelineframework:pipelineframework-deployment:jar',
+    'org.pipelineframework:pipelineframework-runtime-parent:pom',
+    'org.pipelineframework:pipelineframework-runtime-spring:jar',
+    'org.pipelineframework:pipelineframework:jar',
+    'org.pipelineframework:repository-plugin:jar'
+  ]);
 });
 
 test('candidate identity binds PR number and full source SHA', () => {
@@ -117,6 +136,26 @@ test('candidate event rejects unknown repositories and extra properties', () => 
   assert.throws(() => validateCandidateEvent({...event(), suite_hints: []}, config), /unsupported properties/);
 });
 
+test('status target survives a malformed event only for an allowlisted repository and SHA', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tpf-status-target-'));
+  const path = join(directory, 'event.json');
+  await writeFile(path, `${JSON.stringify(event({candidate_version: 'not-a-candidate'}))}\n`);
+  const script = new URL('../scripts/extract-status-target.mjs', import.meta.url);
+  const components = new URL('../components.yml', import.meta.url);
+  const {stdout} = await execFileAsync(process.execPath, [script.pathname, '--components', components.pathname, '--event', path]);
+  assert.deepEqual(JSON.parse(stdout), {
+    repository: event().source_repository,
+    repository_name: 'pipelineframework-blocks',
+    source_sha: sha
+  });
+
+  await writeFile(path, `${JSON.stringify(event({source_repository: 'attacker/repository'}))}\n`);
+  await assert.rejects(
+    execFileAsync(process.execPath, [script.pathname, '--components', components.pathname, '--event', path]),
+    /not an allowed repository/
+  );
+});
+
 test('candidate manifest contains only owned immutable Maven coordinates', () => {
   assert.equal(validateCandidateManifest(manifest(), config).mavenArtifacts.length, config.components.blocks.allowedCoordinates.length);
   const foreign = manifest();
@@ -125,6 +164,19 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   const floating = manifest();
   floating.mavenArtifacts[0].version = '26.9.4-SNAPSHOT';
   assert.throws(() => validateCandidateManifest(floating, config), /must equal candidateVersion/);
+});
+
+test('source-only candidate manifests carry identity and provenance without Maven artifacts', () => {
+  const sourceManifest = manifest({
+    repository: config.components.examples.repository,
+    component: 'examples',
+    mavenArtifacts: []
+  });
+  sourceManifest.provenance.build.repository = sourceManifest.repository;
+  sourceManifest.provenance.publication.repository = sourceManifest.repository;
+  assert.equal(validateCandidateManifest(sourceManifest, config).component, 'examples');
+  sourceManifest.mavenArtifacts = manifest().mavenArtifacts;
+  assert.throws(() => validateCandidateManifest(sourceManifest, config), /source-only candidate manifest/);
 });
 
 test('raw manifest checksum and dispatch values must agree', async () => {
@@ -137,24 +189,75 @@ test('raw manifest checksum and dispatch values must agree', async () => {
   assert.throws(() => validateEventAgainstManifest(event(), manifest(), checksum), /checksum/);
 });
 
-test('GitHub provenance rejects stale PR heads', () => {
-  const run = {
+test('GitHub provenance binds the trusted build and publisher runs', () => {
+  const publicationRun = {
     id: 123,
-    head_sha: sha,
+    run_attempt: 1,
     status: 'completed',
     conclusion: 'success',
     path: '.github/workflows/tpf-candidate-publish.yml',
     event: 'workflow_run',
-    repository: {full_name: event().source_repository}
+    head_branch: 'main',
+    repository: {full_name: event().source_repository, default_branch: 'main'}
+  };
+  const buildRun = {
+    id: 122,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/tpf-candidate-build.yml',
+    event: 'pull_request',
+    repository: {full_name: event().source_repository, default_branch: 'main'},
+    pull_requests: [{number: 42, head: {sha}}]
   };
   const pullRequest = {
     number: 42,
     base: {repo: {full_name: event().source_repository}},
     head: {sha, repo: {full_name: 'contributor/pipelineframework-blocks'}}
   };
-  validateGitHubProvenance(event(), run, pullRequest);
-  assert.throws(() => validateGitHubProvenance(event(), run, {...pullRequest, head: {...pullRequest.head, sha: otherSha}}), /stale/);
-  assert.throws(() => validateGitHubProvenance(event(), {...run, path: '.github/workflows/other.yml'}, pullRequest), /trusted publisher/);
+  validateGitHubProvenance(event(), manifest(), publicationRun, buildRun, pullRequest);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), publicationRun, buildRun, {...pullRequest, head: {...pullRequest.head, sha: otherSha}}), /stale/);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), {...publicationRun, path: '.github/workflows/other.yml'}, buildRun, pullRequest), /workflow path/);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), publicationRun, {...buildRun, pull_requests: []}, pullRequest), /not associated/);
+});
+
+test('main provenance binds the candidate SHA to the default-branch build, not the publisher SHA', () => {
+  const candidateManifest = manifest({
+    pullRequestNumber: null,
+    candidateVersion: '26.9.4-main.abcdef123456'
+  });
+  candidateManifest.provenance.build.event = 'push';
+  const candidateEvent = event({
+    pull_request_number: null,
+    candidate_version: '26.9.4-main.abcdef123456'
+  });
+  const publicationRun = {
+    id: 123,
+    run_attempt: 1,
+    head_sha: otherSha,
+    head_branch: 'main',
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/tpf-candidate-publish.yml',
+    event: 'workflow_run',
+    repository: {full_name: candidateEvent.source_repository, default_branch: 'main'}
+  };
+  const buildRun = {
+    id: 122,
+    run_attempt: 1,
+    head_sha: sha,
+    head_branch: 'main',
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/tpf-candidate-build.yml',
+    event: 'push',
+    repository: {full_name: candidateEvent.source_repository, default_branch: 'main'}
+  };
+  validateGitHubProvenance(candidateEvent, candidateManifest, publicationRun, buildRun, null);
+  assert.throws(
+    () => validateGitHubProvenance(candidateEvent, candidateManifest, publicationRun, {...buildRun, head_sha: otherSha}, null),
+    /build head SHA/
+  );
 });
 
 test('baseline forbids floating Maven versions and container tags', () => {
@@ -172,6 +275,9 @@ test('candidate overlays are deterministic and component-unique', () => {
   const second = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
   assert.equal(canonicalJson(first), canonicalJson(second));
   assert.equal(first.components.blocks.mavenVersion, manifest().candidateVersion);
+  const hinted = overlayBaseline(baseline(), digest, [manifest({suiteHints: ['coordination-compatibility']})], ['c'.repeat(64)], config);
+  assert.deepEqual(hinted.candidates[0].suiteHints, ['coordination-compatibility']);
+  assert.throws(() => validateCandidateManifest(manifest({suiteHints: ['examples-verify', 'examples-verify']}), config), /contains duplicates/);
   assert.throws(() => overlayBaseline(baseline(), digest, [manifest(), manifest()], ['c'.repeat(64), 'd'.repeat(64)], config), /more than one blocks/);
 });
 
@@ -203,6 +309,14 @@ test('checked-in schemas are valid JSON and do not allow candidate-event extras'
   const schema = JSON.parse(await readFile(new URL('schemas/candidate-event.schema.json', root), 'utf8'));
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.required.length, 9);
+  const candidateSchema = JSON.parse(await readFile(new URL('schemas/candidate-manifest.schema.json', root), 'utf8'));
+  assert.equal(candidateSchema.additionalProperties, false);
+  assert.deepEqual(candidateSchema.properties.provenance.required, ['build', 'publication']);
+  assert.equal(candidateSchema.$defs.workflowRun.additionalProperties, false);
+  const baselineSchema = JSON.parse(await readFile(new URL('schemas/baseline-manifest.schema.json', root), 'utf8'));
+  assert.equal(baselineSchema.properties.components.additionalProperties, false);
+  assert.equal(baselineSchema.properties.testHarnesses.additionalProperties, false);
+  assert.equal(baselineSchema.$defs.mavenComponent.additionalProperties, false);
 });
 
 test('compatibility-set PR URLs resolve to unique allowed components', async () => {
