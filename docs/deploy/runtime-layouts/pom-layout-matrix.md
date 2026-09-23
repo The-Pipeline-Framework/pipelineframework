@@ -1,6 +1,8 @@
 # POM vs Layout Matrix
 
-This page maps runtime layout intent to concrete Maven topology in `examples/csv-payments`.
+This page maps runtime layout intent to concrete Maven topology in the standalone
+[`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) application. Maven entrypoints
+in this page are relative to that repository's root.
 
 Use it to answer two questions quickly:
 
@@ -19,9 +21,9 @@ If layout and topology are not aligned, the build can succeed but runtime behavi
 
 | Target runtime layout | Runtime mapping file | Maven entrypoint | Physical deployables produced | Status in csv-payments |
 | --- | --- | --- | --- | --- |
-| `modular` | `config/runtime-mapping/modular-auto.yaml` or `modular-strict.yaml` | `examples/csv-payments/pom.xml` | Per-service runtimes + orchestrator + persistence | Implemented |
-| `pipeline-runtime` | `config/runtime-mapping/pipeline-runtime.yaml` | `examples/csv-payments/pom.pipeline-runtime.xml` via `build-pipeline-runtime.sh` | `orchestrator-svc` artifact + `pipeline-runtime-svc` + `persistence-svc` | Implemented |
-| `monolith` | `config/runtime-mapping/monolith.yaml` | `examples/csv-payments/pom.monolith.xml` via `build-monolith.sh` | Single `monolith-svc` runtime | Implemented |
+| `modular` | `config/runtime-mapping/modular-auto.yaml` or `modular-strict.yaml` | `pom.xml` | Per-service runtimes + orchestrator + persistence | Implemented |
+| `pipeline-runtime` | `config/runtime-mapping/pipeline-runtime.yaml` | `pom.pipeline-runtime.xml` via `build-pipeline-runtime.sh` | `orchestrator-svc` artifact + `pipeline-runtime-svc` + `persistence-svc` | Implemented |
+| `monolith` | `config/runtime-mapping/monolith.yaml` | `pom.monolith.xml` via `build-monolith.sh` | Single `monolith-svc` runtime | Implemented |
 
 ## Phase/execution relevance by topology
 

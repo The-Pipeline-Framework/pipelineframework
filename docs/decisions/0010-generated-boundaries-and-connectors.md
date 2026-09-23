@@ -24,8 +24,9 @@ business data. Operation configuration cannot encode branching or become a secon
 pipeline language. Dynamic selection remains constrained to compiler-authorized typed
 identities and preserves Query/Command semantics.
 
-This decision governs connector SPI and providers under `framework/connectors`, compiler
-generation in `framework/deployment`, and generated metadata under `META-INF/pipeline/`.
+This decision governs Connector SPI in `pipelineframework-contracts`, providers in
+`pipelineframework-connectors`, compiler generation in `pipelineframework-compiler`, and generated metadata under
+`META-INF/pipeline/`.
 
 ## Rationale
 

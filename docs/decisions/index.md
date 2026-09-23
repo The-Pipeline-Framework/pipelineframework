@@ -71,6 +71,7 @@ authoritative for exact syntax and release support.
 | [0060](./0060-reference-implementations-consume-released-artifacts.md) | Build long-lived reference systems as clean consumers of released TPF artifacts. |
 | [0061](./0061-product-bom-pins-the-tested-component-set.md) | Publish the exact independently released TPF component versions verified together. |
 | [0062](./0062-cross-repository-system-tests-use-immutable-overlays.md) | Validate independently released components through immutable candidate overlays and credential-separated test execution. |
+| [0063](./0063-repository-ownership-follows-released-contracts.md) | Assign repositories where consumers can rely on released contracts instead of source-level atomicity. |
 
 ## Maintenance
 
@@ -85,9 +86,8 @@ choice per file and name the affected repository areas concretely.
   supersession in GitNexus rather than erasing the history.
 - Update the relevant design/develop/deploy page and focused tests when exact behaviour
   changes. Do not put transient support matrices into these ADRs.
-- Refresh GitNexus with `node .gitnexus/run.cjs analyze --index-only`, then run
-  `node .gitnexus/run.cjs detect-changes --scope compare --base-ref main --repo .`
-  after meaningful decision changes.
+- Let the managed auto-sync refresh the owning repository and `tpf` group indexes after merge. Run focused graph
+  change analysis against the owning repository before committing code that changes a recorded semantic owner.
 
 GitNexus is a decision index, not architectural authority. Confirm extracted or
 historical records against current repository reality before relying on them.

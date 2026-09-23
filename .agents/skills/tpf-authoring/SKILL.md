@@ -140,14 +140,16 @@ Do not load every reference. Search `docs/architecture/` for meaning, `docs/deve
 
 ## Repository reconnaissance
 
-Use GitNexus as the first-pass structural index of canonical TPF `main` when repository evidence is needed.
+Use the GitNexus `tpf` group as the first-pass structural index when evidence may cross TPF repositories. Query the
+specific owning repository when the boundary is already known.
 
 - Use natural-language `query` to locate candidate symbols or implementations.
 - Once candidates are known, prefer structural operations such as symbol context, implementations, callers/callees, imports, impact analysis, or targeted graph traversal.
 - Do not repeatedly reformulate abstract natural-language searches when results are noisy; narrow to concrete symbols and traverse from them.
 - For new functionality, search for the closest existing TPF precedent before designing a new pattern.
 - Treat GitNexus relationships as structural evidence, not as authority for TPF semantics. DI, interfaces, generated code, reflection, and other dynamic boundaries may make graph results incomplete.
-- GitNexus represents indexed canonical `main`; inspect the current worktree directly for unmerged or uncommitted changes.
+- GitNexus represents indexed canonical `main` branches. Inspect the current worktree directly for unmerged or
+  uncommitted changes, and never edit the managed index clones.
 
 The Skill remains the architectural prior.
 

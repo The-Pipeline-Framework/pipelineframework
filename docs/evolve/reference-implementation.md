@@ -6,7 +6,7 @@ TPF reference material now lives in concrete examples and focused guides rather 
 
 | Example | Use it for |
 | --- | --- |
-| `examples/csv-payments` | runtime layouts, topology POMs, pipeline-runtime and monolith build paths |
+| [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) | runtime layouts, topology POMs, pipeline-runtime and monolith build paths |
 | [`search`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/search) | function platform deployment verification, generated handlers, REST transport, and provider-specific deployment lanes |
 | [`checkout`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/tree/main/checkout) | checkpoint-oriented business flow and durable handoff exploration |
 | [`pipelineframework-examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) | human approval and await-style external reality patterns |

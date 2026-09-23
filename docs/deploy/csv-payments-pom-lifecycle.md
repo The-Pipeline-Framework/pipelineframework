@@ -1,10 +1,12 @@
 # CSV Payments POM Lifecycle (Phase-by-Phase)
 
-This document explains what the `examples/csv-payments/pom.xml` build does at each Maven
+This document explains what the standalone
+[`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) application's `pom.xml` build does at each Maven
 phase. It is intentionally phase-ordered so you can trace where generated sources
 appear and when they are packaged into the runnable artifacts.
 
-Reference POM: `examples/csv-payments/pom.xml`
+Reference POM: [`pom.xml`](https://github.com/The-Pipeline-Framework/csv-kafka-payments/blob/main/pom.xml).
+All remaining paths on this page are relative to that repository's root.
 
 > **Scope**
 > This page is the CSV Payments example-specific build walkthrough.
@@ -74,15 +76,15 @@ module to one runtime role:
 
 ### Practical simplification path
 
-1. Keep `examples/csv-payments/pom.xml` as the modular reference build.
+1. Keep `pom.xml` as the modular reference build.
 2. Introduce a grouped topology (`pipeline-runtime`) when service count grows.
 3. Introduce a dedicated monolith parent/runtime module when you want one deployable.
 
 In this repository, monolith support is demonstrated by:
 
-- `examples/csv-payments/pom.monolith.xml`
-- `examples/csv-payments/monolith-svc/pom.xml`
-- `examples/csv-payments/build-monolith.sh`
+- `pom.monolith.xml`
+- `monolith-svc/pom.xml`
+- `build-monolith.sh`
 
 ## Phase-by-phase breakdown
 
@@ -91,7 +93,7 @@ In this repository, monolith support is demonstrated by:
 Plugin: `exec-maven-plugin`
 
 - Executes `generate-dev-certs.sh` once in the parent module only.
-- Output: `examples/csv-payments/target/dev-certs/*`
+- Output: `target/dev-certs/*`
 - Note: this execution is marked `<inherited>false</inherited>`, so it only runs on the
   parent module.
 

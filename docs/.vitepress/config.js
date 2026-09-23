@@ -74,6 +74,7 @@ const mainSidebar = [
             {text: 'State Model', link: '/architecture/state-model'},
             {text: 'Application Structure', link: '/architecture/application-structure'},
             {text: 'Common Module Structure', link: '/architecture/common-module-structure'},
+            {text: 'Components and Repositories', link: '/architecture/components-and-repositories'},
             {text: 'Operators', link: '/architecture/operators'},
             {text: 'Execution Safety', link: '/architecture/execution-safety'},
             {text: 'Await Boundaries', link: '/architecture/await-boundaries'},

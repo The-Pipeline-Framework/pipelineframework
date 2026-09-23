@@ -135,7 +135,8 @@ interchangeable:
 
 Changing the transport deadline alone is not a scale or recovery fix. The fixture writes its
 observed budget classification alongside the admission observation; its runnable configuration is
-documented in `examples/csv-payments/self-host/container/README.md`.
+documented in the
+[`csv-kafka-payments` self-host container runbook](https://github.com/The-Pipeline-Framework/csv-kafka-payments/tree/main/self-host/container).
 
 ### Retry amplification example (real-world)
 

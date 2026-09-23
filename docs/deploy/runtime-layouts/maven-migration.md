@@ -26,11 +26,12 @@ Typical Maven changes:
 - Remove per-step service modules from parent `<modules>`.
 - Keep `orchestrator-svc` module as separate deployable.
 
-In CSV Payments, the concrete migration assets currently implemented are:
+In the standalone [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments)
+application, the concrete migration assets are:
 
-- `examples/csv-payments/pom.pipeline-runtime.xml`
-- `examples/csv-payments/pipeline-runtime-svc/pom.xml`
-- `examples/csv-payments/build-pipeline-runtime.sh`
+- `pom.pipeline-runtime.xml`
+- `pipeline-runtime-svc/pom.xml`
+- `build-pipeline-runtime.sh`
 
 The helper scripts (`build-pipeline-runtime.sh` and commands that invoke `./mvnw`) require a Unix-like shell. Run them on Linux, macOS, or WSL; native Windows shells are not supported for these scripts.
 
@@ -63,8 +64,8 @@ Typical runtime mapping changes:
 Prefer explicit flags/scripts over profiles for clarity. Example pattern:
 
 ```bash
-./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
-./mvnw -f examples/csv-payments/pom.pipeline-runtime.xml -pl orchestrator-svc \
+./build-pipeline-runtime.sh -DskipTests
+./mvnw -f pom.pipeline-runtime.xml -pl orchestrator-svc \
   -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest test
 ```
 

@@ -17,6 +17,8 @@ flowchart LR
 - [Functional Core, Imperative Shell](/architecture/fcis) establishes the responsibility boundary.
 - [State Model](/architecture/state-model) separates persistence, cache, replay, execution, Await, and effect authority.
 - [Application Structure](/architecture/application-structure) shows how the pieces form one application.
+- [Components and Repositories](/architecture/components-and-repositories) maps semantic ownership, released
+  artifacts, and independent component lifecycles.
 - [Coffee Machine](/architecture/coffee-machine/) explores objections and trade-offs as informal architecture conversations.
 - [Architectural Decisions](/decisions/) records the durable
   ownership rules and distinctions that should survive implementation changes.

@@ -1,13 +1,15 @@
 # CSV Payments Pipeline-Runtime Walkthrough
 
-This page documents the grouped pipeline-runtime topology in `examples/csv-payments`.
+This page documents the grouped pipeline-runtime topology in the standalone
+[`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) application. Paths and commands
+below are relative to that repository's root.
 
 ## What exists
 
-- Pipeline-runtime parent POM: `examples/csv-payments/pom.pipeline-runtime.xml`
-- Grouped pipeline runtime module: `examples/csv-payments/pipeline-runtime-svc/pom.xml`
-- Runtime mapping scenario: `examples/csv-payments/config/runtime-mapping/pipeline-runtime.yaml`
-- Build script: `examples/csv-payments/build-pipeline-runtime.sh`
+- Pipeline-runtime parent POM: `pom.pipeline-runtime.xml`
+- Grouped pipeline runtime module: `pipeline-runtime-svc/pom.xml`
+- Runtime mapping scenario: `config/runtime-mapping/pipeline-runtime.yaml`
+- Build script: `build-pipeline-runtime.sh`
 
 ## Topology shape
 
@@ -18,13 +20,13 @@ This page documents the grouped pipeline-runtime topology in `examples/csv-payme
 ## Build
 
 ```bash
-./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
+./build-pipeline-runtime.sh -DskipTests
 ```
 
 What the script does:
 
 - Applies `pipeline-runtime.yaml` as active runtime mapping.
-- Installs `examples/csv-payments/pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
+- Installs `pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
 - Builds `pom.pipeline-runtime.xml`.
 - Uses `GRPC` transport by default (override with `PIPELINE_TRANSPORT=REST|LOCAL` if needed).
 - Restores the previous active mapping file after the build.
@@ -32,7 +34,7 @@ What the script does:
 ## Verification smoke check
 
 ```bash
-./mvnw -f examples/csv-payments/pom.pipeline-runtime.xml -DskipTests compile
+./mvnw -f pom.pipeline-runtime.xml -DskipTests compile
 ```
 
 ## Required runtime environment
