@@ -116,8 +116,10 @@ Each repository currently verifies its own checkout, but publishing a new upstre
 run all downstream repositories. Therefore an upstream repository can be green while a downstream behavioural
 regression remains undiscovered.
 
-Until [#930](https://github.com/The-Pipeline-Framework/pipelineframework/issues/930) provides an automated
-compatibility train, use this manual order after a boundary-changing snapshot:
+The immutable candidate and baseline contracts, suite policy and shadow coordinator are described in
+[Cross-repository system tests](/evolve/cross-repository-system-tests). Until owner repositories have adopted
+candidate publication and the shadow train has completed its rollout, use this manual order after a
+boundary-changing snapshot:
 
 1. contracts;
 2. compiler and runtime;
@@ -130,6 +132,10 @@ compatibility train, use this manual order after a boundary-changing snapshot:
 
 Fetch fresh dependencies and record the tested component versions. Heavy HA, cloud and native lanes may be
 scheduled, but they must be named as outstanding evidence rather than silently treated as covered.
+
+`CurrentAuthoredSurfacesGuardTest` is deliberately split by ownership: this repository guards current documentation
+and the web UI while `pipelineframework-examples` guards authored YAML and Java. Frozen `docs/versions/**` snapshots
+are outside the current-authoring guard.
 
 ## Assessment
 

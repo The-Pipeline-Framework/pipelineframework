@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipelineframework.org/schemas/system-tests/suite-manifest-v1.json",
+  "title": "TPF owner-local system-test suite manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "suites"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "suites": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "timeoutMinutes"],
+        "properties": {
+          "command": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "timeoutMinutes": {"type": "integer", "minimum": 1, "maximum": 360}
+        }
+      }
+    }
+  }
+}

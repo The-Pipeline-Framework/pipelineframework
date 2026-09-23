@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "suites": {
+    "compatibility": {
+      "command": ["./mvnw", "-B", "-f", "framework/pom.xml", "clean", "verify", "--no-transfer-progress"],
+      "timeoutMinutes": 45
+    }
+  }
+}

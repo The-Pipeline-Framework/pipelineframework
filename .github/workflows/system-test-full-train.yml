@@ -1,0 +1,211 @@
+name: TPF System Tests — Full Train
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: tpf-system-test-full-train
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve immutable baseline
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      baseline_digest: ${{ steps.baseline.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Resolve baseline tag once
+        id: baseline
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          digest="$(oras resolve "$image:main")"
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
+          mkdir -p resolved/baseline
+          oras pull "$image@$digest" --output resolved/baseline
+          test -f resolved/baseline/baseline.json
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          node system-tests/scripts/baseline-set.mjs \
+            --components system-tests/components.yml \
+            --baseline resolved/baseline/baseline.json \
+            --baselineDigest "$digest" \
+            --output resolved/resolved-set.json
+          node system-tests/scripts/select-full-train.mjs \
+            --components system-tests/components.yml \
+            --policy system-tests/policy.yml \
+            --resolvedSet resolved/resolved-set.json \
+            --output resolved/suite-matrix.json
+          cp resolved/baseline/baseline.json resolved/baseline.json
+
+      - name: Export suite matrix
+        id: matrix
+        run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Record exact tested set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-full-train-resolved-set
+          path: resolved/
+          retention-days: 90
+          if-no-files-found: error
+
+  materialize:
+    name: Materialize immutable Maven inputs
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Download exact tested set
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-full-train-resolved-set
+          path: resolved
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Fetch component manifests
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          mkdir -p component-manifests
+          while IFS=$'\t' read -r component digest; do
+            mkdir -p "component-manifests/$component"
+            oras pull "$image@$digest" --output "component-manifests/$component"
+            test -f "component-manifests/$component/candidate-manifest.json"
+          done < <(jq -r '.components | to_entries[] | [.key, .value.manifestDigest] | @tsv' resolved/resolved-set.json)
+          manifest_args=()
+          while IFS= read -r manifest; do manifest_args+=(--manifests "$manifest"); done < <(find component-manifests -name candidate-manifest.json -type f | sort)
+          node system-tests/scripts/materialization-plan.mjs \
+            --components system-tests/components.yml \
+            "${manifest_args[@]}" \
+            --output materialization-plan.json
+
+      - name: Configure package repositories
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/tpf-maven"
+          node system-tests/scripts/write-maven-settings.mjs \
+            --components system-tests/components.yml \
+            --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
+            --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
+
+      - name: Hydrate and attest local Maven repository
+        run: |
+          local_repo="$RUNNER_TEMP/tpf-system-test-m2"
+          while IFS= read -r coordinate; do
+            ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
+              org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
+              -Dartifact="$coordinate" -Dtransitive=true \
+              -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
+              -Dmaven.repo.local="$local_repo" --no-transfer-progress
+          done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          node system-tests/scripts/verify-materialized.mjs \
+            --plan materialization-plan.json --repository "$local_repo"
+          mkdir -p "$RUNNER_TEMP/tpf-test-inputs"
+          tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .
+          cp resolved/resolved-set.json resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
+
+      - name: Publish credential-free test inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-full-train-inputs
+          path: ${{ runner.temp }}/tpf-test-inputs/
+          retention-days: 14
+          if-no-files-found: error
+
+  run-suite:
+    name: ${{ matrix.suite }}
+    needs: [resolve, materialize]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: coordination
+          persist-credentials: false
+
+      - name: Checkout pinned suite owner
+        if: matrix.owner != 'coordination'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.sha }}
+          path: owner
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Download credential-free test inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-full-train-inputs
+          path: inputs
+
+      - name: Extract isolated Maven repository
+        run: |
+          mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
+          tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
+
+      - name: Run owner suite without privileged credentials
+        env:
+          OWNER: ${{ matrix.owner }}
+          ENTRYPOINT: ${{ matrix.entrypoint }}
+          MANIFEST: ${{ matrix.manifest }}
+          VERSION_PROPERTIES: ${{ toJson(matrix.versionProperties) }}
+        run: |
+          if [ "$OWNER" = coordination ]; then
+            suite_root="$GITHUB_WORKSPACE/coordination"
+            suite_manifest="$suite_root/.github/tpf-system-tests.json"
+          else
+            suite_root="$GITHUB_WORKSPACE/owner"
+            suite_manifest="$suite_root/$MANIFEST"
+          fi
+          test -f "$suite_manifest"
+          node coordination/system-tests/scripts/run-suite.mjs \
+            --manifest "$suite_manifest" --entrypoint "$ENTRYPOINT" \
+            --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
+            --versionProperties "$VERSION_PROPERTIES" \
+            --cwd "$suite_root" --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"

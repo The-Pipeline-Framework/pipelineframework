@@ -70,6 +70,7 @@ authoritative for exact syntax and release support.
 | [0059](./0059-learning-examples-consume-released-artifacts.md) | Build learning examples and architectural proofs as clean consumers of released TPF artifacts. |
 | [0060](./0060-reference-implementations-consume-released-artifacts.md) | Build long-lived reference systems as clean consumers of released TPF artifacts. |
 | [0061](./0061-product-bom-pins-the-tested-component-set.md) | Publish the exact independently released TPF component versions verified together. |
+| [0062](./0062-cross-repository-system-tests-use-immutable-overlays.md) | Validate independently released components through immutable candidate overlays and credential-separated test execution. |
 
 ## Maintenance
 

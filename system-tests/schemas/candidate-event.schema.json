@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipelineframework.org/schemas/system-tests/candidate-event-v1.json",
+  "title": "TPF candidate dispatch event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_repository", "source_sha", "pull_request_number", "component", "candidate_version", "publication_run_id", "manifest_sha256", "compatibility_set_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source_repository": {"type": "string", "pattern": "^The-Pipeline-Framework/[A-Za-z0-9._-]+$"},
+    "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "pull_request_number": {"type": ["integer", "null"], "minimum": 1},
+    "component": {"type": "string", "minLength": 1},
+    "candidate_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-(pr\\.[1-9][0-9]*|main)\\.[0-9a-f]{12}$"},
+    "publication_run_id": {"type": "integer", "minimum": 1},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "compatibility_set_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"}
+  }
+}
