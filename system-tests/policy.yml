@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "suites": {
+    "compiler-verify": {"owner": "compiler", "entrypoint": "verify", "tier": "pr"},
+    "runtime-deployment": {"owner": "runtime", "entrypoint": "deployment", "tier": "pr"},
+    "connectors-verify": {"owner": "connectors", "entrypoint": "verify", "tier": "pr"},
+    "blocks-verify": {"owner": "blocks", "entrypoint": "verify", "tier": "pr"},
+    "expansions-resolution": {"owner": "expansions", "entrypoint": "resolution", "tier": "pr"},
+    "coordination-compatibility": {"owner": "coordination", "entrypoint": "compatibility", "tier": "pr"},
+    "examples-verify": {"owner": "examples", "entrypoint": "verify", "tier": "pr"},
+    "references-core": {"owner": "references", "entrypoint": "core", "tier": "pr"},
+    "references-checkout": {"owner": "references", "entrypoint": "checkout", "tier": "pr"},
+    "references-search": {"owner": "references", "entrypoint": "search", "tier": "pr"},
+    "references-quickbooks": {"owner": "references", "entrypoint": "quickbooks", "tier": "pr"},
+    "csv-smoke": {"owner": "csvPayments", "entrypoint": "smoke", "tier": "pr"},
+    "csv-ha": {"owner": "csvPayments", "entrypoint": "ha", "tier": "pr"},
+    "rag-system": {"owner": "ragTurnkey", "entrypoint": "system", "tier": "pr"},
+    "examples-restaurant-ha": {"owner": "examples", "entrypoint": "restaurant-ha", "tier": "pr"},
+    "csv-ha-scale": {"owner": "csvPayments", "entrypoint": "ha-scale", "tier": "heavy"},
+    "native-builds": {"owner": "csvPayments", "entrypoint": "native", "tier": "heavy"},
+    "cloud-deployments": {"owner": "references", "entrypoint": "cloud", "tier": "heavy"},
+    "live-providers": {"owner": "connectors", "entrypoint": "live-providers", "tier": "heavy"}
+  },
+  "componentPolicy": {
+    "contracts": {
+      "required": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"],
+      "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
+    },
+    "compiler": {
+      "required": ["runtime-deployment", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"],
+      "heavy": ["native-builds", "cloud-deployments"]
+    },
+    "runtime": {
+      "required": ["connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-ha", "rag-system"],
+      "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
+    },
+    "connectors": {
+      "required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-ha", "rag-system"],
+      "heavy": ["csv-ha-scale", "cloud-deployments", "live-providers"]
+    },
+    "blocks": {
+      "required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"],
+      "heavy": []
+    },
+    "expansions": {
+      "required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"],
+      "heavy": []
+    },
+    "examples": {
+      "required": ["examples-verify", "examples-restaurant-ha"],
+      "heavy": []
+    },
+    "references": {
+      "required": ["references-checkout", "references-search", "references-quickbooks"],
+      "heavy": ["cloud-deployments"]
+    },
+    "csvPayments": {
+      "required": ["csv-smoke", "csv-ha"],
+      "heavy": ["csv-ha-scale", "native-builds"]
+    },
+    "ragTurnkey": {
+      "required": ["rag-system"],
+      "heavy": []
+    }
+  },
+  "pathRules": [],
+  "fullTrain": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
+}

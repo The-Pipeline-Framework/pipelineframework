@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "suites": {
+    "compatibility": {
+      "command": ["bash", "system-tests/scripts/run-coordination-suite.sh", "compatibility"],
+      "timeoutMinutes": 45
+    }
+  }
+}

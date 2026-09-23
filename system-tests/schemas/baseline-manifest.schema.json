@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipelineframework.org/schemas/system-tests/baseline-manifest-v1.json",
+  "title": "TPF last-known-green baseline manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "generatedAt", "components", "testHarnesses", "images"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "components": {
+      "type": "object",
+      "required": ["contracts", "compiler", "runtime", "connectors", "blocks", "expansions"],
+      "additionalProperties": false,
+      "properties": {
+        "contracts": {"$ref": "#/$defs/mavenComponent"},
+        "compiler": {"$ref": "#/$defs/mavenComponent"},
+        "runtime": {"$ref": "#/$defs/mavenComponent"},
+        "connectors": {"$ref": "#/$defs/mavenComponent"},
+        "blocks": {"$ref": "#/$defs/mavenComponent"},
+        "expansions": {"$ref": "#/$defs/mavenComponent"}
+      }
+    },
+    "testHarnesses": {
+      "type": "object",
+      "required": ["examples", "references", "csvPayments", "ragTurnkey"],
+      "additionalProperties": false,
+      "properties": {
+        "examples": {"$ref": "#/$defs/sourceComponent"},
+        "references": {"$ref": "#/$defs/sourceComponent"},
+        "csvPayments": {"$ref": "#/$defs/sourceComponent"},
+        "ragTurnkey": {"$ref": "#/$defs/sourceComponent"}
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    }
+  },
+  "$defs": {
+    "sourceComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "sha"],
+      "properties": {
+        "repository": {"type": "string"},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "mavenComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "sha", "mavenVersion", "manifestDigest"],
+      "properties": {
+        "repository": {"type": "string"},
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "mavenVersion": {"type": "string", "minLength": 1},
+        "manifestDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

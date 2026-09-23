@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "organisation": "The-Pipeline-Framework",
+  "coordinationRepository": "The-Pipeline-Framework/pipelineframework",
+  "statusContext": "tpf/system-tests",
+  "baselineImage": "ghcr.io/the-pipeline-framework/tpf-system-test-baseline",
+  "candidateManifestImage": "ghcr.io/the-pipeline-framework/tpf-system-test-candidates",
+  "coordinationConsumerVersionProperties": {
+    "blocks": "pipelineframework.blocks.version",
+    "compiler": "pipelineframework.compiler.version",
+    "connectors": "pipelineframework.connectors.version",
+    "contracts": "pipelineframework.contracts.version",
+    "expansions": "pipelineframework.expansions.version",
+    "runtime": "pipelineframework.runtime.version"
+  },
+  "components": {
+    "contracts": {
+      "repository": "The-Pipeline-Framework/pipelineframework-contracts",
+      "kind": "maven",
+      "allowedCoordinates": [
+        "org.pipelineframework:pipelineframework-api:jar",
+        "org.pipelineframework:pipelineframework-contracts-parent:pom",
+        "org.pipelineframework:pipelineframework-dsl:jar",
+        "org.pipelineframework:pipelineframework-runtime-api:jar",
+        "org.pipelineframework:pipelineframework-runtime-core:jar",
+        "org.pipelineframework:pipelineframework-runtime-protocol:jar",
+        "org.pipelineframework:pipelineframework-runtime-serialization:jar",
+        "org.pipelineframework:pipelineframework-runtime-spi:jar",
+        "org.pipelineframework:pipelineframework-semantic-model:jar",
+        "org.pipelineframework:representation-provider-api:jar"
+      ],
+      "consumerVersionProperties": {},
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "compiler": {
+      "repository": "The-Pipeline-Framework/pipelineframework-compiler",
+      "kind": "maven",
+      "allowedCoordinates": ["org.pipelineframework:pipelineframework-compiler:jar"],
+      "consumerVersionProperties": {"contracts": "tpf.version"},
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "runtime": {
+      "repository": "The-Pipeline-Framework/pipelineframework-runtime",
+      "kind": "maven",
+      "allowedCoordinates": [
+      "org.pipelineframework:cache-plugin:jar",
+      "org.pipelineframework:persistence-plugin:jar",
+      "org.pipelineframework:pipelineframework-deployment:jar",
+      "org.pipelineframework:pipelineframework-runtime-parent:pom",
+      "org.pipelineframework:pipelineframework-runtime-spring:jar",
+      "org.pipelineframework:pipelineframework:jar",
+        "org.pipelineframework:repository-plugin:jar"
+      ],
+      "consumerVersionProperties": {
+        "compiler": "tpf.compiler.version",
+        "contracts": "tpf.contracts.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "connectors": {
+      "repository": "The-Pipeline-Framework/pipelineframework-connectors",
+      "kind": "maven",
+      "allowedCoordinates": [
+        "org.pipelineframework:connector-import-tooling:jar",
+        "org.pipelineframework:connector-maven-plugin:maven-plugin",
+        "org.pipelineframework:connector-mcp-maven-plugin:maven-plugin",
+        "org.pipelineframework:connector-openapi-maven-plugin:maven-plugin",
+        "org.pipelineframework:embedding-query-connector:jar",
+        "org.pipelineframework:embedding-query-langchain4j-connector:jar",
+        "org.pipelineframework:framework-connectors:pom",
+        "org.pipelineframework:gmail-query-connector:jar",
+        "org.pipelineframework:graphql-connector:jar",
+        "org.pipelineframework:graphql-smallrye-connector:jar",
+        "org.pipelineframework:host-gmail:jar",
+        "org.pipelineframework:host-microsoft-graph:jar",
+        "org.pipelineframework:host-oidc-quarkus:jar",
+        "org.pipelineframework:host-quickbooks-mcp:jar",
+        "org.pipelineframework:http-connector:jar",
+        "org.pipelineframework:http-contract:jar",
+        "org.pipelineframework:llm-query-connector:jar",
+        "org.pipelineframework:llm-query-langchain4j-connector:jar",
+        "org.pipelineframework:mcp-connector:jar",
+        "org.pipelineframework:mcp-contract:jar",
+        "org.pipelineframework:object-ingest-connector:jar",
+        "org.pipelineframework:pipelineframework-connectors-parent:pom",
+        "org.pipelineframework:query-hibernate-common:jar",
+        "org.pipelineframework:query-hibernate-reactive-connector:jar",
+        "org.pipelineframework:query-jpa-connector:jar",
+        "org.pipelineframework:representation-provider-file:jar",
+        "org.pipelineframework:representation-provider-fixture:jar",
+        "org.pipelineframework:representation-provider-http:jar",
+        "org.pipelineframework:representation-provider-opencsv:jar",
+        "org.pipelineframework:vector-store-connector:jar",
+        "org.pipelineframework:vector-store-pgvector-connector:jar"
+      ],
+      "consumerVersionProperties": {
+        "contracts": "pipelineframework.contracts.version",
+        "runtime": "pipelineframework.runtime.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "blocks": {
+      "repository": "The-Pipeline-Framework/pipelineframework-blocks",
+      "kind": "maven",
+      "allowedCoordinates": [
+        "org.pipelineframework.blocks:document-text-extraction:jar",
+        "org.pipelineframework.blocks:graphql-agent:jar",
+        "org.pipelineframework.blocks:graphql:jar",
+        "org.pipelineframework.blocks:openapi-representation-mapper:jar",
+        "org.pipelineframework:pipeline-blocks:pom"
+      ],
+      "consumerVersionProperties": {
+        "connectors": "pipelineframework.connectors.version",
+        "contracts": "pipelineframework.contracts.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "expansions": {
+      "repository": "The-Pipeline-Framework/pipelineframework-expansions",
+      "kind": "maven",
+      "allowedCoordinates": [
+        "org.pipelineframework.expansions:graphql:pom",
+        "org.pipelineframework.expansions:openapi:pom",
+        "org.pipelineframework:pipeline-expansions:pom"
+      ],
+      "consumerVersionProperties": {
+        "blocks": "pipelineframework.blocks.version",
+        "connectors": "pipelineframework.connectors.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "examples": {
+      "repository": "The-Pipeline-Framework/pipelineframework-examples",
+      "kind": "source",
+      "consumerVersionProperties": {
+        "compiler": "pipelineframework.compiler.version",
+        "connectors": "pipelineframework.connectors.version",
+        "expansions": "pipelineframework.expansions.version",
+        "runtime": "pipelineframework.runtime.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "references": {
+      "repository": "The-Pipeline-Framework/pipelineframework-reference-implementations",
+      "kind": "source",
+      "consumerVersionProperties": {
+        "compiler": "pipelineframework.compiler.version",
+        "connectors": "pipelineframework.connectors.version",
+        "runtime": "pipelineframework.runtime.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "csvPayments": {
+      "repository": "The-Pipeline-Framework/csv-kafka-payments",
+      "kind": "source",
+      "consumerVersionProperties": {
+        "compiler": "pipelineframework.compiler.version",
+        "connectors": "pipelineframework.connectors.version",
+        "runtime": "pipelineframework.runtime.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "ragTurnkey": {
+      "repository": "The-Pipeline-Framework/rag-turnkey",
+      "kind": "source",
+      "consumerVersionProperties": {
+        "blocks": "pipelineframework.blocks.version",
+        "compiler": "pipelineframework.compiler.version",
+        "connectors": "pipelineframework.connectors.version",
+        "runtime": "pipelineframework.runtime.version"
+      },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    }
+  }
+}

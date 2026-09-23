@@ -1,0 +1,594 @@
+name: TPF System Tests — Candidate
+
+on:
+  repository_dispatch:
+    types: [tpf-candidate-v1]
+
+concurrency:
+  group: >-
+    tpf-system-tests-${{ github.event.client_payload.source_repository }}-${{
+      github.event.client_payload.pull_request_number || github.event.client_payload.source_sha }}
+  cancel-in-progress: true
+
+jobs:
+  intake:
+    name: Validate candidate event
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      component: ${{ steps.event.outputs.component }}
+      repository: ${{ steps.target.outputs.repository }}
+      repository_name: ${{ steps.target.outputs.repository_name }}
+      source_sha: ${{ steps.target.outputs.source_sha }}
+      pull_request_number: ${{ steps.event.outputs.pull_request_number }}
+      publication_run_id: ${{ steps.event.outputs.publication_run_id }}
+      candidate_version: ${{ steps.event.outputs.candidate_version }}
+      compatibility_set_id: ${{ steps.event.outputs.compatibility_set_id }}
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Write dispatch event
+        env:
+          EVENT_JSON: ${{ toJson(github.event.client_payload) }}
+        run: printf '%s\n' "$EVENT_JSON" > event.json
+
+      - name: Extract trusted status target
+        id: target
+        run: |
+          node system-tests/scripts/extract-status-target.mjs \
+            --components system-tests/components.yml \
+            --event event.json > status-target.json
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' status-target.json >> "$GITHUB_OUTPUT"
+
+      - name: Validate complete dispatch event
+        id: event
+        run: |
+          node system-tests/scripts/validate-event.mjs \
+            --components system-tests/components.yml \
+            --event event.json > event-summary.json
+          jq -r 'to_entries[] | "\(.key)=\(.value // "")"' event-summary.json >> "$GITHUB_OUTPUT"
+
+      - name: Preserve validated event
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-candidate-event
+          path: event.json
+          retention-days: 14
+          if-no-files-found: error
+
+  pending:
+    name: Post pending status
+    if: always() && needs.intake.outputs.repository != '' && needs.intake.outputs.source_sha != ''
+    needs: intake
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Create source-repository status token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.intake.outputs.repository_name }}
+          permission-statuses: write
+
+      - name: Mark system tests pending
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+          TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api --method POST "repos/$SOURCE_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state=pending \
+            -f context='tpf/system-tests' \
+            -f description='TPF cross-repository system tests are running' \
+            -f target_url="$TARGET_URL"
+
+  retrieve:
+    name: Retrieve and attest candidate
+    needs: [intake, pending]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      candidate_manifest_digest: ${{ steps.oci.outputs.digest }}
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download validated event
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-candidate-event
+          path: intake
+
+      - name: Create source-repository read token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.intake.outputs.repository_name }}
+          permission-actions: read
+          permission-contents: read
+
+      - name: Fetch workflow provenance and candidate manifest
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_RUN_ID: ${{ needs.intake.outputs.publication_run_id }}
+          PULL_REQUEST_NUMBER: ${{ needs.intake.outputs.pull_request_number }}
+        run: |
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > intake/publication-workflow-run.json
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$SOURCE_REPOSITORY" \
+            --name tpf-candidate-manifest \
+            --dir intake/candidate
+          test -f intake/candidate/candidate-manifest.json
+          build_run_id="$(jq -er '.provenance.build.runId | select(type == "number" and . > 0)' intake/candidate/candidate-manifest.json)"
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$build_run_id" > intake/build-workflow-run.json
+          if [ -n "$PULL_REQUEST_NUMBER" ]; then
+            gh api "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" > intake/pull-request.json
+            gh api --paginate "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/files?per_page=100" \
+              --jq '.[].filename' > intake/changed-paths.txt
+          else
+            : > intake/changed-paths.txt
+          fi
+
+      - name: Validate checksum, current head and provenance
+        env:
+          PULL_REQUEST_NUMBER: ${{ needs.intake.outputs.pull_request_number }}
+        run: |
+          args=(
+            --components system-tests/components.yml
+            --event intake/event.json
+            --manifest intake/candidate/candidate-manifest.json
+            --publicationRun intake/publication-workflow-run.json
+            --buildRun intake/build-workflow-run.json
+          )
+          if [ -n "$PULL_REQUEST_NUMBER" ]; then
+            args+=(--pullRequest intake/pull-request.json)
+          fi
+          node system-tests/scripts/validate-candidate.mjs "${args[@]}" > intake/validated-candidate.json
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Store manifest as an immutable OCI artifact
+        id: oci
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          COMPONENT: ${{ needs.intake.outputs.component }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+          SOURCE_RUN_ID: ${{ needs.intake.outputs.publication_run_id }}
+        run: |
+          image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          (
+            cd intake/candidate
+            oras push --format json \
+              --annotation "org.opencontainers.image.revision=$SOURCE_SHA" \
+              --annotation "org.pipelineframework.component=$COMPONENT" \
+              "$image:$COMPONENT-$SOURCE_SHA-$SOURCE_RUN_ID-${{ github.run_id }}-${{ github.run_attempt }}" \
+              candidate-manifest.json:application/vnd.tpf.candidate-manifest.v1+json
+          ) > intake/candidate-oci.json
+          digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' intake/candidate-oci.json)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$digest" > intake/candidate-manifest-digest.txt
+
+      - name: Preserve attested candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-attested-candidate
+          path: intake/
+          retention-days: 30
+          if-no-files-found: error
+
+  baseline:
+    name: Resolve baseline and select suites
+    needs: [intake, retrieve]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      baseline_digest: ${{ steps.resolve.outputs.baseline_digest }}
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download attested candidate
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-attested-candidate
+          path: intake
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Resolve the movable baseline once
+        id: resolve
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          digest="$(oras resolve "$image:main")"
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
+          mkdir -p resolved/baseline
+          oras pull "$image@$digest" --output resolved/baseline
+          test -f resolved/baseline/baseline.json
+          echo "baseline_digest=$digest" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$digest" > resolved/baseline-digest.txt
+
+      - name: Overlay candidate and select mandatory suites
+        env:
+          COMPONENT: ${{ needs.intake.outputs.component }}
+          BASELINE_DIGEST: ${{ steps.resolve.outputs.baseline_digest }}
+          CANDIDATE_MANIFEST_DIGEST: ${{ needs.retrieve.outputs.candidate_manifest_digest }}
+        run: |
+          node system-tests/scripts/resolve-set.mjs \
+            --components system-tests/components.yml \
+            --baseline resolved/baseline/baseline.json \
+            --baselineDigest "$BASELINE_DIGEST" \
+            --candidates intake/candidate/candidate-manifest.json \
+            --candidateDigests "$CANDIDATE_MANIFEST_DIGEST" \
+            --output resolved/resolved-set.json
+          node system-tests/scripts/select-suites.mjs \
+            --components system-tests/components.yml \
+            --policy system-tests/policy.yml \
+            --resolvedSet resolved/resolved-set.json \
+            --component "$COMPONENT" \
+            --changedPaths intake/changed-paths.txt \
+            --hints "$(jq -r '.suiteHints // [] | join(",")' intake/candidate/candidate-manifest.json)" \
+            --output resolved/suite-matrix.json
+          cp intake/event.json resolved/event.json
+          cp resolved/baseline/baseline.json resolved/baseline.json
+
+      - name: Export matrix
+        id: matrix
+        run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve resolved immutable test set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-resolved-system-test-set
+          path: resolved/
+          retention-days: 30
+          if-no-files-found: error
+
+  materialize:
+    name: Materialize immutable Maven inputs
+    needs: baseline
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Download resolved set
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-resolved-system-test-set
+          path: resolved
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Fetch every pinned component manifest
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          mkdir -p component-manifests
+          while IFS=$'\t' read -r component digest; do
+            mkdir -p "component-manifests/$component"
+            oras pull "$image@$digest" --output "component-manifests/$component"
+            test -f "component-manifests/$component/candidate-manifest.json"
+          done < <(jq -r '.components | to_entries[] | [.key, .value.manifestDigest] | @tsv' resolved/resolved-set.json)
+          manifest_args=()
+          while IFS= read -r path; do manifest_args+=(--manifests "$path"); done < <(find component-manifests -name candidate-manifest.json -type f | sort)
+          node system-tests/scripts/materialization-plan.mjs \
+            --components system-tests/components.yml \
+            "${manifest_args[@]}" \
+            --output materialization-plan.json
+
+      - name: Configure read-only package repositories
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/tpf-maven"
+          node system-tests/scripts/write-maven-settings.mjs \
+            --components system-tests/components.yml \
+            --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
+            --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
+
+      - name: Hydrate isolated Maven repository
+        run: |
+          local_repo="$RUNNER_TEMP/tpf-system-test-m2"
+          while IFS= read -r coordinate; do
+            ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
+              org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
+              -Dartifact="$coordinate" \
+              -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
+              -Dtransitive=true \
+              -Dmaven.repo.local="$local_repo" \
+              --no-transfer-progress
+          done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          node system-tests/scripts/verify-materialized.mjs \
+            --plan materialization-plan.json \
+            --repository "$local_repo"
+          mkdir -p "$RUNNER_TEMP/tpf-test-inputs"
+          tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .
+          cp resolved/resolved-set.json resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
+
+      - name: Publish credential-free test inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-materialized-system-test-inputs
+          path: ${{ runner.temp }}/tpf-test-inputs/
+          retention-days: 14
+          if-no-files-found: error
+
+  run-suite:
+    name: ${{ matrix.suite }}
+    needs: [baseline, materialize]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.baseline.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: coordination
+          persist-credentials: false
+
+      - name: Checkout pinned suite owner
+        if: matrix.owner != 'coordination'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.sha }}
+          path: owner
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Download credential-free test inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-materialized-system-test-inputs
+          path: inputs
+
+      - name: Extract isolated Maven repository
+        run: |
+          mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
+          tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
+
+      - name: Run owner-controlled suite without privileged credentials
+        env:
+          OWNER: ${{ matrix.owner }}
+          ENTRYPOINT: ${{ matrix.entrypoint }}
+          MANIFEST: ${{ matrix.manifest }}
+          VERSION_PROPERTIES: ${{ toJson(matrix.versionProperties) }}
+        run: |
+          if [ "$OWNER" = coordination ]; then
+            suite_root="$GITHUB_WORKSPACE/coordination"
+            suite_manifest="$suite_root/.github/tpf-system-tests.json"
+          else
+            suite_root="$GITHUB_WORKSPACE/owner"
+            suite_manifest="$suite_root/$MANIFEST"
+          fi
+          test -f "$suite_manifest"
+          node coordination/system-tests/scripts/run-suite.mjs \
+            --manifest "$suite_manifest" \
+            --entrypoint "$ENTRYPOINT" \
+            --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
+            --versionProperties "$VERSION_PROPERTIES" \
+            --cwd "$suite_root" \
+            --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
+
+  promote:
+    name: Promote green main candidate
+    if: needs.intake.outputs.pull_request_number == ''
+    needs: [intake, baseline, run-suite]
+    concurrency:
+      group: tpf-system-test-baseline-promotion
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      retry: ${{ steps.cas.outputs.retry }}
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download resolved set
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-resolved-system-test-set
+          path: resolved
+
+      - name: Create source-repository read token
+        id: source-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.intake.outputs.repository_name }}
+          permission-contents: read
+
+      - name: Confirm candidate is still the default-branch head
+        id: current-main
+        env:
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+        run: |
+          default_branch="$(gh api "repos/$SOURCE_REPOSITORY" --jq '.default_branch')"
+          current_sha="$(gh api "repos/$SOURCE_REPOSITORY/commits/$default_branch" --jq '.sha')"
+          if [ "$current_sha" = "$SOURCE_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'current=false' >> "$GITHUB_OUTPUT"
+            echo "Candidate $SOURCE_SHA is green but no longer the default-branch head; skipping baseline promotion."
+          fi
+
+      - name: Install ORAS
+        if: steps.current-main.outputs.current == 'true'
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Compare and swap baseline
+        if: steps.current-main.outputs.current == 'true'
+        id: cas
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          expected="$(cat resolved/baseline-digest.txt)"
+          current="$(oras resolve "$image:main")"
+          if [ "$current" != "$expected" ]; then
+            echo 'retry=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node system-tests/scripts/promote-baseline.mjs \
+            --components system-tests/components.yml \
+            --current resolved/baseline.json \
+            --resolvedSet resolved/resolved-set.json \
+            --generatedAt "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+            --output resolved/next-baseline.json
+          revision="$(jq -r '.revision' resolved/next-baseline.json)"
+          mkdir -p resolved/promotion
+          cp resolved/next-baseline.json resolved/promotion/baseline.json
+          (
+            cd resolved/promotion
+            oras push --format json \
+              "$image:revision-$revision-${{ github.run_id }}-${{ github.run_attempt }}" \
+              baseline.json:application/vnd.tpf.system-test-baseline.v1+json
+          ) > resolved/promoted-oci.json
+          promoted="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' resolved/promoted-oci.json)"
+          test "$(oras resolve "$image:main")" = "$expected"
+          oras copy "$image@$promoted" "$image:main"
+          echo 'retry=false' >> "$GITHUB_OUTPUT"
+
+  retry-promotion:
+    name: Re-test after baseline race
+    if: needs.promote.outputs.retry == 'true'
+    needs: [promote]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download original event
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-candidate-event
+          path: retry
+
+      - name: Create coordination-repository dispatch token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: pipelineframework
+          permission-contents: write
+
+      - name: Dispatch against the winning baseline
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: jq -n --slurpfile payload retry/event.json '{event_type:"tpf-candidate-v1", client_payload:$payload[0]}' | gh api --method POST "repos/${{ github.repository }}/dispatches" --input -
+
+  report:
+    name: Report aggregate status
+    if: always() && needs.pending.result == 'success'
+    needs: [intake, pending, retrieve, baseline, materialize, run-suite, promote, retry-promotion]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Create source-repository status token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.intake.outputs.repository_name }}
+          permission-statuses: write
+
+      - name: Publish final status
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+          RETRIEVE_RESULT: ${{ needs.retrieve.result }}
+          BASELINE_RESULT: ${{ needs.baseline.result }}
+          MATERIALIZE_RESULT: ${{ needs.materialize.result }}
+          TEST_RESULT: ${{ needs.run-suite.result }}
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+          RETRY_RESULT: ${{ needs.retry-promotion.result }}
+          TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$TEST_RESULT" = failure ]; then
+            state=failure
+            description='A mandatory TPF system-test suite failed'
+          elif [ "$RETRIEVE_RESULT" = success ] && [ "$BASELINE_RESULT" = success ] && \
+               [ "$MATERIALIZE_RESULT" = success ] && [ "$TEST_RESULT" = success ] && \
+               { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; }; then
+            if [ "$RETRY_RESULT" = success ]; then
+              state=pending
+              description='Baseline changed; replacement system-test run dispatched'
+            else
+              state=success
+              description='All mandatory TPF system-test suites passed'
+            fi
+          else
+            state=error
+            description='TPF system-test orchestration or infrastructure failed'
+          fi
+          gh api --method POST "repos/$SOURCE_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state="$state" \
+            -f context='tpf/system-tests' \
+            -f description="$description" \
+            -f target_url="$TARGET_URL"

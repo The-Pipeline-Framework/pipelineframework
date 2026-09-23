@@ -477,6 +477,7 @@ const mainSidebar = [
             {text: 'CI Guidelines', link: '/evolve/ci-guidelines'},
             {text: 'Testing Guidelines', link: '/evolve/testing-guidelines'},
             {text: 'Repository Split Migration', link: '/evolve/repository-split-migration'},
+            {text: 'Cross-repository System Tests', link: '/evolve/cross-repository-system-tests'},
             {text: 'Gotchas & Pitfalls', link: '/evolve/gotchas-pitfalls'},
             {text: 'Proto Descriptor Integration', link: '/evolve/protobuf-integration-descriptor-res'},
             {text: 'Protobuf-over-HTTP Dispatch Design', link: '/evolve/protobuf-over-http-dispatch-design'},

@@ -1,0 +1,72 @@
+name: TPF System Tests — Bootstrap Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_json:
+        description: Exact baseline manifest JSON; every Maven version, source SHA and image must be immutable
+        required: true
+        type: string
+
+concurrency:
+  group: tpf-system-test-baseline-promotion
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate exact baseline
+        env:
+          BASELINE_JSON: ${{ inputs.baseline_json }}
+        run: |
+          printf '%s\n' "$BASELINE_JSON" > baseline.json
+          node --input-type=module <<'NODE'
+          import {readJson, validateBaseline, validateComponentsConfig} from './system-tests/scripts/lib/contracts.mjs';
+          const config = validateComponentsConfig(await readJson('system-tests/components.yml'));
+          validateBaseline(await readJson('baseline.json'), config);
+          NODE
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Verify every immutable component manifest
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          mkdir -p baseline-manifests
+          while IFS=$'\t' read -r component digest; do
+            mkdir -p "baseline-manifests/$component"
+            oras pull "$image@$digest" --output "baseline-manifests/$component"
+          done < <(jq -r '.components | to_entries[] | [.key, .value.manifestDigest] | @tsv' baseline.json)
+          node system-tests/scripts/validate-baseline-manifests.mjs \
+            --components system-tests/components.yml \
+            --baseline baseline.json \
+            --manifests baseline-manifests
+
+      - name: Publish first immutable baseline
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if oras resolve "$image:main" >/dev/null 2>&1; then
+            echo 'Baseline main already exists; use tested compare-and-swap promotion.' >&2
+            exit 1
+          fi
+          oras push --format json \
+            "$image:bootstrap-${{ github.run_id }}-${{ github.run_attempt }}" \
+            baseline.json:application/vnd.tpf.system-test-baseline.v1+json \
+            > baseline-oci.json
+          digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' baseline-oci.json)"
+          oras copy "$image@$digest" "$image:main"
