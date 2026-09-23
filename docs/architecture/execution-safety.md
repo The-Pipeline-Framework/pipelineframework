@@ -3,6 +3,7 @@
 TPF keeps useful work flowing without treating resilience as a business-policy profile. Its safety mechanisms answer different questions:
 
 - **Backpressure:** how much work may flow now?
+- **Paging:** how much resumable source work may one transition own?
 - **Blocking adaptation:** how much control remains after synchronous code enters the path?
 - **Circuit admission:** should a known-unhealthy managed dependency invocation start at all?
 
@@ -13,6 +14,7 @@ Timeout bounds one started invocation. Retry and backoff decide whether a failed
 | Boundary | Guarantee |
 | --- | --- |
 | Fully reactive segment | TPF propagates demand through the segment where all participants preserve it. |
+| Paged resumable source | TPF opens one bounded source slice at a pinned provider snapshot. Items still move only on downstream demand; a normally completed and released page may advance its opaque checkpoint. |
 | Generated REST/gRPC invocation | TPF can preserve reactive demand where the transport path supports it and can reject the invocation through circuit admission. |
 | `BlockingService` and `StepOneToOneBlocking` | TPF offloads the synchronous call, but cannot control I/O or buffering hidden inside it. |
 | `BlockingIteratorService` and `StepOneToManyBlockingIterator` | TPF obtains iterator elements according to downstream demand. The iterator itself can still read ahead or perform eager work. |
@@ -58,6 +60,14 @@ provider-resource termination. Providers must emit a deterministic total row ord
 resubscription recreates the same ONE_TO_MANY child identities.
 
 A reactive streaming pipeline can slow source parsing when an await or downstream step has no demand. A `BlockingIteratorService` is different: TPF requests the next iterator item only when downstream asks, but the iterator implementation might have already loaded a page, buffered rows, or contacted a dependency. Prefer the iterator form over a list-returning blocking form when a synchronous library exposes a cursor or reader, but do not mistake it for full end-to-end backpressure.
+
+## Live Streaming, Paging, And Durable Stream Recovery
+
+Live streaming controls pressure inside one running transition. Paging additionally limits the source records, replay scope, and remote-worker lifetime owned by that transition. A pipeline opts in on its first source-producing `ONE_TO_MANY` step with `paging.maxRecords`; the source provider owns its checkpoint format and validates a pinned snapshot each time a page opens.
+
+The current page remains an ordinary demand-driven stream. Slow Await admission or downstream demand stops source requests. An admitted item may continue through Await and Object Publish before the page closes. Normal publisher completion and provider resource release make the page result eligible for a fenced commit; only that commit can queue the next page. Cancellation or failure leaves the start checkpoint unchanged, so confirmed owner loss replays that page without rereading completed pages.
+
+Paging does not provide fine-grained durable takeover inside an open page. That stronger stream-region recovery remains a separate capability. A remote transition whose outcome is unknown retains the existing `REMOTE_OUTCOME_UNKNOWN` rule.
 
 Circuit admission cannot protect user-written outbound calls hidden in any blocking or reactive business method. Put that I/O behind a TPF-managed transport boundary when the framework must own circuit admission, retry, telemetry, and durability semantics.
 

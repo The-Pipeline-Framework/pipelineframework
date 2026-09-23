@@ -219,6 +219,19 @@ Object Publish metrics:
 | `tpf.object_publish.failed.total` | counter | `tpf.object_publish.target`, `tpf.object_publish.provider` | Publish failures. |
 | `tpf.object_publish.write.duration` | histogram | `tpf.object_publish.target`, `tpf.object_publish.provider` | Provider write duration in milliseconds. |
 
+Paged source metrics use only the bounded `tpf.page.exhausted` boolean where an attribute is needed:
+
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `tpf.page.completed.total` | counter | Source pages that completed normally and released provider resources. |
+| `tpf.page.records.consumed.total` | counter | Logical source records consumed by committed page results. |
+| `tpf.page.replayed.total` | counter | Page attempts identified as replays. |
+| `tpf.page.demand.stalls.total` | counter | Intervals where an open page waited with no downstream demand. |
+| `tpf.page.duration` | histogram | Source-page lifetime through provider resource release, in milliseconds. |
+| `tpf.page.demand.stall.duration` | histogram | Time an open page waited for further downstream demand, in milliseconds. |
+
+Use execution state and replay events for page index, source identity, checkpoint disposition, and duplicate-commit investigation. Do not add these high-cardinality values to metric attributes. A growing demand-stall duration with stable provider health indicates downstream or Await capacity is holding the source correctly; it is not evidence of eager page drain.
+
 Await boundary metrics:
 
 | Metric | Type | Attributes | Meaning |

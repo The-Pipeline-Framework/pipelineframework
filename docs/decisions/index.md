@@ -72,6 +72,7 @@ authoritative for exact syntax and release support.
 | [0061](./0061-product-bom-pins-the-tested-component-set.md) | Publish the exact independently released TPF component versions verified together. |
 | [0062](./0062-cross-repository-system-tests-use-immutable-overlays.md) | Validate independently released components through immutable candidate overlays and credential-separated test execution. |
 | [0063](./0063-repository-ownership-follows-released-contracts.md) | Assign repositories where consumers can rely on released contracts instead of source-level atomicity. |
+| [0064](./0064-paged-resumable-sources-preserve-live-demand.md) | Bound resumable source transitions by pages while preserving live item demand and existing recovery ownership. |
 
 ## Maintenance
 
