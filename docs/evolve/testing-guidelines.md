@@ -41,8 +41,9 @@ fixtures and deployment-topology assertions belong to their application reposito
 
 ## Cross-artifact compatibility
 
-`pipelineframework` owns the product BOM and `framework/transport-completeness-tests`. That module consumes released
-compiler, runtime and Connector artifacts and currently proves:
+`pipelineframework` owns the product BOM and `framework/transport-completeness-tests`. For `26.9.4-SNAPSHOT`, that
+module checks compatibility between the compiler, runtime and Connector artifacts selected by the product BOM. It
+currently establishes:
 
 - compiler generation with real Connector-owned contributed protocol types;
 - REST, gRPC and function representation generation across those types;
