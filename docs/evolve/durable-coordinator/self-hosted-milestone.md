@@ -12,11 +12,12 @@ Use the restaurant approval reference first. It is the smallest human-await path
 ./restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
 ```
 
-Use CSV Payments after that when you need the stream-await/provider proof:
+Use the standalone [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments)
+application after that when you need the stream-await/provider proof. Run these commands from its root:
 
 ```bash
-./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
-TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+./self-host/container/run-container-ha-demo.sh --ci
+TPF_CSV_AWAIT_TRANSPORT=kafka ./self-host/container/run-container-ha-demo.sh --ci
 ```
 
 The self-host HA path is `COMPUTE + QUEUE_ASYNC`: a coordinator service owns durable execution state and dispatches work to local, REST, gRPC, or SQS workers. Current `FUNCTION` support is serverless invocation/adapter support, not a TPF-owned durable HA coordinator.

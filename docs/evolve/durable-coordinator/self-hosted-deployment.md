@@ -4,7 +4,11 @@ This page describes the current production-ish self-host shape for the durable c
 
 The runnable starting point is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host). That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process. Its containerized HA reference runs the same flow with a coordinator container, REST worker container, and LocalStack-backed DynamoDB/SQS/S3-compatible services. Commands below run from the root of that standalone examples repository.
 
-`examples/csv-payments/self-host/container` is the advanced container reference. It adds stream input, app persistence, a REST transition worker, and a grouped `pipeline-runtime-svc` gRPC step runtime on top of the same durable coordinator pattern. The default lane uses SQS to stay within the LocalStack-backed AWS-shaped substrate; `TPF_CSV_AWAIT_TRANSPORT=kafka` runs the same self-host topology with Kafka await completions.
+[`csv-kafka-payments/self-host/container`](https://github.com/The-Pipeline-Framework/csv-kafka-payments/tree/main/self-host/container)
+is the advanced container reference. It adds stream input, app persistence, a REST transition worker, and a grouped
+`pipeline-runtime-svc` gRPC step runtime on top of the same durable coordinator pattern. The default lane uses SQS
+to stay within the LocalStack-backed AWS-shaped substrate; `TPF_CSV_AWAIT_TRANSPORT=kafka` runs the same self-host
+topology with Kafka await completions.
 
 For the role split behind coordinator, transition worker, step/runtime services, and the historical `orchestrator-svc` name, see [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology).
 
@@ -145,16 +149,18 @@ The same reference includes a process-restart recovery proof:
 
 That script submits an execution, waits until it is parked on an await unit, restarts the coordinator, verifies status and pending await state are still readable, completes the await, and verifies the terminal result. It then repeats the flow with a worker restart before await completion. This proves recovery at a deterministic await boundary; it does not claim arbitrary mid-transition crash injection.
 
-The CSV Payments container reference demonstrates the same baseline with broker-backed await completions and the example persistence path:
+The standalone [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments)
+container reference demonstrates the same baseline with broker-backed await completions and the example persistence
+path. Run these commands from its root:
 
 ```bash
-./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+./self-host/container/run-container-ha-demo.sh --ci
 ```
 
 The SQS lane is the default AWS-shaped proof. The Kafka lane proves the same await abstraction against a second provider:
 
 ```bash
-TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+TPF_CSV_AWAIT_TRANSPORT=kafka ./self-host/container/run-container-ha-demo.sh --ci
 ```
 
 CSV await item continuations use the same bounded transition-worker seam as normal queue-async work. The worker executes each item continuation segment until the itemized unit reaches the next aggregate or terminal boundary. In the connector-first CSV path, terminal Object Publish owns output object writes before execution success is committed, while generated step clients target the runtime and persistence containers.

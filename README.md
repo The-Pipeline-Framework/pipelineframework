@@ -144,8 +144,8 @@ gh skill install The-Pipeline-Framework/pipelineframework tpf-authoring --allow-
 - [`rag-turnkey`](https://github.com/The-Pipeline-Framework/rag-turnkey) composes separate indexing and query applications
   backed by Ollama and PostgreSQL/pgvector.
 
-The [Examples Guide](https://pipelineframework.org/develop/examples/) links and briefs every example
-README in the repository.
+The [Examples Guide](https://pipelineframework.org/develop/examples/) links and briefs the examples in the
+standalone examples and application repositories.
 
 ## Choose a Documentation Path
 
@@ -164,6 +164,8 @@ README in the repository.
 
 ## Repository Map
 
+- The standalone [`pipelineframework-compiler`](https://github.com/The-Pipeline-Framework/pipelineframework-compiler)
+  repository owns the framework-neutral JSR-269 compiler, semantic phases, and generated-source renderers.
 - The standalone [`pipelineframework-contracts`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts)
   repository owns framework-neutral model, DSL, API, SPI, serialization, and protocol contracts.
 - The standalone [`pipelineframework-connectors`](https://github.com/The-Pipeline-Framework/pipelineframework-connectors)
@@ -202,7 +204,9 @@ Import `pipelineframework-bom` to use the component versions verified together b
 </dependencyManagement>
 ```
 
-Application dependencies covered by the BOM then omit their individual versions. The BOM records a tested compatible set; it does not require every component repository to share one release lifecycle.
+Application dependencies covered by the BOM then omit their individual versions. The BOM records a tested compatible
+set promoted through the cross-repository full train; it does not require every component repository to share one
+release lifecycle.
 
 ## Build and Validation
 
@@ -226,6 +230,16 @@ Documentation verification:
 npm --prefix docs test
 npm --prefix docs run build
 ```
+
+System-test orchestration contract:
+
+```shell
+node --test system-tests/test/*.test.mjs
+node system-tests/scripts/validate-config.mjs
+```
+
+See [Cross-repository system tests](https://pipelineframework.org/evolve/cross-repository-system-tests) for
+candidate, compatibility-set, full-train, credential, and promotion behavior.
 
 ## Contributing and Security
 

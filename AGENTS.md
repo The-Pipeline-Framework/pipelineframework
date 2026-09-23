@@ -9,6 +9,7 @@ Core modules:
 - `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
   `pipelineframework-contracts` repository and consumed here as a released dependency
 - `framework/transport-completeness-tests`: cross-artifact compiler/runtime/connector compatibility coverage
+- `system-tests`: immutable candidate-overlay policy, compatibility-set orchestration, and full-train promotion
 
 The standalone `pipelineframework-runtime` repository owns the Quarkus runtime, deployment,
 Spring runtime adapter, and foundational persistence/cache/repository plugins consumed here as
@@ -211,7 +212,9 @@ For planning, PR slicing, roadmap, or architecture tradeoff work, load `AGENTS.p
 
 TPF-specific scoping rules:
 
-- Core semantics live under `framework/api` and released runtime/contract artifacts owned by their standalone repositories.
+- Core contracts live in released artifacts owned by `pipelineframework-contracts`; compiler semantics live in
+  `pipelineframework-compiler`. This repository owns the BOM, cross-artifact conformance, candidate-overlay and
+  full-train policy, and canonical docs, not source mirrors or owner-local tests for those components.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.
@@ -264,14 +267,19 @@ Prefer GitNexus context over broad grep, but do not call every graph tool by def
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **pipelineframework** (54434 symbols, 135286 relationships, 592 execution flows).
-
-> Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
+TPF's canonical `main` branches are indexed as the GitNexus group **tpf**. This repository's managed label is
+`github.com/The-Pipeline-Framework/pipelineframework`. The auto-sync service owns the managed clones and index;
+never edit those clones or start a competing foreground analysis. Work in an ordinary checkout or worktree and
+verify every indexed finding against its current source.
 
 ## Always Do
 
-- **MUST run impact before editing.** Use `impact({target: "symbolName", direction: "upstream"})` or `node .gitnexus/run.cjs impact "symbolName" --direction upstream --repo .`; report callers, processes, and risk. Never substitute grep for graph analysis.
-- **MUST analyze graph changes before committing.** Use `detect_changes({scope: "all"})` (MCP) or `node .gitnexus/run.cjs detect-changes --scope all --repo .` (CLI fallback). `partial: true` or `truncated: true` is not a clean check — a zero means unseen, not unaffected; re-run it. For regression review: `detect_changes({scope: "compare", base_ref: "main"})` or `node .gitnexus/run.cjs detect-changes --scope compare --base-ref "main" --repo .`.
+- **MUST run impact before editing a symbol.** Target the owning managed repository, report callers, processes, and
+  risk, and use the `tpf` group when the dependency may cross repositories. Never substitute grep for graph
+  analysis.
+- **MUST analyse graph changes before committing code.** Use `detect_changes` against the indexed repository when
+  the tool can represent the change. `partial: true` or `truncated: true` is not a clean check. Documentation-only
+  changes instead require the documentation validation appropriate to the changed surface.
 - MUST warn on HIGH/CRITICAL `risk` pre-edit; never use `riskSharedAxes` to waive a HIGH/CRITICAL `risk` warning. Compare File/symbol: MCP File omits axes; Graph-RAG expands File.
 - **MUST treat `risk: UNKNOWN` as unresolved, not as low.** An empty caller set is not evidence the symbol is unused — it can also mean the callers are not resolvable by the index (plain-object property access, dynamic dispatch, cross-language calls). `impact` pairs `UNKNOWN` with a `riskNote` saying so. Confirm with a text search before treating the symbol as safe to change or delete; do not proceed on the strength of a zero.
 - **MUST use `query({search_query: "concept"})` for concepts/flows, `context({name: "symbolName"})` for a named symbol, or `impact` for blast radius, on read-only callers, dependencies, imports, or execution flow.** Graph first; text search only for empty/`UNKNOWN`/literals.
@@ -288,20 +296,19 @@ This project is indexed by GitNexus as **pipelineframework** (54434 symbols, 135
 
 | Resource | Use for |
 | --- | --- |
-| `gitnexus://repo/pipelineframework/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/pipelineframework/clusters` | All functional areas |
-| `gitnexus://repo/pipelineframework/processes` | All execution flows |
-| `gitnexus://repo/pipelineframework/process/{name}` | Step-by-step execution trace |
+| `tpf` group | Cross-repository ownership and dependency discovery |
+| `github.com/The-Pipeline-Framework/pipelineframework` | This repository's code and conformance surface |
+| Owning repository label | Component-local symbols, processes, and impact |
 
 ## CLI
 
 | Task | Read this skill file |
 | --- | --- |
-| Understand architecture / "How does X work?" | `.agents/skills/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.agents/skills/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.agents/skills/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.agents/skills/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.agents/skills/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.agents/skills/gitnexus-cli/SKILL.md` |
+| Understand architecture / "How does X work?" | `gitnexus-exploring` |
+| Blast radius / "What breaks if I change X?" | `gitnexus-impact-analysis` |
+| Trace bugs / "Why is X failing?" | `gitnexus-debugging` |
+| Rename / extract / split / refactor | `gitnexus-refactoring` |
+| Tools, resources, schema reference | `gitnexus-guide` |
+| Index, status, clean, wiki CLI commands | `gitnexus-cli` |
 
 <!-- gitnexus:end -->

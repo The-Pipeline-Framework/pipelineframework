@@ -25,8 +25,8 @@ flowchart TB
 | Vector storage | `vector-store`, `vector-store-pgvector` | [Embedding and vector connectors](/develop/extension/embedding-and-vector-connectors) |
 | Gmail read Query | `gmail-query` | [Host-authenticated Connectors](/develop/oauth-connections/reference) |
 
-The complete module source is under
-[`framework/connectors`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/framework/connectors).
+The complete module source is in the
+[`pipelineframework-connectors`](https://github.com/The-Pipeline-Framework/pipelineframework-connectors) repository.
 `query-hibernate-common` and `mcp-contract` are shared implementation/contract modules rather than
 application-selected providers.
 

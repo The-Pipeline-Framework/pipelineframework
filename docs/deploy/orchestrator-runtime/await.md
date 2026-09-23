@@ -92,7 +92,7 @@ sequenceDiagram
 
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits completion envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS standard queues.
 
-For runnable examples, use [`pipelineframework-examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) for human/UI await and [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for brokered unary await over a stream.
+For runnable examples, use [`pipelineframework-examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval) for human/UI await and [`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) for brokered unary await over a stream.
 
 ## Runtime Guardrails
 

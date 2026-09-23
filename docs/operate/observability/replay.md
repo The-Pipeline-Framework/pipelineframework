@@ -252,7 +252,7 @@ Example commands and artifact locations are intentionally kept out of this page.
 
 Use the example READMEs for concrete generation flows:
 
-- `examples/csv-payments/README.md`
+- [`csv-kafka-payments/README.md`](https://github.com/The-Pipeline-Framework/csv-kafka-payments/blob/main/README.md)
 - [`search/README.md`](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/main/search/README.md)
 
 ## LGTM / Grafana discovery

@@ -1,13 +1,15 @@
 # CSV Payments Monolith Walkthrough
 
-This page documents the current monolith topology in `examples/csv-payments`.
+This page documents the current monolith topology in the standalone
+[`csv-kafka-payments`](https://github.com/The-Pipeline-Framework/csv-kafka-payments) application. Paths and commands
+below are relative to that repository's root.
 
 ## What exists today
 
-- Monolith parent POM: `examples/csv-payments/pom.monolith.xml`
-- Monolith runtime module: `examples/csv-payments/monolith-svc/pom.xml`
-- Runtime mapping scenario: `examples/csv-payments/config/runtime-mapping/monolith.yaml`
-- Build script: `examples/csv-payments/build-monolith.sh`
+- Root POM used by `build-monolith.sh`: `pom.xml`
+- Monolith runtime module: `monolith-svc/pom.xml`
+- Runtime mapping scenario: `config/runtime-mapping/monolith.yaml`
+- Build script: `build-monolith.sh`
 
 ## Source layout clarification
 
@@ -32,22 +34,22 @@ Without these metadata files, monolith startup can fail with errors such as:
 ## Build the monolith runtime
 
 ```bash
-./examples/csv-payments/build-monolith.sh -DskipTests
+./build-monolith.sh -DskipTests
 ```
 
 What the script does:
 
 - Applies monolith runtime mapping.
-- Installs `examples/csv-payments/pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
+- Installs `pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
 - Ensures development certificates exist for module-local test/runtime launches.
-- Builds `pom.monolith.xml`.
+- Builds the monolith module selection from `pom.xml`.
 - Uses local transport for in-process step calls.
 - Restores previous runtime mapping file after build.
 
 ## Run monolith E2E
 
 ```bash
-./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
+./mvnw -f pom.xml -pl orchestrator-svc \
   -Dcsv.runtime.layout=monolith -Dtest=CsvPaymentsEndToEndIT test
 ```
 

@@ -304,6 +304,18 @@ Then decide whether the right change is to:
 - move misplaced documentation while retaining redirects;
 - document the same capability differently for distinct audiences.
 
+## Repository ownership
+
+Canonical public documentation, navigation, terminology, and architectural decisions live in the
+`pipelineframework` repository even when the implementation lives elsewhere. A component repository README should
+explain that repository's ownership, artifacts, dependency direction, build, and release contract, then link to the
+canonical documentation instead of copying a second guide.
+
+When source evidence spans repositories, use the GitNexus `tpf` group to find the semantic owner and verify the
+result in that repository's current source. Point current documentation at the standalone compiler, contracts,
+runtime, Connector, Block, Expansion, example, reference-implementation, or application repository that now owns
+the source. Do not preserve a stale monorepo path merely to avoid an external link.
+
 ## Core rule
 
 Write **today's TPF**, while understanding enough of yesterday's TPF to recognise why the documentation looks the way it does.

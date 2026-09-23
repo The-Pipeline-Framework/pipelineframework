@@ -46,7 +46,7 @@ For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested
 
 The CSV self-host HA profile does not emit telemetry in this verification setup, so do not expect it
 to populate either Grafana dashboard. See the
-[CSV Payments runbook](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments)
+[CSV Payments runbook](https://github.com/The-Pipeline-Framework/csv-kafka-payments)
 for the fast verification run and 10,000-item dashboard workload commands.
 
 The fast verification run validates the required semantic stages and Await trace continuity with a

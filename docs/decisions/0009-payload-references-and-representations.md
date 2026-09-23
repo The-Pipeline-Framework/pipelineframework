@@ -23,9 +23,9 @@ connector mappers adapt admission/publication; runtime mappings describe placeme
 do not convert values. Object Ingest admits references, including grouped references
 when several objects form one typed input. Object Publish is a typed outbound boundary.
 
-This decision governs canonical payload types, `framework/plugins` materialization,
-object connectors under `framework/connectors`, representation providers, and mapping
-resolution in `framework/deployment`.
+This decision governs canonical payload types in `pipelineframework-contracts`, materialization in
+`pipelineframework-runtime`, object Connectors and representation providers in `pipelineframework-connectors`, and
+mapping resolution in `pipelineframework-compiler`.
 
 ## Rationale
 

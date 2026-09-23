@@ -40,8 +40,8 @@ The current transport-complete contributed slice covers records, including neste
 
 Before annotation processing, pipeline protobuf contracts are generated from the pipeline template. For version 3 Java applications, the Java domain target is generated in the same lifecycle. The authoritative generators are:
 
-- `framework/compiler/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java`
-- `framework/compiler/src/main/java/org/pipelineframework/proto/PipelineJavaDomainGenerator.java`
+- [`PipelineProtoGenerator.java`](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/main/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java)
+- [`PipelineJavaDomainGenerator.java`](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/main/src/main/java/org/pipelineframework/proto/PipelineJavaDomainGenerator.java)
 
 These generators belong to the `org.pipelineframework:pipelineframework-compiler` artifact, which runs without a runtime integration dependency. Maven consumers declare this artifact explicitly on the generator classpath; the generator class names remain unchanged.
 
