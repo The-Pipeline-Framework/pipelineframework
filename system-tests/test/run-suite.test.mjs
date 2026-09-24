@@ -15,7 +15,10 @@ async function fixture(command) {
   await writeFile(join(directory, 'wrapper.sh'), '#!/usr/bin/env bash\nprintf \'%s\\n\' "${MAVEN_ARGS:-}" > "$TPF_CAPTURE"\n');
   await chmod(join(directory, 'wrapper.sh'), 0o755);
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({schemaVersion: 1, suites: {verify: {command, timeoutMinutes: 1}}}));
-  await writeFile(join(directory, 'resolved.json'), JSON.stringify({components: {contracts: {mavenVersion: '26.9.4-pr.7.abcdef123456'}}}));
+  await writeFile(join(directory, 'resolved.json'), JSON.stringify({
+    components: {contracts: {mavenVersion: '26.9.4-pr.7.abcdef123456'}},
+    coordinationBom: {mavenVersion: '26.9.4-system-test.1234567890ab'}
+  }));
   return {directory, capture};
 }
 
@@ -24,7 +27,10 @@ function run({directory, capture}) {
     '--manifest', join(directory, 'manifest.json'),
     '--entrypoint', 'verify',
     '--resolvedSet', join(directory, 'resolved.json'),
-    '--versionProperties', JSON.stringify({contracts: 'pipelineframework.contracts.version'}),
+    '--versionProperties', JSON.stringify({
+      contracts: 'pipelineframework.contracts.version',
+      coordinationBom: 'pipelineframework.bom.version'
+    }),
     '--cwd', directory,
     '--mavenRepository', join(directory, 'm2')
   ], {env: {...process.env, TPF_CAPTURE: capture}, encoding: 'utf8'});
@@ -36,6 +42,7 @@ test('direct Maven suite commands receive exact versions and the isolated reposi
   assert.equal(result.status, 0, result.stderr);
   const captured = await readFile(value.capture, 'utf8');
   assert.match(captured, /-Dpipelineframework\.contracts\.version=26\.9\.4-pr\.7\.abcdef123456/);
+  assert.match(captured, /-Dpipelineframework\.bom\.version=26\.9\.4-system-test\.1234567890ab/);
   assert.match(captured, new RegExp(`-Dmaven\\.repo\\.local=${value.directory}/m2`));
 });
 
@@ -45,5 +52,6 @@ test('wrapper suite commands receive exact Maven arguments through MAVEN_ARGS', 
   assert.equal(result.status, 0, result.stderr);
   const captured = await readFile(value.capture, 'utf8');
   assert.match(captured, /-Dpipelineframework\.contracts\.version=26\.9\.4-pr\.7\.abcdef123456/);
+  assert.match(captured, /-Dpipelineframework\.bom\.version=26\.9\.4-system-test\.1234567890ab/);
   assert.match(captured, new RegExp(`-Dmaven\\.repo\\.local=${value.directory}/m2`));
 });

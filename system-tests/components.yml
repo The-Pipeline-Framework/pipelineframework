@@ -135,6 +135,7 @@
       "repository": "The-Pipeline-Framework/pipelineframework-examples",
       "kind": "source",
       "consumerVersionProperties": {
+        "coordinationBom": "pipelineframework.bom.version",
         "compiler": "pipelineframework.compiler.version",
         "connectors": "pipelineframework.connectors.version",
         "expansions": "pipelineframework.expansions.version",
@@ -146,6 +147,7 @@
       "repository": "The-Pipeline-Framework/pipelineframework-reference-implementations",
       "kind": "source",
       "consumerVersionProperties": {
+        "coordinationBom": "pipelineframework.bom.version",
         "compiler": "pipelineframework.compiler.version",
         "connectors": "pipelineframework.connectors.version",
         "runtime": "pipelineframework.runtime.version"
@@ -156,6 +158,7 @@
       "repository": "The-Pipeline-Framework/csv-kafka-payments",
       "kind": "source",
       "consumerVersionProperties": {
+        "coordinationBom": "pipelineframework.bom.version",
         "compiler": "pipelineframework.compiler.version",
         "connectors": "pipelineframework.connectors.version",
         "runtime": "pipelineframework.runtime.version"

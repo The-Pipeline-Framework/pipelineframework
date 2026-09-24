@@ -37,7 +37,7 @@ if (versionProperties === null || typeof versionProperties !== 'object' || Array
 }
 const versionArguments = [];
 for (const [component, property] of Object.entries(versionProperties)) {
-  const pin = resolvedSet.components?.[component];
+  const pin = component === 'coordinationBom' ? resolvedSet.coordinationBom : resolvedSet.components?.[component];
   if (pin === undefined) throw new Error(`suite references unresolved Maven component ${component}`);
   if (typeof property !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(property)) throw new Error(`suite has invalid Maven property for ${component}`);
   versionArguments.push(`-D${property}=${pin.mavenVersion}`);

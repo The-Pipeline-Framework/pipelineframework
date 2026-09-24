@@ -346,8 +346,14 @@ jobs:
             --plan materialization-plan.json \
             --repository "$local_repo"
           mkdir -p "$RUNNER_TEMP/tpf-test-inputs"
+          node system-tests/scripts/materialize-tested-bom.mjs \
+            --source framework/bom/pom.xml \
+            --resolvedSet resolved/resolved-set.json \
+            --repository "$local_repo" \
+            --coordinationSha "${{ github.sha }}" \
+            --outputResolvedSet "$RUNNER_TEMP/tpf-test-inputs/resolved-set.json"
           tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .
-          cp resolved/resolved-set.json resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
+          cp resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
 
       - name: Publish credential-free test inputs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
