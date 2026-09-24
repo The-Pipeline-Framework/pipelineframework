@@ -75,7 +75,7 @@ The candidate workflow has four security zones:
    checked-in contract;
 2. trusted retrieval uses a repository-scoped GitHub App token to read the publication run and post status;
 3. trusted materialisation reads GitHub Packages into a run-isolated Maven repository, verifies every recorded
-   checksum, then uploads a credential-free archive;
+   checksum, removes Maven resolver-origin and negative-cache metadata, then uploads a credential-free archive;
 4. untrusted owner tests execute with contents-read only and cannot read package, dispatch or status credentials.
 
 Fork code is never executed in a privileged job. A fork pull request first runs its ordinary unprivileged owner
@@ -90,9 +90,22 @@ The organisation GitHub App used by the train needs only the operations it perfo
 - Contents write on `pipelineframework` for `repository_dispatch`;
 - no administrative permission.
 
-Set `SYSTEM_TEST_APP_ID` as a variable and `SYSTEM_TEST_APP_PRIVATE_KEY` as a secret in repositories that publish or
-coordinate candidates. Grant `pipelineframework` read access to each Maven package. Its own `GITHUB_TOKEN` performs
-package reads; App installation tokens are not exposed to test jobs.
+Store `SYSTEM_TEST_APP_ID` and `SYSTEM_TEST_APP_PRIVATE_KEY` only in `pipelineframework`, where trusted coordinator
+workflows use them. Do not copy the coordinator App private key into publisher repositories. A publisher that sends a
+candidate event must use a separate dispatch credential scoped only to `pipelineframework`; it must not grant access
+to other owner repositories. Maven candidates currently use public, repository-scoped GitHub Packages registries,
+so they do not expose a package-level
+**Manage Actions access** control and need no additional grant to `pipelineframework`. The coordinator's own
+`GITHUB_TOKEN`, with `packages: read`, performs package reads. If a package becomes private or changes ownership,
+grant the coordinator explicit read access before enabling its candidate workflow. App installation tokens are not
+used for Maven package reads and are never exposed to test jobs.
+
+The App installation must cover the ten owner repositories and `pipelineframework`. Its installation permissions
+must permit Actions read and Contents read on owner repositories, while Contents write is limited to
+`pipelineframework`. Pull requests read and Commit statuses write remain required; each job still requests only the
+repository-scoped subset it needs. Maven-producing repositories publish candidates with their own
+`GITHUB_TOKEN` and `packages: write`. Source-only harness repositories publish manifests without Maven package
+authority. Create the `safe-to-system-test` label in every repository that accepts fork pull requests.
 
 Before bootstrapping, run the six Maven producers on `main` once so that each component has an immutable candidate
 manifest digest. Those seed runs may stop when baseline resolution finds no `main` tag; their published candidate
@@ -152,6 +165,19 @@ URLs. The coordinator resolves every current head, locates its successful candid
 candidate per component, unions the centrally required suites, and reports the same aggregate result to every
 participating SHA. It never falls back to a branch name or to an older PR head.
 
+Before dispatching a set, confirm that `TPF Candidate Publish` succeeded for the current SHA of every pull request.
+The compatibility workflow does not wait for a publisher and does not reuse a candidate from an older SHA.
+
+```bash
+gh workflow run system-test-compatibility-set.yml \
+  --repo The-Pipeline-Framework/pipelineframework \
+  -f set_id=compiler-runtime-change \
+  -f pull_requests='https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/123,https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/456'
+```
+
+Use the same set ID when repeating the same coordinated change. If any participating head changes, wait for its new
+candidate publisher and dispatch the set again; the previous result remains evidence only for the previous SHAs.
+
 ## What a resolved test set contains
 
 Every run starts with one baseline digest. A normal pull request replaces one component. A compatibility set may
@@ -184,6 +210,30 @@ flowchart LR
 
 This resolved set is the reproducibility boundary. Re-running it does not consult `main`, `latest`, a Maven
 snapshot, or a moving container tag.
+
+The materialised Maven repository is a portable input, not a runner cache. After checksum verification, remove
+`_remote.repositories`, `*.lastUpdated` and `resolver-status.properties` before archiving it. Otherwise Maven may
+ignore files that are physically present because their original authenticated repository is absent in the
+credential-free test job. A materialisation change is complete only when a clean job with no package settings can
+resolve the exact component set.
+
+## Reruns and failure handling
+
+Candidate identity is immutable. A coordinator or infrastructure correction should rerun the trusted candidate
+publisher so it dispatches the same manifest again; it must not rebuild or mint another candidate version. A new
+source commit is different: it needs a new candidate build and publisher before system tests can run.
+
+Use the fixed status as the asynchronous notification boundary. Do not poll a running train. Record its run URL and
+inspect it only after it reaches a terminal state. Start with the first failed mandatory job and classify the result:
+
+- `failure` means an owner-controlled build or test assertion failed;
+- `error` means candidate validation, materialisation, credentials or coordinator infrastructure failed;
+- a stale pull-request head needs a new candidate, not a workflow retry;
+- a transient registry or coordinator failure may redispatch the same immutable candidate.
+
+Do not rerun a long owner build merely because a wrapper command returned an anomalous exit code without an error.
+If Maven reported no failure and produced the required outputs, treat that build as successful and fix the wrapper
+or status adapter separately.
 
 ## Where credentials stop
 
