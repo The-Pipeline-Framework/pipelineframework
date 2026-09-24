@@ -145,8 +145,8 @@ export function validateComponentsConfig(config) {
 function validateVersionProperties(properties, expectedComponents, name) {
   object(properties, name);
   for (const [component, property] of Object.entries(properties)) {
-    if (!expectedComponents.includes(component)) fail(`${name} references unknown component ${component}`);
-    if (!MAVEN_COMPONENTS.includes(component)) fail(`${name} references non-Maven component ${component}`);
+    if (!expectedComponents.includes(component) && component !== 'coordinationBom') fail(`${name} references unknown component ${component}`);
+    if (!MAVEN_COMPONENTS.includes(component) && component !== 'coordinationBom') fail(`${name} references non-Maven component ${component}`);
     if (typeof property !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(property)) fail(`${name}.${component} is invalid`);
   }
 }

@@ -31,6 +31,12 @@ individual versions. Consumer repositories should import a released BOM version 
 artifacts have been published. Maven build-plugin versions remain explicit because dependency-management imports do
 not manage application build plugins.
 
+Before a compatible set is released, the cross-repository system-test coordinator materializes an unpublished,
+content-addressed `pipelineframework-bom` from this repository's BOM source and the exact candidate/baseline pins.
+Consumer suites receive that BOM through an isolated local Maven repository and an explicit
+`pipelineframework.bom.version` property. The tested BOM is evidence for one run, not a release artifact or a
+substitute for publishing the final product BOM.
+
 ## Rationale
 
 A released BOM is a normal Maven contract that downstream repositories can consume without source-level
