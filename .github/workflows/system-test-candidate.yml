@@ -352,6 +352,8 @@ jobs:
             --repository "$local_repo" \
             --coordinationSha "${{ github.sha }}" \
             --outputResolvedSet "$RUNNER_TEMP/tpf-test-inputs/resolved-set.json"
+          node system-tests/scripts/sanitize-maven-repository.mjs \
+            --repository "$local_repo"
           tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .
           cp resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
 
