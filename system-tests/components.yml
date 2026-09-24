@@ -65,6 +65,8 @@
         "org.pipelineframework:connector-maven-plugin:maven-plugin",
         "org.pipelineframework:connector-mcp-maven-plugin:maven-plugin",
         "org.pipelineframework:connector-openapi-maven-plugin:maven-plugin",
+        "org.pipelineframework:decision-query-connector:jar",
+        "org.pipelineframework:decision-query-jev-connector:jar",
         "org.pipelineframework:embedding-query-connector:jar",
         "org.pipelineframework:embedding-query-langchain4j-connector:jar",
         "org.pipelineframework:framework-connectors:pom",
