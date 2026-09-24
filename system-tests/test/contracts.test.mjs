@@ -117,6 +117,7 @@ test('configuration covers exactly the ten extracted repositories', () => {
     'org.pipelineframework:cache-plugin:jar',
     'org.pipelineframework:persistence-plugin:jar',
     'org.pipelineframework:pipelineframework-deployment:jar',
+    'org.pipelineframework:pipelineframework-release-maven-plugin:jar',
     'org.pipelineframework:pipelineframework-runtime-parent:pom',
     'org.pipelineframework:pipelineframework-runtime-spring:jar',
     'org.pipelineframework:pipelineframework:jar',
