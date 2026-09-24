@@ -294,13 +294,17 @@ export function validateEventAgainstManifest(event, manifest, manifestSha256) {
   if (event.manifest_sha256 !== manifestSha256) fail('candidate manifest checksum does not match dispatch event');
 }
 
-export function validateGitHubProvenance(event, manifest, publicationRun, buildRun, pullRequest) {
+export function validateGitHubProvenance(event, manifest, sourceRepository, publicationRun, buildRun, pullRequest) {
+  object(sourceRepository, 'source repository');
+  const sourceRepositoryName = nonBlank(sourceRepository.full_name, 'source repository full name');
+  const defaultBranch = nonBlank(sourceRepository.default_branch, 'source repository default branch');
+  if (sourceRepositoryName !== event.source_repository) fail('source repository metadata does not match event');
   validateRunAgainstManifest(publicationRun, manifest.provenance.publication, 'publication');
   validateRunAgainstManifest(buildRun, manifest.provenance.build, 'build');
   if (publicationRun.id !== event.publication_run_id) fail('publication workflow run ID does not match event');
   if (publicationRun.path !== '.github/workflows/tpf-candidate-publish.yml') fail('candidate did not originate from the trusted publisher workflow');
   if (publicationRun.event !== 'workflow_run') fail('candidate publisher must be triggered by workflow_run');
-  if (publicationRun.head_branch !== publicationRun.repository?.default_branch) fail('candidate publisher did not run from the repository default branch');
+  if (publicationRun.head_branch !== defaultBranch) fail('candidate publisher did not run from the repository default branch');
   if (buildRun.path !== '.github/workflows/tpf-candidate-build.yml') fail('candidate did not originate from the trusted build workflow');
   if (event.pull_request_number !== null) {
     object(pullRequest, 'pull request');
@@ -314,7 +318,7 @@ export function validateGitHubProvenance(event, manifest, publicationRun, buildR
   } else {
     if (buildRun.event !== 'push') fail('main candidate build must be triggered by push');
     if (buildRun.head_sha !== event.source_sha) fail('main candidate build head SHA does not match event');
-    if (buildRun.head_branch !== buildRun.repository?.default_branch) fail('main candidate build did not run from the repository default branch');
+    if (buildRun.head_branch !== defaultBranch) fail('main candidate build did not run from the repository default branch');
   }
 }
 

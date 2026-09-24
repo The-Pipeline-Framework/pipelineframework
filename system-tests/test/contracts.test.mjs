@@ -190,6 +190,7 @@ test('raw manifest checksum and dispatch values must agree', async () => {
 });
 
 test('GitHub provenance binds the trusted build and publisher runs', () => {
+  const sourceRepository = {full_name: event().source_repository, default_branch: 'main'};
   const publicationRun = {
     id: 123,
     run_attempt: 1,
@@ -198,7 +199,7 @@ test('GitHub provenance binds the trusted build and publisher runs', () => {
     path: '.github/workflows/tpf-candidate-publish.yml',
     event: 'workflow_run',
     head_branch: 'main',
-    repository: {full_name: event().source_repository, default_branch: 'main'}
+    repository: {full_name: event().source_repository}
   };
   const buildRun = {
     id: 122,
@@ -207,7 +208,7 @@ test('GitHub provenance binds the trusted build and publisher runs', () => {
     conclusion: 'success',
     path: '.github/workflows/tpf-candidate-build.yml',
     event: 'pull_request',
-    repository: {full_name: event().source_repository, default_branch: 'main'},
+    repository: {full_name: event().source_repository},
     pull_requests: [{number: 42, head: {sha}}]
   };
   const pullRequest = {
@@ -215,10 +216,10 @@ test('GitHub provenance binds the trusted build and publisher runs', () => {
     base: {repo: {full_name: event().source_repository}},
     head: {sha, repo: {full_name: 'contributor/pipelineframework-blocks'}}
   };
-  validateGitHubProvenance(event(), manifest(), publicationRun, buildRun, pullRequest);
-  assert.throws(() => validateGitHubProvenance(event(), manifest(), publicationRun, buildRun, {...pullRequest, head: {...pullRequest.head, sha: otherSha}}), /stale/);
-  assert.throws(() => validateGitHubProvenance(event(), manifest(), {...publicationRun, path: '.github/workflows/other.yml'}, buildRun, pullRequest), /workflow path/);
-  assert.throws(() => validateGitHubProvenance(event(), manifest(), publicationRun, {...buildRun, pull_requests: []}, pullRequest), /not associated/);
+  validateGitHubProvenance(event(), manifest(), sourceRepository, publicationRun, buildRun, pullRequest);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), sourceRepository, publicationRun, buildRun, {...pullRequest, head: {...pullRequest.head, sha: otherSha}}), /stale/);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), sourceRepository, {...publicationRun, path: '.github/workflows/other.yml'}, buildRun, pullRequest), /workflow path/);
+  assert.throws(() => validateGitHubProvenance(event(), manifest(), sourceRepository, publicationRun, {...buildRun, pull_requests: []}, pullRequest), /not associated/);
 });
 
 test('main provenance binds the candidate SHA to the default-branch build, not the publisher SHA', () => {
@@ -231,6 +232,7 @@ test('main provenance binds the candidate SHA to the default-branch build, not t
     pull_request_number: null,
     candidate_version: '26.9.4-main.abcdef123456'
   });
+  const sourceRepository = {full_name: candidateEvent.source_repository, default_branch: 'main'};
   const publicationRun = {
     id: 123,
     run_attempt: 1,
@@ -240,7 +242,7 @@ test('main provenance binds the candidate SHA to the default-branch build, not t
     conclusion: 'success',
     path: '.github/workflows/tpf-candidate-publish.yml',
     event: 'workflow_run',
-    repository: {full_name: candidateEvent.source_repository, default_branch: 'main'}
+    repository: {full_name: candidateEvent.source_repository}
   };
   const buildRun = {
     id: 122,
@@ -251,12 +253,16 @@ test('main provenance binds the candidate SHA to the default-branch build, not t
     conclusion: 'success',
     path: '.github/workflows/tpf-candidate-build.yml',
     event: 'push',
-    repository: {full_name: candidateEvent.source_repository, default_branch: 'main'}
+    repository: {full_name: candidateEvent.source_repository}
   };
-  validateGitHubProvenance(candidateEvent, candidateManifest, publicationRun, buildRun, null);
+  validateGitHubProvenance(candidateEvent, candidateManifest, sourceRepository, publicationRun, buildRun, null);
   assert.throws(
-    () => validateGitHubProvenance(candidateEvent, candidateManifest, publicationRun, {...buildRun, head_sha: otherSha}, null),
+    () => validateGitHubProvenance(candidateEvent, candidateManifest, sourceRepository, publicationRun, {...buildRun, head_sha: otherSha}, null),
     /build head SHA/
+  );
+  assert.throws(
+    () => validateGitHubProvenance(candidateEvent, candidateManifest, {...sourceRepository, default_branch: 'trunk'}, publicationRun, buildRun, null),
+    /publisher did not run/
   );
 });
 
