@@ -120,6 +120,13 @@ test('configuration covers exactly the ten extracted repositories', () => {
     'org.pipelineframework:pipelineframework:jar',
     'org.pipelineframework:repository-plugin:jar'
   ]);
+  assert.deepEqual(
+    config.components.connectors.allowedCoordinates.filter((coordinate) => coordinate.includes(':decision-query-')),
+    [
+      'org.pipelineframework:decision-query-connector:jar',
+      'org.pipelineframework:decision-query-jev-connector:jar'
+    ]
+  );
 });
 
 test('candidate identity binds PR number and full source SHA', () => {
