@@ -22,6 +22,30 @@ flowchart LR
 The arrows describe downstream compatibility obligations, not source aggregation. A downstream repository consumes
 published artifacts selected by the BOM; it does not rebuild upstream source.
 
+For cross-repository evidence, candidate publication and execution are deliberately separated:
+
+```mermaid
+flowchart LR
+    P[Owner-local verify] --> C[Immutable candidate + provenance]
+    C --> O[Overlay on last-known-green baseline]
+    O --> H[Hydrate exact Maven set once]
+    H --> C1[Compiler + semantics shard]
+    H --> RT[Runtime shard]
+    H --> EC[Ecosystem shard]
+    H --> R[Examples + references shard]
+    H --> A[Applications shard]
+    C1 --> G[tpf/system-tests]
+    RT --> G
+    EC --> G
+    R --> G
+    A --> G
+```
+
+One candidate or explicit compatibility set creates one central product-test run. Related changes are coalesced by
+submitting a compatibility set; singleton candidates start immediately and are not delayed by a debounce window.
+Each run reuses one credential-free materialisation across a small number of coarse parallel shards instead of
+starting one Actions job per suite.
+
 ## Owner-local verification
 
 Every behaviour has one repository that owns its primary tests:
@@ -77,6 +101,12 @@ tests, deployment-topology tests, native builds, HA scenarios or application jou
 An upstream repository being green is necessary but not sufficient for product compatibility. The compatibility
 train must fetch fresh snapshots (`-U` where appropriate), record the exact component versions and run downstream
 tests in dependency order. Do not use a warm developer cache as release evidence.
+
+The central policy may skip product shards only when every changed path matches an allowlisted non-semantic rule.
+Mixed and unknown paths receive full component coverage. Established ordinary HA lanes may remain on `main` when
+that was already the monorepo policy; scale, native, cloud and live-provider checks run in the full train. The fixed
+`tpf/system-tests` status is required for semantic pull requests and is the evidence that the split retains the
+monorepo's cross-component safety net.
 
 The migration audit records current exceptions. In particular, a Maven lifecycle that includes `-DskipTests` is
 not owner verification merely because it reaches `verify`; skipped tests must be reported and restored explicitly.

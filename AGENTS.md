@@ -9,7 +9,7 @@ Core modules:
 - `pipelineframework-runtime-core`: framework-neutral TPF abstractions, published from the standalone
   `pipelineframework-contracts` repository and consumed here as a released dependency
 - `framework/transport-completeness-tests`: cross-artifact compiler/runtime/connector compatibility coverage
-- `system-tests`: immutable candidate-overlay policy, compatibility-set orchestration, and full-train promotion
+- `system-tests`: immutable candidate overlays, one-hydration product-test shards, compatibility sets, and full-train promotion
 
 The standalone `pipelineframework-runtime` repository owns the Quarkus runtime, deployment,
 Spring runtime adapter, and foundational persistence/cache/repository plugins consumed here as
@@ -214,7 +214,8 @@ TPF-specific scoping rules:
 
 - Core contracts live in released artifacts owned by `pipelineframework-contracts`; compiler semantics live in
   `pipelineframework-compiler`. This repository owns the BOM, cross-artifact conformance, candidate-overlay and
-  full-train policy, and canonical docs, not source mirrors or owner-local tests for those components.
+  coarse product-shard policy, full-train policy, and canonical docs, not source mirrors or owner-local tests for
+  those components.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.

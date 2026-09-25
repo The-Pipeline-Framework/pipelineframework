@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { readJson, selectSuites, suiteMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
+import { readJson, selectPostMergeSuites, selectSuites, shardMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -11,6 +11,7 @@ const { values } = parseArgs({
     component: {type: 'string'},
     changedPaths: {type: 'string'},
     hints: {type: 'string'},
+    includePostMerge: {type: 'boolean', default: false},
     includeHeavy: {type: 'boolean', default: false},
     output: {type: 'string'}
   },
@@ -25,7 +26,8 @@ const resolvedSet = await readJson(values.resolvedSet);
 const changedPaths = values.changedPaths === undefined ? [] : (await readFile(values.changedPaths, 'utf8')).split(/\r?\n/).filter(Boolean);
 const hints = values.hints === undefined ? [] : values.hints.split(',').map((value) => value.trim()).filter(Boolean);
 const selected = selectSuites(values.component, policy, changedPaths, hints);
+if (values.includePostMerge && selected.length > 0) selected.push(...selectPostMergeSuites(values.component, policy));
 if (values.includeHeavy) selected.push(...policy.componentPolicy[values.component].heavy);
 const uniqueSelected = [...new Set(selected)].sort();
-const matrix = suiteMatrix(uniqueSelected, policy, resolvedSet, config);
+const matrix = shardMatrix(uniqueSelected, policy, resolvedSet, config);
 await writeFile(values.output, `${JSON.stringify({include: matrix}, null, 2)}\n`);

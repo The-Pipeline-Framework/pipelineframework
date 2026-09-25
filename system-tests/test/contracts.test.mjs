@@ -11,8 +11,10 @@ import {
   overlayBaseline,
   parseCandidateVersion,
   readJson,
+  selectPostMergeSuites,
   selectSuites,
   sha256File,
+  shardMatrix,
   suiteMatrix,
   validateBaseline,
   validateCandidateEvent,
@@ -301,12 +303,30 @@ test('publisher hints may widen but cannot reduce central coverage', () => {
   assert.deepEqual(widened, ['coordination-compatibility', ...base]);
 });
 
+test('non-semantic path rules suppress product tests while mixed changes fall back to full coverage', () => {
+  assert.deepEqual(selectSuites('runtime', policy, ['README.md', 'docs/architecture/runtime.md']), []);
+  assert.deepEqual(
+    selectSuites('runtime', policy, ['README.md', 'runtime/src/main/java/Runtime.java']),
+    policy.componentPolicy.runtime.required.slice().sort()
+  );
+  assert.deepEqual(selectPostMergeSuites('runtime', policy), ['csv-ha']);
+});
+
 test('suite matrix pins owner source SHAs from the resolved set', () => {
   const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
   const [suite] = suiteMatrix(['expansions-resolution'], policy, resolved, config);
   assert.equal(suite.repository, config.components.expansions.repository);
   assert.equal(suite.sha, resolved.components.expansions.sha);
   assert.deepEqual(suite.versionProperties, config.components.expansions.consumerVersionProperties);
+});
+
+test('product matrix groups suites into a bounded set of coarse shards', () => {
+  const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
+  const selected = selectSuites('blocks', policy);
+  const shards = shardMatrix(selected, policy, resolved, config);
+  assert.deepEqual(shards.map(({shard}) => shard), ['applications', 'consumers', 'ecosystem']);
+  assert.deepEqual(shards.flatMap(({suites}) => suites.map(({suite}) => suite)).sort(), selected);
+  assert.ok(shards.every(({suites}) => suites.length > 0));
 });
 
 test('promotion increments the baseline and rejects a stale tested revision', () => {
