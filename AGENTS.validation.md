@@ -28,9 +28,11 @@ Owner-local validation after the split:
 - Checkout/TPFGo, Search or QuickBooks changes: `pipelineframework-reference-implementations`;
 - real application changes: the application repository.
 
-For a change that crosses a released boundary, owner-local `verify` is only the first gate. Publish/consume the
-fresh snapshot and run the smallest affected downstream compatibility or E2E suite. The coordination repository's
-transport-completeness tests do not substitute for owner E2E tests.
+For a change that crosses a released boundary, owner-local `verify` is only the first gate. For one changed
+repository, use its immutable candidate publisher and singleton system-test path. For coordinated pull requests,
+run `TPF System Tests — Compatibility Set`; it builds the candidates together in dependency order, so do not merge
+or publish snapshots one repository at a time. The coordination repository's transport-completeness tests do not
+substitute for owner E2E tests.
 
 Node/docs surfaces:
 

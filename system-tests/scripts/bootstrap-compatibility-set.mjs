@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {readJson, validateComponentsConfig} from './lib/contracts.mjs';
-import {candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from './lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from './lib/compatibility-bootstrap.mjs';
 
 const {values} = parseArgs({
   options: {
@@ -78,12 +78,10 @@ for (const target of orderedMavenTargets(config, targets)) {
   if (candidateVersion !== expectedVersion) {
     throw new Error(`${target.component} prepared ${candidateVersion}, expected ${expectedVersion}`);
   }
-  await run(join(source, 'mvnw'), [
-    '-B', 'clean', 'install', '--no-transfer-progress',
-    '-Dmaven.deploy.skip=true', '-Dgpg.skip=true', '-Dtpf.flatten.skip=true',
-    `-Dmaven.repo.local=${resolve(values.mavenRepository)}`,
-    ...versionArguments
-  ], {cwd: source, env: {...process.env, JAVA_HOME: javaHome}});
+  await run(join(source, 'mvnw'), candidateBuildArguments(resolve(values.mavenRepository), versionArguments), {
+    cwd: source,
+    env: {...process.env, JAVA_HOME: javaHome}
+  });
   const manifest = await writeManifest(target, candidateVersion, versionArguments);
   resolvedSet.components[target.component] = {
     repository: target.repository,

@@ -83,12 +83,15 @@ The singleton candidate workflow has four security zones:
 4. untrusted owner tests execute with contents-read only and cannot read package, dispatch or status credentials.
 
 Compatibility sets preserve the same separation with a different middle stage. A trusted job resolves and hydrates
-the last-known-green baseline without executing pull-request code. It uploads a credential-free Maven repository.
+the last-known-green baseline without executing pull-request code. Baseline hydration is cached by immutable OCI
+digest; restored or newly downloaded artifacts are checksum-verified and stripped of Maven remote-origin metadata
+before the job uploads a credential-free repository.
 A contents-read job then checks out each resolved merge commit (the exact PR head applied to its current base),
 builds the Maven components as independent reactors in declared dependency order, and records checksummed
 compatibility-candidate manifests. Thus downstream
 PRs consume upstream PR artifacts without requiring an intermediate merge, snapshot publication, or package token.
-The product shards reuse that single hydrated repository, and only the final trusted reporter can write statuses.
+Bootstrap installs candidate artifacts without rerunning owner test suites. The product shards reuse that single
+hydrated repository, run the centrally selected tests, and only the final trusted reporter can write statuses.
 
 Fork code is never executed in a privileged job. A fork pull request first runs its ordinary unprivileged owner
 suite. Candidate publication is enabled only after a maintainer applies `safe-to-system-test`; the privileged

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
+const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, testedSha: sha});
 
@@ -36,4 +37,24 @@ test('compatibility candidate dependency cycles are rejected', () => {
     ['runtime', target('runtime', 7)]
   ]);
   assert.throws(() => orderedMavenTargets(cyclic, targets), /dependency cycle/);
+});
+
+test('compatibility bootstrap installs candidates without repeating owner test suites', () => {
+  const arguments_ = candidateBuildArguments('/tmp/tpf-m2', ['-Dtpf.contracts.version=26.9.4-pr.28.abcdef123456']);
+  assert.equal(arguments_[0], '-B');
+  assert.ok(arguments_.includes('install'));
+  assert.ok(!arguments_.includes('clean'));
+  assert.ok(arguments_.includes('-DskipTests=true'));
+  assert.ok(arguments_.includes('-DskipITs=true'));
+  assert.ok(arguments_.includes('-DskipUnitTests=true'));
+  assert.ok(arguments_.includes('-Dmaven.repo.local=/tmp/tpf-m2'));
+});
+
+test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
+  const cache = workflow.indexOf('key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}');
+  const sanitize = workflow.indexOf('node system-tests/scripts/sanitize-maven-repository.mjs');
+  const archive = workflow.indexOf('tar -C "$local_repo" -czf baseline/tpf-system-test-m2.tar.gz .');
+  assert.ok(cache >= 0, 'baseline cache key is missing');
+  assert.ok(sanitize >= 0, 'baseline sanitation is missing');
+  assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
 });

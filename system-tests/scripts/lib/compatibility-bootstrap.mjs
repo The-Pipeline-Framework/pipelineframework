@@ -22,6 +22,16 @@ export function expectedCandidateVersion(resolvedSet, target) {
   return `${match[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
 }
 
+export function candidateBuildArguments(mavenRepository, versionArguments) {
+  return [
+    '-B', 'install', '--no-transfer-progress',
+    '-Dmaven.deploy.skip=true', '-Dgpg.skip=true', '-Dtpf.flatten.skip=true',
+    '-DskipTests=true', '-DskipITs=true', '-DskipUnitTests=true',
+    `-Dmaven.repo.local=${mavenRepository}`,
+    ...versionArguments
+  ];
+}
+
 export function candidateFromOutput(output) {
   const matches = output.split(/\r?\n/).filter((line) => line.startsWith('candidate=')).map((line) => line.slice('candidate='.length));
   if (matches.length !== 1 || !/^\d+\.\d+\.\d+-pr\.[1-9][0-9]*\.[0-9a-f]{12}$/.test(matches[0])) {

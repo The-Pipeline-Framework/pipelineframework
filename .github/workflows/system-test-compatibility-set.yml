@@ -137,16 +137,18 @@ jobs:
       - name: Install ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
-      - name: Resolve and hydrate the immutable baseline
+      - name: Resolve immutable baseline metadata
+        id: baseline
         env:
           GHCR_TOKEN: ${{ github.token }}
-          PACKAGE_TOKEN: ${{ github.token }}
         run: |
           baseline_image="$(jq -r '.baselineImage' system-tests/components.yml)"
           manifest_image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
           echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
           digest="$(oras resolve "$baseline_image:main")"
           case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "cache_key=${digest#sha256:}" >> "$GITHUB_OUTPUT"
           mkdir -p baseline/raw baseline/manifests "$RUNNER_TEMP/tpf-maven"
           oras pull "$baseline_image@$digest" --output baseline/raw
           while IFS=$'\t' read -r component manifest_digest; do
@@ -163,6 +165,21 @@ jobs:
             --components system-tests/components.yml \
             --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
             --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
+
+      - name: Restore immutable baseline Maven repository
+        id: baseline-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tpf-system-test-m2
+          key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}
+          restore-keys: |
+            tpf-system-test-baseline-
+
+      - name: Hydrate baseline Maven repository on cache miss
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+        run: |
           local_repo="$RUNNER_TEMP/tpf-system-test-m2"
           while IFS= read -r coordinate; do
             ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
@@ -173,13 +190,19 @@ jobs:
               -Dmaven.repo.local="$local_repo" \
               --no-transfer-progress
           done < <(jq -r '.artifacts[].coordinate' baseline/materialization-plan.json)
+
+      - name: Verify and package credential-free baseline
+        run: |
+          local_repo="$RUNNER_TEMP/tpf-system-test-m2"
+          node system-tests/scripts/sanitize-maven-repository.mjs \
+            --repository "$local_repo"
           node system-tests/scripts/verify-materialized.mjs \
             --plan baseline/materialization-plan.json \
             --repository "$local_repo"
           node system-tests/scripts/baseline-set.mjs \
             --components system-tests/components.yml \
             --baseline baseline/raw/baseline.json \
-            --baselineDigest "$digest" \
+            --baselineDigest "${{ steps.baseline.outputs.digest }}" \
             --output baseline/resolved-set.json
           tar -C "$local_repo" -czf baseline/tpf-system-test-m2.tar.gz .
 

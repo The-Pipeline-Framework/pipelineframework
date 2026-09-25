@@ -30,6 +30,12 @@ the product shards against that resolved set. These remain independent Maven rea
 not reconstruct a source monorepo or require intermediate merges or snapshot publications. It also does not wait in
 a debounce window for unrelated work.
 
+Baseline Maven materialisation is keyed by the immutable baseline digest. A trusted cache may reuse a previously
+verified repository for that exact digest or seed hydration from an older baseline, but every run removes Maven
+resolver-origin metadata and verifies the required artifacts against their signed candidate manifests before the
+repository crosses into an unprivileged job. Candidate bootstrap performs install-only assembly; owner-local tests
+and the centrally selected product shards own test execution and must not be repeated during dependency assembly.
+
 The coordination repository owns suite policy. A publisher may request additional suites but cannot remove a
 centrally required suite. Selected suites are grouped into a small number of product-shaped shards: compiler and
 semantic compatibility, runtime deployment, ecosystem compatibility, examples/reference systems and
