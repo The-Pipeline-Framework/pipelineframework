@@ -277,6 +277,8 @@ jobs:
             --resolvedSet resolved/resolved-set.json \
             --compatibilitySet intake/request/compatibility-set-request.json \
             --output resolved/suite-matrix.json
+          node system-tests/scripts/sanitize-maven-repository.mjs \
+            --repository "$local_repo"
           mkdir -p "$RUNNER_TEMP/tpf-test-inputs"
           tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .
           cp resolved/resolved-set.json resolved/suite-matrix.json "$RUNNER_TEMP/tpf-test-inputs/"
