@@ -305,6 +305,11 @@ test('publisher hints may widen but cannot reduce central coverage', () => {
 
 test('non-semantic path rules suppress product tests while mixed changes fall back to full coverage', () => {
   assert.deepEqual(selectSuites('runtime', policy, ['README.md', 'docs/architecture/runtime.md']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/ISSUE_TEMPLATE/bug.yml', '.github/CODEOWNERS']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/README.md', '.github/PULL_REQUEST_TEMPLATE/change.md']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/workflows/build.yml']), policy.componentPolicy.runtime.required.slice().sort());
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/actions/candidate/action.yml']), policy.componentPolicy.runtime.required.slice().sort());
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/tpf-system-tests.json']), policy.componentPolicy.runtime.required.slice().sort());
   assert.deepEqual(
     selectSuites('runtime', policy, ['README.md', 'runtime/src/main/java/Runtime.java']),
     policy.componentPolicy.runtime.required.slice().sort()

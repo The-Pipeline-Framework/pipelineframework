@@ -127,7 +127,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
-          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
           SOURCE_RUN_ID: ${{ needs.intake.outputs.publication_run_id }}
           PULL_REQUEST_NUMBER: ${{ needs.intake.outputs.pull_request_number }}
         run: |
@@ -145,8 +144,7 @@ jobs:
             gh api --paginate "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/files?per_page=100" \
               --jq '.[].filename' > intake/changed-paths.txt
           else
-            gh api --paginate "repos/$SOURCE_REPOSITORY/commits/$SOURCE_SHA?per_page=100" \
-              --jq '.files[].filename' > intake/changed-paths.txt
+            : > intake/changed-paths.txt
           fi
 
       - name: Validate checksum, current head and provenance

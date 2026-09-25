@@ -43,16 +43,16 @@
     "ragTurnkey": {"required": ["rag-system"], "postMerge": [], "heavy": []}
   },
   "pathRules": [
-    {"component": "contracts", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "compiler", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "runtime", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "connectors", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "blocks", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "expansions", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "examples", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "references", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "csvPayments", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
-    {"component": "ragTurnkey", "paths": [".github/**", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []}
+    {"component": "contracts", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "compiler", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "runtime", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "connectors", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "blocks", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "expansions", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "examples", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "references", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "csvPayments", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "ragTurnkey", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []}
   ],
   "fullTrain": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
 }

@@ -34,7 +34,7 @@ flowchart TB
     end
 
     Coordinator[pipelineframework<br/>policy + orchestration]
-    Suites[Credential-free suite jobs]
+    Shards[Credential-free product shards]
     Status[tpf/system-tests<br/>commit status]
 
     Producers -->|candidate artifacts| Packages
@@ -43,9 +43,9 @@ flowchart TB
     Coordinator --> CandidateOCI
     BaselineOCI --> Coordinator
     Packages --> Coordinator
-    Coordinator -->|exact SHAs + exact versions| Suites
-    Harnesses -->|owner-controlled commands| Suites
-    Suites --> Coordinator
+    Coordinator -->|exact SHAs + exact versions| Shards
+    Harnesses -->|owner-controlled commands| Shards
+    Shards --> Coordinator
     Coordinator --> Status
     Coordinator -->|green main promotion| BaselineOCI
 ```
@@ -57,7 +57,8 @@ test harnesses cross them as exact Git SHAs.
 
 - `system-tests/components.yml` is the repository allowlist, exact Maven-coordinate ownership map and the central
   consumer version-property map. A suite owner cannot substitute another property or publish a partial component.
-- `system-tests/policy.yml` maps a changed component to mandatory pull-request and heavy suites.
+- `system-tests/policy.yml` maps a changed component to mandatory pull-request, post-merge and heavy suites, then
+  groups selected suites into coarse product shards.
 - `system-tests/schemas/candidate-event.schema.json` defines the nine-field `tpf-candidate-v1` dispatch payload.
 - `system-tests/schemas/candidate-manifest.schema.json` records source, separate build/publisher workflow runs,
   Maven and image provenance, and optional additive suite hints.
@@ -144,8 +145,8 @@ sequenceDiagram
    therefore ends in `error`; an event without a safe target is rejected without writing to an untrusted repository.
    The workflow then verifies the current PR head and build/publication provenance, resolves the baseline tag once,
    and uses only the returned digest.
-5. Selected owner suites run against the materialised overlay. The aggregate reporter posts success, failure or
-   error to the originating SHA.
+5. Selected owner suites run sequentially inside a bounded number of coarse product shards against the one
+   materialised overlay. The aggregate reporter posts success, failure or error to the originating SHA.
 
 For a coordinated change, run `TPF System Tests — Compatibility Set` with a stable set ID and two to ten pull-request
 URLs. The coordinator resolves every current head, locates its successful candidate publisher, overlays at most one
@@ -177,9 +178,9 @@ flowchart LR
     Resolved --> Materialise[Trusted materialisation<br/>verify checksums and transitive artifacts]
     Materialise --> Inputs[Credential-free input archive]
     Resolved --> Policy[Central suite policy]
-    Policy --> Matrix[Mandatory suite matrix]
+    Policy --> Matrix[Mandatory product-shard matrix]
     Inputs --> Matrix
-    Matrix --> Run[Parallel owner-controlled suites]
+    Matrix --> Run[Coarse parallel shards<br/>owner suites sequential within each shard]
 ```
 
 This resolved set is the reproducibility boundary. Re-running it does not consult `main`, `latest`, a Maven
@@ -223,9 +224,9 @@ runs and one deliberate regression failure for that repository.
 ## Test ownership and frequency
 
 Owner-local unit, contract and integration suites continue on every pull request. The central pull-request gate adds
-affected ordinary E2E and non-scale HA coverage. Nightly and release trains add the complete compatibility matrix,
-HA scale, native builds, cloud deployment and live-provider suites. Publisher hints may widen that set but cannot
-make it smaller.
+affected product compatibility, application smoke and reference coverage. Established ordinary HA lanes remain on
+`main`; nightly and release trains add the complete compatibility matrix, HA scale, native builds, cloud deployment
+and live-provider suites. Publisher hints may widen that set but cannot make it smaller.
 
 Different candidate sets use isolated Actions jobs and Maven repositories. The singleton concurrency key is
 repository plus pull request; a coordinated set uses its explicit set ID. New commits cancel only older runs for
