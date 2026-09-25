@@ -42,6 +42,8 @@ for (const target of targetDocument.targets) {
   const component = config.components[target.component];
   if (component === undefined || component.repository !== target.repository) throw new Error(`invalid target component ${target.component}`);
   if (!/^[0-9a-f]{40}$/.test(target.sourceSha)) throw new Error(`invalid target SHA for ${target.component}`);
+  if (!/^[0-9a-f]{40}$/.test(target.baseSha)) throw new Error(`invalid target base SHA for ${target.component}`);
+  if (!/^[0-9a-f]{40}$/.test(target.testedSha)) throw new Error(`invalid tested SHA for ${target.component}`);
   if (!Number.isSafeInteger(target.pullRequestNumber) || target.pullRequestNumber < 1) throw new Error(`invalid PR number for ${target.component}`);
   if (targets.has(target.component)) throw new Error(`duplicate target component ${target.component}`);
   targets.set(target.component, target);
@@ -118,10 +120,10 @@ async function checkout(target) {
   await mkdir(destination, {recursive: true});
   await run('git', ['init', '--quiet', destination]);
   await run('git', ['-C', destination, 'remote', 'add', 'origin', `https://github.com/${target.repository}.git`]);
-  await run('git', ['-C', destination, '-c', 'protocol.version=2', 'fetch', '--quiet', '--depth=1', 'origin', target.sourceSha]);
+  await run('git', ['-C', destination, '-c', 'protocol.version=2', 'fetch', '--quiet', '--depth=1', 'origin', target.testedSha]);
   await run('git', ['-C', destination, 'checkout', '--quiet', '--detach', 'FETCH_HEAD']);
   const actual = (await capture('git', ['-C', destination, 'rev-parse', 'HEAD'])).trim();
-  if (actual !== target.sourceSha) throw new Error(`checkout for ${target.component} resolved ${actual}`);
+  if (actual !== target.testedSha) throw new Error(`checkout for ${target.component} resolved ${actual}`);
 }
 
 async function writeManifest(target, candidateVersion, versionArguments) {
@@ -146,6 +148,8 @@ async function writeManifest(target, candidateVersion, versionArguments) {
     repository: target.repository,
     component: target.component,
     sourceSha: target.sourceSha,
+    baseSha: target.baseSha,
+    testedSha: target.testedSha,
     pullRequestNumber: target.pullRequestNumber,
     candidateVersion,
     dependencyOverrides: versionArguments.map((argument) => argument.slice(2)).sort(),

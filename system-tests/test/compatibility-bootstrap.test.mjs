@@ -5,7 +5,7 @@ import {candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
-const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha});
+const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, testedSha: sha});
 
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([

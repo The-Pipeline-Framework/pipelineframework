@@ -4,13 +4,15 @@
   "title": "TPF dependency-ordered compatibility candidate manifest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "setId", "repository", "component", "sourceSha", "pullRequestNumber", "candidateVersion", "dependencyOverrides", "provenance", "mavenArtifacts"],
+  "required": ["schemaVersion", "setId", "repository", "component", "sourceSha", "baseSha", "testedSha", "pullRequestNumber", "candidateVersion", "dependencyOverrides", "provenance", "mavenArtifacts"],
   "properties": {
     "schemaVersion": {"const": 1},
     "setId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
     "repository": {"type": "string", "pattern": "^The-Pipeline-Framework/[A-Za-z0-9._-]+$"},
     "component": {"type": "string", "minLength": 1},
     "sourceSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "baseSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "testedSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "pullRequestNumber": {"type": "integer", "minimum": 1},
     "candidateVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-pr\\.[1-9][0-9]*\\.[0-9a-f]{12}$"},
     "dependencyOverrides": {

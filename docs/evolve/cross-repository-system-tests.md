@@ -62,8 +62,9 @@ test harnesses cross them as exact Git SHAs.
 - `system-tests/schemas/candidate-event.schema.json` defines the nine-field `tpf-candidate-v1` dispatch payload.
 - `system-tests/schemas/candidate-manifest.schema.json` records source, separate build/publisher workflow runs,
   Maven and image provenance, and optional additive suite hints.
-- `system-tests/schemas/compatibility-candidate-manifest.schema.json` records exact PR heads, dependency-version
-  overrides, checksums and coordinator provenance for candidates bootstrapped as one dependency-ordered set.
+- `system-tests/schemas/compatibility-candidate-manifest.schema.json` records exact PR-head identity, base SHA,
+  tested merge SHA, dependency-version overrides, checksums and coordinator provenance for candidates bootstrapped
+  as one dependency-ordered set.
 - `system-tests/schemas/baseline-manifest.schema.json` pins the last-known-green components and test harnesses.
 - `system-tests/schemas/suite-manifest.schema.json` lets each owner publish stable argument-array test entrypoints.
 
@@ -83,8 +84,9 @@ The singleton candidate workflow has four security zones:
 
 Compatibility sets preserve the same separation with a different middle stage. A trusted job resolves and hydrates
 the last-known-green baseline without executing pull-request code. It uploads a credential-free Maven repository.
-A contents-read job then checks out the exact participating PR heads, builds the Maven components as independent
-reactors in declared dependency order, and records checksummed compatibility-candidate manifests. Thus downstream
+A contents-read job then checks out each resolved merge commit (the exact PR head applied to its current base),
+builds the Maven components as independent reactors in declared dependency order, and records checksummed
+compatibility-candidate manifests. Thus downstream
 PRs consume upstream PR artifacts without requiring an intermediate merge, snapshot publication, or package token.
 The product shards reuse that single hydrated repository, and only the final trusted reporter can write statuses.
 
@@ -158,14 +160,15 @@ sequenceDiagram
    materialised overlay. The aggregate reporter posts success, failure or error to the originating SHA.
 
 For a coordinated change, run `TPF System Tests — Compatibility Set` with a stable set ID and two to ten pull-request
-URLs. The coordinator resolves every exact head, overlays the immutable baseline, builds participating Maven
-components in dependency order, unions the centrally required suites, and reports the same aggregate result to
+URLs. The coordinator resolves every exact head and tested merge commit, overlays the immutable baseline, builds
+participating Maven components in dependency order, unions the centrally required suites, and reports the same aggregate result to
 every participating SHA. It never requires a candidate to build against the old baseline first, and never falls
 back to a branch name or older PR head.
 
 ```mermaid
 flowchart LR
-    PRs[Exact PR heads] --> Resolve[Resolve component DAG]
+    PRs[Exact PR heads + base SHAs] --> Merge[Pin tested merge commits]
+    Merge --> Resolve[Resolve component DAG]
     Baseline[Credential-free baseline repository] --> Contracts
     Resolve --> Contracts[Build Contracts candidate]
     Contracts --> Compiler[Build compiler candidate]

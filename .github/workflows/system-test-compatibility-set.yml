@@ -85,10 +85,10 @@ jobs:
           while IFS=$'\t' read -r component repository number; do
             gh api "repos/$repository/pulls/$number" > "targets/pulls/$component.json"
             jq -e --arg repository "$repository" \
-              '.base.repo.full_name == $repository and (.state == "open" or .merged_at != null) and (.head.sha | test("^[0-9a-f]{40}$"))' \
+              '.base.repo.full_name == $repository and (.state == "open" or .merged_at != null) and (.head.sha | test("^[0-9a-f]{40}$")) and (.base.sha | test("^[0-9a-f]{40}$")) and (.merge_commit_sha | test("^[0-9a-f]{40}$"))' \
               "targets/pulls/$component.json" > /dev/null
             jq -c --arg component "$component" --arg repository "$repository" --argjson number "$number" \
-              '{component: $component, repository: $repository, repositoryName: ($repository | split("/")[1]), pullRequestNumber: $number, sourceSha: .head.sha}' \
+              '{component: $component, repository: $repository, repositoryName: ($repository | split("/")[1]), pullRequestNumber: $number, sourceSha: .head.sha, baseSha: .base.sha, testedSha: .merge_commit_sha}' \
               "targets/pulls/$component.json" >> targets/targets.ndjson
           done < <(jq -r '.requests[] | [.component, .repository, .pullRequestNumber] | @tsv' request/compatibility-set-request.json)
           jq -s '{schemaVersion: 1, targets: sort_by(.component)}' targets/targets.ndjson > targets/targets.json
