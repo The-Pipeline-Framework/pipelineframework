@@ -216,10 +216,15 @@ TPF-specific scoping rules:
   `pipelineframework-compiler`. This repository owns the BOM, cross-artifact conformance, candidate-overlay and
   coarse product-shard policy, full-train policy, and canonical docs, not source mirrors or owner-local tests for
   those components.
-- A compatibility set identifies candidates by exact PR heads, tests each open PR's exact merge commit with its
-  current base, and builds participating Maven repositories in dependency order against one isolated candidate
-  repository. Never require intermediate merges or snapshot publications merely to make a coordinated downstream
-  PR compile against its upstream PRs.
+- For an ordinary single-repository pull request, use its candidate publisher and singleton system-test path. For a
+  coordinated change, do **not** wait for participating candidate publishers and do not merge or publish snapshots
+  one repository at a time. Manually run
+  [`TPF System Tests — Compatibility Set`](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/system-test-compatibility-set.yml)
+  with one stable set ID and 2–10 pull-request URLs, one per line. It identifies candidates by exact PR heads, tests
+  each open PR's exact merge commit with its current base, builds participating Maven repositories in dependency
+  order against one isolated repository, and reports one `tpf/system-tests` result to every participating SHA. A
+  new commit invalidates that PR's result; rerun the same set ID with the current URLs. Never require intermediate
+  merges or snapshot publications merely to make a coordinated downstream PR compile against its upstream PRs.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.
