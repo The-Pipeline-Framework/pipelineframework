@@ -329,7 +329,7 @@ test('product matrix groups suites into a bounded set of coarse shards', () => {
   const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
   const selected = selectSuites('blocks', policy);
   const shards = shardMatrix(selected, policy, resolved, config);
-  assert.deepEqual(shards.map(({shard}) => shard), ['applications', 'consumers', 'ecosystem']);
+  assert.deepEqual(shards.map(({shard}) => shard), ['applications', 'ecosystem', 'examples', 'references']);
   assert.deepEqual(shards.flatMap(({suites}) => suites.map(({suite}) => suite)).sort(), selected);
   assert.ok(shards.every(({suites}) => suites.length > 0));
 });

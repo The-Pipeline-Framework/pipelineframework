@@ -22,13 +22,20 @@ artifacts. Every run resolves one last-known-green baseline OCI manifest to an i
 immutable candidate per changed repository. Maven candidates use a unique version derived from the pull request or
 `main` commit. Container candidates are identified only by digest.
 
-A coordinated change identifies candidates by exact pull-request heads and tests each resolved merge commit, not
-an assumption that every candidate already builds against the old baseline. The coordinator builds participating
+A coordinated change identifies candidates by exact pull-request heads and current base SHAs, then creates and
+tests a deterministic local merge for each pair instead of trusting GitHub's asynchronously refreshed test-merge
+ref or assuming every candidate already builds against the old baseline. The coordinator builds participating
 Maven reactors in dependency order into one
 credential-free, run-isolated Maven repository, records a checksummed manifest for each result, and then executes
 the product shards against that resolved set. These remain independent Maven reactors; the compatibility set does
 not reconstruct a source monorepo or require intermediate merges or snapshot publications. It also does not wait in
 a debounce window for unrelated work.
+
+Baseline Maven materialisation is keyed by the immutable baseline digest. A trusted cache may reuse a previously
+verified repository for that exact digest or seed hydration from an older baseline, but every run removes Maven
+resolver-origin metadata and verifies the required artifacts against their signed candidate manifests before the
+repository crosses into an unprivileged job. Candidate bootstrap performs install-only assembly; owner-local tests
+and the centrally selected product shards own test execution and must not be repeated during dependency assembly.
 
 The coordination repository owns suite policy. A publisher may request additional suites but cannot remove a
 centrally required suite. Selected suites are grouped into a small number of product-shaped shards: compiler and

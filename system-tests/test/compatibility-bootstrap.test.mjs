@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
+const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
+const bootstrap = await readFile(new URL('../scripts/bootstrap-compatibility-set.mjs', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
-const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, testedSha: sha});
+const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
 
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
@@ -36,4 +38,35 @@ test('compatibility candidate dependency cycles are rejected', () => {
     ['runtime', target('runtime', 7)]
   ]);
   assert.throws(() => orderedMavenTargets(cyclic, targets), /dependency cycle/);
+});
+
+test('compatibility bootstrap installs candidates without repeating owner test suites', () => {
+  const arguments_ = candidateBuildArguments('/tmp/tpf-m2', ['-Dtpf.contracts.version=26.9.4-pr.28.abcdef123456']);
+  assert.equal(arguments_[0], '-B');
+  assert.ok(arguments_.includes('install'));
+  assert.ok(!arguments_.includes('clean'));
+  assert.ok(arguments_.includes('-DskipTests=true'));
+  assert.ok(arguments_.includes('-DskipITs=true'));
+  assert.ok(arguments_.includes('-DskipUnitTests=true'));
+  assert.ok(arguments_.includes('-Dmaven.repo.local=/tmp/tpf-m2'));
+});
+
+test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
+  const cache = workflow.indexOf('key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}');
+  const sanitize = workflow.indexOf('node system-tests/scripts/sanitize-maven-repository.mjs');
+  const archive = workflow.indexOf('tar -C "$local_repo" -czf baseline/tpf-system-test-m2.tar.gz .');
+  assert.ok(cache >= 0, 'baseline cache key is missing');
+  assert.ok(sanitize >= 0, 'baseline sanitation is missing');
+  assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
+  assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
+});
+
+test('compatibility targets are merged locally from the exact current base and PR head', () => {
+  assert.match(workflow, /permission-contents: read/);
+  assert.match(workflow, /repos\/\$repository\/commits\/\$base_ref/);
+  assert.match(workflow, /baseRef: \$baseRef/);
+  assert.doesNotMatch(workflow, /\.mergeable/);
+  assert.match(bootstrap, /refs\/pull\/\$\{target\.pullRequestNumber\}\/head/);
+  assert.match(bootstrap, /'commit-tree', tree, '-p', target\.baseSha, '-p', target\.sourceSha/);
+  assert.match(bootstrap, /GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z'/);
 });
