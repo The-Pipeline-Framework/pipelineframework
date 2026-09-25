@@ -158,6 +158,7 @@ jobs:
         id: baseline
         env:
           GHCR_TOKEN: ${{ github.token }}
+          PACKAGE_TOKEN: ${{ github.token }}
         run: |
           baseline_image="$(jq -r '.baselineImage' system-tests/components.yml)"
           manifest_image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"

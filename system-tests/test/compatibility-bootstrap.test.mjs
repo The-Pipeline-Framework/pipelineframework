@@ -58,6 +58,7 @@ test('compatibility baseline is portable and cached by immutable digest before b
   assert.ok(cache >= 0, 'baseline cache key is missing');
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
+  assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
 });
 
 test('compatibility targets are merged locally from the exact current base and PR head', () => {
