@@ -114,7 +114,7 @@ export function validateComponentsConfig(config) {
   validateVersionProperties(config.coordinationConsumerVersionProperties, expected, 'coordination consumer version properties');
   const repositories = [];
   for (const [name, component] of Object.entries(components)) {
-    const allowed = ['repository', 'kind', 'allowedCoordinates', 'consumerVersionProperties', 'suiteManifest'];
+    const allowed = ['repository', 'kind', 'buildJavaVersion', 'allowedCoordinates', 'consumerVersionProperties', 'suiteManifest'];
     exactKeys(component, allowed, ['repository', 'kind', 'consumerVersionProperties', 'suiteManifest'], `component ${name}`);
     nonBlank(component.repository, `component ${name}.repository`);
     repositories.push(component.repository);
@@ -124,6 +124,9 @@ export function validateComponentsConfig(config) {
     nonBlank(component.suiteManifest, `component ${name}.suiteManifest`);
     validateVersionProperties(component.consumerVersionProperties, expected, `component ${name}.consumerVersionProperties`);
     if (component.kind === 'maven') {
+      if (![21, 25].includes(component.buildJavaVersion)) {
+        fail(`component ${name}.buildJavaVersion must be 21 or 25`);
+      }
       if (!Array.isArray(component.allowedCoordinates) || component.allowedCoordinates.length === 0) {
         fail(`component ${name}.allowedCoordinates must be a non-empty array`);
       }
@@ -134,8 +137,9 @@ export function validateComponentsConfig(config) {
         }
       });
       unique(component.allowedCoordinates, `component ${name}.allowedCoordinates`);
-    } else if (component.allowedCoordinates !== undefined) {
-      fail(`source component ${name} cannot declare Maven coordinates`);
+    } else {
+      if (component.buildJavaVersion !== undefined) fail(`source component ${name} cannot declare buildJavaVersion`);
+      if (component.allowedCoordinates !== undefined) fail(`source component ${name} cannot declare Maven coordinates`);
     }
   }
   unique(repositories, 'component repositories');

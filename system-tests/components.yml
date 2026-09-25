@@ -17,6 +17,7 @@
     "contracts": {
       "repository": "The-Pipeline-Framework/pipelineframework-contracts",
       "kind": "maven",
+      "buildJavaVersion": 25,
       "allowedCoordinates": [
         "org.pipelineframework:pipelineframework-api:jar",
         "org.pipelineframework:pipelineframework-contracts-parent:pom",
@@ -35,6 +36,7 @@
     "compiler": {
       "repository": "The-Pipeline-Framework/pipelineframework-compiler",
       "kind": "maven",
+      "buildJavaVersion": 21,
       "allowedCoordinates": ["org.pipelineframework:pipelineframework-compiler:jar"],
       "consumerVersionProperties": {"contracts": "tpf.version"},
       "suiteManifest": ".github/tpf-system-tests.json"
@@ -42,6 +44,7 @@
     "runtime": {
       "repository": "The-Pipeline-Framework/pipelineframework-runtime",
       "kind": "maven",
+      "buildJavaVersion": 21,
       "allowedCoordinates": [
       "org.pipelineframework:cache-plugin:jar",
       "org.pipelineframework:persistence-plugin:jar",
@@ -60,6 +63,7 @@
     "connectors": {
       "repository": "The-Pipeline-Framework/pipelineframework-connectors",
       "kind": "maven",
+      "buildJavaVersion": 21,
       "allowedCoordinates": [
         "org.pipelineframework:connector-import-tooling:jar",
         "org.pipelineframework:connector-maven-plugin:maven-plugin",
@@ -104,6 +108,7 @@
     "blocks": {
       "repository": "The-Pipeline-Framework/pipelineframework-blocks",
       "kind": "maven",
+      "buildJavaVersion": 21,
       "allowedCoordinates": [
         "org.pipelineframework.blocks:document-text-extraction:jar",
         "org.pipelineframework.blocks:graphql-agent:jar",
@@ -120,6 +125,7 @@
     "expansions": {
       "repository": "The-Pipeline-Framework/pipelineframework-expansions",
       "kind": "maven",
+      "buildJavaVersion": 21,
       "allowedCoordinates": [
         "org.pipelineframework.expansions:graphql:pom",
         "org.pipelineframework.expansions:openapi:pom",

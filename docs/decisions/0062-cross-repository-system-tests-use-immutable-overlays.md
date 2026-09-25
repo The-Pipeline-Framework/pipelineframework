@@ -20,9 +20,14 @@ credentials and commit-status authority must not be available to that code.
 The `pipelineframework` coordination repository owns one centrally orchestrated product-test run over released
 artifacts. Every run resolves one last-known-green baseline OCI manifest to an immutable digest, then overlays one
 immutable candidate per changed repository. Maven candidates use a unique version derived from the pull request or
-`main` commit. Container candidates are identified only by digest. A coordinated change is an explicitly submitted
-set of those same candidate overlays; it is not a composite source reactor and it does not wait in a debounce
-window for unrelated work.
+`main` commit. Container candidates are identified only by digest.
+
+A coordinated change starts from the exact pull-request heads, not from an assumption that every candidate already
+builds against the old baseline. The coordinator builds participating Maven reactors in dependency order into one
+credential-free, run-isolated Maven repository, records a checksummed manifest for each result, and then executes
+the product shards against that resolved set. These remain independent Maven reactors; the compatibility set does
+not reconstruct a source monorepo or require intermediate merges or snapshot publications. It also does not wait in
+a debounce window for unrelated work.
 
 The coordination repository owns suite policy. A publisher may request additional suites but cannot remove a
 centrally required suite. Selected suites are grouped into a small number of product-shaped shards: compiler and
@@ -35,11 +40,12 @@ Changes limited to centrally allowlisted non-semantic paths do not start product
 fall back to the component's complete pull-request mapping. Ordinary HA lanes that were already sufficient after
 merge remain post-merge checks; scale, native, cloud and live-provider lanes remain nightly or release evidence.
 
-Privileged intake jobs validate event identity, the current pull-request head, both the unprivileged build run and
-the trusted default-branch publisher run, manifest checksums and the repository/coordinate allowlist. They hydrate
-an isolated Maven repository and remove all package
-credentials before tests run. Test jobs receive no package, dispatch or commit-status credential. A final trusted
-job reports the fixed `tpf/system-tests` status to every candidate SHA.
+Privileged intake jobs validate event identity, pull-request heads, manifest checksums and the
+repository/coordinate allowlist. For singleton candidates they also validate the unprivileged build and trusted
+publisher runs. For compatibility sets, a privileged job hydrates only the released baseline and then removes all
+package credentials; a separate credential-free job executes pull-request code and builds the dependency-ordered
+candidate set. Product tests likewise receive no package, dispatch or commit-status credential. A final trusted job
+reports the fixed `tpf/system-tests` status to every participating SHA.
 
 Baseline promotion is serialized. A green `main` candidate may replace the `main` baseline tag only while its SHA is
 still the source repository's default-branch head and the tag still resolves to the digest used by its test run.
@@ -55,7 +61,9 @@ allows pull-request validation without giving arbitrary test code cross-reposito
 
 ## Consequences
 
-- Owner-local tests remain the first pull-request gate; the central train complements rather than replaces them.
+- Owner-local tests remain the first pull-request gate for independent changes. When a pull request intentionally
+  depends on another candidate in the same compatibility set, its complete candidate build runs inside the
+  dependency-ordered central gate instead of being required to compile against the old baseline.
 - The fixed `tpf/system-tests` result remains the cross-repository quality gate. A split repository is not considered
   quality-equivalent until its required central result succeeds.
 - Pull requests run the product shards required by semantic impact. Established post-merge HA remains post-merge,
