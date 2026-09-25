@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { readJson, selectSuites, suiteMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
+import { readJson, selectSuites, shardMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -30,5 +30,5 @@ for (const request of compatibilitySet.requests) {
   if (candidate === undefined) throw new Error(`resolved set is missing candidate ${request.component}`);
   for (const suite of selectSuites(request.component, policy, [], candidate.suiteHints ?? [])) selected.add(suite);
 }
-const matrix = suiteMatrix([...selected].sort(), policy, resolvedSet, config);
+const matrix = shardMatrix([...selected].sort(), policy, resolvedSet, config);
 await writeFile(values.output, `${JSON.stringify({include: matrix}, null, 2)}\n`);

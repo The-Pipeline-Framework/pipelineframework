@@ -1,68 +1,58 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "shards": {
+    "semantic": {"displayName": "Compiler and semantic compatibility", "timeoutMinutes": 180},
+    "runtime": {"displayName": "Runtime deployment compatibility", "timeoutMinutes": 180},
+    "ecosystem": {"displayName": "Connector, Block and Expansion compatibility", "timeoutMinutes": 180},
+    "consumers": {"displayName": "Examples and reference systems", "timeoutMinutes": 180},
+    "applications": {"displayName": "Applications and ordinary HA", "timeoutMinutes": 240},
+    "scale-native": {"displayName": "Scale and native", "timeoutMinutes": 360},
+    "cloud-live": {"displayName": "Cloud and live providers", "timeoutMinutes": 360}
+  },
   "suites": {
-    "compiler-verify": {"owner": "compiler", "entrypoint": "verify", "tier": "pr"},
-    "runtime-deployment": {"owner": "runtime", "entrypoint": "deployment", "tier": "pr"},
-    "connectors-verify": {"owner": "connectors", "entrypoint": "verify", "tier": "pr"},
-    "blocks-verify": {"owner": "blocks", "entrypoint": "verify", "tier": "pr"},
-    "expansions-resolution": {"owner": "expansions", "entrypoint": "resolution", "tier": "pr"},
-    "coordination-compatibility": {"owner": "coordination", "entrypoint": "compatibility", "tier": "pr"},
-    "examples-verify": {"owner": "examples", "entrypoint": "verify", "tier": "pr"},
-    "references-core": {"owner": "references", "entrypoint": "core", "tier": "pr"},
-    "references-checkout": {"owner": "references", "entrypoint": "checkout", "tier": "pr"},
-    "references-search": {"owner": "references", "entrypoint": "search", "tier": "pr"},
-    "references-quickbooks": {"owner": "references", "entrypoint": "quickbooks", "tier": "pr"},
-    "csv-smoke": {"owner": "csvPayments", "entrypoint": "smoke", "tier": "pr"},
-    "csv-ha": {"owner": "csvPayments", "entrypoint": "ha", "tier": "pr"},
-    "rag-system": {"owner": "ragTurnkey", "entrypoint": "system", "tier": "pr"},
-    "examples-restaurant-ha": {"owner": "examples", "entrypoint": "restaurant-ha", "tier": "pr"},
-    "csv-ha-scale": {"owner": "csvPayments", "entrypoint": "ha-scale", "tier": "heavy"},
-    "native-builds": {"owner": "csvPayments", "entrypoint": "native", "tier": "heavy"},
-    "cloud-deployments": {"owner": "references", "entrypoint": "cloud", "tier": "heavy"},
-    "live-providers": {"owner": "connectors", "entrypoint": "live-providers", "tier": "heavy"}
+    "compiler-verify": {"owner": "compiler", "entrypoint": "verify", "tier": "pr", "shard": "semantic"},
+    "runtime-deployment": {"owner": "runtime", "entrypoint": "deployment", "tier": "pr", "shard": "runtime"},
+    "connectors-verify": {"owner": "connectors", "entrypoint": "verify", "tier": "pr", "shard": "ecosystem"},
+    "blocks-verify": {"owner": "blocks", "entrypoint": "verify", "tier": "pr", "shard": "ecosystem"},
+    "expansions-resolution": {"owner": "expansions", "entrypoint": "resolution", "tier": "pr", "shard": "ecosystem"},
+    "coordination-compatibility": {"owner": "coordination", "entrypoint": "compatibility", "tier": "pr", "shard": "semantic"},
+    "examples-verify": {"owner": "examples", "entrypoint": "verify", "tier": "pr", "shard": "consumers"},
+    "references-core": {"owner": "references", "entrypoint": "core", "tier": "pr", "shard": "consumers"},
+    "references-checkout": {"owner": "references", "entrypoint": "checkout", "tier": "pr", "shard": "consumers"},
+    "references-search": {"owner": "references", "entrypoint": "search", "tier": "pr", "shard": "consumers"},
+    "references-quickbooks": {"owner": "references", "entrypoint": "quickbooks", "tier": "pr", "shard": "consumers"},
+    "csv-smoke": {"owner": "csvPayments", "entrypoint": "smoke", "tier": "pr", "shard": "applications"},
+    "rag-system": {"owner": "ragTurnkey", "entrypoint": "system", "tier": "pr", "shard": "applications"},
+    "csv-ha": {"owner": "csvPayments", "entrypoint": "ha", "tier": "post-merge", "shard": "applications"},
+    "examples-restaurant-ha": {"owner": "examples", "entrypoint": "restaurant-ha", "tier": "post-merge", "shard": "applications"},
+    "csv-ha-scale": {"owner": "csvPayments", "entrypoint": "ha-scale", "tier": "heavy", "shard": "scale-native"},
+    "native-builds": {"owner": "csvPayments", "entrypoint": "native", "tier": "heavy", "shard": "scale-native"},
+    "cloud-deployments": {"owner": "references", "entrypoint": "cloud", "tier": "heavy", "shard": "cloud-live"},
+    "live-providers": {"owner": "connectors", "entrypoint": "live-providers", "tier": "heavy", "shard": "cloud-live"}
   },
   "componentPolicy": {
-    "contracts": {
-      "required": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"],
-      "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
-    },
-    "compiler": {
-      "required": ["runtime-deployment", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"],
-      "heavy": ["native-builds", "cloud-deployments"]
-    },
-    "runtime": {
-      "required": ["connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-ha", "rag-system"],
-      "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
-    },
-    "connectors": {
-      "required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-ha", "rag-system"],
-      "heavy": ["csv-ha-scale", "cloud-deployments", "live-providers"]
-    },
-    "blocks": {
-      "required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"],
-      "heavy": []
-    },
-    "expansions": {
-      "required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"],
-      "heavy": []
-    },
-    "examples": {
-      "required": ["examples-verify", "examples-restaurant-ha"],
-      "heavy": []
-    },
-    "references": {
-      "required": ["references-checkout", "references-search", "references-quickbooks"],
-      "heavy": ["cloud-deployments"]
-    },
-    "csvPayments": {
-      "required": ["csv-smoke", "csv-ha"],
-      "heavy": ["csv-ha-scale", "native-builds"]
-    },
-    "ragTurnkey": {
-      "required": ["rag-system"],
-      "heavy": []
-    }
+    "contracts": {"required": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "compiler": {"required": ["runtime-deployment", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["native-builds", "cloud-deployments"]},
+    "runtime": {"required": ["connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "connectors": {"required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "cloud-deployments", "live-providers"]},
+    "blocks": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
+    "expansions": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
+    "examples": {"required": ["examples-verify"], "postMerge": ["examples-restaurant-ha"], "heavy": []},
+    "references": {"required": ["references-checkout", "references-search", "references-quickbooks"], "postMerge": [], "heavy": ["cloud-deployments"]},
+    "csvPayments": {"required": ["csv-smoke"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds"]},
+    "ragTurnkey": {"required": ["rag-system"], "postMerge": [], "heavy": []}
   },
-  "pathRules": [],
+  "pathRules": [
+    {"component": "contracts", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "compiler", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "runtime", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "connectors", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "blocks", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "expansions", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "examples", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "references", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "csvPayments", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "ragTurnkey", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []}
+  ],
   "fullTrain": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
 }

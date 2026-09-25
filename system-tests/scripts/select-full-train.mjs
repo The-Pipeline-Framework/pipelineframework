@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { readJson, suiteMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
+import { readJson, shardMatrix, validateComponentsConfig, validatePolicy } from './lib/contracts.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -18,4 +18,4 @@ for (const name of ['components', 'policy', 'resolvedSet', 'output']) {
 const config = validateComponentsConfig(await readJson(values.components));
 const policy = validatePolicy(await readJson(values.policy), config);
 const resolvedSet = await readJson(values.resolvedSet);
-await writeFile(values.output, `${JSON.stringify({include: suiteMatrix(policy.fullTrain, policy, resolvedSet, config)}, null, 2)}\n`);
+await writeFile(values.output, `${JSON.stringify({include: shardMatrix(policy.fullTrain, policy, resolvedSet, config)}, null, 2)}\n`);

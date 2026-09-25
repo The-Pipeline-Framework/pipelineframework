@@ -206,6 +206,7 @@ jobs:
       packages: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      has_shards: ${{ steps.matrix.outputs.has_shards }}
       baseline_digest: ${{ steps.resolve.outputs.baseline_digest }}
     steps:
       - name: Checkout trusted coordinator
@@ -242,6 +243,7 @@ jobs:
           COMPONENT: ${{ needs.intake.outputs.component }}
           BASELINE_DIGEST: ${{ steps.resolve.outputs.baseline_digest }}
           CANDIDATE_MANIFEST_DIGEST: ${{ needs.retrieve.outputs.candidate_manifest_digest }}
+          INCLUDE_POST_MERGE: ${{ needs.intake.outputs.pull_request_number == '' }}
         run: |
           node system-tests/scripts/resolve-set.mjs \
             --components system-tests/components.yml \
@@ -250,6 +252,8 @@ jobs:
             --candidates intake/candidate/candidate-manifest.json \
             --candidateDigests "$CANDIDATE_MANIFEST_DIGEST" \
             --output resolved/resolved-set.json
+          post_merge=()
+          if [ "$INCLUDE_POST_MERGE" = true ]; then post_merge+=(--includePostMerge); fi
           node system-tests/scripts/select-suites.mjs \
             --components system-tests/components.yml \
             --policy system-tests/policy.yml \
@@ -257,13 +261,16 @@ jobs:
             --component "$COMPONENT" \
             --changedPaths intake/changed-paths.txt \
             --hints "$(jq -r '.suiteHints // [] | join(",")' intake/candidate/candidate-manifest.json)" \
+            "${post_merge[@]}" \
             --output resolved/suite-matrix.json
           cp intake/event.json resolved/event.json
           cp resolved/baseline/baseline.json resolved/baseline.json
 
       - name: Export matrix
         id: matrix
-        run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "has_shards=$(jq -r '.include | length > 0' resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
 
       - name: Preserve resolved immutable test set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -365,14 +372,15 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  run-suite:
-    name: ${{ matrix.suite }}
+  run-product-shard:
+    name: ${{ matrix.displayName }}
     needs: [baseline, materialize]
+    if: needs.baseline.outputs.has_shards == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.baseline.outputs.matrix) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: ${{ matrix.timeoutMinutes }}
     permissions:
       contents: read
     steps:
@@ -382,14 +390,14 @@ jobs:
           path: coordination
           persist-credentials: false
 
-      - name: Checkout pinned suite owner
-        if: matrix.owner != 'coordination'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ matrix.repository }}
-          ref: ${{ matrix.sha }}
-          path: owner
-          persist-credentials: false
+      - name: Checkout every pinned shard owner
+        env:
+          SHARD_JSON: ${{ toJson(matrix) }}
+        run: |
+          printf '%s\n' "$SHARD_JSON" > shard.json
+          node coordination/system-tests/scripts/prepare-shard-sources.mjs \
+            --shard shard.json \
+            --output owners
 
       - name: Setup JDK 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -408,33 +416,24 @@ jobs:
           mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
           tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
 
-      - name: Run owner-controlled suite without privileged credentials
-        env:
-          OWNER: ${{ matrix.owner }}
-          ENTRYPOINT: ${{ matrix.entrypoint }}
-          MANIFEST: ${{ matrix.manifest }}
-          VERSION_PROPERTIES: ${{ toJson(matrix.versionProperties) }}
+      - name: Run product shard without privileged credentials
         run: |
-          if [ "$OWNER" = coordination ]; then
-            suite_root="$GITHUB_WORKSPACE/coordination"
-            suite_manifest="$suite_root/.github/tpf-system-tests.json"
-          else
-            suite_root="$GITHUB_WORKSPACE/owner"
-            suite_manifest="$suite_root/$MANIFEST"
-          fi
-          test -f "$suite_manifest"
-          node coordination/system-tests/scripts/run-suite.mjs \
-            --manifest "$suite_manifest" \
-            --entrypoint "$ENTRYPOINT" \
+          node coordination/system-tests/scripts/run-shard.mjs \
+            --shard "$GITHUB_WORKSPACE/shard.json" \
+            --coordination "$GITHUB_WORKSPACE/coordination" \
+            --owners "$GITHUB_WORKSPACE/owners" \
             --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
-            --versionProperties "$VERSION_PROPERTIES" \
-            --cwd "$suite_root" \
             --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
 
   promote:
     name: Promote green main candidate
-    if: needs.intake.outputs.pull_request_number == ''
-    needs: [intake, baseline, run-suite]
+    if: >-
+      always() && needs.intake.outputs.pull_request_number == '' &&
+      needs.baseline.result == 'success' &&
+      needs.materialize.result == 'success' &&
+      (needs.run-product-shard.result == 'success' ||
+       (needs.baseline.outputs.has_shards == 'false' && needs.run-product-shard.result == 'skipped'))
+    needs: [intake, baseline, materialize, run-product-shard]
     concurrency:
       group: tpf-system-test-baseline-promotion
       cancel-in-progress: false
@@ -552,7 +551,7 @@ jobs:
   report:
     name: Report aggregate status
     if: always() && needs.pending.result == 'success'
-    needs: [intake, pending, retrieve, baseline, materialize, run-suite, promote, retry-promotion]
+    needs: [intake, pending, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -575,7 +574,8 @@ jobs:
           RETRIEVE_RESULT: ${{ needs.retrieve.result }}
           BASELINE_RESULT: ${{ needs.baseline.result }}
           MATERIALIZE_RESULT: ${{ needs.materialize.result }}
-          TEST_RESULT: ${{ needs.run-suite.result }}
+          HAS_SHARDS: ${{ needs.baseline.outputs.has_shards }}
+          TEST_RESULT: ${{ needs.run-product-shard.result }}
           PROMOTE_RESULT: ${{ needs.promote.result }}
           RETRY_RESULT: ${{ needs.retry-promotion.result }}
           TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -584,14 +584,19 @@ jobs:
             state=failure
             description='A mandatory TPF system-test suite failed'
           elif [ "$RETRIEVE_RESULT" = success ] && [ "$BASELINE_RESULT" = success ] && \
-               [ "$MATERIALIZE_RESULT" = success ] && [ "$TEST_RESULT" = success ] && \
+               { { [ "$HAS_SHARDS" = true ] && [ "$MATERIALIZE_RESULT" = success ] && [ "$TEST_RESULT" = success ]; } || \
+                 { [ "$HAS_SHARDS" = false ] && [ "$MATERIALIZE_RESULT" = success ] && [ "$TEST_RESULT" = skipped ]; }; } && \
                { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; }; then
             if [ "$RETRY_RESULT" = success ]; then
               state=pending
               description='Baseline changed; replacement system-test run dispatched'
             else
               state=success
-              description='All mandatory TPF system-test suites passed'
+              if [ "$HAS_SHARDS" = false ]; then
+                description='Non-semantic change; owner validation is sufficient'
+              else
+                description='All mandatory TPF product-test shards passed'
+              fi
             fi
           else
             state=error

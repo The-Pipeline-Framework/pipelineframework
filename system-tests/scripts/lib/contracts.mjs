@@ -114,7 +114,7 @@ export function validateComponentsConfig(config) {
   validateVersionProperties(config.coordinationConsumerVersionProperties, expected, 'coordination consumer version properties');
   const repositories = [];
   for (const [name, component] of Object.entries(components)) {
-    const allowed = ['repository', 'kind', 'allowedCoordinates', 'consumerVersionProperties', 'suiteManifest'];
+    const allowed = ['repository', 'kind', 'buildJavaVersion', 'allowedCoordinates', 'consumerVersionProperties', 'suiteManifest'];
     exactKeys(component, allowed, ['repository', 'kind', 'consumerVersionProperties', 'suiteManifest'], `component ${name}`);
     nonBlank(component.repository, `component ${name}.repository`);
     repositories.push(component.repository);
@@ -124,6 +124,9 @@ export function validateComponentsConfig(config) {
     nonBlank(component.suiteManifest, `component ${name}.suiteManifest`);
     validateVersionProperties(component.consumerVersionProperties, expected, `component ${name}.consumerVersionProperties`);
     if (component.kind === 'maven') {
+      if (![21, 25].includes(component.buildJavaVersion)) {
+        fail(`component ${name}.buildJavaVersion must be 21 or 25`);
+      }
       if (!Array.isArray(component.allowedCoordinates) || component.allowedCoordinates.length === 0) {
         fail(`component ${name}.allowedCoordinates must be a non-empty array`);
       }
@@ -134,8 +137,9 @@ export function validateComponentsConfig(config) {
         }
       });
       unique(component.allowedCoordinates, `component ${name}.allowedCoordinates`);
-    } else if (component.allowedCoordinates !== undefined) {
-      fail(`source component ${name} cannot declare Maven coordinates`);
+    } else {
+      if (component.buildJavaVersion !== undefined) fail(`source component ${name} cannot declare buildJavaVersion`);
+      if (component.allowedCoordinates !== undefined) fail(`source component ${name} cannot declare Maven coordinates`);
     }
   }
   unique(repositories, 'component repositories');
@@ -371,28 +375,51 @@ export function validateBaseline(baseline, config) {
 }
 
 export function validatePolicy(policy, config) {
-  exactKeys(policy, ['schemaVersion', 'suites', 'componentPolicy', 'pathRules', 'fullTrain'], ['schemaVersion', 'suites', 'componentPolicy', 'pathRules', 'fullTrain'], 'suite policy');
-  if (policy.schemaVersion !== 1) fail('suite policy schemaVersion must be 1');
+  exactKeys(policy, ['schemaVersion', 'shards', 'suites', 'componentPolicy', 'pathRules', 'fullTrain'], ['schemaVersion', 'shards', 'suites', 'componentPolicy', 'pathRules', 'fullTrain'], 'suite policy');
+  if (policy.schemaVersion !== 2) fail('suite policy schemaVersion must be 2');
+  object(policy.shards, 'suite policy shards');
   object(policy.suites, 'suite policy suites');
   object(policy.componentPolicy, 'suite policy componentPolicy');
   if (!Array.isArray(policy.pathRules)) fail('suite policy pathRules must be an array');
   if (!Array.isArray(policy.fullTrain)) fail('suite policy fullTrain must be an array');
+  for (const [name, shard] of Object.entries(policy.shards)) {
+    exactKeys(shard, ['displayName', 'timeoutMinutes'], ['displayName', 'timeoutMinutes'], `shard ${name}`);
+    nonBlank(shard.displayName, `shard ${name}.displayName`);
+    if (!Number.isSafeInteger(shard.timeoutMinutes) || shard.timeoutMinutes < 1 || shard.timeoutMinutes > 360) {
+      fail(`shard ${name}.timeoutMinutes must be between 1 and 360`);
+    }
+  }
   for (const [name, suite] of Object.entries(policy.suites)) {
-    exactKeys(suite, ['owner', 'entrypoint', 'tier'], ['owner', 'entrypoint', 'tier'], `suite ${name}`);
+    exactKeys(suite, ['owner', 'entrypoint', 'tier', 'shard'], ['owner', 'entrypoint', 'tier', 'shard'], `suite ${name}`);
     if (suite.owner !== 'coordination' && config.components[suite.owner] === undefined) fail(`suite ${name} has unknown owner`);
     nonBlank(suite.entrypoint, `suite ${name}.entrypoint`);
-    if (!['pr', 'heavy'].includes(suite.tier)) fail(`suite ${name}.tier is invalid`);
+    if (!['pr', 'post-merge', 'heavy'].includes(suite.tier)) fail(`suite ${name}.tier is invalid`);
+    if (policy.shards[suite.shard] === undefined) fail(`suite ${name} references unknown shard ${suite.shard}`);
   }
   exactKeys(policy.componentPolicy, Object.keys(config.components), Object.keys(config.components), 'suite policy componentPolicy');
   for (const [component, componentPolicy] of Object.entries(policy.componentPolicy)) {
-    exactKeys(componentPolicy, ['required', 'heavy'], ['required', 'heavy'], `component policy ${component}`);
-    for (const key of ['required', 'heavy']) {
+    exactKeys(componentPolicy, ['required', 'postMerge', 'heavy'], ['required', 'postMerge', 'heavy'], `component policy ${component}`);
+    for (const key of ['required', 'postMerge', 'heavy']) {
       if (!Array.isArray(componentPolicy[key])) fail(`component policy ${component}.${key} must be an array`);
       unique(componentPolicy[key], `component policy ${component}.${key}`);
       for (const suite of componentPolicy[key]) {
         if (policy.suites[suite] === undefined) fail(`component policy ${component}.${key} references unknown suite ${suite}`);
-        if (policy.suites[suite].tier !== (key === 'required' ? 'pr' : 'heavy')) fail(`component policy ${component}.${key} references a suite in the wrong tier`);
+        const expectedTier = key === 'required' ? 'pr' : key === 'postMerge' ? 'post-merge' : 'heavy';
+        if (policy.suites[suite].tier !== expectedTier) fail(`component policy ${component}.${key} references a suite in the wrong tier`);
       }
+    }
+  }
+  for (const [index, rule] of policy.pathRules.entries()) {
+    exactKeys(rule, ['component', 'paths', 'required'], ['component', 'paths', 'required'], `path rule ${index}`);
+    if (config.components[rule.component] === undefined) fail(`path rule ${index} has unknown component`);
+    if (!Array.isArray(rule.paths) || rule.paths.length === 0) fail(`path rule ${index}.paths must be a non-empty array`);
+    if (!Array.isArray(rule.required)) fail(`path rule ${index}.required must be an array`);
+    unique(rule.paths, `path rule ${index}.paths`);
+    unique(rule.required, `path rule ${index}.required`);
+    for (const path of rule.paths) nonBlank(path, `path rule ${index}.paths entry`);
+    for (const suite of rule.required) {
+      if (policy.suites[suite] === undefined) fail(`path rule ${index} references unknown suite ${suite}`);
+      if (policy.suites[suite].tier !== 'pr') fail(`path rule ${index} references a non-PR suite`);
     }
   }
   unique(policy.fullTrain, 'suite policy fullTrain');
@@ -425,6 +452,12 @@ export function selectSuites(component, policy, changedPaths = [], publisherHint
     required.add(hint);
   }
   return [...required].sort();
+}
+
+export function selectPostMergeSuites(component, policy) {
+  const componentPolicy = policy.componentPolicy[component];
+  if (componentPolicy === undefined) fail(`no suite policy exists for component ${component}`);
+  return [...componentPolicy.postMerge].sort();
 }
 
 export function overlayBaseline(baseline, baselineDigest, candidates, candidateDigests, config) {
@@ -480,6 +513,25 @@ export function suiteMatrix(selectedSuites, policy, resolvedSet, config) {
     const pin = component.kind === 'maven' ? resolvedSet.components[suite.owner] : resolvedSet.testHarnesses[suite.owner];
     return {suite: name, owner: suite.owner, repository: component.repository, sha: pin.sha, manifest: component.suiteManifest, entrypoint: suite.entrypoint, tier: suite.tier, versionProperties: component.consumerVersionProperties};
   });
+}
+
+export function shardMatrix(selectedSuites, policy, resolvedSet, config) {
+  const shards = new Map();
+  for (const suite of suiteMatrix(selectedSuites, policy, resolvedSet, config)) {
+    const shardName = policy.suites[suite.suite].shard;
+    const definition = policy.shards[shardName];
+    const shard = shards.get(shardName) ?? {
+      shard: shardName,
+      displayName: definition.displayName,
+      timeoutMinutes: definition.timeoutMinutes,
+      suites: []
+    };
+    shard.suites.push(suite);
+    shards.set(shardName, shard);
+  }
+  return [...shards.values()]
+    .map((shard) => ({...shard, suites: shard.suites.sort((left, right) => left.suite.localeCompare(right.suite))}))
+    .sort((left, right) => left.shard.localeCompare(right.shard));
 }
 
 export function nextBaseline(currentBaseline, resolvedSet, generatedAt) {

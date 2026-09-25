@@ -11,8 +11,10 @@ import {
   overlayBaseline,
   parseCandidateVersion,
   readJson,
+  selectPostMergeSuites,
   selectSuites,
   sha256File,
+  shardMatrix,
   suiteMatrix,
   validateBaseline,
   validateCandidateEvent,
@@ -301,12 +303,35 @@ test('publisher hints may widen but cannot reduce central coverage', () => {
   assert.deepEqual(widened, ['coordination-compatibility', ...base]);
 });
 
+test('non-semantic path rules suppress product tests while mixed changes fall back to full coverage', () => {
+  assert.deepEqual(selectSuites('runtime', policy, ['README.md', 'docs/architecture/runtime.md']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/ISSUE_TEMPLATE/bug.yml', '.github/CODEOWNERS']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/README.md', '.github/PULL_REQUEST_TEMPLATE/change.md']), []);
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/workflows/build.yml']), policy.componentPolicy.runtime.required.slice().sort());
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/actions/candidate/action.yml']), policy.componentPolicy.runtime.required.slice().sort());
+  assert.deepEqual(selectSuites('runtime', policy, ['.github/tpf-system-tests.json']), policy.componentPolicy.runtime.required.slice().sort());
+  assert.deepEqual(
+    selectSuites('runtime', policy, ['README.md', 'runtime/src/main/java/Runtime.java']),
+    policy.componentPolicy.runtime.required.slice().sort()
+  );
+  assert.deepEqual(selectPostMergeSuites('runtime', policy), ['csv-ha']);
+});
+
 test('suite matrix pins owner source SHAs from the resolved set', () => {
   const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
   const [suite] = suiteMatrix(['expansions-resolution'], policy, resolved, config);
   assert.equal(suite.repository, config.components.expansions.repository);
   assert.equal(suite.sha, resolved.components.expansions.sha);
   assert.deepEqual(suite.versionProperties, config.components.expansions.consumerVersionProperties);
+});
+
+test('product matrix groups suites into a bounded set of coarse shards', () => {
+  const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
+  const selected = selectSuites('blocks', policy);
+  const shards = shardMatrix(selected, policy, resolved, config);
+  assert.deepEqual(shards.map(({shard}) => shard), ['applications', 'consumers', 'ecosystem']);
+  assert.deepEqual(shards.flatMap(({suites}) => suites.map(({suite}) => suite)).sort(), selected);
+  assert.ok(shards.every(({suites}) => suites.length > 0));
 });
 
 test('promotion increments the baseline and rejects a stale tested revision', () => {
@@ -326,6 +351,14 @@ test('checked-in schemas are valid JSON and do not allow candidate-event extras'
   assert.equal(candidateSchema.additionalProperties, false);
   assert.deepEqual(candidateSchema.properties.provenance.required, ['build', 'publication']);
   assert.equal(candidateSchema.$defs.workflowRun.additionalProperties, false);
+  const compatibilityCandidateSchema = JSON.parse(await readFile(new URL('schemas/compatibility-candidate-manifest.schema.json', root), 'utf8'));
+  assert.equal(compatibilityCandidateSchema.additionalProperties, false);
+  assert.equal(compatibilityCandidateSchema.properties.provenance.additionalProperties, false);
+  assert.equal(compatibilityCandidateSchema.properties.provenance.properties.workflowPath.const, '.github/workflows/system-test-compatibility-set.yml');
+  const compatibilitySetSchema = JSON.parse(await readFile(new URL('schemas/compatibility-set.schema.json', root), 'utf8'));
+  assert.equal(compatibilitySetSchema.additionalProperties, false);
+  assert.equal(compatibilitySetSchema.properties.requests.minItems, 2);
+  assert.equal(compatibilitySetSchema.properties.requests.items.additionalProperties, false);
   const baselineSchema = JSON.parse(await readFile(new URL('schemas/baseline-manifest.schema.json', root), 'utf8'));
   assert.equal(baselineSchema.properties.components.additionalProperties, false);
   assert.equal(baselineSchema.properties.testHarnesses.additionalProperties, false);

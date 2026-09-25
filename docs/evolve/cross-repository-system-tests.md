@@ -34,7 +34,7 @@ flowchart TB
     end
 
     Coordinator[pipelineframework<br/>policy + orchestration]
-    Suites[Credential-free suite jobs]
+    Shards[Credential-free product shards]
     Status[tpf/system-tests<br/>commit status]
 
     Producers -->|candidate artifacts| Packages
@@ -43,9 +43,9 @@ flowchart TB
     Coordinator --> CandidateOCI
     BaselineOCI --> Coordinator
     Packages --> Coordinator
-    Coordinator -->|exact SHAs + exact versions| Suites
-    Harnesses -->|owner-controlled commands| Suites
-    Suites --> Coordinator
+    Coordinator -->|exact SHAs + exact versions| Shards
+    Harnesses -->|owner-controlled commands| Shards
+    Shards --> Coordinator
     Coordinator --> Status
     Coordinator -->|green main promotion| BaselineOCI
 ```
@@ -57,10 +57,14 @@ test harnesses cross them as exact Git SHAs.
 
 - `system-tests/components.yml` is the repository allowlist, exact Maven-coordinate ownership map and the central
   consumer version-property map. A suite owner cannot substitute another property or publish a partial component.
-- `system-tests/policy.yml` maps a changed component to mandatory pull-request and heavy suites.
+- `system-tests/policy.yml` maps a changed component to mandatory pull-request, post-merge and heavy suites, then
+  groups selected suites into coarse product shards.
 - `system-tests/schemas/candidate-event.schema.json` defines the nine-field `tpf-candidate-v1` dispatch payload.
 - `system-tests/schemas/candidate-manifest.schema.json` records source, separate build/publisher workflow runs,
   Maven and image provenance, and optional additive suite hints.
+- `system-tests/schemas/compatibility-candidate-manifest.schema.json` records exact PR-head identity, base SHA,
+  tested merge SHA, dependency-version overrides, checksums and coordinator provenance for candidates bootstrapped
+  as one dependency-ordered set.
 - `system-tests/schemas/baseline-manifest.schema.json` pins the last-known-green components and test harnesses.
 - `system-tests/schemas/suite-manifest.schema.json` lets each owner publish stable argument-array test entrypoints.
 
@@ -69,7 +73,7 @@ runtime already present on every runner. No workflow-only package installation i
 
 ## Trust boundaries
 
-The candidate workflow has four security zones:
+The singleton candidate workflow has four security zones:
 
 1. event intake accepts no credentials and rejects repositories, components, versions and SHAs outside the
    checked-in contract;
@@ -77,6 +81,14 @@ The candidate workflow has four security zones:
 3. trusted materialisation reads GitHub Packages into a run-isolated Maven repository, verifies every recorded
    checksum, then uploads a credential-free archive;
 4. untrusted owner tests execute with contents-read only and cannot read package, dispatch or status credentials.
+
+Compatibility sets preserve the same separation with a different middle stage. A trusted job resolves and hydrates
+the last-known-green baseline without executing pull-request code. It uploads a credential-free Maven repository.
+A contents-read job then checks out each resolved merge commit (the exact PR head applied to its current base),
+builds the Maven components as independent reactors in declared dependency order, and records checksummed
+compatibility-candidate manifests. Thus downstream
+PRs consume upstream PR artifacts without requiring an intermediate merge, snapshot publication, or package token.
+The product shards reuse that single hydrated repository, and only the final trusted reporter can write statuses.
 
 Fork code is never executed in a privileged job. A fork pull request first runs its ordinary unprivileged owner
 suite. Candidate publication is enabled only after a maintainer applies `safe-to-system-test`; the privileged
@@ -144,13 +156,30 @@ sequenceDiagram
    therefore ends in `error`; an event without a safe target is rejected without writing to an untrusted repository.
    The workflow then verifies the current PR head and build/publication provenance, resolves the baseline tag once,
    and uses only the returned digest.
-5. Selected owner suites run against the materialised overlay. The aggregate reporter posts success, failure or
-   error to the originating SHA.
+5. Selected owner suites run sequentially inside a bounded number of coarse product shards against the one
+   materialised overlay. The aggregate reporter posts success, failure or error to the originating SHA.
 
 For a coordinated change, run `TPF System Tests — Compatibility Set` with a stable set ID and two to ten pull-request
-URLs. The coordinator resolves every current head, locates its successful candidate publisher, overlays at most one
-candidate per component, unions the centrally required suites, and reports the same aggregate result to every
-participating SHA. It never falls back to a branch name or to an older PR head.
+URLs. The coordinator resolves every exact head and tested merge commit, overlays the immutable baseline, builds
+participating Maven components in dependency order, unions the centrally required suites, and reports the same aggregate result to
+every participating SHA. It never requires a candidate to build against the old baseline first, and never falls
+back to a branch name or older PR head.
+
+```mermaid
+flowchart LR
+    PRs[Exact PR heads + base SHAs] --> Merge[Pin tested merge commits]
+    Merge --> Resolve[Resolve component DAG]
+    Baseline[Credential-free baseline repository] --> Contracts
+    Resolve --> Contracts[Build Contracts candidate]
+    Contracts --> Compiler[Build compiler candidate]
+    Contracts --> Runtime[Build runtime candidate]
+    Compiler --> Runtime
+    Runtime --> Connectors[Build Connector candidate]
+    Connectors --> Consumers[Run exact source consumers]
+    Runtime --> Consumers
+    Consumers --> Shards[Coarse product-test shards]
+    Shards --> Status[One tpf/system-tests result<br/>on every participating SHA]
+```
 
 ## What a resolved test set contains
 
@@ -177,9 +206,9 @@ flowchart LR
     Resolved --> Materialise[Trusted materialisation<br/>verify checksums and transitive artifacts]
     Materialise --> Inputs[Credential-free input archive]
     Resolved --> Policy[Central suite policy]
-    Policy --> Matrix[Mandatory suite matrix]
+    Policy --> Matrix[Mandatory product-shard matrix]
     Inputs --> Matrix
-    Matrix --> Run[Parallel owner-controlled suites]
+    Matrix --> Run[Coarse parallel shards<br/>owner suites sequential within each shard]
 ```
 
 This resolved set is the reproducibility boundary. Re-running it does not consult `main`, `latest`, a Maven
@@ -223,9 +252,9 @@ runs and one deliberate regression failure for that repository.
 ## Test ownership and frequency
 
 Owner-local unit, contract and integration suites continue on every pull request. The central pull-request gate adds
-affected ordinary E2E and non-scale HA coverage. Nightly and release trains add the complete compatibility matrix,
-HA scale, native builds, cloud deployment and live-provider suites. Publisher hints may widen that set but cannot
-make it smaller.
+affected product compatibility, application smoke and reference coverage. Established ordinary HA lanes remain on
+`main`; nightly and release trains add the complete compatibility matrix, HA scale, native builds, cloud deployment
+and live-provider suites. Publisher hints may widen that set but cannot make it smaller.
 
 Different candidate sets use isolated Actions jobs and Maven repositories. The singleton concurrency key is
 repository plus pull request; a coordinated set uses its explicit set ID. New commits cancel only older runs for
