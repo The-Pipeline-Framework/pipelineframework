@@ -22,8 +22,9 @@ artifacts. Every run resolves one last-known-green baseline OCI manifest to an i
 immutable candidate per changed repository. Maven candidates use a unique version derived from the pull request or
 `main` commit. Container candidates are identified only by digest.
 
-A coordinated change identifies candidates by exact pull-request heads and tests each resolved merge commit, not
-an assumption that every candidate already builds against the old baseline. The coordinator builds participating
+A coordinated change identifies candidates by exact pull-request heads and current base SHAs, then creates and
+tests a deterministic local merge for each pair instead of trusting GitHub's asynchronously refreshed test-merge
+ref or assuming every candidate already builds against the old baseline. The coordinator builds participating
 Maven reactors in dependency order into one
 credential-free, run-isolated Maven repository, records a checksummed manifest for each result, and then executes
 the product shards against that resolved set. These remain independent Maven reactors; the compatibility set does

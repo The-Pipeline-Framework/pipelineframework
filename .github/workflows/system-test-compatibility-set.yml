@@ -73,6 +73,7 @@ jobs:
           private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
           owner: The-Pipeline-Framework
           repositories: ${{ needs.parse.outputs.repository_names }}
+          permission-contents: read
           permission-pull-requests: read
           permission-statuses: write
 
@@ -83,12 +84,28 @@ jobs:
           mkdir -p targets/pulls
           : > targets/targets.ndjson
           while IFS=$'\t' read -r component repository number; do
-            gh api "repos/$repository/pulls/$number" > "targets/pulls/$component.json"
+            pull="targets/pulls/$component.json"
+            gh api "repos/$repository/pulls/$number" > "$pull"
             jq -e --arg repository "$repository" \
-              '.base.repo.full_name == $repository and (.merged_at != null or (.state == "open" and .mergeable == true)) and (.head.sha | test("^[0-9a-f]{40}$")) and (.base.sha | test("^[0-9a-f]{40}$")) and ((.merge_commit_sha // "") | test("^[0-9a-f]{40}$"))' \
-              "targets/pulls/$component.json" > /dev/null
+              '.base.repo.full_name == $repository and (.base.ref | type == "string") and (.head.sha | test("^[0-9a-f]{40}$")) and (.merged_at != null or .state == "open")' \
+              "$pull" > /dev/null
+
+            source_sha=$(jq -r '.head.sha' "$pull")
+            base_ref=$(jq -r '.base.ref' "$pull")
+            merged=$(jq -r '.merged_at != null' "$pull")
+            if [[ "$merged" == true ]]; then
+              tested_sha=$(jq -er '.merge_commit_sha | select(test("^[0-9a-f]{40}$"))' "$pull")
+              gh api "repos/$repository/commits/$tested_sha" > "targets/pulls/$component-merge.json"
+              base_sha=$(jq -er '.parents[0].sha | select(test("^[0-9a-f]{40}$"))' "targets/pulls/$component-merge.json")
+            else
+              gh api "repos/$repository/commits/$base_ref" > "targets/pulls/$component-base.json"
+              base_sha=$(jq -er '.sha | select(test("^[0-9a-f]{40}$"))' "targets/pulls/$component-base.json")
+              tested_sha=''
+            fi
             jq -c --arg component "$component" --arg repository "$repository" --argjson number "$number" \
-              '{component: $component, repository: $repository, repositoryName: ($repository | split("/")[1]), pullRequestNumber: $number, sourceSha: .head.sha, baseSha: .base.sha, testedSha: .merge_commit_sha}' \
+              --arg baseRef "$base_ref" --arg sourceSha "$source_sha" --arg baseSha "$base_sha" \
+              --argjson merged "$merged" --arg testedSha "$tested_sha" \
+              '{component: $component, repository: $repository, repositoryName: ($repository | split("/")[1]), baseRef: $baseRef, pullRequestNumber: $number, sourceSha: $sourceSha, baseSha: $baseSha, merged: $merged} + (if $merged then {testedSha: $testedSha} else {} end)' \
               "targets/pulls/$component.json" >> targets/targets.ndjson
           done < <(jq -r '.requests[] | [.component, .repository, .pullRequestNumber] | @tsv' request/compatibility-set-request.json)
           jq -s '{schemaVersion: 1, targets: sort_by(.component)}' targets/targets.ndjson > targets/targets.json

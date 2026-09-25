@@ -41,9 +41,11 @@ const targets = new Map();
 for (const target of targetDocument.targets) {
   const component = config.components[target.component];
   if (component === undefined || component.repository !== target.repository) throw new Error(`invalid target component ${target.component}`);
+  if (typeof target.baseRef !== 'string' || target.baseRef.trim() === '') throw new Error(`invalid base ref for ${target.component}`);
   if (!/^[0-9a-f]{40}$/.test(target.sourceSha)) throw new Error(`invalid target SHA for ${target.component}`);
   if (!/^[0-9a-f]{40}$/.test(target.baseSha)) throw new Error(`invalid target base SHA for ${target.component}`);
-  if (!/^[0-9a-f]{40}$/.test(target.testedSha)) throw new Error(`invalid tested SHA for ${target.component}`);
+  if (typeof target.merged !== 'boolean') throw new Error(`invalid merged state for ${target.component}`);
+  if (target.merged && !/^[0-9a-f]{40}$/.test(target.testedSha)) throw new Error(`invalid tested SHA for ${target.component}`);
   if (!Number.isSafeInteger(target.pullRequestNumber) || target.pullRequestNumber < 1) throw new Error(`invalid PR number for ${target.component}`);
   if (targets.has(target.component)) throw new Error(`duplicate target component ${target.component}`);
   targets.set(target.component, target);
@@ -52,7 +54,7 @@ for (const target of targetDocument.targets) {
 await mkdir(values.sources, {recursive: true});
 await mkdir(values.mavenRepository, {recursive: true});
 await mkdir(values.manifests, {recursive: true});
-for (const target of targets.values()) await checkout(target);
+for (const target of targets.values()) target.testedSha = await checkout(target);
 
 const resolvedSet = structuredClone(baseline);
 resolvedSet.candidates = [];
@@ -118,10 +120,45 @@ async function checkout(target) {
   await mkdir(destination, {recursive: true});
   await run('git', ['init', '--quiet', destination]);
   await run('git', ['-C', destination, 'remote', 'add', 'origin', `https://github.com/${target.repository}.git`]);
-  await run('git', ['-C', destination, '-c', 'protocol.version=2', 'fetch', '--quiet', '--depth=1', 'origin', target.testedSha]);
-  await run('git', ['-C', destination, 'checkout', '--quiet', '--detach', 'FETCH_HEAD']);
+  await run('git', ['-C', destination, '-c', 'protocol.version=2', 'fetch', '--quiet', '--no-tags', 'origin', target.baseRef]);
+  if (target.merged) {
+    if (!(await containsCommit(destination, target.testedSha))) throw new Error(`merged commit for ${target.component} is not on ${target.baseRef}`);
+    await run('git', ['-C', destination, 'checkout', '--quiet', '--detach', target.testedSha]);
+  } else {
+    if (!(await containsCommit(destination, target.baseSha))) throw new Error(`base commit for ${target.component} is not on ${target.baseRef}`);
+    await run('git', ['-C', destination, '-c', 'protocol.version=2', 'fetch', '--quiet', '--no-tags', 'origin', `refs/pull/${target.pullRequestNumber}/head`]);
+    const fetchedHead = (await capture('git', ['-C', destination, 'rev-parse', 'FETCH_HEAD'])).trim();
+    if (fetchedHead !== target.sourceSha) throw new Error(`PR head for ${target.component} moved after resolution`);
+    await run('git', ['-C', destination, 'checkout', '--quiet', '--detach', target.baseSha]);
+    await run('git', ['-C', destination, '-c', 'user.name=TPF System Tests', '-c', 'user.email=system-tests@pipelineframework.org', 'merge', '--quiet', '--no-ff', '--no-commit', target.sourceSha]);
+    const tree = (await capture('git', ['-C', destination, 'write-tree'])).trim();
+    const testedSha = (await capture('git', ['-C', destination, 'commit-tree', tree, '-p', target.baseSha, '-p', target.sourceSha], {
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'TPF System Tests',
+        GIT_AUTHOR_EMAIL: 'system-tests@pipelineframework.org',
+        GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z',
+        GIT_COMMITTER_NAME: 'TPF System Tests',
+        GIT_COMMITTER_EMAIL: 'system-tests@pipelineframework.org',
+        GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z'
+      },
+      input: `TPF compatibility merge: ${target.component}\n`
+    })).trim();
+    await run('git', ['-C', destination, 'reset', '--quiet', '--hard', testedSha]);
+    target.testedSha = testedSha;
+  }
   const actual = (await capture('git', ['-C', destination, 'rev-parse', 'HEAD'])).trim();
   if (actual !== target.testedSha) throw new Error(`checkout for ${target.component} resolved ${actual}`);
+  return actual;
+}
+
+async function containsCommit(destination, sha) {
+  try {
+    await capture('git', ['-C', destination, 'merge-base', '--is-ancestor', sha, 'FETCH_HEAD']);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function writeManifest(target, candidateVersion, versionArguments) {
@@ -179,10 +216,12 @@ function run(command, arguments_, options = {}) {
   });
 }
 
-function capture(command, arguments_) {
+function capture(command, arguments_, options = {}) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, arguments_, {stdio: ['ignore', 'pipe', 'inherit'], shell: false});
+    const child = spawn(command, arguments_, {...options, stdio: ['pipe', 'pipe', 'inherit'], shell: false});
     let output = '';
+    if (options.input === undefined) child.stdin.end();
+    else child.stdin.end(options.input);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.once('error', reject);

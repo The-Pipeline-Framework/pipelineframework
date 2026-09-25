@@ -5,8 +5,9 @@ import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, 
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
+const bootstrap = await readFile(new URL('../scripts/bootstrap-compatibility-set.mjs', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
-const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, testedSha: sha});
+const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
 
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
@@ -57,4 +58,14 @@ test('compatibility baseline is portable and cached by immutable digest before b
   assert.ok(cache >= 0, 'baseline cache key is missing');
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
+});
+
+test('compatibility targets are merged locally from the exact current base and PR head', () => {
+  assert.match(workflow, /permission-contents: read/);
+  assert.match(workflow, /repos\/\$repository\/commits\/\$base_ref/);
+  assert.match(workflow, /baseRef: \$baseRef/);
+  assert.doesNotMatch(workflow, /\.mergeable/);
+  assert.match(bootstrap, /refs\/pull\/\$\{target\.pullRequestNumber\}\/head/);
+  assert.match(bootstrap, /'commit-tree', tree, '-p', target\.baseSha, '-p', target\.sourceSha/);
+  assert.match(bootstrap, /GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z'/);
 });
