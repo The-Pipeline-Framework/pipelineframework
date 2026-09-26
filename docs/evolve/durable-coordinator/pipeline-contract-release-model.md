@@ -36,7 +36,10 @@ Inter-pipeline handoff contracts remain a follow-up extension.
 
 ## Release Descriptor
 
-`pipeline-release.json` is emitted by a build or release process after artifacts are built and addressable in the system that naturally owns that artifact form. TPF should not force every artifact through one store.
+`pipeline-release.json` is emitted by the [Pipeline Release Maven plugin](/deploy/release-descriptors) after local
+artifacts are built, with an explicit Release version and an address in the system that naturally owns each artifact
+form. Post-push tooling remains responsible for remote-only identities such as OCI image digests. TPF does not force
+every artifact through one store.
 
 It includes:
 
