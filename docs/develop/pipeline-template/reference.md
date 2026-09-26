@@ -230,6 +230,27 @@ public Uni<PaymentRequest> process(Multi<PaymentLineItem> items) {
 
 The corresponding steps declare `ONE_TO_MANY` and `MANY_TO_ONE`. TPF does not insert a collection-to-stream or stream-to-collection conversion.
 
+### Paged resumable sources
+
+Paging is an opt-in execution modifier on the first source-producing `ONE_TO_MANY` step:
+
+```yaml
+steps:
+  - name: Read payments
+    service: com.example.payments.PagedPaymentSource
+    cardinality: ONE_TO_MANY
+    input: PaymentFile
+    output: Payment
+    paging:
+      maxRecords: 1000
+```
+
+`maxRecords` is a positive bound on logical source records consumed by one page. Rejected or skipped records count; a format header does not. Users submit one source and never author provider checkpoints.
+
+The source service must implement `PagedSourceOperation`. It receives the pinned source identity, an optional opaque checkpoint, and the record limit, then returns a demand-aware `Flow.Publisher` and a completion stage. The provider interprets and validates its checkpoint and immutable or versioned snapshot on every open. Completion becomes valid only after the publisher completes normally and provider resources are released. A failed or cancelled page cannot advance. An empty non-exhausted page must return a different checkpoint.
+
+The first release requires terminal Object Publish with a `PagedStreamingObjectPublishMapper` and a filesystem or S3 target that supports page-part composition. The mapper supplies once-only group prefix and suffix chunks and folds bounded metadata across pages. The compiler rejects paging with `MATERIALIZED_MULTI`, a later `MANY_TO_ONE` aggregate, a non-resumable source, or an incompatible target or mapper.
+
 ### External representations
 
 A v3 domain type can optionally declare a named external representation for a framework component. The pipeline and business functions continue to use the generated canonical domain type; the component performs the explicit conversion at its boundary.

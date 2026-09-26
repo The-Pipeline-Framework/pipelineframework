@@ -9,6 +9,10 @@ Backpressure controls how much work can flow through a live reactive path. It is
 
 These mechanisms are complementary. Backpressure does not prevent rapid connection-refused loops, and a circuit does not replace demand propagation or provider-capacity sizing. See [Execution Safety](/architecture/execution-safety) and [Operate Circuit Protection](/operate/circuit-breakers).
 
+Paging adds a third bound for large resumable sources. `paging.maxRecords` limits logical source work owned and replayed by one transition; it does not prefetch that many records. The current page still follows normal reactive demand, Await admission, and downstream capacity. One page is active per logical source, and the next page starts only after normal stream completion, resource release, page-output manifest commit, and a fenced execution-state commit.
+
+A smaller page reduces replay and remote-transition exposure, while slow downstream work may still make that page exceed a REST request deadline. Size the page from acceptable replay cost and transition lifetime, then size concurrency and buffers from provider and memory capacity. Do not use a larger buffer to imitate a page, or a larger page to override backpressure.
+
 ### How to size `pipeline.max-concurrency`
 
 `pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For platform-owned compute and I/O work, it is a density control: more permitted in-flight work can use available platform capacity more efficiently, subject to memory, downstream demand, and the work's own saturation point.
@@ -95,6 +99,8 @@ For await-heavy pipelines, size the system around two kinds of pressure:
 - durable boundary pressure: pending await interactions, completions waiting for durable fallback continuation, work-queue depth, provider permits, broker lag, retry rate, and DLQ events.
 
 In connector-first CSV Payments, Object Ingest controls source-object admission, the CSV parser advances by reactive demand and the live await in-flight window, and Object Publish accepts terminal chunks through a target session. The old CSV reader demand pacer is a legacy fallback for the deprecated file-step path; it is not the main backpressure mechanism for the connector-owned path.
+
+With source paging enabled, CSV Payments still submits one CSV object. OpenCSV advances in parser-valid logical records, including quoted multiline and UTF-8 fields. Each page uses the same live path shown below; Object Publish stages attempt-safe page parts and composes them in page order into one final object after source exhaustion.
 
 ```mermaid
 flowchart LR
