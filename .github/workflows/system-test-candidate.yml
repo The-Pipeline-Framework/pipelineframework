@@ -189,6 +189,26 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           printf '%s\n' "$digest" > intake/candidate-manifest-digest.txt
 
+      - name: Record current main candidate for nightly reconciliation
+        if: needs.intake.outputs.pull_request_number == ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GHCR_TOKEN: ${{ github.token }}
+          COMPONENT: ${{ needs.intake.outputs.component }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+          CANDIDATE_DIGEST: ${{ steps.oci.outputs.digest }}
+        run: |
+          default_branch="$(jq -r '.default_branch' intake/source-repository.json)"
+          current_sha="$(gh api "repos/$SOURCE_REPOSITORY/commits/$default_branch" --jq '.sha')"
+          if [ "$current_sha" != "$SOURCE_SHA" ]; then
+            echo "Candidate $SOURCE_SHA is no longer the default-branch head; not moving the discovery tag."
+            exit 0
+          fi
+          image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          oras copy "$image@$CANDIDATE_DIGEST" "$image:main-$COMPONENT"
+
       - name: Preserve attested candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -502,6 +502,60 @@ export function overlayBaseline(baseline, baselineDigest, candidates, candidateD
   };
 }
 
+function baselinePin(baseline, component, config) {
+  return config.components[component].kind === 'maven'
+    ? baseline.components[component]
+    : baseline.testHarnesses[component];
+}
+
+export function reconcileMainCandidates(baseline, baselineDigest, candidates, candidateDigests, currentHeads, config) {
+  validateBaseline(baseline, config);
+  requireDigest(baselineDigest, 'baseline digest');
+  if (!Array.isArray(candidates)) fail('main candidates must be an array');
+  if (!Array.isArray(candidateDigests) || candidateDigests.length !== candidates.length) {
+    fail('main candidate digests must align with candidates');
+  }
+  object(currentHeads, 'current main heads');
+
+  const current = [];
+  const digests = [];
+  candidates.forEach((candidate, index) => {
+    validateCandidateManifest(candidate, config);
+    if (candidate.pullRequestNumber !== null) fail(`latest-main candidate for ${candidate.component} must not belong to a pull request`);
+    requireSha(currentHeads[candidate.component], `current main head for ${candidate.component}`);
+    if (candidate.sourceSha !== currentHeads[candidate.component]) return;
+    const pin = baselinePin(baseline, candidate.component, config);
+    if (pin.sha === candidate.sourceSha && (pin.mavenVersion === undefined || pin.mavenVersion === candidate.candidateVersion)) return;
+    current.push(candidate);
+    digests.push(candidateDigests[index]);
+  });
+
+  if (current.length > 0) return overlayBaseline(baseline, baselineDigest, current, digests, config);
+  return {
+    schemaVersion: 1,
+    baselineDigest,
+    baselineRevision: baseline.revision,
+    components: structuredClone(baseline.components),
+    testHarnesses: structuredClone(baseline.testHarnesses),
+    images: structuredClone(baseline.images),
+    candidates: []
+  };
+}
+
+export function validateResolvedCandidateHeads(resolvedSet, currentHeads, config) {
+  object(resolvedSet, 'resolved set');
+  object(currentHeads, 'current main heads');
+  if (!Array.isArray(resolvedSet.candidates)) fail('resolved set candidates must be an array');
+  for (const candidate of resolvedSet.candidates) {
+    if (config.components[candidate.component] === undefined) fail(`resolved set references unknown component ${candidate.component}`);
+    requireSha(currentHeads[candidate.component], `current main head for ${candidate.component}`);
+    if (candidate.sha !== currentHeads[candidate.component]) {
+      fail(`resolved ${candidate.component} candidate is no longer the default-branch head`);
+    }
+  }
+  return resolvedSet;
+}
+
 export function suiteMatrix(selectedSuites, policy, resolvedSet, config) {
   return selectedSuites.map((name) => {
     const suite = policy.suites[name];

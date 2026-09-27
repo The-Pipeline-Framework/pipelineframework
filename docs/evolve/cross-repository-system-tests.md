@@ -48,6 +48,7 @@ flowchart TB
     Shards --> Coordinator
     Coordinator --> Status
     Coordinator -->|green main promotion| BaselineOCI
+    CandidateOCI -->|resolve current-main candidates once| Coordinator
 ```
 
 The arrows do not form a new source reactor. Maven components cross repository boundaries as published artifacts;
@@ -273,20 +274,20 @@ current candidate again against the new baseline. Promotion publishes
 a new immutable OCI manifest and moves `main` to it. Rollback moves `main` back to a previous manifest digest; no
 Maven artifact, image or manifest is overwritten.
 
+An attested default-branch candidate also updates a component-scoped discovery tag after the coordinator confirms
+that its SHA is still the repository's current default-branch head. Discovery tags are not reproducibility inputs:
+the nightly full train resolves them once to immutable manifest digests, ignores a stale tag whose candidate no
+longer matches current `main`, overlays all newer candidates on the last-known-green baseline, and then runs the
+complete ordinary and heavy product matrix. If green, the entire tested set is promoted atomically. This is the recovery path when a
+candidate was previously blocked by a transient or subsequently fixed downstream failure.
+
 Formal BOM or release promotion requires a green full train. A green owner repository alone is necessary evidence,
 not product compatibility evidence.
 
-`TPF System Tests — Full Train` resolves the baseline tag once, records the resulting digest, and runs the complete
-ordinary and heavy suite list from that immutable set. It is scheduled nightly and may also be started manually for
-release evidence. Scheduled execution remains dormant until the repository variable
-`SYSTEM_TEST_FULL_TRAIN_ENABLED=true` is set after baseline bootstrap and the shadow pilots.
-
-Do not enable that variable until the reference-implementations repository exposes a trusted, exact-SHA relay to
-its existing OIDC cloud workflows and the Connectors repository owns a real live-provider lane. Their current suite
-entrypoints fail closed rather than reporting ordinary deterministic tests as cloud or live-provider evidence.
-Likewise, CSV Payments and RAG Turnkey initially publish source-only candidate manifests: add image digests only
-after their unprivileged builds can produce immutable OCI output that a trusted publisher can validate and upload
-without executing pull-request code.
+`TPF System Tests — Full Train` performs that recovery once every night and may also be started manually for release
+evidence. It resolves the baseline and current-main candidate tags once, records the resulting immutable digests,
+and runs the complete ordinary and heavy suite list. It is not feature-gated. Snapshot publication is separate:
+snapshots remain floating development artifacts and are never baseline inputs.
 
 ## Local validation
 

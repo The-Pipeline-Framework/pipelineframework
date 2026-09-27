@@ -60,6 +60,14 @@ still the source repository's default-branch head and the tag still resolves to 
 This prevents a slower, superseded build from moving a component backwards. A compare-and-swap miss starts a new
 run against the winning baseline instead of promoting stale evidence.
 
+Every attested default-branch candidate also advances a component-scoped discovery tag, but that mutable tag is
+never itself a test input. The nightly full train resolves each discovery tag once, rejects candidates that no
+longer match the repository's current default-branch head, overlays every newer candidate on the immutable
+last-known-green baseline, and records the resulting digests before execution. A green reconciliation promotes the complete
+resolved set with the same serialized compare-and-swap rule. This reconciliation allows a candidate rejected by a
+transient downstream failure to be reconsidered after the downstream baseline changes instead of leaving that
+component pinned indefinitely.
+
 ## Rationale
 
 The candidate overlay is the smallest unit that proves the repository boundary: downstream source consumes an
@@ -78,6 +86,8 @@ allows pull-request validation without giving arbitrary test code cross-reposito
   while scale, native, cloud and live-provider suites remain explicit nightly or release evidence.
 - Explicit compatibility sets coalesce related repository changes immediately; singleton candidates are never
   delayed merely to create a batching opportunity.
+- The nightly full train advances the product baseline from the latest attested current-main candidates; a failed
+  singleton run is therefore reconsidered after other components move.
 - Candidate packages and manifests require retention cleanup, but they are never public release identities.
 - GitHub App installation tokens are repository-scoped. Package access uses the coordination repository's explicit
   GitHub Packages grants and is consumed only during trusted materialisation.
