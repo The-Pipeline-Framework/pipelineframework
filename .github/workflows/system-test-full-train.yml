@@ -83,12 +83,19 @@ jobs:
               mkdir -p "$candidate_dir"
               cp "$pointer_dir/candidate-manifest.json" "$candidate_dir/candidate-manifest.json"
             else
-              tag="$(awk -v prefix="$component-$current_sha-" 'index($0, prefix) == 1' resolved/candidate-tags.txt | sort -V | tail -n 1)"
-              if [ -n "$tag" ]; then
-                candidate_digest="$(oras resolve "$candidate_image:$tag")"
-                mkdir -p "$candidate_dir"
-                oras pull "$candidate_image@$candidate_digest" --output "$candidate_dir"
-              fi
+              while IFS= read -r tag; do
+                [ -n "$tag" ] || continue
+                probe_digest="$(oras resolve "$candidate_image:$tag")"
+                probe_dir="resolved/discovery/$component-probe"
+                rm -rf "$probe_dir"; mkdir -p "$probe_dir"
+                oras pull "$candidate_image@$probe_digest" --output "$probe_dir"
+                if [ "$(jq -r '.pullRequestNumber' "$probe_dir/candidate-manifest.json")" = "null" ]; then
+                  candidate_digest="$probe_digest"
+                  mkdir -p "$candidate_dir"
+                  cp "$probe_dir/candidate-manifest.json" "$candidate_dir/candidate-manifest.json"
+                  break
+                fi
+              done < <(awk -v prefix="$component-$current_sha-" 'index($0, prefix) == 1' resolved/candidate-tags.txt | sort -Vr)
             fi
 
             if [ -n "$candidate_digest" ]; then
