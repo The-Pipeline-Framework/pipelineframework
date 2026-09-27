@@ -225,6 +225,10 @@ TPF-specific scoping rules:
   order against one isolated repository, and reports one `tpf/system-tests` result to every participating SHA. A
   new commit invalidates that PR's result; rerun the same set ID with the current URLs. Never require intermediate
   merges or snapshot publications merely to make a coordinated downstream PR compile against its upstream PRs.
+- The full train runs every night. It resolves attested current-main candidates over the last-known-green baseline,
+  executes the complete ordinary and heavy matrix, and promotes the complete green set. It is distinct from
+  floating snapshot publication. Do not leave a candidate fossilized after a transient downstream failure when the
+  nightly train can retest it against the newer product state.
 - Runtime integrations should stay scoped:
   - Spring work: `core + spring`, not Quarkus unless parity is claimed.
   - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.

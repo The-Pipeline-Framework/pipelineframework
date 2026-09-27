@@ -11,6 +11,7 @@ import {
   overlayBaseline,
   parseCandidateVersion,
   readJson,
+  reconcileMainCandidates,
   selectPostMergeSuites,
   selectSuites,
   sha256File,
@@ -22,7 +23,8 @@ import {
   validateComponentsConfig,
   validateEventAgainstManifest,
   validateGitHubProvenance,
-  validatePolicy
+  validatePolicy,
+  validateResolvedCandidateHeads
 } from '../scripts/lib/contracts.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -90,6 +92,42 @@ function event(overrides = {}) {
     compatibility_set_id: null,
     ...overrides
   };
+}
+
+function mainManifest(overrides = {}) {
+  const sourceSha = overrides.sourceSha ?? sha;
+  const candidateVersion = `26.9.4-main.${sourceSha.slice(0, 12)}`;
+  const candidate = manifest({
+    sourceSha,
+    pullRequestNumber: null,
+    candidateVersion,
+    provenance: {
+      build: {
+        repository: 'The-Pipeline-Framework/pipelineframework-blocks',
+        runId: 122,
+        runAttempt: 1,
+        workflowPath: '.github/workflows/tpf-candidate-build.yml',
+        event: 'push'
+      },
+      publication: {
+        repository: 'The-Pipeline-Framework/pipelineframework-blocks',
+        runId: 123,
+        runAttempt: 1,
+        workflowPath: '.github/workflows/tpf-candidate-publish.yml',
+        event: 'workflow_run'
+      }
+    },
+    ...overrides
+  });
+  candidate.mavenArtifacts = candidate.mavenArtifacts.map((artifact) => ({
+    ...artifact,
+    version: candidateVersion,
+    files: artifact.files.map((file) => ({
+      ...file,
+      name: file.name.replace('26.9.4-pr.42.abcdef123456', candidateVersion)
+    }))
+  }));
+  return candidate;
 }
 
 function baseline() {
@@ -341,6 +379,41 @@ test('promotion increments the baseline and rejects a stale tested revision', ()
   assert.equal(promoted.revision, 8);
   assert.equal(promoted.components.blocks.mavenVersion, manifest().candidateVersion);
   assert.throws(() => nextBaseline({...current, revision: 8}, resolved, '2026-09-23T01:00:00.000Z'), /not tested against/);
+});
+
+test('nightly reconciliation overlays only current, changed main candidates', () => {
+  const current = baseline();
+  const candidate = mainManifest();
+  const resolved = reconcileMainCandidates(current, digest, [candidate], [`sha256:${'c'.repeat(64)}`], {blocks: sha}, config);
+  assert.equal(resolved.candidates.length, 1);
+  assert.equal(resolved.components.blocks.sha, sha);
+  assert.equal(resolved.components.blocks.mavenVersion, candidate.candidateVersion);
+
+  const stale = reconcileMainCandidates(current, digest, [candidate], [`sha256:${'c'.repeat(64)}`], {blocks: otherSha}, config);
+  assert.deepEqual(stale.candidates, []);
+  assert.deepEqual(stale.components, current.components);
+
+  current.components.blocks = {
+    repository: candidate.repository,
+    sha: candidate.sourceSha,
+    mavenVersion: candidate.candidateVersion,
+    manifestDigest: `sha256:${'c'.repeat(64)}`
+  };
+  const unchanged = reconcileMainCandidates(current, digest, [candidate], [`sha256:${'c'.repeat(64)}`], {blocks: sha}, config);
+  assert.deepEqual(unchanged.candidates, []);
+});
+
+test('nightly reconciliation rejects pull-request candidates and stale promotion heads', () => {
+  assert.throws(
+    () => reconcileMainCandidates(baseline(), digest, [manifest()], [`sha256:${'c'.repeat(64)}`], {blocks: sha}, config),
+    /must not belong to a pull request/
+  );
+  const resolved = reconcileMainCandidates(baseline(), digest, [mainManifest()], [`sha256:${'c'.repeat(64)}`], {blocks: sha}, config);
+  assert.throws(
+    () => validateResolvedCandidateHeads(resolved, {blocks: otherSha}, config),
+    /no longer the default-branch head/
+  );
+  assert.equal(validateResolvedCandidateHeads(resolved, {blocks: sha}, config), resolved);
 });
 
 test('checked-in schemas are valid JSON and do not allow candidate-event extras', async () => {
