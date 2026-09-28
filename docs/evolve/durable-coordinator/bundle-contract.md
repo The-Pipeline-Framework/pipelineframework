@@ -21,6 +21,11 @@ The self-host release path has three runtime pieces:
 2. `PipelineReleaseRegistrar` validates `pipeline-release.json` and verifies artifact identity.
 3. `PipelineReleaseArtifactStore` stores executable artifacts in a coordinator-owned content-addressed store where applicable.
 
+Produce the descriptor from packaged bytes with the
+[Pipeline Release Maven plugin](/deploy/release-descriptors). An independent consumer resolves every listed
+artefact, verifies its digest, and recovers the full `META-INF/pipeline/**` tree from `compiledTruthArtifactId`; it
+does not locate a separate contract or build directory.
+
 Hosted-style execution submission requires `pipelineId`. The coordinator resolves the active release, verifies the stored artifact, verifies worker availability, and stores `pipelineId + contractVersion + releaseVersion` on the `ExecutionRecord`.
 
 Existing executions, retries, await resumes, and result reads stay pinned to the release identity stored on the execution record even if an administrator activates a newer release later.

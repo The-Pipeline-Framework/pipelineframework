@@ -253,6 +253,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/deploy/'},
+            {text: 'Pipeline Release Descriptors', link: '/deploy/release-descriptors'},
             {
                 text: 'Runtime Layouts',
                 link: '/deploy/runtime-layouts/',

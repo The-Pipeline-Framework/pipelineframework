@@ -169,11 +169,11 @@ CSV await item continuations use the same bounded transition-worker seam as norm
 
 Before accepting work:
 
-1. Build the pipeline artifact and confirm it contains `META-INF/pipeline/pipeline-contract.json`.
+1. Build the pipeline artefacts and confirm the named carrier contains the complete `META-INF/pipeline/**` tree.
 2. Start durable substrates first: execution tables, await tables and indexes, work queue, DLQ queue, and any worker protocol queues.
 3. Start worker processes with the matching pipeline code and worker protocol secret.
 4. Start the coordinator with `strict-startup=true`.
-5. Produce a `pipeline-release.json` that pins the built artifacts by digest.
+5. [Produce `pipeline-release.json`](/deploy/release-descriptors) with canonical locations and exact digests.
 6. Register and activate the release for the tenant and pipeline.
 7. Register or heartbeat at least one worker for the active contract/release identity.
 8. Submit one canary execution and verify status, pending await interaction, completion, and result.
