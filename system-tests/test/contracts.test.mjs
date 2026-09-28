@@ -214,6 +214,58 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   assert.throws(() => validateCandidateManifest(floating, config), /must equal candidateVersion/);
 });
 
+test('current candidates are complete while historical baseline manifests retain strict ownership', () => {
+  const historical = manifest();
+  historical.mavenArtifacts = historical.mavenArtifacts.slice(1);
+  assert.throws(
+    () => validateCandidateManifest(historical, config),
+    /pipelineframework-blocks.*current component contract/
+  );
+  assert.equal(
+    validateCandidateManifest(historical, config, {requireAllOwnedCoordinates: false}).component,
+    'blocks'
+  );
+
+  const foreign = structuredClone(historical);
+  foreign.mavenArtifacts[0].groupId = 'com.example';
+  assert.throws(
+    () => validateCandidateManifest(foreign, config, {requireAllOwnedCoordinates: false}),
+    /not owned/
+  );
+});
+
+test('materialization accepts an older coordinate set and identifies an invalid manifest', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tpf-historical-manifest-'));
+  const manifestPath = join(directory, 'candidate-manifest.json');
+  const outputPath = join(directory, 'materialization-plan.json');
+  const historical = manifest();
+  historical.mavenArtifacts = historical.mavenArtifacts.slice(1);
+  await writeFile(manifestPath, `${JSON.stringify(historical)}\n`);
+
+  const script = new URL('../scripts/materialization-plan.mjs', import.meta.url);
+  const components = new URL('../components.yml', import.meta.url);
+  await execFileAsync(process.execPath, [
+    script.pathname,
+    '--components', components.pathname,
+    '--manifests', manifestPath,
+    '--output', outputPath
+  ]);
+  const plan = JSON.parse(await readFile(outputPath, 'utf8'));
+  assert.equal(plan.artifacts.length, historical.mavenArtifacts.length);
+
+  historical.mavenArtifacts[0].groupId = 'com.example';
+  await writeFile(manifestPath, `${JSON.stringify(historical)}\n`);
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      script.pathname,
+      '--components', components.pathname,
+      '--manifests', manifestPath,
+      '--output', outputPath
+    ]),
+    /cannot materialize manifest .*\(blocks, The-Pipeline-Framework\/pipelineframework-blocks, 26\.9\.4-pr\.42\.abcdef123456\).*not owned/
+  );
+});
+
 test('source-only candidate manifests carry identity and provenance without Maven artifacts', () => {
   const sourceManifest = manifest({
     repository: config.components.examples.repository,

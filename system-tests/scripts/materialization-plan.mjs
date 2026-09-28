@@ -17,7 +17,23 @@ for (const name of ['components', 'manifests', 'output']) {
 const config = validateComponentsConfig(await readJson(values.components));
 const entries = [];
 for (const manifestPath of values.manifests) {
-  const manifest = validateCandidateManifest(await readJson(manifestPath), config);
+  const rawManifest = await readJson(manifestPath);
+  let manifest;
+  try {
+    // Resolved sets may contain immutable manifests promoted under an older
+    // component coordinate contract. Intake validates new candidates against
+    // the complete current contract; materialisation validates historical
+    // manifests for identity, ownership, provenance and integrity instead.
+    manifest = validateCandidateManifest(rawManifest, config, {requireAllOwnedCoordinates: false});
+  } catch (error) {
+    const identity = [rawManifest.component, rawManifest.repository, rawManifest.candidateVersion]
+      .filter((value) => typeof value === 'string' && value.length > 0)
+      .join(', ');
+    throw new Error(
+      `cannot materialize manifest ${manifestPath}${identity.length > 0 ? ` (${identity})` : ''}: ${error.message}`,
+      {cause: error}
+    );
+  }
   for (const artifact of manifest.mavenArtifacts) {
     const extension = artifact.packaging === 'maven-plugin' ? 'jar' : artifact.packaging;
     const primaryName = `${artifact.artifactId}-${artifact.version}.${extension}`;
