@@ -216,15 +216,19 @@ TPF-specific scoping rules:
   `pipelineframework-compiler`. This repository owns the BOM, cross-artifact conformance, candidate-overlay and
   coarse product-shard policy, full-train policy, and canonical docs, not source mirrors or owner-local tests for
   those components.
-- For an ordinary single-repository pull request, use its candidate publisher and singleton system-test path. For a
-  coordinated change, do **not** wait for participating candidate publishers and do not merge or publish snapshots
-  one repository at a time. Manually run
+- For an ordinary single-repository pull request, use its candidate publisher and singleton system-test path. Give
+  every pull request in a coordinated change the same head-branch name under the same GitHub owner. Candidate intake
+  discovers those open component pull requests and dispatches one compatibility set automatically; repeated intake
+  events reuse the deterministic set ID and cancel the older in-flight run. Do **not** wait for participating
+  candidate publishers and do not merge or publish snapshots one repository at a time. Use the manual
   [`TPF System Tests — Compatibility Set`](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/system-test-compatibility-set.yml)
-  with one stable set ID and 2–10 pull-request URLs, one per line. It identifies candidates by exact PR heads, tests
-  each open PR's exact merge commit with its current base, builds participating Maven repositories in dependency
-  order against one isolated repository, and reports one `tpf/system-tests` result to every participating SHA. A
-  new commit invalidates that PR's result; rerun the same set ID with the current URLs. Never require intermediate
-  merges or snapshot publications merely to make a coordinated downstream PR compile against its upstream PRs.
+  entry point only when a coordinated set intentionally uses different branch names. It accepts one stable set ID
+  and 2–10 pull-request URLs, one per line. Both paths identify candidates by exact PR heads, test each open PR's
+  exact merge commit with its current base, build participating Maven repositories in dependency order against one
+  isolated repository, and report one `tpf/system-tests` result to every participating SHA. Never require
+  intermediate merges or snapshot publications merely to make a coordinated downstream PR compile against its
+  upstream PRs. Compatibility sets retain last-known-green Maven artifacts for non-participating producers but pin
+  consumer-only examples, references, and applications to their exact current default-branch SHAs once per run.
 - The full train runs every night. It resolves attested current-main candidates over the last-known-green baseline,
   executes the complete ordinary and heavy matrix, and promotes the complete green set. It is distinct from
   floating snapshot publication. Do not leave a candidate fossilized after a transient downstream failure when the

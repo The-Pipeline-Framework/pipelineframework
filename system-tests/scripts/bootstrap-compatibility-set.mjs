@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {readJson, validateComponentsConfig} from './lib/contracts.mjs';
-import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from './lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, exactRemoteHead, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from './lib/compatibility-bootstrap.mjs';
 
 const {values} = parseArgs({
   options: {
@@ -58,6 +58,12 @@ for (const target of targets.values()) target.testedSha = await checkout(target)
 
 const resolvedSet = structuredClone(baseline);
 resolvedSet.candidates = [];
+await Promise.all(Object.entries(config.components).map(async ([name, component]) => {
+  if (component.kind !== 'source' || targets.has(name)) return;
+  const remote = `https://github.com/${component.repository}.git`;
+  const sha = exactRemoteHead(await capture('git', ['ls-remote', '--symref', remote, 'HEAD']));
+  resolvedSet.testHarnesses[name] = {repository: component.repository, sha};
+}));
 for (const target of orderedMavenTargets(config, targets)) {
   const component = config.components[target.component];
   const versionArguments = [];
@@ -80,6 +86,12 @@ for (const target of orderedMavenTargets(config, targets)) {
   if (candidateVersion !== expectedVersion) {
     throw new Error(`${target.component} prepared ${candidateVersion}, expected ${expectedVersion}`);
   }
+  const dependencyVersions = Object.fromEntries(Object.entries(component.consumerVersionProperties).map(([dependency, property]) => [
+    property,
+    resolvedSet.components[dependency].mavenVersion
+  ]));
+  const rootPom = join(source, 'pom.xml');
+  await writeFile(rootPom, pinCandidateDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
   await run(join(source, 'mvnw'), candidateBuildArguments(resolve(values.mavenRepository), versionArguments), {
     cwd: source,
     env: {...process.env, JAVA_HOME: javaHome}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, exactRemoteHead, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
@@ -48,7 +48,30 @@ test('compatibility bootstrap installs candidates without repeating owner test s
   assert.ok(arguments_.includes('-DskipTests=true'));
   assert.ok(arguments_.includes('-DskipITs=true'));
   assert.ok(arguments_.includes('-DskipUnitTests=true'));
+  assert.ok(arguments_.includes('-Dinvoker.skip=true'));
   assert.ok(arguments_.includes('-Dmaven.repo.local=/tmp/tpf-m2'));
+});
+
+test('candidate POMs persist exact predecessor versions for downstream consumers', () => {
+  const source = '<properties>\n<tpf.contracts.version>26.9.4-SNAPSHOT</tpf.contracts.version>\n</properties>\n';
+  assert.equal(
+    pinCandidateDependencyProperties(source, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    '<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n'
+  );
+  assert.throws(
+    () => pinCandidateDependencyProperties(source, {'missing.version': '26.9.4-main.abcdef123456'}),
+    /must declare missing\.version exactly once/
+  );
+  assert.throws(
+    () => pinCandidateDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
+    /must use an immutable version/
+  );
+});
+
+test('source harness HEAD resolution accepts one exact symbolic revision', () => {
+  assert.equal(exactRemoteHead(`ref: refs/heads/main\tHEAD\n${'a'.repeat(40)}\tHEAD\n`), 'a'.repeat(40));
+  assert.throws(() => exactRemoteHead(`${'a'.repeat(40)}\tHEAD\n`), /exactly one branch and revision/);
+  assert.throws(() => exactRemoteHead(`ref: refs/heads/main\tHEAD\n${'a'.repeat(40)}\tHEAD\n${'b'.repeat(40)}\tHEAD\n`), /exactly one branch and revision/);
 });
 
 test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
@@ -59,6 +82,7 @@ test('compatibility baseline is portable and cached by immutable digest before b
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
   assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
+  assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?targets\/targets\.json/);
 });
 
 test('compatibility targets are merged locally from the exact current base and PR head', () => {

@@ -91,9 +91,82 @@ jobs:
             -f description='TPF cross-repository system tests are running' \
             -f target_url="$TARGET_URL"
 
+  coalesce:
+    name: Coalesce same-feature pull requests
+    if: needs.intake.outputs.pull_request_number != '' && needs.pending.result == 'success'
+    needs: [intake, pending]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      coalesced: ${{ steps.discovery.outputs.coalesced }}
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select component repositories
+        id: repositories
+        run: echo "names=$(jq -r '[.components[].repository | split("/")[1]] | join(",")' system-tests/components.yml)" >> "$GITHUB_OUTPUT"
+
+      - name: Create component pull-request read token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ steps.repositories.outputs.names }}
+          permission-contents: read
+          permission-pull-requests: read
+
+      - name: Discover exact same-branch component pull requests
+        id: discovery
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REPOSITORY: ${{ needs.intake.outputs.repository }}
+          SOURCE_PULL_REQUEST: ${{ needs.intake.outputs.pull_request_number }}
+          SOURCE_SHA: ${{ needs.intake.outputs.source_sha }}
+          REQUESTED_SET_ID: ${{ needs.intake.outputs.compatibility_set_id }}
+        run: |
+          mkdir -p discovery/repositories
+          while IFS= read -r repository; do
+            name="${repository#*/}"
+            gh api "repos/$repository/pulls?state=open&per_page=100" > "discovery/repositories/$name.json"
+          done < <(jq -r '.components[].repository' system-tests/components.yml)
+          jq -s 'add' discovery/repositories/*.json > discovery/pulls.json
+          args=(
+            --components system-tests/components.yml
+            --pulls discovery/pulls.json
+            --sourceRepository "$SOURCE_REPOSITORY"
+            --sourcePullRequest "$SOURCE_PULL_REQUEST"
+            --sourceSha "$SOURCE_SHA"
+          )
+          if [ -n "$REQUESTED_SET_ID" ]; then args+=(--setId "$REQUESTED_SET_ID"); fi
+          node system-tests/scripts/discover-compatibility-set.mjs "${args[@]}" > discovery/result.json
+          echo "coalesced=$(jq -r '.coalesced' discovery/result.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch one compatibility-set run
+        if: steps.discovery.outputs.coalesced == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq '{ref:"main", inputs:{set_id:.setId, pull_requests:(.pullRequests | join("\n"))}}' \
+            discovery/result.json > discovery/dispatch.json
+          gh api --method POST \
+            "repos/${{ github.repository }}/actions/workflows/system-test-compatibility-set.yml/dispatches" \
+            --input discovery/dispatch.json
+
   retrieve:
     name: Retrieve and attest candidate
-    needs: [intake, pending]
+    if: >-
+      always() &&
+      needs.intake.result == 'success' &&
+      needs.pending.result == 'success' &&
+      needs.coalesce.outputs.coalesced != 'true'
+    needs: [intake, pending, coalesce]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -659,8 +732,11 @@ jobs:
 
   report:
     name: Report aggregate status
-    if: always() && needs.pending.result == 'success'
-    needs: [intake, pending, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
+    if: >-
+      always() &&
+      needs.pending.result == 'success' &&
+      needs.coalesce.outputs.coalesced != 'true'
+    needs: [intake, pending, coalesce, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -7,6 +7,7 @@ const { values } = parseArgs({
   options: {
     components: {type: 'string'},
     manifests: {type: 'string', multiple: true},
+    allowMissingCoordinatesFor: {type: 'string', multiple: true},
     output: {type: 'string'}
   },
   strict: true
@@ -15,6 +16,10 @@ for (const name of ['components', 'manifests', 'output']) {
   if (values[name] === undefined) throw new Error(`--${name} is required`);
 }
 const config = validateComponentsConfig(await readJson(values.components));
+const allowMissingCoordinatesFor = new Set(values.allowMissingCoordinatesFor ?? []);
+for (const component of allowMissingCoordinatesFor) {
+  if (config.components[component]?.kind !== 'maven') throw new Error(`cannot allow missing coordinates for ${component}`);
+}
 const entries = [];
 for (const manifestPath of values.manifests) {
   const rawManifest = await readJson(manifestPath);

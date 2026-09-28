@@ -164,11 +164,22 @@ sequenceDiagram
 5. Selected owner suites run sequentially inside a bounded number of coarse product shards against the one
    materialised overlay. The aggregate reporter posts success, failure or error to the originating SHA.
 
-For a coordinated change, run `TPF System Tests — Compatibility Set` with a stable set ID and two to ten pull-request
-URLs. The coordinator resolves every exact head and current base, creates each tested merge locally, overlays the immutable baseline, builds
-participating Maven components in dependency order, unions the centrally required suites, and reports the same aggregate result to
-every participating SHA. It never requires a candidate to build against the old baseline first, and never falls
-back to a branch name or older PR head.
+For a coordinated change, use the same head-branch name under the same GitHub owner in every participating
+repository. The first candidate intake discovers the matching open component pull requests and dispatches
+`TPF System Tests — Compatibility Set` automatically. Later intake events for the same branch reuse a deterministic
+set ID, so GitHub cancels the older in-flight set instead of running competing product trains. The manual workflow
+remains a fallback for intentionally differently named branches and accepts a stable set ID plus two to ten
+pull-request URLs.
+
+The coordinator uses branch identity only for discovery. It then resolves every exact head and current base,
+creates each tested merge locally, overlays the immutable baseline, builds participating Maven components in
+dependency order, unions the centrally required suites, and reports the same aggregate result to every
+participating SHA. It never requires a candidate to build against the old baseline first, and never executes tests
+against a floating branch name or an older PR head. Maven producers that are not part of the set remain pinned to
+the last-known-green artifact baseline. Consumer-only test harnesses that are not part of the set resolve their
+default-branch HEAD once at materialisation time and thereafter use that exact SHA. This prevents an unrelated
+full-train failure from fossilising old example, reference, or application test source while retaining immutable
+inputs for the run.
 
 ```mermaid
 flowchart LR

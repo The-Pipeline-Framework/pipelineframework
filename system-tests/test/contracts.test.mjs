@@ -206,6 +206,13 @@ test('status target survives a malformed event only for an allowlisted repositor
 
 test('candidate manifest contains only owned immutable Maven coordinates', () => {
   assert.equal(validateCandidateManifest(manifest(), config).mavenArtifacts.length, config.components.blocks.allowedCoordinates.length);
+  const historical = manifest();
+  historical.mavenArtifacts.pop();
+  assert.throws(() => validateCandidateManifest(historical, config), /omits required/);
+  assert.equal(
+    validateCandidateManifest(historical, config, {requireAllCoordinates: false}).mavenArtifacts.length,
+    config.components.blocks.allowedCoordinates.length - 1
+  );
   const foreign = manifest();
   foreign.mavenArtifacts[0].groupId = 'com.example';
   assert.throws(() => validateCandidateManifest(foreign, config), /not owned/);
@@ -496,6 +503,7 @@ test('compatibility-set PR URLs resolve to unique allowed components', async () 
   const input = join(directory, 'pull-requests.txt');
   const output = join(directory, 'request.json');
   await writeFile(input, [
+    'https://github.com/The-Pipeline-Framework/pipelineframework/pull/968',
     'https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/12',
     'https://github.com/The-Pipeline-Framework/pipelineframework-blocks/pull/34'
   ].join('\n'));

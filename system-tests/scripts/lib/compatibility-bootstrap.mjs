@@ -26,10 +26,38 @@ export function candidateBuildArguments(mavenRepository, versionArguments) {
   return [
     '-B', 'install', '--no-transfer-progress',
     '-Dmaven.deploy.skip=true', '-Dgpg.skip=true', '-Dtpf.flatten.skip=true',
-    '-DskipTests=true', '-DskipITs=true', '-DskipUnitTests=true',
+    '-DskipTests=true', '-DskipITs=true', '-DskipUnitTests=true', '-Dinvoker.skip=true',
     `-Dmaven.repo.local=${mavenRepository}`,
     ...versionArguments
   ];
+}
+
+export function pinCandidateDependencyProperties(sourcePom, dependencyVersions) {
+  let pinned = sourcePom;
+  for (const [property, version] of Object.entries(dependencyVersions).sort(([left], [right]) => left.localeCompare(right))) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(property)) throw new Error(`candidate dependency property is invalid: ${property}`);
+    if (typeof version !== 'string' || version.length === 0 || /SNAPSHOT/i.test(version)) {
+      throw new Error(`candidate dependency ${property} must use an immutable version`);
+    }
+    const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(<${escaped}>\\s*)[^<]*(\\s*</${escaped}>)`, 'g');
+    const matches = [...pinned.matchAll(pattern)];
+    if (matches.length !== 1) {
+      throw new Error(`candidate POM must declare ${property} exactly once; found ${matches.length}`);
+    }
+    pinned = pinned.replace(pattern, (_match, opening, closing) => `${opening}${version}${closing}`);
+  }
+  return pinned;
+}
+
+export function exactRemoteHead(output) {
+  const lines = output.split(/\r?\n/).filter(Boolean);
+  const symbolic = lines.filter((line) => /^ref:\s+refs\/heads\/[^\s]+\s+HEAD$/.test(line));
+  const revisions = lines.filter((line) => /^[0-9a-f]{40}\s+HEAD$/.test(line));
+  if (symbolic.length !== 1 || revisions.length !== 1) {
+    throw new Error('remote HEAD did not resolve to exactly one branch and revision');
+  }
+  return revisions[0].split(/\s+/)[0];
 }
 
 export function candidateFromOutput(output) {
