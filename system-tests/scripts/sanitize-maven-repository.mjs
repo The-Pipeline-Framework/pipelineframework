@@ -15,18 +15,26 @@ const resolverMetadata = (name) =>
   || name.endsWith('.lastUpdated');
 
 async function sanitize(directory) {
-  let removed = 0;
+  let removedMetadata = 0;
+  let removedSnapshots = 0;
   for (const entry of await readdir(directory, {withFileTypes: true})) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      removed += await sanitize(path);
+      if (entry.name.endsWith('-SNAPSHOT')) {
+        await rm(path, {recursive: true});
+        removedSnapshots += 1;
+      } else {
+        const nested = await sanitize(path);
+        removedMetadata += nested.removedMetadata;
+        removedSnapshots += nested.removedSnapshots;
+      }
     } else if (entry.isFile() && resolverMetadata(entry.name)) {
       await rm(path);
-      removed += 1;
+      removedMetadata += 1;
     }
   }
-  return removed;
+  return {removedMetadata, removedSnapshots};
 }
 
 const removed = await sanitize(values.repository);
-process.stdout.write(`Removed ${removed} Maven resolver metadata file(s).\n`);
+process.stdout.write(`Removed ${removed.removedMetadata} Maven resolver metadata file(s) and ${removed.removedSnapshots} mutable SNAPSHOT version tree(s).\n`);

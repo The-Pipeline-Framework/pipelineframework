@@ -232,9 +232,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/tpf-system-test-m2
-          key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}
-          restore-keys: |
-            tpf-system-test-baseline-
+          key: tpf-system-test-baseline-v2-${{ steps.baseline.outputs.cache_key }}
 
       - name: Hydrate baseline Maven repository on cache miss
         if: steps.baseline-cache.outputs.cache-hit != 'true'

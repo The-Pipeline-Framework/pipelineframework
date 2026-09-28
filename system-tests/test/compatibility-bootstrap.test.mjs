@@ -92,12 +92,13 @@ test('compatibility targets include changed main and the complete downstream Mav
 });
 
 test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
-  const cache = workflow.indexOf('key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}');
+  const cache = workflow.indexOf('key: tpf-system-test-baseline-v2-${{ steps.baseline.outputs.cache_key }}');
   const sanitize = workflow.indexOf('node system-tests/scripts/sanitize-maven-repository.mjs');
   const archive = workflow.indexOf('tar -C "$local_repo" -czf baseline/tpf-system-test-m2.tar.gz .');
   assert.ok(cache >= 0, 'baseline cache key is missing');
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
+  assert.doesNotMatch(workflow, /restore-keys:/);
   assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
   assert.match(workflow, /augment-compatibility-targets\.mjs[\s\S]*?--output baseline\/bootstrap-targets\.json/);
   assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?baseline\/bootstrap-targets\.json/);
