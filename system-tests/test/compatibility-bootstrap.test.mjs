@@ -101,6 +101,7 @@ test('compatibility baseline is portable and cached by immutable digest before b
   assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
   assert.match(workflow, /augment-compatibility-targets\.mjs[\s\S]*?--output baseline\/bootstrap-targets\.json/);
   assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?baseline\/bootstrap-targets\.json/);
+  assert.match(workflow, /select\(\$config\[0\]\.components\[\.component\]\.kind == "maven"\)/);
   assert.match(workflow, /bootstrap-compatibility-set\.mjs[\s\S]*?--targets baseline\/bootstrap-targets\.json/);
 });
 

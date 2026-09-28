@@ -212,7 +212,11 @@ jobs:
           manifest_args=()
           while IFS= read -r manifest; do manifest_args+=(--manifests "$manifest"); done < <(find baseline/manifests -name candidate-manifest.json -type f | sort)
           incomplete_args=()
-          while IFS= read -r component; do incomplete_args+=(--allowMissingCoordinatesFor "$component"); done < <(jq -r '.targets[].component' baseline/bootstrap-targets.json)
+          while IFS= read -r component; do incomplete_args+=(--allowMissingCoordinatesFor "$component"); done < <(
+            jq -r --slurpfile config system-tests/components.yml \
+              '.targets[] | select($config[0].components[.component].kind == "maven") | .component' \
+              baseline/bootstrap-targets.json
+          )
           node system-tests/scripts/materialization-plan.mjs \
             --components system-tests/components.yml \
             "${manifest_args[@]}" \
