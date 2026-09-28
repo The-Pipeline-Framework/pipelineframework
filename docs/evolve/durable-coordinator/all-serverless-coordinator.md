@@ -1,10 +1,10 @@
 # All-Serverless Durable Coordinator
 
-This spike asks one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
+This design track asks one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
 
 The answer is **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.
 
-Current `FUNCTION` support remains serverless invocation/adapter support. This page describes a future design track, not current runtime support.
+PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
 
 ## Recommendation
 
@@ -19,7 +19,7 @@ Provider durable workflow engines can be useful later, but only as backend adapt
 5. DLQ/re-drive evidence and operator control,
 6. at-least-once transition execution with stable business idempotency keys.
 
-Do not start Lambda handler implementation until `sweep`, await item continuation, and polling loops have explicit single-shot actions.
+Provider handlers can now invoke the bounded SQS message actions without reproducing work-item, await-completion, or transition-worker semantics. A complete process-free deployment still needs a durable replacement for itemised await-continuation retry scheduling.
 
 ## Target Shape
 
@@ -43,7 +43,7 @@ flowchart LR
     ApiFn --> WorkQueue
 ```
 
-The coordinator no longer has an always-on sweeper thread or local poller loop. Each invocation performs one bounded action and exits.
+This is the target hosting shape. The current compute-first runtime retains its sweeper and SQS polling loops as replaceable loop hosts. Each host adapts a bounded action and owns only receiving, acknowledgement, visibility, scheduling, concurrency, and backoff.
 
 | Current compute-first role | All-serverless equivalent |
 | --- | --- |
@@ -140,7 +140,9 @@ sequenceDiagram
     Fn-->>Timer: batch complete
 ```
 
-This is the clearest blocker. Current `sweepDueExecutions` owns a process scheduler and subscribes internally. All-serverless needs an explicit `sweepOnce` action returning a `Uni`/result that a scheduled invocation can call.
+`PipelineControlPlane.sweepOnce(long nowEpochMs)` is now the explicit action boundary. It returns `Uni<CoordinatorSweepResult>` with the supplied timestamp, configured sweep limit, successfully admitted await timeout count, and successfully dispatched execution count. It processes await timeouts before querying and dispatching due executions. Any phase failure fails the `Uni`; dispatch attempts the complete due batch before reporting aggregated failures.
+
+The compute-first lifecycle remains the default, but loop ownership has moved to `QueueAsyncSweepLoopHost`. It obtains the current time, invokes `sweepOnce`, subscribes once, discards the successful summary, and logs failure. `QueueAsyncCoordinator` now initialises providers without scheduling. The configured `pipeline.orchestrator.sweep-limit` remains authoritative.
 
 ### Re-drive
 
@@ -163,19 +165,19 @@ This is already close to single-shot. It must preserve pinned pipeline, contract
 
 | Area | Current shape | Single-shot readiness | Required change |
 | --- | --- | --- | --- |
-| Submit | `executePipelineAsync` creates execution and enqueues work | Clean | Keep as action method; ensure no process-local state is required beyond provider selection. |
+| Submit | `executePipelineAsync` creates execution and enqueues work | Clean | Available through `PipelineControlPlane`; action invocation initializes providers without starting loops. |
 | Status | `getExecutionStatus` reads durable record | Clean | No meaningful change. |
 | Result | `getExecutionResult` / payload reads durable record | Clean | No meaningful change. |
-| Re-drive | `redriveExecution` conditionally transitions terminal execution and enqueues work | Clean | Keep as action method; expose explicit result for function/API handlers. |
+| Re-drive | `redriveExecution` conditionally transitions terminal execution and enqueues work | Clean | Available through `PipelineControlPlane` with its existing explicit result. |
 | Process work item | `processExecutionWorkItem` admits, claims, invokes worker, commits outcome | Mostly clean | Inject selected worker explicitly; require remote/function worker when running as serverless coordinator. |
 | Await completion | `completeAwait` admits completion and releases parent execution | Partly clean | Keep parent release action; convert aggregate item continuations and retries into explicit queued actions. |
-| Sweep | `initializeQueueMode` starts scheduled executor; `sweepDueExecutions` subscribes internally | Not clean | Extract `sweepOnce(now, limit)` returning a result and no internal subscription. |
+| Sweep | `sweepOnce(nowEpochMs)` is reactive and returns `CoordinatorSweepResult`; `QueueAsyncSweepLoopHost` owns the compute-first schedule | Clean | Add provider scheduler handlers in a later slice. |
 | Await item continuation | Uses executor scheduling and fire-and-forget retry attempts | Not clean | Represent continuation attempts as durable work items or scheduler wakeups. |
-| Work poller | `SqsWorkPoller` owns process loop | Not clean | Replace loop with queue event-source invocation or single `pollOnce` handler for local tests. |
-| Await completion poller | `SqsAwaitCompletionPoller` owns process loop | Not clean | Replace loop with queue event-source invocation or single `completeAwait` handler. |
-| SQS transition worker poller | `SqsTransitionWorkerPoller` owns process loop | Not clean | Use SQS event-source worker function or explicit single request handler. |
+| Work poller | `SqsWorkPoller` hosts receiving, acknowledgement, visibility, and backoff over `SqsWorkItemAction` | Clean message action | Reuse the action from a provider event-source handler. |
+| Await completion poller | `SqsAwaitCompletionPoller` hosts bounded concurrent receives and acknowledgement over `SqsAwaitCompletionAction` | Clean message action | Reuse the action from a provider event-source handler. |
+| SQS transition worker poller | `SqsTransitionWorkerPoller` hosts receiving and acknowledgement over `SqsTransitionWorkerAction` | Clean message action | Reuse the action from a provider event-source worker function. |
 
-The current `PipelineControlPlane` facade is useful, but it is still process-shaped because `initializeQueueMode` starts a sweeper and the pollers own loops. The next runtime refactor should separate **action logic** from **process hosting**.
+`PipelineControlPlane` is now the single-shot action contract for submit, status, typed/raw result, re-drive, work-item processing, await completion, pending-await queries, and one bounded sweep. `SqsWorkItemAction`, `SqsAwaitCompletionAction`, and `SqsTransitionWorkerAction` add receipt-independent message boundaries for provider event sources. Provider initialisation is separate from loop startup, so invoking an action does not start the periodic sweeper. The remaining process-owned semantic work is aggregate await-continuation retry scheduling; provider-specific hosting remains to be added.
 
 ## Provider Durable Workflow Shortcuts
 
@@ -197,14 +199,14 @@ The first implementation path should not assume either mapping. Build the TPF-na
 
 ## Implementation Slices After This Spike
 
-1. **Single-shot coordinator actions.** Extract `submit`, `processWorkItem`, `completeAwait`, `redrive`, and `sweepOnce` action methods without changing compute-first behaviour.
-2. **Loop hosting split.** Keep current process pollers/sweepers as adapters around the action methods; add tests proving action methods can run without starting loops.
+1. **Single-shot coordinator actions — complete.** `PipelineControlPlane` is the action contract, including structured `sweepOnce`; provider readiness is separate from periodic sweep startup and compute-first behaviour is preserved.
+2. **Loop hosting split — complete.** The sweeper and SQS pollers are compute-first loop hosts over bounded actions. Aggregate await-continuation retry scheduling remains explicitly deferred.
 3. **AWS-shaped local proof.** Use LocalStack-style Dynamo/SQS/EventBridge equivalents or scripts to invoke actions without a coordinator process.
 4. **Provider function handlers.** Add AWS-first function handlers only after the action model is explicit.
 5. **Durable workflow adapter spike.** Evaluate one provider backend using the same action model and document whether it preserves TPF semantics.
 
 ## Current Decision
 
-Proceed with TPF-native single-shot coordinator action extraction first.
+Continue from the action contract and replaceable loop hosts into the AWS-shaped local proof and provider handlers. Keep aggregate await-continuation retry scheduling visible as the remaining process-owned exception.
 
-Do not implement Lambda/FUNCTION HA yet. Do not adopt provider durable workflow engines as the primary coordinator runtime until TPF has a clean action model and a mapping test for await units, release identity, and operator re-drive.
+Do not implement Lambda/Azure/GCP handlers in the action-extraction slice. Do not adopt provider durable workflow engines as the primary coordinator runtime until TPF has a mapping test for await units, release identity, and operator re-drive.
