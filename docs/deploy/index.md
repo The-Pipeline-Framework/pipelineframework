@@ -16,8 +16,8 @@ flowchart TB
 ```
 
 Start with [Runtime Layouts](./runtime-layouts/) for monolith, pipeline-runtime, and modular placement.
-Use [Pipeline Release Descriptors](./release-descriptors) to bind complete Compiled Truth to every exact deployable
-artefact and give an independent consumer one immutable deployment input.
+Use [Pipeline Release Descriptors](./release-descriptors) to bind every deployable artefact to its exact bytes,
+name one Compiled Truth carrier, and give an independent consumer one immutable deployment input.
 Use [Orchestrator Runtime](./orchestrator-runtime/) for durable `QUEUE_ASYNC`, transition workers,
 checkpoint handoff, Command, and Await setup. Function-style entry points are deployment patterns
 composed from a transport and platform; they are covered under [Function Platforms](./function-providers).
