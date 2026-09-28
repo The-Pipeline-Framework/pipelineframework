@@ -9,8 +9,8 @@ The runtime uses generated `pipeline-contract.json`, local `pipeline-release.jso
 | Term | Meaning |
 | --- | --- |
 | Pipeline contract | Generated semantic contract derived from YAML plus compiled metadata: graph, step ids, cardinalities, type ids, mapper and boundary metadata, await metadata, and compatibility identity. |
-| Release descriptor | Build-produced descriptor that selects one deployable version of a pipeline contract and pins exact artifacts by digest or immutable reference. |
-| Artifact descriptor | A concrete runtime artifact that satisfies part or all of the release: local file, JAR, native binary, container image, function package, or external endpoint. |
+| Release descriptor | Build-produced closure that selects one deployable version of a pipeline contract, pins every artefact by digest, and names its Compiled Truth carrier. |
+| Artifact descriptor | A closed, byte-addressable runtime artefact that satisfies part or all of the Release. |
 | Deployment plan | Platform-specific actioning layer: Helm, Kustomize, ECS task definitions, Terraform, Lambda aliases, Azure Functions configuration, or local scripts. |
 | Activation | Coordinator decision that new executions should use a specific release. |
 | Pinning | Execution record stores the contract/release identity it started with; retries, awaits, and resumes keep that identity. |
@@ -36,17 +36,22 @@ Inter-pipeline handoff contracts remain a follow-up extension.
 
 ## Release Descriptor
 
-`pipeline-release.json` is emitted by a build or release process after artifacts are built and addressable in the system that naturally owns that artifact form. TPF should not force every artifact through one store.
+`pipeline-release.json` is emitted after packaging by the
+[Pipeline Release Maven plugin](/deploy/release-descriptors), or by post-push tooling that can observe an
+authoritative remote digest. It is sufficient for an independent consumer to resolve and verify every artefact and
+recover all Compiled Truth. TPF does not force every artefact through one store.
 
 It includes:
 
 1. pipeline id,
 2. contract version,
 3. release version,
-4. artifact descriptors for the coordinator-facing worker or individual steps,
-5. artifact digests.
+4. the `compiledTruthArtifactId`,
+5. ordered artefact descriptors with kind, canonical URI, SHA-256 digest, step associations, and capability
+   associations.
 
-Expected worker capability identities, deployment target metadata, provenance, SBOM, and signature references remain follow-up fields.
+Deployment target metadata, credentials, repository roots, cloud identity, and environment configuration are not
+Release semantics.
 
 Example:
 
@@ -56,20 +61,22 @@ Example:
   "pipelineId": "payments.csv",
   "contractVersion": "sha256:contractabc",
   "releaseVersion": "2026.06.07.1",
+  "compiledTruthArtifactId": "payment-provider-worker",
   "artifacts": [
     {
       "artifactId": "payment-provider-worker",
-      "kind": "container-image",
-      "scope": "step",
+      "kind": "jar",
       "stepIds": ["await-payment-provider"],
-      "uri": "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/payment-provider@sha256:image222",
-      "digest": "sha256:image222",
-      "runtime": "jvm",
-      "capabilities": ["transition-worker", "step:await-payment-provider"]
+      "uri": "maven:com.example:payment-provider-worker:2026.06.07.1",
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "capabilities": ["grpc"]
     }
   ]
 }
 ```
+
+An image cannot itself expose ZIP resources to a generic consumer, so an image Release also lists a JAR,
+application archive, Lambda ZIP, or `compiled-truth` archive as `compiledTruthArtifactId`.
 
 The coordinator validates and activates releases. It does not become the deployment engine. Platform-specific tools deploy the artifacts, then the coordinator verifies that workers report matching contract/release capability before accepting work.
 
@@ -79,25 +86,32 @@ The release descriptor accepts these artifact kinds:
 
 | Kind | Example | Primary backing system | Typical use |
 | --- | --- | --- |
-| `local-file` | `/var/lib/tpf/artifacts/worker.jar` | local filesystem or managed blob store | Local/self-host pilots and air-gapped installs. |
-| `jar` | Maven coordinate plus checksum or `file:///opt/tpf/restaurant-worker.jar` | Maven repository, JFrog Artifactory, Nexus, or managed blob store | JVM worker process. |
-| `native-binary` | `/opt/tpf/workers/payment-worker` | local filesystem, generic OCI artifact, or managed blob store | Quarkus native worker. |
+| `jar` | `maven:com.example:worker:1.2.3` | Maven repository or local filesystem | JVM worker process and possible Compiled Truth carrier. |
+| `application-archive` | `maven:com.example:fast-app:zip:1.2.3` | Maven repository or local filesystem | Closed directory-shaped application such as fast-JAR. |
+| `native-binary` | `maven:com.example:worker:bin:1.2.3` | Maven repository or local filesystem | Native worker paired with a Compiled Truth carrier. |
 | `container-image` | `oci://ecr.example/payments/worker@sha256:...` | OCI registry: ECR, GHCR, JFrog, Harbor, Docker registry | Kubernetes, ECS, and production container platforms. |
-| `lambda-zip` | `s3://bucket/payment-worker.zip#sha256:...` | S3 or S3-compatible object store | AWS Lambda zip deployment. |
+| `lambda-zip` | `maven:com.example:payment-worker:zip:1.2.3` | Maven repository or local filesystem | AWS Lambda ZIP deployment. |
 | `lambda-image` | `oci://ecr.example/payment-lambda@sha256:...` | OCI registry, usually ECR for AWS Lambda | AWS Lambda container image. |
-| `external-endpoint` | `https://payments.internal/step` | existing service deployment and service discovery | Pre-existing service that satisfies a step contract. |
+| `compiled-truth` | `maven:com.example:payment-truth:zip:1.2.3` | Maven repository or local filesystem | Non-deployable carrier for `META-INF/pipeline/**`. |
 
-Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container images are already treated as digest-backed release identities and remain in OCI registries. Function and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature.
+Absolute canonical `file:` URIs are valid only for explicitly local releases. Promotable releases use opaque
+`maven:` coordinates or digest-qualified `oci:` URIs. External endpoints are Deployment Plan configuration, not
+immutable Release artefacts.
 
-Production releases should prefer immutable references in the artifact's native repository: OCI digests for images, Maven coordinates plus checksum for JVM artifacts, S3 object version plus checksum for ZIP/blob artifacts, or a signed local manifest in air-gapped deployments.
+Producer and consumer apply the same shared validation: every authored step is assigned to exactly one deployable
+artefact, declared runtime capabilities are covered, and the carrier exposes the exact compiler-produced resource
+tree.
 
 ### S3 Is A Blob Store, Not The Artifact Repository Strategy
 
-The S3-compatible release artifact store exists so a self-hosted coordinator can copy and verify blob-like artifacts that do not already live in a better artifact repository. Good fits are local/JAR/native artifacts in small self-host installs, Lambda ZIP packages, release descriptor blobs, provenance attachments, and MinIO/LocalStack development setups.
+The S3-compatible release artefact store is coordinator-owned storage for already resolved and verified blobs. It
+does not introduce an `s3:` Release URI profile or replace the artefact's canonical `maven:` identity.
 
 It is not the preferred target for container images. Tools such as Jib produce OCI images; those should be pushed to an OCI registry and referenced from `pipeline-release.json` by immutable digest. TPF should not copy those images into S3.
 
-The release descriptor is the integration point across repositories. A single release can pin a Jib-produced image in ECR, a JVM helper artifact in JFrog, and a Lambda ZIP in S3, while the coordinator validates the contract/release identity and worker capability reports.
+The release descriptor is the integration point across repositories. A single Release can pin a Jib-produced image
+in ECR, a JVM helper artefact in JFrog, and a Lambda ZIP in a Maven repository while the coordinator validates the
+contract/Release identity and worker capability reports.
 
 ## Ownership Models
 
@@ -142,6 +156,9 @@ CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful refer
 
 ## Relationship To Current Runtime
 
-The current self-host runtime registers releases directly. For local/JAR artifacts, registration can inspect embedded `META-INF/pipeline/pipeline-contract.json` and rejects artifacts whose contract identity does not match the release descriptor. For container images, the runtime treats the digest as release identity and relies on platform deployment plus worker capability checks; it does not pull, unpack, or copy image layers.
+The current self-host runtime registers local releases directly. It uses the shared structural and semantic
+validator, verifies local bytes, and reads the contract from the named Compiled Truth carrier. An independent Cloud
+consumer can instead resolve canonical `maven:` and `oci:` locations through environment-owned resolvers while
+preserving the descriptor unchanged.
 
 The coordinator validates, activates, pins, and dispatches releases. Platform-specific tools still deploy artifacts outside TPF.
