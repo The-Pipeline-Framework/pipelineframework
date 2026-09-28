@@ -197,7 +197,7 @@ export function validateCandidateEvent(event, config) {
   return event;
 }
 
-export function validateCandidateManifest(manifest, config) {
+export function validateCandidateManifest(manifest, config, {requireAllOwnedCoordinates = true} = {}) {
   exactKeys(
     manifest,
     ['schemaVersion', 'repository', 'component', 'sourceSha', 'pullRequestNumber', 'candidateVersion', 'suiteHints', 'provenance', 'mavenArtifacts', 'images'],
@@ -258,9 +258,14 @@ export function validateCandidateManifest(manifest, config) {
     coordinates.push(`${artifact.groupId}:${artifact.artifactId}:${artifact.packaging}`);
   }
   unique(coordinates, 'candidate Maven coordinates');
-  if (componentConfig.kind === 'maven') {
+  if (componentConfig.kind === 'maven' && requireAllOwnedCoordinates) {
     const missing = componentConfig.allowedCoordinates.filter((coordinate) => !coordinates.includes(coordinate));
-    if (missing.length > 0) fail(`candidate manifest omits required ${component} coordinates: ${missing.join(', ')}`);
+    if (missing.length > 0) {
+      fail(
+        `candidate manifest for ${component} (${manifest.repository}, ${manifest.candidateVersion}, ${manifest.sourceSha}) `
+        + `omits coordinates required by the current component contract: ${missing.join(', ')}`
+      );
+    }
   }
   for (const [index, image] of manifest.images.entries()) {
     exactKeys(image, ['repository', 'digest'], ['repository', 'digest'], `images[${index}]`);
