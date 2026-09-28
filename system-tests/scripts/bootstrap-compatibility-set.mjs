@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {readJson, validateComponentsConfig} from './lib/contracts.mjs';
-import {candidateBuildArguments, candidateFromOutput, exactRemoteHead, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from './lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from './lib/compatibility-bootstrap.mjs';
 
 const {values} = parseArgs({
   options: {
@@ -46,7 +46,9 @@ for (const target of targetDocument.targets) {
   if (!/^[0-9a-f]{40}$/.test(target.baseSha)) throw new Error(`invalid target base SHA for ${target.component}`);
   if (typeof target.merged !== 'boolean') throw new Error(`invalid merged state for ${target.component}`);
   if (target.merged && !/^[0-9a-f]{40}$/.test(target.testedSha)) throw new Error(`invalid tested SHA for ${target.component}`);
-  if (!Number.isSafeInteger(target.pullRequestNumber) || target.pullRequestNumber < 1) throw new Error(`invalid PR number for ${target.component}`);
+  const pullRequestTarget = Number.isSafeInteger(target.pullRequestNumber) && target.pullRequestNumber > 0;
+  const mainTarget = target.pullRequestNumber === null && target.merged && target.sourceSha === target.baseSha && target.testedSha === target.sourceSha;
+  if (!pullRequestTarget && !mainTarget) throw new Error(`invalid candidate identity for ${target.component}`);
   if (targets.has(target.component)) throw new Error(`duplicate target component ${target.component}`);
   targets.set(target.component, target);
 }
@@ -58,12 +60,6 @@ for (const target of targets.values()) target.testedSha = await checkout(target)
 
 const resolvedSet = structuredClone(baseline);
 resolvedSet.candidates = [];
-await Promise.all(Object.entries(config.components).map(async ([name, component]) => {
-  if (component.kind !== 'source' || targets.has(name)) return;
-  const remote = `https://github.com/${component.repository}.git`;
-  const sha = exactRemoteHead(await capture('git', ['ls-remote', '--symref', remote, 'HEAD']));
-  resolvedSet.testHarnesses[name] = {repository: component.repository, sha};
-}));
 for (const target of orderedMavenTargets(config, targets)) {
   const component = config.components[target.component];
   const versionArguments = [];
@@ -77,7 +73,9 @@ for (const target of orderedMavenTargets(config, targets)) {
   const javaHome = component.buildJavaVersion === 25 ? values.java25Home : values.java21Home;
   const candidateOutput = join(values.runnerTemp, `${target.component}-candidate-output.txt`);
   await mkdir(join(values.runnerTemp, target.component), {recursive: true});
-  await run('bash', ['scripts/prepare-candidate.sh', 'pull_request', String(target.pullRequestNumber), target.sourceSha], {
+  const buildEvent = target.pullRequestNumber === null ? 'push' : 'pull_request';
+  const pullRequestNumber = target.pullRequestNumber === null ? '-' : String(target.pullRequestNumber);
+  await run('bash', ['scripts/prepare-candidate.sh', buildEvent, pullRequestNumber, target.sourceSha], {
     cwd: source,
     env: {...process.env, JAVA_HOME: javaHome, GITHUB_OUTPUT: candidateOutput, RUNNER_TEMP: join(values.runnerTemp, target.component)}
   });

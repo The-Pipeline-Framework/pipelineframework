@@ -227,8 +227,11 @@ TPF-specific scoping rules:
   exact merge commit with its current base, build participating Maven repositories in dependency order against one
   isolated repository, and report one `tpf/system-tests` result to every participating SHA. Never require
   intermediate merges or snapshot publications merely to make a coordinated downstream PR compile against its
-  upstream PRs. Compatibility sets retain last-known-green Maven artifacts for non-participating producers but pin
-  consumer-only examples, references, and applications to their exact current default-branch SHAs once per run.
+  upstream PRs. Compatibility sets derive the complete downstream Maven closure from the requested pull requests
+  and every component whose current default-branch SHA is newer than the last-known-green baseline. They build that
+  closure in dependency order, using exact current-main SHAs for derived producers and consumer-only harnesses. A
+  feature author supplies the feature pull requests once; they do not manually add unchanged downstream
+  repositories or publish intermediate snapshots.
 - The full train runs every night. It resolves attested current-main candidates over the last-known-green baseline,
   executes the complete ordinary and heavy matrix, and promotes the complete green set. It is distinct from
   floating snapshot publication. Do not leave a candidate fossilized after a transient downstream failure when the

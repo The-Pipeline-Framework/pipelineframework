@@ -172,14 +172,14 @@ remains a fallback for intentionally differently named branches and accepts a st
 pull-request URLs.
 
 The coordinator uses branch identity only for discovery. It then resolves every exact head and current base,
-creates each tested merge locally, overlays the immutable baseline, builds participating Maven components in
+creates each tested merge locally, overlays the immutable baseline, and derives the complete downstream Maven
+closure. The closure includes Maven producers whose current default-branch SHA is newer than the baseline and
+unchanged downstream producers whose POMs must be repinned to an upstream candidate. It builds that closure in
 dependency order, unions the centrally required suites, and reports the same aggregate result to every
 participating SHA. It never requires a candidate to build against the old baseline first, and never executes tests
-against a floating branch name or an older PR head. Maven producers that are not part of the set remain pinned to
-the last-known-green artifact baseline. Consumer-only test harnesses that are not part of the set resolve their
-default-branch HEAD once at materialisation time and thereafter use that exact SHA. This prevents an unrelated
-full-train failure from fossilising old example, reference, or application test source while retaining immutable
-inputs for the run.
+against a floating branch name or an older PR head. Consumer-only test harnesses use the exact current-main SHA
+resolved with the producer graph. The feature author supplies only the feature pull requests; the coordinator owns
+derivation of current-main and downstream closure targets.
 
 ```mermaid
 flowchart LR

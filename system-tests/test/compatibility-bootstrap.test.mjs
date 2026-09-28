@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {candidateBuildArguments, candidateFromOutput, exactRemoteHead, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {augmentCompatibilityTargets, candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
 const bootstrap = await readFile(new URL('../scripts/bootstrap-compatibility-set.mjs', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
+const currentHead = (value) => ({baseRef: 'main', sha: value});
 
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
@@ -26,7 +27,9 @@ test('compatibility Maven candidates build in dependency order', () => {
 test('compatibility candidate identity is derived from the exact PR head', () => {
   const resolvedSet = {components: {contracts: {mavenVersion: '26.9.4-main.111111111111'}}};
   assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7)), '26.9.4-pr.7.abcdef123456');
+  assert.equal(expectedCandidateVersion(resolvedSet, {...target('runtime', null), merged: true}), '26.9.4-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
+  assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
   assert.throws(() => candidateFromOutput('candidate=26.9.4-SNAPSHOT\n'), /exactly one valid version/);
 });
 
@@ -68,10 +71,24 @@ test('candidate POMs persist exact predecessor versions for downstream consumers
   );
 });
 
-test('source harness HEAD resolution accepts one exact symbolic revision', () => {
-  assert.equal(exactRemoteHead(`ref: refs/heads/main\tHEAD\n${'a'.repeat(40)}\tHEAD\n`), 'a'.repeat(40));
-  assert.throws(() => exactRemoteHead(`${'a'.repeat(40)}\tHEAD\n`), /exactly one branch and revision/);
-  assert.throws(() => exactRemoteHead(`ref: refs/heads/main\tHEAD\n${'a'.repeat(40)}\tHEAD\n${'b'.repeat(40)}\tHEAD\n`), /exactly one branch and revision/);
+test('compatibility targets include changed main and the complete downstream Maven closure', () => {
+  const baselineSha = '1'.repeat(40);
+  const connectorSha = '2'.repeat(40);
+  const heads = Object.fromEntries(Object.keys(config.components).map((component) => [component, currentHead(baselineSha)]));
+  heads.connectors = currentHead(connectorSha);
+  const baseline = {
+    components: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'maven')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}])),
+    testHarnesses: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'source')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}]))
+  };
+  const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('runtime', 7)]}, heads);
+  assert.deepEqual(
+    augmented.targets.filter(({component}) => config.components[component].kind === 'maven').map(({component}) => component),
+    ['blocks', 'connectors', 'expansions', 'runtime']
+  );
+  assert.equal(augmented.targets.find(({component}) => component === 'connectors').sourceSha, connectorSha);
+  assert.equal(augmented.targets.find(({component}) => component === 'blocks').pullRequestNumber, null);
 });
 
 test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
@@ -82,7 +99,9 @@ test('compatibility baseline is portable and cached by immutable digest before b
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
   assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
-  assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?targets\/targets\.json/);
+  assert.match(workflow, /augment-compatibility-targets\.mjs[\s\S]*?--output baseline\/bootstrap-targets\.json/);
+  assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?baseline\/bootstrap-targets\.json/);
+  assert.match(workflow, /bootstrap-compatibility-set\.mjs[\s\S]*?--targets baseline\/bootstrap-targets\.json/);
 });
 
 test('compatibility targets are merged locally from the exact current base and PR head', () => {

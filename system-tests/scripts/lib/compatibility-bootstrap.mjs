@@ -19,7 +19,62 @@ export function expectedCandidateVersion(resolvedSet, target) {
   const reference = resolvedSet.components.contracts?.mavenVersion ?? Object.values(resolvedSet.components)[0]?.mavenVersion;
   const match = typeof reference === 'string' ? /^(\d+\.\d+\.\d+)/.exec(reference) : null;
   if (match === null) throw new Error('baseline does not expose a semantic Maven version');
-  return `${match[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
+  return target.pullRequestNumber === null
+    ? `${match[1]}-main.${target.sourceSha.slice(0, 12)}`
+    : `${match[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
+}
+
+export function augmentCompatibilityTargets(config, baseline, targetDocument, currentHeads) {
+  const targets = new Map(targetDocument.targets.map((target) => [target.component, structuredClone(target)]));
+  const selectedMaven = new Set(
+    [...targets.values()]
+      .filter((target) => config.components[target.component].kind === 'maven')
+      .map((target) => target.component)
+  );
+
+  for (const [component, definition] of Object.entries(config.components)) {
+    const current = currentHeads[component];
+    if (current === undefined) throw new Error(`current main head is missing for ${component}`);
+    const baselineEntry = definition.kind === 'maven' ? baseline.components[component] : baseline.testHarnesses[component];
+    if (baselineEntry === undefined) throw new Error(`baseline entry is missing for ${component}`);
+    if (current.sha !== baselineEntry.sha && definition.kind === 'maven') selectedMaven.add(component);
+    if (current.sha !== baselineEntry.sha && definition.kind === 'source' && !targets.has(component)) {
+      targets.set(component, mainTarget(component, definition, current));
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [component, definition] of Object.entries(config.components)) {
+      if (definition.kind !== 'maven' || selectedMaven.has(component)) continue;
+      const dependencies = Object.keys(definition.consumerVersionProperties);
+      if (dependencies.some((dependency) => selectedMaven.has(dependency))) {
+        selectedMaven.add(component);
+        changed = true;
+      }
+    }
+  }
+
+  for (const component of selectedMaven) {
+    if (targets.has(component)) continue;
+    targets.set(component, mainTarget(component, config.components[component], currentHeads[component]));
+  }
+  return {schemaVersion: 1, targets: [...targets.values()].sort((left, right) => left.component.localeCompare(right.component))};
+}
+
+function mainTarget(component, definition, current) {
+  return {
+    component,
+    repository: definition.repository,
+    repositoryName: definition.repository.split('/')[1],
+    baseRef: current.baseRef,
+    pullRequestNumber: null,
+    sourceSha: current.sha,
+    baseSha: current.sha,
+    merged: true,
+    testedSha: current.sha
+  };
 }
 
 export function candidateBuildArguments(mavenRepository, versionArguments) {
@@ -50,19 +105,9 @@ export function pinCandidateDependencyProperties(sourcePom, dependencyVersions) 
   return pinned;
 }
 
-export function exactRemoteHead(output) {
-  const lines = output.split(/\r?\n/).filter(Boolean);
-  const symbolic = lines.filter((line) => /^ref:\s+refs\/heads\/[^\s]+\s+HEAD$/.test(line));
-  const revisions = lines.filter((line) => /^[0-9a-f]{40}\s+HEAD$/.test(line));
-  if (symbolic.length !== 1 || revisions.length !== 1) {
-    throw new Error('remote HEAD did not resolve to exactly one branch and revision');
-  }
-  return revisions[0].split(/\s+/)[0];
-}
-
 export function candidateFromOutput(output) {
   const matches = output.split(/\r?\n/).filter((line) => line.startsWith('candidate=')).map((line) => line.slice('candidate='.length));
-  if (matches.length !== 1 || !/^\d+\.\d+\.\d+-pr\.[1-9][0-9]*\.[0-9a-f]{12}$/.test(matches[0])) {
+  if (matches.length !== 1 || !/^\d+\.\d+\.\d+-(?:pr\.[1-9][0-9]*|main)\.[0-9a-f]{12}$/.test(matches[0])) {
     throw new Error('candidate preparation did not emit exactly one valid version');
   }
   return matches[0];
