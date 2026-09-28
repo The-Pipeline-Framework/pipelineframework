@@ -134,7 +134,7 @@ jobs:
           mkdir -p discovery/repositories
           while IFS= read -r repository; do
             name="${repository#*/}"
-            gh api "repos/$repository/pulls?state=open&per_page=100" > "discovery/repositories/$name.json"
+            gh api --paginate "repos/$repository/pulls?state=open&per_page=100" > "discovery/repositories/$name.json"
           done < <(jq -r '.components[].repository' system-tests/components.yml)
           jq -s 'add' discovery/repositories/*.json > discovery/pulls.json
           args=(
