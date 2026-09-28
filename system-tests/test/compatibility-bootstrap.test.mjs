@@ -26,8 +26,9 @@ test('compatibility Maven candidates build in dependency order', () => {
 
 test('compatibility candidate identity is derived from the exact PR head', () => {
   const resolvedSet = {components: {contracts: {mavenVersion: '26.9.4-main.111111111111'}}};
-  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7)), '26.9.4-pr.7.abcdef123456');
-  assert.equal(expectedCandidateVersion(resolvedSet, {...target('runtime', null), merged: true}), '26.9.4-main.abcdef123456');
+  const sourcePom = '<project><modelVersion>4.0.0</modelVersion><version>26.10.0-SNAPSHOT</version></project>';
+  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), sourcePom), '26.9.4-pr.7.abcdef123456');
+  assert.equal(expectedCandidateVersion({components: {}}, {...target('runtime', null), merged: true}, sourcePom), '26.10.0-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
   assert.throws(() => candidateFromOutput('candidate=26.9.4-SNAPSHOT\n'), /exactly one valid version/);

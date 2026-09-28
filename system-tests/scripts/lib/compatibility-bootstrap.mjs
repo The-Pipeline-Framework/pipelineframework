@@ -15,13 +15,19 @@ export function orderedMavenTargets(config, targets) {
   return ordered;
 }
 
-export function expectedCandidateVersion(resolvedSet, target) {
-  const reference = resolvedSet.components.contracts?.mavenVersion ?? Object.values(resolvedSet.components)[0]?.mavenVersion;
-  const match = typeof reference === 'string' ? /^(\d+\.\d+\.\d+)/.exec(reference) : null;
-  if (match === null) throw new Error('baseline does not expose a semantic Maven version');
+export function expectedCandidateVersion(resolvedSet, target, sourcePom) {
+  if (target.pullRequestNumber === null && sourcePom !== undefined) {
+    const projectVersion = sourcePom.replace(/<parent\b[\s\S]*?<\/parent>/, '').match(/<version>\s*([^<]+)\s*<\/version>/)?.[1];
+    const sourceMatch = typeof projectVersion === 'string' ? /^(\d+\.\d+\.\d+)-SNAPSHOT$/.exec(projectVersion.trim()) : null;
+    if (sourceMatch === null) throw new Error('root project version must be a semantic SNAPSHOT version');
+    return `${sourceMatch[1]}-main.${target.sourceSha.slice(0, 12)}`;
+  }
+  const baselineReference = resolvedSet.components.contracts?.mavenVersion ?? Object.values(resolvedSet.components)[0]?.mavenVersion;
+  const baselineMatch = typeof baselineReference === 'string' ? /^(\d+\.\d+\.\d+)/.exec(baselineReference) : null;
+  if (baselineMatch === null) throw new Error('baseline does not expose a semantic Maven version');
   return target.pullRequestNumber === null
-    ? `${match[1]}-main.${target.sourceSha.slice(0, 12)}`
-    : `${match[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
+    ? `${baselineMatch[1]}-main.${target.sourceSha.slice(0, 12)}`
+    : `${baselineMatch[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
 }
 
 export function augmentCompatibilityTargets(config, baseline, targetDocument, currentHeads) {

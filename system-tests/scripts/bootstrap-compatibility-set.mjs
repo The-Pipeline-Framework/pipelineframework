@@ -70,6 +70,8 @@ for (const target of orderedMavenTargets(config, targets)) {
   }
   versionArguments.sort();
   const source = join(values.sources, target.component);
+  const rootPom = join(source, 'pom.xml');
+  const sourcePom = await readFile(rootPom, 'utf8');
   const javaHome = component.buildJavaVersion === 25 ? values.java25Home : values.java21Home;
   const candidateOutput = join(values.runnerTemp, `${target.component}-candidate-output.txt`);
   await mkdir(join(values.runnerTemp, target.component), {recursive: true});
@@ -80,7 +82,7 @@ for (const target of orderedMavenTargets(config, targets)) {
     env: {...process.env, JAVA_HOME: javaHome, GITHUB_OUTPUT: candidateOutput, RUNNER_TEMP: join(values.runnerTemp, target.component)}
   });
   const candidateVersion = candidateFromOutput(await readFile(candidateOutput, 'utf8'));
-  const expectedVersion = expectedCandidateVersion(resolvedSet, target);
+  const expectedVersion = expectedCandidateVersion(resolvedSet, target, sourcePom);
   if (candidateVersion !== expectedVersion) {
     throw new Error(`${target.component} prepared ${candidateVersion}, expected ${expectedVersion}`);
   }
@@ -88,7 +90,6 @@ for (const target of orderedMavenTargets(config, targets)) {
     property,
     resolvedSet.components[dependency].mavenVersion
   ]));
-  const rootPom = join(source, 'pom.xml');
   await writeFile(rootPom, pinDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
   await run(join(source, 'mvnw'), candidateBuildArguments(resolve(values.mavenRepository), versionArguments), {
     cwd: source,

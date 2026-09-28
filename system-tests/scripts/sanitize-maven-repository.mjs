@@ -17,17 +17,17 @@ const resolverMetadata = (name) =>
 async function sanitize(directory) {
   let removedMetadata = 0;
   let removedSnapshots = 0;
-  for (const entry of await readdir(directory, {withFileTypes: true})) {
+  const entries = await readdir(directory, {withFileTypes: true});
+  if (directory.endsWith('-SNAPSHOT') && !entries.some((entry) => entry.isDirectory())) {
+    await rm(directory, {recursive: true});
+    return {removedMetadata, removedSnapshots: 1};
+  }
+  for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name.endsWith('-SNAPSHOT')) {
-        await rm(path, {recursive: true});
-        removedSnapshots += 1;
-      } else {
-        const nested = await sanitize(path);
-        removedMetadata += nested.removedMetadata;
-        removedSnapshots += nested.removedSnapshots;
-      }
+      const nested = await sanitize(path);
+      removedMetadata += nested.removedMetadata;
+      removedSnapshots += nested.removedSnapshots;
     } else if (entry.isFile() && resolverMetadata(entry.name)) {
       await rm(path);
       removedMetadata += 1;
