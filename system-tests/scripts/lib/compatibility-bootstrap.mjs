@@ -87,18 +87,18 @@ export function candidateBuildArguments(mavenRepository, versionArguments) {
   ];
 }
 
-export function pinCandidateDependencyProperties(sourcePom, dependencyVersions) {
+export function pinDependencyProperties(sourcePom, dependencyVersions) {
   let pinned = sourcePom;
   for (const [property, version] of Object.entries(dependencyVersions).sort(([left], [right]) => left.localeCompare(right))) {
-    if (!/^[A-Za-z0-9_.-]+$/.test(property)) throw new Error(`candidate dependency property is invalid: ${property}`);
+    if (!/^[A-Za-z0-9_.-]+$/.test(property)) throw new Error(`dependency property is invalid: ${property}`);
     if (typeof version !== 'string' || version.length === 0 || /SNAPSHOT/i.test(version)) {
-      throw new Error(`candidate dependency ${property} must use an immutable version`);
+      throw new Error(`dependency ${property} must use an immutable version`);
     }
     const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`(<${escaped}>\\s*)[^<]*(\\s*</${escaped}>)`, 'g');
     const matches = [...pinned.matchAll(pattern)];
     if (matches.length !== 1) {
-      throw new Error(`candidate POM must declare ${property} exactly once; found ${matches.length}`);
+      throw new Error(`POM must declare ${property} exactly once; found ${matches.length}`);
     }
     pinned = pinned.replace(pattern, (_match, opening, closing) => `${opening}${version}${closing}`);
   }

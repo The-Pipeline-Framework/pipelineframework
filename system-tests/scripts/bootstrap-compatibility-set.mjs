@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {readJson, validateComponentsConfig} from './lib/contracts.mjs';
-import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from './lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinDependencyProperties} from './lib/compatibility-bootstrap.mjs';
 
 const {values} = parseArgs({
   options: {
@@ -89,7 +89,7 @@ for (const target of orderedMavenTargets(config, targets)) {
     resolvedSet.components[dependency].mavenVersion
   ]));
   const rootPom = join(source, 'pom.xml');
-  await writeFile(rootPom, pinCandidateDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
+  await writeFile(rootPom, pinDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
   await run(join(source, 'mvnw'), candidateBuildArguments(resolve(values.mavenRepository), versionArguments), {
     cwd: source,
     env: {...process.env, JAVA_HOME: javaHome}

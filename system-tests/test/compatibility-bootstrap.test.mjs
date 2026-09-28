@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {augmentCompatibilityTargets, candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinCandidateDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {augmentCompatibilityTargets, candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
@@ -58,15 +58,15 @@ test('compatibility bootstrap installs candidates without repeating owner test s
 test('candidate POMs persist exact predecessor versions for downstream consumers', () => {
   const source = '<properties>\n<tpf.contracts.version>26.9.4-SNAPSHOT</tpf.contracts.version>\n</properties>\n';
   assert.equal(
-    pinCandidateDependencyProperties(source, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
     '<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n'
   );
   assert.throws(
-    () => pinCandidateDependencyProperties(source, {'missing.version': '26.9.4-main.abcdef123456'}),
+    () => pinDependencyProperties(source, {'missing.version': '26.9.4-main.abcdef123456'}),
     /must declare missing\.version exactly once/
   );
   assert.throws(
-    () => pinCandidateDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
+    () => pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
     /must use an immutable version/
   );
 });
