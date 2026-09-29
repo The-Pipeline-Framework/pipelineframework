@@ -43,6 +43,28 @@ Supporting repo surfaces:
 
 For planning, PR slicing, architecture tradeoffs, roadmap shaping, or docs IA strategy, read `AGENTS.planning.md`. For ordinary implementation work, use this file plus the smallest relevant local context.
 
+## Cross-Repository System Tests
+
+`pipelineframework` owns the candidate-overlay policy, compatibility-set workflow, last-known-green baseline and
+full-train promotion. Owner repositories continue to own their local tests and the stable commands in
+`.github/tpf-system-tests.json`.
+
+For a coordinated change, first wait for `TPF Candidate Publish` to succeed for the current head SHA of every
+participating pull request. Then run `TPF System Tests — Compatibility Set` with one stable set ID and two to ten
+pull-request URLs, with at most one pull request per component:
+
+```sh
+gh workflow run system-test-compatibility-set.yml \
+  --repo The-Pipeline-Framework/pipelineframework \
+  -f set_id=compiler-runtime-change \
+  -f pull_requests='https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/123,https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/456'
+```
+
+Any new commit invalidates the previous set: wait for the new candidate publisher and dispatch the compatibility
+set again. Require the same `tpf/system-tests` success on every participating SHA. Do not substitute snapshots,
+branch heads, source checkouts or a composite Maven reactor. See
+`docs/evolve/cross-repository-system-tests.md` for setup, trust boundaries, reruns and failure handling.
+
 Before making or reviewing an architectural change, read `docs/decisions/`. It is the
 GitNexus-aligned catalogue of durable TPF semantic ownership and distinctions. Keep
 it current in the same change whenever a PR adds a semantic capability, moves
