@@ -244,20 +244,108 @@ jobs:
       - name: Install ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
-      - name: Resolve the movable baseline once
+      - name: List component repositories
+        id: repositories
+        run: echo "names=$(jq -r '[.components[].repository | split("/")[1]] | join(",")' system-tests/components.yml)" >> "$GITHUB_OUTPUT"
+
+      - name: Create source-repository read token
+        id: source-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ steps.repositories.outputs.names }}
+          permission-contents: read
+
+      - name: Resolve baseline and current main candidates
         id: resolve
         env:
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
-          image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          baseline_image="$(jq -r '.baselineImage' system-tests/components.yml)"
+          candidate_image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
           echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-          digest="$(oras resolve "$image:main")"
+          digest="$(oras resolve "$baseline_image:main")"
           case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
-          mkdir -p resolved/baseline
-          oras pull "$image@$digest" --output resolved/baseline
+          mkdir -p resolved/baseline resolved/main-candidates resolved/discovery
+          oras pull "$baseline_image@$digest" --output resolved/baseline
           test -f resolved/baseline/baseline.json
           echo "baseline_digest=$digest" >> "$GITHUB_OUTPUT"
           printf '%s\n' "$digest" > resolved/baseline-digest.txt
+
+          oras repo tags "$candidate_image" > resolved/candidate-tags.txt
+          jq -n '{}' > resolved/current-heads.json
+          while IFS=$'\t' read -r component repository; do
+            default_branch="$(gh api "repos/$repository" --jq '.default_branch')"
+            current_sha="$(gh api "repos/$repository/commits/$default_branch" --jq '.sha')"
+            jq --arg component "$component" --arg sha "$current_sha" \
+              '. + {($component): $sha}' resolved/current-heads.json > resolved/current-heads.next.json
+            mv resolved/current-heads.next.json resolved/current-heads.json
+
+            candidate_digest=''
+            pointer_dir="resolved/discovery/$component"
+            if pointer_digest="$(oras resolve "$candidate_image:main-$component" 2>/dev/null)"; then
+              mkdir -p "$pointer_dir"
+              oras pull "$candidate_image@$pointer_digest" --output "$pointer_dir"
+              if [ "$(jq -r '.sourceSha' "$pointer_dir/candidate-manifest.json")" = "$current_sha" ]; then
+                candidate_digest="$pointer_digest"
+              fi
+            fi
+
+            candidate_dir="resolved/main-candidates/$component"
+            if [ -n "$candidate_digest" ]; then
+              mkdir -p "$candidate_dir"
+              cp "$pointer_dir/candidate-manifest.json" "$candidate_dir/candidate-manifest.json"
+            else
+              while IFS= read -r tag; do
+                [ -n "$tag" ] || continue
+                probe_digest="$(oras resolve "$candidate_image:$tag")"
+                probe_dir="resolved/discovery/$component-probe"
+                rm -rf "$probe_dir"; mkdir -p "$probe_dir"
+                oras pull "$candidate_image@$probe_digest" --output "$probe_dir"
+                if [ "$(jq -r '.pullRequestNumber' "$probe_dir/candidate-manifest.json")" = "null" ]; then
+                  candidate_digest="$probe_digest"
+                  mkdir -p "$candidate_dir"
+                  cp "$probe_dir/candidate-manifest.json" "$candidate_dir/candidate-manifest.json"
+                  break
+                fi
+              done < <(awk -v prefix="$component-$current_sha-" 'index($0, prefix) == 1' resolved/candidate-tags.txt | sort -Vr)
+            fi
+
+            if [ -n "$candidate_digest" ]; then
+              case "$candidate_digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
+              test -f "$candidate_dir/candidate-manifest.json"
+              printf '%s\n' "$candidate_digest" > "$candidate_dir/digest.txt"
+            else
+              baseline_sha="$(jq -r --arg component "$component" \
+                '.components[$component].sha // .testHarnesses[$component].sha' \
+                resolved/baseline/baseline.json)"
+              if [ "$current_sha" != "$baseline_sha" ]; then
+                echo "No attested current-main candidate exists for $component at $current_sha." >&2
+                exit 1
+              fi
+            fi
+          done < <(jq -r '.components | to_entries[] | [.key, .value.repository] | @tsv' system-tests/components.yml)
+
+          candidate_args=()
+          digest_args=()
+          while IFS= read -r manifest; do
+            candidate_args+=(--candidates "$manifest")
+            digest_args+=(--candidateDigests "$(cat "$(dirname "$manifest")/digest.txt")")
+          done < <(find resolved/main-candidates -name candidate-manifest.json -type f | sort)
+          node system-tests/scripts/reconcile-main-candidates.mjs \
+            --components system-tests/components.yml \
+            --baseline resolved/baseline/baseline.json \
+            --baselineDigest "$digest" \
+            --currentHeads resolved/current-heads.json \
+            "${candidate_args[@]}" \
+            "${digest_args[@]}" \
+            --output resolved/current-main-set.json
+          jq --slurpfile baseline resolved/baseline/baseline.json \
+            '{schemaVersion: 1, revision: .baselineRevision, generatedAt: $baseline[0].generatedAt, components, testHarnesses, images}' \
+            resolved/current-main-set.json > resolved/effective-baseline.json
 
       - name: Overlay candidate and select mandatory suites
         env:
@@ -268,7 +356,7 @@ jobs:
         run: |
           node system-tests/scripts/resolve-set.mjs \
             --components system-tests/components.yml \
-            --baseline resolved/baseline/baseline.json \
+            --baseline resolved/effective-baseline.json \
             --baselineDigest "$BASELINE_DIGEST" \
             --candidates intake/candidate/candidate-manifest.json \
             --candidateDigests "$CANDIDATE_MANIFEST_DIGEST" \
