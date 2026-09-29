@@ -14,6 +14,10 @@ async function fixture(command) {
   await chmod(join(directory, 'mvnw'), 0o755);
   await writeFile(join(directory, 'wrapper.sh'), '#!/usr/bin/env bash\nprintf \'%s\\n\' "${MAVEN_ARGS:-}" > "$TPF_CAPTURE"\n');
   await chmod(join(directory, 'wrapper.sh'), 0o755);
+  await writeFile(join(directory, 'pom.xml'), `<project><properties>
+    <pipelineframework.contracts.version>26.9.4-SNAPSHOT</pipelineframework.contracts.version>
+    <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
+  </properties></project>`);
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({schemaVersion: 1, suites: {verify: {command, timeoutMinutes: 1}}}));
   await writeFile(join(directory, 'resolved.json'), JSON.stringify({
     components: {contracts: {mavenVersion: '26.9.4-pr.7.abcdef123456'}},
@@ -44,6 +48,9 @@ test('direct Maven suite commands receive exact versions and the isolated reposi
   assert.match(captured, /-Dpipelineframework\.contracts\.version=26\.9\.4-pr\.7\.abcdef123456/);
   assert.match(captured, /-Dpipelineframework\.bom\.version=26\.9\.4-system-test\.1234567890ab/);
   assert.match(captured, new RegExp(`-Dmaven\\.repo\\.local=${value.directory}/m2`));
+  const pom = await readFile(join(value.directory, 'pom.xml'), 'utf8');
+  assert.match(pom, /<pipelineframework\.contracts\.version>26\.9\.4-pr\.7\.abcdef123456<\/pipelineframework\.contracts\.version>/);
+  assert.match(pom, /<pipelineframework\.bom\.version>26\.9\.4-system-test\.1234567890ab<\/pipelineframework\.bom\.version>/);
 });
 
 test('wrapper suite commands receive exact Maven arguments through MAVEN_ARGS', async () => {
@@ -54,4 +61,7 @@ test('wrapper suite commands receive exact Maven arguments through MAVEN_ARGS', 
   assert.match(captured, /-Dpipelineframework\.contracts\.version=26\.9\.4-pr\.7\.abcdef123456/);
   assert.match(captured, /-Dpipelineframework\.bom\.version=26\.9\.4-system-test\.1234567890ab/);
   assert.match(captured, new RegExp(`-Dmaven\\.repo\\.local=${value.directory}/m2`));
+  const pom = await readFile(join(value.directory, 'pom.xml'), 'utf8');
+  assert.match(pom, /<pipelineframework\.contracts\.version>26\.9\.4-pr\.7\.abcdef123456<\/pipelineframework\.contracts\.version>/);
+  assert.match(pom, /<pipelineframework\.bom\.version>26\.9\.4-system-test\.1234567890ab<\/pipelineframework\.bom\.version>/);
 });

@@ -164,11 +164,22 @@ sequenceDiagram
 5. Selected owner suites run sequentially inside a bounded number of coarse product shards against the one
    materialised overlay. The aggregate reporter posts success, failure or error to the originating SHA.
 
-For a coordinated change, run `TPF System Tests — Compatibility Set` with a stable set ID and two to ten pull-request
-URLs. The coordinator resolves every exact head and current base, creates each tested merge locally, overlays the immutable baseline, builds
-participating Maven components in dependency order, unions the centrally required suites, and reports the same aggregate result to
-every participating SHA. It never requires a candidate to build against the old baseline first, and never falls
-back to a branch name or older PR head.
+For a coordinated change, use the same head-branch name under the same GitHub owner in every participating
+repository. The first candidate intake discovers the matching open component pull requests and dispatches
+`TPF System Tests — Compatibility Set` automatically. Later intake events for the same branch reuse a deterministic
+set ID, so GitHub cancels the older in-flight set instead of running competing product trains. The manual workflow
+remains a fallback for intentionally differently named branches and accepts a stable set ID plus two to ten
+pull-request URLs.
+
+The coordinator uses branch identity only for discovery. It then resolves every exact head and current base,
+creates each tested merge locally, overlays the immutable baseline, and derives the complete downstream Maven
+closure. The closure includes Maven producers whose current default-branch SHA is newer than the baseline and
+unchanged downstream producers whose POMs must be repinned to an upstream candidate. It builds that closure in
+dependency order, unions the centrally required suites, and reports the same aggregate result to every
+participating SHA. It never requires a candidate to build against the old baseline first, and never executes tests
+against a floating branch name or an older PR head. Consumer-only test harnesses use the exact current-main SHA
+resolved with the producer graph. The feature author supplies only the feature pull requests; the coordinator owns
+derivation of current-main and downstream closure targets.
 
 ```mermaid
 flowchart LR

@@ -28,19 +28,27 @@ if (tokens.length < 2 || tokens.length > 10) {
   throw new Error('a compatibility set must contain between 2 and 10 pull requests');
 }
 
-const requests = tokens.map((value) => {
+const requests = tokens.flatMap((value) => {
   const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/([1-9][0-9]*)\/?$/.exec(value);
   if (match === null) throw new Error(`invalid GitHub pull-request URL: ${value}`);
   const repository = match[1];
+  if (repository === config.coordinationRepository) {
+    console.warn(`ignoring coordination-repository pull request in candidate set: ${value}`);
+    return [];
+  }
   const component = componentForRepository(config, repository);
-  return {
+  return [{
     component,
     repository,
     repositoryName: repository.split('/')[1],
     pullRequestNumber: Number(match[2]),
     url: value.replace(/\/$/, '')
-  };
+  }];
 });
+
+if (requests.length < 2) {
+  throw new Error('a compatibility set must contain at least two component pull requests');
+}
 
 const duplicateComponents = requests
   .map(({component}) => component)

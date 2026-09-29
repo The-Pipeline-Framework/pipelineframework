@@ -7,6 +7,7 @@ const { values } = parseArgs({
   options: {
     components: {type: 'string'},
     manifests: {type: 'string', multiple: true},
+    allowMissingCoordinatesFor: {type: 'string', multiple: true},
     output: {type: 'string'}
   },
   strict: true
@@ -15,16 +16,19 @@ for (const name of ['components', 'manifests', 'output']) {
   if (values[name] === undefined) throw new Error(`--${name} is required`);
 }
 const config = validateComponentsConfig(await readJson(values.components));
+const allowMissingCoordinatesFor = new Set(values.allowMissingCoordinatesFor ?? []);
+for (const component of allowMissingCoordinatesFor) {
+  if (config.components[component]?.kind !== 'maven') throw new Error(`cannot allow missing coordinates for ${component}`);
+}
 const entries = [];
 for (const manifestPath of values.manifests) {
   const rawManifest = await readJson(manifestPath);
   let manifest;
   try {
-    // Resolved sets may contain immutable manifests promoted under an older
-    // component coordinate contract. Intake validates new candidates against
-    // the complete current contract; materialisation validates historical
-    // manifests for identity, ownership, provenance and integrity instead.
-    manifest = validateCandidateManifest(rawManifest, config, {requireAllOwnedCoordinates: false});
+    // Only explicitly named Maven components may use historical coordinate sets.
+    manifest = validateCandidateManifest(rawManifest, config, {
+      requireAllOwnedCoordinates: !allowMissingCoordinatesFor.has(rawManifest.component)
+    });
   } catch (error) {
     const identity = [rawManifest.component, rawManifest.repository, rawManifest.candidateVersion]
       .filter((value) => typeof value === 'string' && value.length > 0)

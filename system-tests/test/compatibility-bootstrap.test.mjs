@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from '../scripts/lib/compatibility-bootstrap.mjs';
+import {augmentCompatibilityTargets, candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinDependencyProperties} from '../scripts/lib/compatibility-bootstrap.mjs';
 
 const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../../.github/workflows/system-test-compatibility-set.yml', import.meta.url), 'utf8');
 const bootstrap = await readFile(new URL('../scripts/bootstrap-compatibility-set.mjs', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
+const currentHead = (value) => ({baseRef: 'main', sha: value});
 
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
@@ -25,9 +26,27 @@ test('compatibility Maven candidates build in dependency order', () => {
 
 test('compatibility candidate identity is derived from the exact PR head', () => {
   const resolvedSet = {components: {contracts: {mavenVersion: '26.9.4-main.111111111111'}}};
-  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7)), '26.9.4-pr.7.abcdef123456');
+  const sourcePom = '<project><modelVersion>4.0.0</modelVersion><version>26.10.0-SNAPSHOT</version></project>';
+  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
+  assert.equal(expectedCandidateVersion({components: {}}, {...target('runtime', null), merged: true}, sourcePom), '26.10.0-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
+  assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
   assert.throws(() => candidateFromOutput('candidate=26.9.4-SNAPSHOT\n'), /exactly one valid version/);
+});
+
+test('candidate versions use only the active root project version', () => {
+  const sourcePom = `<!-- <project><version>1.0.0-SNAPSHOT</version></project> -->
+    <project>
+      <!-- <version>2.0.0-SNAPSHOT</version> -->
+      <parent><version>3.0.0-SNAPSHOT</version></parent>
+      <dependencies><dependency><version>4.0.0-SNAPSHOT</version></dependency></dependencies>
+      <version> 26.10.0-SNAPSHOT </version>
+    </project>`;
+  assert.equal(expectedCandidateVersion({}, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
+  for (const version of ['', '<version>26.10.0</version>', '<version>26.10-SNAPSHOT</version>']) {
+    const invalid = sourcePom.replace('<version> 26.10.0-SNAPSHOT </version>', version);
+    assert.throws(() => expectedCandidateVersion({}, target('runtime', 7), invalid), /root project version must be a semantic SNAPSHOT version/);
+  }
 });
 
 test('compatibility candidate dependency cycles are rejected', () => {
@@ -48,17 +67,68 @@ test('compatibility bootstrap installs candidates without repeating owner test s
   assert.ok(arguments_.includes('-DskipTests=true'));
   assert.ok(arguments_.includes('-DskipITs=true'));
   assert.ok(arguments_.includes('-DskipUnitTests=true'));
+  assert.ok(arguments_.includes('-Dinvoker.skip=true'));
   assert.ok(arguments_.includes('-Dmaven.repo.local=/tmp/tpf-m2'));
 });
 
+test('candidate POMs persist exact predecessor versions for downstream consumers', () => {
+  const source = '<properties>\n<tpf.contracts.version>26.9.4-SNAPSHOT</tpf.contracts.version>\n</properties>\n';
+  assert.equal(
+    pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    '<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n'
+  );
+  assert.throws(
+    () => pinDependencyProperties(source, {'missing.version': '26.9.4-main.abcdef123456'}),
+    /must declare missing\.version exactly once/
+  );
+  assert.throws(
+    () => pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
+    /must use an immutable version/
+  );
+  const withCommentedDeclaration = `<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->\n${source}`;
+  assert.equal(
+    pinDependencyProperties(withCommentedDeclaration, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    `<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->\n<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n`
+  );
+  assert.throws(
+    () => pinDependencyProperties('<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->', {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    /must declare tpf\.contracts\.version exactly once; found 0/
+  );
+});
+
+test('compatibility targets include changed main and the complete downstream Maven closure', () => {
+  const baselineSha = '1'.repeat(40);
+  const connectorSha = '2'.repeat(40);
+  const heads = Object.fromEntries(Object.keys(config.components).map((component) => [component, currentHead(baselineSha)]));
+  heads.connectors = currentHead(connectorSha);
+  const baseline = {
+    components: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'maven')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}])),
+    testHarnesses: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'source')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}]))
+  };
+  const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('runtime', 7)]}, heads);
+  assert.deepEqual(
+    augmented.targets.filter(({component}) => config.components[component].kind === 'maven').map(({component}) => component),
+    ['blocks', 'connectors', 'expansions', 'runtime']
+  );
+  assert.equal(augmented.targets.find(({component}) => component === 'connectors').sourceSha, connectorSha);
+  assert.equal(augmented.targets.find(({component}) => component === 'blocks').pullRequestNumber, null);
+});
+
 test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {
-  const cache = workflow.indexOf('key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}');
+  const cache = workflow.indexOf('key: tpf-system-test-baseline-v3-${{ steps.baseline.outputs.cache_key }}');
   const sanitize = workflow.indexOf('node system-tests/scripts/sanitize-maven-repository.mjs');
   const archive = workflow.indexOf('tar -C "$local_repo" -czf baseline/tpf-system-test-m2.tar.gz .');
   assert.ok(cache >= 0, 'baseline cache key is missing');
   assert.ok(sanitize >= 0, 'baseline sanitation is missing');
   assert.ok(archive > sanitize, 'baseline must be sanitized before it crosses the credential boundary');
+  assert.match(workflow, /restore-keys:[\s\S]*?tpf-system-test-baseline-v2-[\s\S]*?tpf-system-test-baseline-/);
   assert.match(workflow, /Resolve immutable baseline metadata[\s\S]*?PACKAGE_TOKEN: \$\{\{ github\.token \}\}[\s\S]*?write-maven-settings\.mjs/);
+  assert.match(workflow, /augment-compatibility-targets\.mjs[\s\S]*?--output baseline\/bootstrap-targets\.json/);
+  assert.match(workflow, /incomplete_args[\s\S]*?--allowMissingCoordinatesFor[\s\S]*?baseline\/bootstrap-targets\.json/);
+  assert.match(workflow, /select\(\$config\[0\]\.components\[\.component\]\.kind == "maven"\)/);
+  assert.match(workflow, /bootstrap-compatibility-set\.mjs[\s\S]*?--targets baseline\/bootstrap-targets\.json/);
 });
 
 test('compatibility targets are merged locally from the exact current base and PR head', () => {

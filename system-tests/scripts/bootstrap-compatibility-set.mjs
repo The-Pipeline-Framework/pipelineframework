@@ -5,7 +5,7 @@ import {join, resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {readJson, validateComponentsConfig} from './lib/contracts.mjs';
-import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets} from './lib/compatibility-bootstrap.mjs';
+import {candidateBuildArguments, candidateFromOutput, expectedCandidateVersion, orderedMavenTargets, pinDependencyProperties} from './lib/compatibility-bootstrap.mjs';
 
 const {values} = parseArgs({
   options: {
@@ -46,7 +46,9 @@ for (const target of targetDocument.targets) {
   if (!/^[0-9a-f]{40}$/.test(target.baseSha)) throw new Error(`invalid target base SHA for ${target.component}`);
   if (typeof target.merged !== 'boolean') throw new Error(`invalid merged state for ${target.component}`);
   if (target.merged && !/^[0-9a-f]{40}$/.test(target.testedSha)) throw new Error(`invalid tested SHA for ${target.component}`);
-  if (!Number.isSafeInteger(target.pullRequestNumber) || target.pullRequestNumber < 1) throw new Error(`invalid PR number for ${target.component}`);
+  const pullRequestTarget = Number.isSafeInteger(target.pullRequestNumber) && target.pullRequestNumber > 0;
+  const mainTarget = target.pullRequestNumber === null && target.merged && target.sourceSha === target.baseSha && target.testedSha === target.sourceSha;
+  if (!pullRequestTarget && !mainTarget) throw new Error(`invalid candidate identity for ${target.component}`);
   if (targets.has(target.component)) throw new Error(`duplicate target component ${target.component}`);
   targets.set(target.component, target);
 }
@@ -68,18 +70,27 @@ for (const target of orderedMavenTargets(config, targets)) {
   }
   versionArguments.sort();
   const source = join(values.sources, target.component);
+  const rootPom = join(source, 'pom.xml');
+  const sourcePom = await readFile(rootPom, 'utf8');
   const javaHome = component.buildJavaVersion === 25 ? values.java25Home : values.java21Home;
   const candidateOutput = join(values.runnerTemp, `${target.component}-candidate-output.txt`);
   await mkdir(join(values.runnerTemp, target.component), {recursive: true});
-  await run('bash', ['scripts/prepare-candidate.sh', 'pull_request', String(target.pullRequestNumber), target.sourceSha], {
+  const buildEvent = target.pullRequestNumber === null ? 'push' : 'pull_request';
+  const pullRequestNumber = target.pullRequestNumber === null ? '-' : String(target.pullRequestNumber);
+  await run('bash', ['scripts/prepare-candidate.sh', buildEvent, pullRequestNumber, target.sourceSha], {
     cwd: source,
     env: {...process.env, JAVA_HOME: javaHome, GITHUB_OUTPUT: candidateOutput, RUNNER_TEMP: join(values.runnerTemp, target.component)}
   });
   const candidateVersion = candidateFromOutput(await readFile(candidateOutput, 'utf8'));
-  const expectedVersion = expectedCandidateVersion(resolvedSet, target);
+  const expectedVersion = expectedCandidateVersion(resolvedSet, target, sourcePom);
   if (candidateVersion !== expectedVersion) {
     throw new Error(`${target.component} prepared ${candidateVersion}, expected ${expectedVersion}`);
   }
+  const dependencyVersions = Object.fromEntries(Object.entries(component.consumerVersionProperties).map(([dependency, property]) => [
+    property,
+    resolvedSet.components[dependency].mavenVersion
+  ]));
+  await writeFile(rootPom, pinDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
   await run(join(source, 'mvnw'), candidateBuildArguments(resolve(values.mavenRepository), versionArguments), {
     cwd: source,
     env: {...process.env, JAVA_HOME: javaHome}

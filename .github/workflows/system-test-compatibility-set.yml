@@ -145,6 +145,26 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download immutable targets
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-compatibility-set-targets
+          path: targets
+
+      - name: List component repositories
+        id: component-repositories
+        run: echo "names=$(jq -r '[.components[].repository | split("/")[1]] | join(",")' system-tests/components.yml)" >> "$GITHUB_OUTPUT"
+
+      - name: Create source-repository read token
+        id: source-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ steps.component-repositories.outputs.names }}
+          permission-contents: read
+
       - name: Setup JDK 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -157,6 +177,7 @@ jobs:
       - name: Resolve immutable baseline metadata
         id: baseline
         env:
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
           GHCR_TOKEN: ${{ github.token }}
           PACKAGE_TOKEN: ${{ github.token }}
         run: |
@@ -169,15 +190,37 @@ jobs:
           echo "cache_key=${digest#sha256:}" >> "$GITHUB_OUTPUT"
           mkdir -p baseline/raw baseline/manifests "$RUNNER_TEMP/tpf-maven"
           oras pull "$baseline_image@$digest" --output baseline/raw
+          jq -n '{}' > baseline/current-heads.json
+          while IFS=$'\t' read -r component repository; do
+            base_ref="$(gh api "repos/$repository" --jq '.default_branch')"
+            source_sha="$(gh api "repos/$repository/commits/$base_ref" --jq '.sha')"
+            jq --arg component "$component" --arg baseRef "$base_ref" --arg sha "$source_sha" \
+              '. + {($component): {baseRef: $baseRef, sha: $sha}}' \
+              baseline/current-heads.json > baseline/current-heads.next.json
+            mv baseline/current-heads.next.json baseline/current-heads.json
+          done < <(jq -r '.components | to_entries[] | [.key, .value.repository] | @tsv' system-tests/components.yml)
+          node system-tests/scripts/augment-compatibility-targets.mjs \
+            --components system-tests/components.yml \
+            --baseline baseline/raw/baseline.json \
+            --targets targets/targets.json \
+            --currentHeads baseline/current-heads.json \
+            --output baseline/bootstrap-targets.json
           while IFS=$'\t' read -r component manifest_digest; do
             mkdir -p "baseline/manifests/$component"
             oras pull "$manifest_image@$manifest_digest" --output "baseline/manifests/$component"
           done < <(jq -r '.components | to_entries[] | [.key, .value.manifestDigest] | @tsv' baseline/raw/baseline.json)
           manifest_args=()
           while IFS= read -r manifest; do manifest_args+=(--manifests "$manifest"); done < <(find baseline/manifests -name candidate-manifest.json -type f | sort)
+          incomplete_args=()
+          while IFS= read -r component; do incomplete_args+=(--allowMissingCoordinatesFor "$component"); done < <(
+            jq -r --slurpfile config system-tests/components.yml \
+              '.targets[] | select($config[0].components[.component].kind == "maven") | .component' \
+              baseline/bootstrap-targets.json
+          )
           node system-tests/scripts/materialization-plan.mjs \
             --components system-tests/components.yml \
             "${manifest_args[@]}" \
+            "${incomplete_args[@]}" \
             --output baseline/materialization-plan.json
           node system-tests/scripts/write-maven-settings.mjs \
             --components system-tests/components.yml \
@@ -189,8 +232,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/tpf-system-test-m2
-          key: tpf-system-test-baseline-${{ steps.baseline.outputs.cache_key }}
+          key: tpf-system-test-baseline-v3-${{ steps.baseline.outputs.cache_key }}
           restore-keys: |
+            tpf-system-test-baseline-v2-
             tpf-system-test-baseline-
 
       - name: Hydrate baseline Maven repository on cache miss
@@ -293,7 +337,7 @@ jobs:
           node system-tests/scripts/bootstrap-compatibility-set.mjs \
             --components system-tests/components.yml \
             --baselineResolvedSet baseline/resolved-set.json \
-            --targets intake/targets/targets.json \
+            --targets baseline/bootstrap-targets.json \
             --sources "$RUNNER_TEMP/tpf-set-sources" \
             --mavenRepository "$local_repo" \
             --manifests manifests \

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {readdir, rm} from 'node:fs/promises';
-import {join} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 import {parseArgs} from 'node:util';
 
 const {values} = parseArgs({
@@ -15,18 +15,38 @@ const resolverMetadata = (name) =>
   || name.endsWith('.lastUpdated');
 
 async function sanitize(directory) {
-  let removed = 0;
-  for (const entry of await readdir(directory, {withFileTypes: true})) {
+  let removedMetadata = 0;
+  let removedSnapshots = 0;
+  const entries = await readdir(directory, {withFileTypes: true});
+  if (isSnapshotVersionDirectory(directory, entries)) {
+    await rm(directory, {recursive: true});
+    return {removedMetadata, removedSnapshots: 1};
+  }
+  for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      removed += await sanitize(path);
+      const nested = await sanitize(path);
+      removedMetadata += nested.removedMetadata;
+      removedSnapshots += nested.removedSnapshots;
     } else if (entry.isFile() && resolverMetadata(entry.name)) {
       await rm(path);
-      removed += 1;
+      removedMetadata += 1;
     }
   }
-  return removed;
+  return {removedMetadata, removedSnapshots};
+}
+
+function isSnapshotVersionDirectory(directory, entries) {
+  const version = basename(directory);
+  if (!version.endsWith('-SNAPSHOT')) return false;
+  const artifactId = basename(dirname(directory));
+  const snapshotPrefix = `${artifactId}-${version.slice(0, -'SNAPSHOT'.length)}`;
+  return entries.some((entry) => entry.isFile() && (
+    entry.name.startsWith(`${artifactId}-${version}.`)
+    || (entry.name.startsWith(snapshotPrefix)
+      && /^\d{8}\.\d{6}-\d+(?:[.-])/.test(entry.name.slice(snapshotPrefix.length)))
+  ));
 }
 
 const removed = await sanitize(values.repository);
-process.stdout.write(`Removed ${removed} Maven resolver metadata file(s).\n`);
+process.stdout.write(`Removed ${removed.removedMetadata} Maven resolver metadata file(s) and ${removed.removedSnapshots} mutable SNAPSHOT version tree(s).\n`);

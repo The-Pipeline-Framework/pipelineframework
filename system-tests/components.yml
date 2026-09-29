@@ -142,6 +142,7 @@
       "repository": "The-Pipeline-Framework/pipelineframework-examples",
       "kind": "source",
       "consumerVersionProperties": {
+        "blocks": "pipelineframework.blocks.version",
         "coordinationBom": "pipelineframework.bom.version",
         "compiler": "pipelineframework.compiler.version",
         "connectors": "pipelineframework.connectors.version",

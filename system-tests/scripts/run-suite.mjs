@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import {readFile, writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import { parseArgs } from 'node:util';
 import { readJson } from './lib/contracts.mjs';
+import {pinDependencyProperties} from './lib/compatibility-bootstrap.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -36,13 +39,19 @@ if (versionProperties === null || typeof versionProperties !== 'object' || Array
   throw new Error('--versionProperties must be a JSON object');
 }
 const versionArguments = [];
+const dependencyVersions = {};
 for (const [component, property] of Object.entries(versionProperties)) {
   const pin = component === 'coordinationBom' ? resolvedSet.coordinationBom : resolvedSet.components?.[component];
   if (pin === undefined) throw new Error(`suite references unresolved Maven component ${component}`);
   if (typeof property !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(property)) throw new Error(`suite has invalid Maven property for ${component}`);
+  dependencyVersions[property] = pin.mavenVersion;
   versionArguments.push(`-D${property}=${pin.mavenVersion}`);
 }
 versionArguments.sort();
+if (Object.keys(dependencyVersions).length > 0) {
+  const rootPom = join(values.cwd, 'pom.xml');
+  await writeFile(rootPom, pinDependencyProperties(await readFile(rootPom, 'utf8'), dependencyVersions));
+}
 const [command, ...arguments_] = suite.command;
 const injectedMavenArguments = [...versionArguments, `-Dmaven.repo.local=${values.mavenRepository}`];
 const mavenArguments = injectedMavenArguments.join(' ');
