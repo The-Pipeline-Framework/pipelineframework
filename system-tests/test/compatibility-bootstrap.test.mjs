@@ -34,6 +34,21 @@ test('compatibility candidate identity is derived from the exact PR head', () =>
   assert.throws(() => candidateFromOutput('candidate=26.9.4-SNAPSHOT\n'), /exactly one valid version/);
 });
 
+test('candidate versions use only the active root project version', () => {
+  const sourcePom = `<!-- <project><version>1.0.0-SNAPSHOT</version></project> -->
+    <project>
+      <!-- <version>2.0.0-SNAPSHOT</version> -->
+      <parent><version>3.0.0-SNAPSHOT</version></parent>
+      <dependencies><dependency><version>4.0.0-SNAPSHOT</version></dependency></dependencies>
+      <version> 26.10.0-SNAPSHOT </version>
+    </project>`;
+  assert.equal(expectedCandidateVersion({}, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
+  for (const version of ['', '<version>26.10.0</version>', '<version>26.10-SNAPSHOT</version>']) {
+    const invalid = sourcePom.replace('<version> 26.10.0-SNAPSHOT </version>', version);
+    assert.throws(() => expectedCandidateVersion({}, target('runtime', 7), invalid), /root project version must be a semantic SNAPSHOT version/);
+  }
+});
+
 test('compatibility candidate dependency cycles are rejected', () => {
   const cyclic = structuredClone(config);
   cyclic.components.contracts.consumerVersionProperties = {runtime: 'tpf.runtime.version'};

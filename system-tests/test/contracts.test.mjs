@@ -241,7 +241,7 @@ test('current candidates are complete while historical baseline manifests retain
   );
 });
 
-test('materialization accepts an older coordinate set and identifies an invalid manifest', async () => {
+test('materialization permits missing coordinates only for named Maven components', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tpf-historical-manifest-'));
   const manifestPath = join(directory, 'candidate-manifest.json');
   const outputPath = join(directory, 'materialization-plan.json');
@@ -251,24 +251,31 @@ test('materialization accepts an older coordinate set and identifies an invalid 
 
   const script = new URL('../scripts/materialization-plan.mjs', import.meta.url);
   const components = new URL('../components.yml', import.meta.url);
-  await execFileAsync(process.execPath, [
+  const args = [
     script.pathname,
     '--components', components.pathname,
     '--manifests', manifestPath,
     '--output', outputPath
-  ]);
+  ];
+  await assert.rejects(execFileAsync(process.execPath, args), /omits coordinates required/);
+  await assert.rejects(
+    execFileAsync(process.execPath, [...args, '--allowMissingCoordinatesFor', 'runtime']),
+    /omits coordinates required/
+  );
+  for (const component of ['examples', 'unknown']) {
+    await assert.rejects(
+      execFileAsync(process.execPath, [...args, '--allowMissingCoordinatesFor', component]),
+      /cannot allow missing coordinates/
+    );
+  }
+  await execFileAsync(process.execPath, [...args, '--allowMissingCoordinatesFor', 'blocks']);
   const plan = JSON.parse(await readFile(outputPath, 'utf8'));
   assert.equal(plan.artifacts.length, historical.mavenArtifacts.length);
 
   historical.mavenArtifacts[0].groupId = 'com.example';
   await writeFile(manifestPath, `${JSON.stringify(historical)}\n`);
   await assert.rejects(
-    execFileAsync(process.execPath, [
-      script.pathname,
-      '--components', components.pathname,
-      '--manifests', manifestPath,
-      '--output', outputPath
-    ]),
+    execFileAsync(process.execPath, [...args, '--allowMissingCoordinatesFor', 'blocks']),
     /cannot materialize manifest .*\(blocks, The-Pipeline-Framework\/pipelineframework-blocks, 26\.9\.4-pr\.42\.abcdef123456\).*not owned/
   );
 });

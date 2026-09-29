@@ -17,7 +17,21 @@ export function orderedMavenTargets(config, targets) {
 
 export function expectedCandidateVersion(resolvedSet, target, sourcePom) {
   if (sourcePom !== undefined) {
-    const projectVersion = sourcePom.replace(/<parent\b[\s\S]*?<\/parent>/, '').match(/<version>\s*([^<]+)\s*<\/version>/)?.[1];
+    const activePom = sourcePom.replace(/<!--[\s\S]*?-->/g, '');
+    const project = activePom.match(/<project\b[^>]*>([\s\S]*?)<\/project\s*>/)?.[1] ?? '';
+    let depth = 0;
+    let projectVersion;
+    // Only direct children count; parent and dependency versions are excluded.
+    for (const tag of project.matchAll(/<(\/?)([\w:.-]+)\b[^>]*>/g)) {
+      if (tag[1] === '/') depth -= 1;
+      else {
+        if (depth === 0 && tag[2] === 'version') {
+          projectVersion = project.slice(tag.index + tag[0].length).match(/^([^<]*)<\/version\s*>/)?.[1];
+          break;
+        }
+        if (!tag[0].endsWith('/>')) depth += 1;
+      }
+    }
     const sourceMatch = typeof projectVersion === 'string' ? /^(\d+\.\d+\.\d+)-SNAPSHOT$/.exec(projectVersion.trim()) : null;
     if (sourceMatch === null) throw new Error('root project version must be a semantic SNAPSHOT version');
     return target.pullRequestNumber === null
