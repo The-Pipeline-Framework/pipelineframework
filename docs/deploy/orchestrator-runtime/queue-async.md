@@ -23,7 +23,7 @@ await, command-effect, lease, and admission state. A future local durable profil
 embedded implementation of that complete coordination-store suite, not a product registry or
 persistence-plugin adapter.
 
-This is lease-based recovery, not mid-pipeline checkpoint resume. TPF persists execution state, lease ownership, retry timing, and terminal outcomes, but it does not currently persist a resumable "restart from step N" checkpoint inside one pipeline run.
+This is lease-based recovery. For an explicitly paged resumable source, TPF also persists the current page index and provider-opaque page-start checkpoint. That bounds source replay to the current page. TPF does not persist arbitrary step-level or per-item continuation inside an open page.
 
 Durability protects TPF execution state and dispatch/retry flow. External systems called by your business code still need idempotency, because a retry or takeover can call the same operator or downstream system again.
 
@@ -40,6 +40,8 @@ In `QUEUE_ASYNC` mode:
 For the DynamoDB state provider, `pipeline.orchestrator.dynamo.execution-payload-table` is a separate table with `payload_id` as its partition key and `payload_part` as its sort key. Materialized multi-payloads, and inline candidates larger than the safe inline budget, are serialized once into an immutable manifest and byte chunks before the execution row is updated to reference the manifest. Chunks are limited to 256 KiB, well below DynamoDB's 400 KiB item limit; this is a byte-storage invariant, not an item-count batching setting. TPF reconstructs the original serialized payload before decoding it, so this does not change the execution result API. The payload table belongs to the DynamoDB coordinator configuration; no object-store plugin is involved.
 
 Terminal Object Publish is the connector-owned exception to the older "materialize then write a final file" pattern. When `output.to` is configured, queue-async terminal output is published through the Object Publish connector before the execution is marked successful. The persisted execution result may still keep a compatibility payload, but the external object write is not a user-authored final business step.
+
+Paged Object Publish writes bounded, attempt-safe parts under stable page and group identities. Each page commits its part manifests before the page checkpoint advances. The exhausted page triggers streaming composition in page order and publishes the existing single final object key only after composition succeeds. No page output list crosses the transition-worker result boundary.
 
 ## Crash Behaviour
 
@@ -137,6 +139,34 @@ Submit(run-async)
   -> commit transition (markSucceeded / scheduleRetry / markTerminalFailure)
   -> enqueue next transition OR finalize terminal state
 ```
+
+For a paged source, the transition repeats as follows:
+
+```mermaid
+sequenceDiagram
+    participant C as Coordinator
+    participant W as Transition worker
+    participant S as Paged source
+    participant D as Await/downstream
+    participant O as Object Publish
+    C->>W: page index + opaque start checkpoint
+    W->>S: open pinned snapshot with maxRecords
+    D-->>S: downstream demand
+    S-->>D: admitted items
+    D-->>O: live terminal chunks
+    S-->>W: normal completion after resource release
+    W->>O: commit stable page-part manifests
+    W->>C: page completion metadata
+    C->>C: fenced checkpoint/page commit
+    alt more source records
+        C->>W: next page
+    else exhausted
+        C->>O: compose final grouped objects
+        C->>C: finalise execution
+    end
+```
+
+Duplicate invocation reuses the execution, page, group, and item-position identities. A duplicate page commit observes an already advanced state and does not enqueue another successor. After confirmed owner loss, recovery reopens the current page from its start checkpoint; completed pages are not read again. A REST deadline with uncertain worker disposition remains `REMOTE_OUTCOME_UNKNOWN` and is not evidence of owner loss.
 
 Recovery points:
 
