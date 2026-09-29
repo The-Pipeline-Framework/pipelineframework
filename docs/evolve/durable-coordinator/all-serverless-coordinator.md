@@ -4,7 +4,7 @@ This design track asks one question: can TPF keep `QUEUE_ASYNC` semantics withou
 
 The answer is **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.
 
-PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
+PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. PR 3 proves those boundaries locally against AWS-shaped DynamoDB and SQS substrates without hosting the compute-first loops. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
 
 ## Recommendation
 
@@ -53,6 +53,18 @@ This is the target hosting shape. The current compute-first runtime retains its 
 | Await completion poller | Provider event-source invocation or explicit `completeAwait` action |
 | Transition worker process | Stateless function that handles one transition envelope |
 | Worker lifecycle heartbeat | Explicit heartbeat action or platform-deployment registration action |
+
+## AWS-Shaped Local Proof
+
+The runtime integration proof uses LocalStack DynamoDB and SQS as durable substrates, but invokes the coordinator and message actions directly. A bounded test driver receives one event, calls one action, and acknowledges only an `ACKNOWLEDGE` disposition. It does not start the work, await-completion, transition-worker, or sweep loop hosts.
+
+The proof covers:
+
+1. submit, signed SQS transition dispatch, durable await suspension, process replacement, replay of the original work event, await completion, resume, and typed/raw result reads;
+2. a synthetic scheduled wakeup that calls `sweepOnce(nowEpochMs)`, dispatches one due retry, and returns the structured sweep counts;
+3. terminal worker failure, SQS DLQ publication, process replacement, operator re-drive, and successful completion while preserving the pinned pipeline, contract, and release identity.
+
+This is deliberately an **AWS-shaped local proof**, not production AWS function support. DynamoDB and SQS behaviour is exercised through their AWS SDK contracts. The scheduled wakeup is an event-shaped call made by the test driver; it is not an EventBridge rule or handler. Lambda handlers, EventBridge integration, IAM, Terraform, and CloudFormation remain provider-hosting work.
 
 ## Single-Shot Action Sequences
 
@@ -201,12 +213,12 @@ The first implementation path should not assume either mapping. Build the TPF-na
 
 1. **Single-shot coordinator actions — complete.** `PipelineControlPlane` is the action contract, including structured `sweepOnce`; provider readiness is separate from periodic sweep startup and compute-first behaviour is preserved.
 2. **Loop hosting split — complete.** The sweeper and SQS pollers are compute-first loop hosts over bounded actions. Aggregate await-continuation retry scheduling remains explicitly deferred.
-3. **AWS-shaped local proof.** Use LocalStack-style Dynamo/SQS/EventBridge equivalents or scripts to invoke actions without a coordinator process.
+3. **AWS-shaped local proof — complete.** LocalStack DynamoDB/SQS integration invokes the bounded control-plane and message actions directly, including a synthetic scheduled `sweepOnce` wakeup, restart/event replay, await resume, retry, DLQ, and re-drive. It does not claim Lambda or EventBridge handler support.
 4. **Provider function handlers.** Add AWS-first function handlers only after the action model is explicit.
 5. **Durable workflow adapter spike.** Evaluate one provider backend using the same action model and document whether it preserves TPF semantics.
 
 ## Current Decision
 
-Continue from the action contract and replaceable loop hosts into the AWS-shaped local proof and provider handlers. Keep aggregate await-continuation retry scheduling visible as the remaining process-owned exception.
+Continue from the action contract, replaceable loop hosts, and AWS-shaped local proof into provider handlers. Keep aggregate await-continuation retry scheduling visible as the remaining process-owned exception.
 
 Do not implement Lambda/Azure/GCP handlers in the action-extraction slice. Do not adopt provider durable workflow engines as the primary coordinator runtime until TPF has a mapping test for await units, release identity, and operator re-drive.
