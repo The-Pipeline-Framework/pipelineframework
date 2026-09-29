@@ -8,7 +8,7 @@ If you are trying to understand what happened to the old "orchestrator", start w
 
 This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/deploy/orchestrator-runtime/). The first runnable reference is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host).
 
-The current self-host HA path is compute-first. PR 1 provides a control-plane contract of bounded single-shot actions, including a structured `sweepOnce` result. PR 2 makes the periodic sweeper and SQS pollers replaceable loop hosts over those actions, without starting loops on direct action invocation. Provider handlers and durable itemised await-continuation retry remain future FUNCTION/all-serverless HA work; see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
+The current self-host HA path is compute-first. PR 1 provides a control-plane contract of bounded single-shot actions, including a structured `sweepOnce` result. PR 2 makes the periodic sweeper and SQS pollers replaceable loop hosts over those actions, without starting loops on direct action invocation. PR 3 proves direct action invocation locally against LocalStack DynamoDB and SQS, including restart/event replay, synthetic scheduled sweep, await resume, retry, DLQ, and re-drive. It is an AWS-shaped substrate proof, not Lambda or EventBridge handler support. Provider handlers and durable itemised await-continuation retry remain future FUNCTION/all-serverless HA work; see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
 
 ## Current Shape
 
@@ -66,7 +66,7 @@ An eligible live itemized await remains in the active transition worker and foll
 9. [Contract And Release Identity](/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
 10. [Pipeline Contract And Release Model](/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
 11. [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
-12. [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) records the single-shot coordinator actions, replaceable compute-first loop hosts, and remaining provider work for FUNCTION/all-serverless HA.
+12. [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) records the single-shot coordinator actions, replaceable compute-first loop hosts, AWS-shaped local proof, and remaining provider work for FUNCTION/all-serverless HA.
 13. [Local APIs](/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
 14. [Self-Hosted Deployment](/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
 15. [Self-Hosted HA Roadmap](/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
