@@ -138,7 +138,8 @@ jobs:
             --dir intake/candidate
           test -f intake/candidate/candidate-manifest.json
           build_run_id="$(jq -er '.provenance.build.runId | select(type == "number" and . > 0)' intake/candidate/candidate-manifest.json)"
-          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$build_run_id" > intake/build-workflow-run.json
+          build_run_attempt="$(jq -er '.provenance.build.runAttempt | select(type == "number" and . > 0)' intake/candidate/candidate-manifest.json)"
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$build_run_id/attempts/$build_run_attempt" > intake/build-workflow-run.json
           if [ -n "$PULL_REQUEST_NUMBER" ]; then
             gh api "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER" > intake/pull-request.json
             gh api --paginate "repos/$SOURCE_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/files?per_page=100" \
