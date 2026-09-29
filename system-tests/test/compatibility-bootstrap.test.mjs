@@ -27,7 +27,7 @@ test('compatibility Maven candidates build in dependency order', () => {
 test('compatibility candidate identity is derived from the exact PR head', () => {
   const resolvedSet = {components: {contracts: {mavenVersion: '26.9.4-main.111111111111'}}};
   const sourcePom = '<project><modelVersion>4.0.0</modelVersion><version>26.10.0-SNAPSHOT</version></project>';
-  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), sourcePom), '26.9.4-pr.7.abcdef123456');
+  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
   assert.equal(expectedCandidateVersion({components: {}}, {...target('runtime', null), merged: true}, sourcePom), '26.10.0-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
@@ -69,6 +69,15 @@ test('candidate POMs persist exact predecessor versions for downstream consumers
   assert.throws(
     () => pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
     /must use an immutable version/
+  );
+  const withCommentedDeclaration = `<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->\n${source}`;
+  assert.equal(
+    pinDependencyProperties(withCommentedDeclaration, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    `<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->\n<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n`
+  );
+  assert.throws(
+    () => pinDependencyProperties('<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->', {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
+    /must declare tpf\.contracts\.version exactly once; found 0/
   );
 });
 

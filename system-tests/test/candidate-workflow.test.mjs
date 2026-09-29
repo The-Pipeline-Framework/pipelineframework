@@ -30,3 +30,10 @@ test('singleton candidates overlay the current attested main set', () => {
   assert.match(workflow, /candidate_image:main-\$component/);
   assert.match(workflow, /No attested current-main candidate exists for \$component at \$current_sha/);
 });
+
+test('candidate status reporting survives a failed coalescing dispatch', () => {
+  assert.match(
+    workflow,
+    /needs\.pending\.result == 'success' &&\s*\(needs\.coalesce\.result != 'success' \|\| needs\.coalesce\.outputs\.coalesced != 'true'\)/
+  );
+});

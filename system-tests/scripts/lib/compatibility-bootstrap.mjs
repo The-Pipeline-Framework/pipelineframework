@@ -16,11 +16,13 @@ export function orderedMavenTargets(config, targets) {
 }
 
 export function expectedCandidateVersion(resolvedSet, target, sourcePom) {
-  if (target.pullRequestNumber === null && sourcePom !== undefined) {
+  if (sourcePom !== undefined) {
     const projectVersion = sourcePom.replace(/<parent\b[\s\S]*?<\/parent>/, '').match(/<version>\s*([^<]+)\s*<\/version>/)?.[1];
     const sourceMatch = typeof projectVersion === 'string' ? /^(\d+\.\d+\.\d+)-SNAPSHOT$/.exec(projectVersion.trim()) : null;
     if (sourceMatch === null) throw new Error('root project version must be a semantic SNAPSHOT version');
-    return `${sourceMatch[1]}-main.${target.sourceSha.slice(0, 12)}`;
+    return target.pullRequestNumber === null
+      ? `${sourceMatch[1]}-main.${target.sourceSha.slice(0, 12)}`
+      : `${sourceMatch[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;
   }
   const baselineReference = resolvedSet.components.contracts?.mavenVersion ?? Object.values(resolvedSet.components)[0]?.mavenVersion;
   const baselineMatch = typeof baselineReference === 'string' ? /^(\d+\.\d+\.\d+)/.exec(baselineReference) : null;
@@ -102,11 +104,13 @@ export function pinDependencyProperties(sourcePom, dependencyVersions) {
     }
     const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`(<${escaped}>\\s*)[^<]*(\\s*</${escaped}>)`, 'g');
-    const matches = [...pinned.matchAll(pattern)];
+    const activePom = pinned.replace(/<!--[\s\S]*?-->/g, (comment) => ' '.repeat(comment.length));
+    const matches = [...activePom.matchAll(pattern)];
     if (matches.length !== 1) {
       throw new Error(`POM must declare ${property} exactly once; found ${matches.length}`);
     }
-    pinned = pinned.replace(pattern, (_match, opening, closing) => `${opening}${version}${closing}`);
+    const [match] = matches;
+    pinned = `${pinned.slice(0, match.index)}${match[1]}${version}${match[2]}${pinned.slice(match.index + match[0].length)}`;
   }
   return pinned;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {readdir, rm} from 'node:fs/promises';
-import {join} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 import {parseArgs} from 'node:util';
 
 const {values} = parseArgs({
@@ -18,7 +18,7 @@ async function sanitize(directory) {
   let removedMetadata = 0;
   let removedSnapshots = 0;
   const entries = await readdir(directory, {withFileTypes: true});
-  if (directory.endsWith('-SNAPSHOT') && !entries.some((entry) => entry.isDirectory())) {
+  if (isSnapshotVersionDirectory(directory, entries)) {
     await rm(directory, {recursive: true});
     return {removedMetadata, removedSnapshots: 1};
   }
@@ -34,6 +34,13 @@ async function sanitize(directory) {
     }
   }
   return {removedMetadata, removedSnapshots};
+}
+
+function isSnapshotVersionDirectory(directory, entries) {
+  const version = basename(directory);
+  if (!version.endsWith('-SNAPSHOT')) return false;
+  const artifactId = basename(dirname(directory));
+  return entries.some((entry) => entry.isFile() && entry.name.startsWith(`${artifactId}-${version}.`));
 }
 
 const removed = await sanitize(values.repository);

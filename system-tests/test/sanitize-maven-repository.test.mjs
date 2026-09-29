@@ -22,8 +22,9 @@ test('removes resolver provenance and mutable snapshots while preserving immutab
     writeFile(join(artifact, 'resolver-status.properties'), 'origin=github')
   ]);
   const snapshot = join(repository, 'org', 'pipelineframework', 'example', '1.1.0-SNAPSHOT');
-  await mkdir(snapshot, {recursive: true});
+  await mkdir(join(snapshot, 'nested'), {recursive: true});
   await writeFile(join(snapshot, 'example-1.1.0-SNAPSHOT.jar'), 'mutable');
+  await writeFile(join(snapshot, 'nested', 'content.bin'), 'nested mutable content');
   const snapshotNamedArtifact = join(repository, 'org', 'pipelineframework', 'example-SNAPSHOT', '1.0.0');
   await mkdir(snapshotNamedArtifact, {recursive: true});
   await writeFile(join(snapshotNamedArtifact, 'example-SNAPSHOT-1.0.0.jar'), 'immutable');

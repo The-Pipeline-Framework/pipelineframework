@@ -208,9 +208,9 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   assert.equal(validateCandidateManifest(manifest(), config).mavenArtifacts.length, config.components.blocks.allowedCoordinates.length);
   const historical = manifest();
   historical.mavenArtifacts.pop();
-  assert.throws(() => validateCandidateManifest(historical, config), /omits required/);
+  assert.throws(() => validateCandidateManifest(historical, config), /omits coordinates required/);
   assert.equal(
-    validateCandidateManifest(historical, config, {requireAllCoordinates: false}).mavenArtifacts.length,
+    validateCandidateManifest(historical, config, {requireAllOwnedCoordinates: false}).mavenArtifacts.length,
     config.components.blocks.allowedCoordinates.length - 1
   );
   const foreign = manifest();

@@ -735,7 +735,7 @@ jobs:
     if: >-
       always() &&
       needs.pending.result == 'success' &&
-      needs.coalesce.outputs.coalesced != 'true'
+      (needs.coalesce.result != 'success' || needs.coalesce.outputs.coalesced != 'true')
     needs: [intake, pending, coalesce, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
     runs-on: ubuntu-latest
     permissions:
