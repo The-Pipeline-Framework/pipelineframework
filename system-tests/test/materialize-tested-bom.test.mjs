@@ -8,6 +8,7 @@ import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const materializer = new URL('../scripts/materialize-tested-bom.mjs', import.meta.url).pathname;
+const fullTrainWorkflow = await readFile(new URL('../../.github/workflows/system-test-full-train.yml', import.meta.url), 'utf8');
 const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 
 const sourcePom = `<?xml version="1.0" encoding="UTF-8"?>
@@ -73,4 +74,16 @@ test('materializes one deterministic unpublished BOM over exact component versio
   const second = JSON.parse(await readFile(output, 'utf8'));
   assert.equal(second.coordinationBom.mavenVersion, version);
   assert.equal(await readFile(pomPath, 'utf8'), firstPom);
+});
+
+test('full train materializes its tested BOM and sanitizes resolver state before archiving', () => {
+  const verify = fullTrainWorkflow.indexOf('node system-tests/scripts/verify-materialized.mjs');
+  const bom = fullTrainWorkflow.indexOf('node system-tests/scripts/materialize-tested-bom.mjs');
+  const sanitize = fullTrainWorkflow.indexOf('node system-tests/scripts/sanitize-maven-repository.mjs');
+  const archive = fullTrainWorkflow.indexOf('tar -C "$local_repo" -czf "$RUNNER_TEMP/tpf-test-inputs/tpf-system-test-m2.tar.gz" .');
+  assert.ok(verify >= 0, 'full train must verify hydrated artifacts');
+  assert.ok(bom > verify, 'full train must materialize the exact tested BOM after artifact verification');
+  assert.ok(sanitize > bom, 'full train must sanitize resolver state after materializing the BOM');
+  assert.ok(archive > sanitize, 'full train must sanitize the repository before it crosses the credential boundary');
+  assert.match(fullTrainWorkflow, /--outputResolvedSet "\$RUNNER_TEMP\/tpf-test-inputs\/resolved-set\.json"/);
 });
