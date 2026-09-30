@@ -66,7 +66,7 @@ Current scope notes:
 2. Azure Durable Functions are not a separate TPF platform mode and do not change TPF runtime semantics.
 3. Queue-backed HA and checkpoint handoff remain part of the `COMPUTE` + `QUEUE_ASYNC` durable coordinator path rather than the `FUNCTION` path.
 
-For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Lambda support.
+For the durable coordinator design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) and [AWS Durable Coordination Host](/evolve/durable-coordinator/aws-durable-coordination-host). Deployed fault evidence makes Lambda Durable Functions the preferred candidate AWS `QUEUE_ASYNC` coordination host, but it is not current supported Lambda packaging.
 
 ::: warning Checkpoint Handoff Is Not Available In FUNCTION Mode
 Checkpoint publication and subscription are not available in `FUNCTION` mode.

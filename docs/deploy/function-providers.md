@@ -63,9 +63,9 @@ It does not currently document or implement:
 
 If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
 
-An all-serverless durable coordinator would be a separate design, backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
+An all-serverless durable coordinator is a separate design. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
 
-The current architecture spike for that future path is [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). It evaluates TPF-native single-shot coordinator actions first, and provider durable workflow engines such as Lambda durable functions, Step Functions, Azure Durable Functions, and Google Cloud Workflows as possible later adapters.
+The [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) defines TPF-native single-shot actions and replaceable hosts. A [deployed AWS fault proof](/evolve/durable-coordinator/aws-durable-coordination-host) makes Lambda Durable Functions the preferred candidate AWS host while the native coordinator remains the portable reference and fallback. Azure and Google provider mappings remain unevaluated beyond documentation.
 
 ## Quick Start
 
