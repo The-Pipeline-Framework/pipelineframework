@@ -20,7 +20,7 @@
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipeline-framework-root</artifactId>
-    <version>26.9.4</version>
+    <version>26.10.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>The Pipeline Framework - Root POM</name>
     <description>The root POM for the Pipeline Framework project and its framework tooling</description>
