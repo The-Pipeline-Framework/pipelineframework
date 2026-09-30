@@ -16,6 +16,9 @@ If you are new to the framework, read the [Pipeline Template Guide](./pipeline-t
 template is the authoring front door to the Functional Core: it names the application's types and
 flow before the compiler generates the imperative shell.
 
+Upgrading from 26.9.3? Start with the [26.9.4 upgrade guide](./upgrade-26.9.4) for the new product BOM,
+repository ownership boundaries, DSL v3 checks and committed IDL state.
+
 Use the focused Guides when the flow crosses a boundary or introduces reusable composition:
 
 - [Examples](./examples/) — choose a current proof or reference application;

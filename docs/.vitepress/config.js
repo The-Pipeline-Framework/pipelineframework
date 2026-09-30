@@ -117,6 +117,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/develop/'},
+            {text: 'Upgrade to 26.9.4', link: '/develop/upgrade-26.9.4'},
             {text: 'Spring Support Status', link: '/develop/spring-support'},
             {
                 text: 'Pipeline Compilation',

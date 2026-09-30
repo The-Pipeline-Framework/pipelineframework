@@ -4,13 +4,15 @@ Proper dependency management is crucial for maintaining clean, modular pipeline 
 
 ## Quarkus platform alignment
 
-TPF targets Java 21 and Quarkus **3.39.2**. Import the Quarkus platform BOM in
-the application parent, and use the same version for the Quarkus Maven plugin and
-annotation processors. Child modules should inherit that version.
+TPF targets Java 21 and Quarkus **3.39.2**. Import both the Quarkus platform BOM and the TPF product BOM in
+the application parent. The TPF BOM pins the contracts, compiler, runtime, Connectors, Blocks and Expansions that
+were tested together. Use the same Quarkus version for the Quarkus Maven plugin and annotation processors. Child
+modules should inherit those versions.
 
 ```xml
 <properties>
     <quarkus.platform.version>3.39.2</quarkus.platform.version>
+    <tpf.version>26.9.4</tpf.version>
 </properties>
 
 <dependencyManagement>
@@ -26,6 +28,13 @@ annotation processors. Child modules should inherit that version.
             <groupId>io.quarkus.platform</groupId>
             <artifactId>quarkus-amazon-services-bom</artifactId>
             <version>${quarkus.platform.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-bom</artifactId>
+            <version>${tpf.version}</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -60,9 +69,11 @@ For the upstream changes, see the Quarkus migration guides for
 [3.38](https://github.com/quarkusio/quarkus/wiki/Migration-Guide-3.38), and
 [3.39](https://github.com/quarkusio/quarkus/wiki/Migration-Guide-3.39).
 
-## Parent POM
+## Application parent POM
 
-The parent POM defines common properties and manages dependencies. The pipeline framework is included as a single dependency that bundles both runtime and build-time components:
+The application parent defines common properties and imports both product BOMs. It is an application-owned POM;
+do not use TPF's internal `framework-parent` publication coordinator as the application parent. The Quarkus extension
+dependency remains `org.pipelineframework:pipelineframework`:
 
 ```xml
 <!-- pom.xml -->
@@ -75,7 +86,7 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <quarkus.platform.version>3.39.2</quarkus.platform.version>
-        <tpf.version>26.5.2</tpf.version>
+        <tpf.version>26.9.4</tpf.version>
     </properties>
 
     <modules>
@@ -102,6 +113,13 @@ The parent POM defines common properties and manages dependencies. The pipeline 
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-bom</artifactId>
+                <version>${tpf.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>com.example</groupId>
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
@@ -109,7 +127,6 @@ The parent POM defines common properties and manages dependencies. The pipeline 
             <dependency>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>pipelineframework</artifactId>
-                <version>${tpf.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -142,7 +159,8 @@ The parent POM defines common properties and manages dependencies. The pipeline 
 </project>
 ```
 
-The `${tpf.version}` property is defined in the parent POM so every child service uses the same `org.pipelineframework:pipelineframework` version.
+The `${tpf.version}` property selects one tested product set. The imported TPF BOM supplies the matching version for
+`org.pipelineframework:pipelineframework` and the other managed TPF artifacts used by child services.
 
 ## Service POMs
 
