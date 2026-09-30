@@ -4,12 +4,13 @@ Use the current documentation for the latest release, or open a frozen snapshot 
 
 ## Current Release
 
-- [v26.9.3](/) - Current released documentation
+- [v26.9.4](/) - Current released documentation
 
 ## Recent Release Notes
 
 The v26.9.x releases do not have frozen documentation snapshots. Their release notes remain available:
 
+- [v26.9.4](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.4)
 - [v26.9.3](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.3)
 - [v26.9.2](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.2)
 - [v26.9.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.1)
@@ -42,8 +43,9 @@ flowchart LR
 
 ## Documentation Snapshot Policy
 
-This site points the current release documentation to the root. When cutting a release, create its
-frozen snapshot and update the current version entry:
+This site points the current release documentation to the root. Before tagging a release, update the
+current version entry and add its release-notes link. When the release receives a frozen documentation
+snapshot, create it with:
 
 ```bash
 cd docs
