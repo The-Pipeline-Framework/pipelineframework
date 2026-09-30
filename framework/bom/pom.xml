@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.9.4-SNAPSHOT</version>
+        <version>26.9.4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -147,26 +147,6 @@
             </dependency>
             <dependency>
                 <groupId>org.pipelineframework</groupId>
-                <artifactId>host-gmail</artifactId>
-                <version>${pipelineframework.connectors.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>host-microsoft-graph</artifactId>
-                <version>${pipelineframework.connectors.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>host-oidc-quarkus</artifactId>
-                <version>${pipelineframework.connectors.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>host-quickbooks-mcp</artifactId>
-                <version>${pipelineframework.connectors.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
                 <artifactId>http-contract</artifactId>
                 <version>${pipelineframework.connectors.version}</version>
             </dependency>
@@ -213,11 +193,6 @@
             <dependency>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>query-jpa-connector</artifactId>
-                <version>${pipelineframework.connectors.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>representation-provider-file</artifactId>
                 <version>${pipelineframework.connectors.version}</version>
             </dependency>
             <dependency>

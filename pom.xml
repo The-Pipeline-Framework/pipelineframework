@@ -20,7 +20,7 @@
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipeline-framework-root</artifactId>
-    <version>26.9.4-SNAPSHOT</version>
+    <version>26.9.4</version>
     <packaging>pom</packaging>
     <name>The Pipeline Framework - Root POM</name>
     <description>The root POM for the Pipeline Framework project and its framework tooling</description>
@@ -45,16 +45,16 @@
         <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
         <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
         <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
-        <tag>v26.9.2</tag>
+        <tag>v26.9.4</tag>
     </scm>
 
     <properties>
-        <pipelineframework.contracts.version>26.9.4-SNAPSHOT</pipelineframework.contracts.version>
-        <pipelineframework.compiler.version>26.9.4-SNAPSHOT</pipelineframework.compiler.version>
-        <pipelineframework.runtime.version>26.9.4-SNAPSHOT</pipelineframework.runtime.version>
-        <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
-        <pipelineframework.blocks.version>26.9.4-SNAPSHOT</pipelineframework.blocks.version>
-        <pipelineframework.expansions.version>26.9.4-SNAPSHOT</pipelineframework.expansions.version>
+        <pipelineframework.contracts.version>26.9.4</pipelineframework.contracts.version>
+        <pipelineframework.compiler.version>26.9.4</pipelineframework.compiler.version>
+        <pipelineframework.runtime.version>26.9.4</pipelineframework.runtime.version>
+        <pipelineframework.connectors.version>26.9.4</pipelineframework.connectors.version>
+        <pipelineframework.blocks.version>26.9.4</pipelineframework.blocks.version>
+        <pipelineframework.expansions.version>26.9.4</pipelineframework.expansions.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
