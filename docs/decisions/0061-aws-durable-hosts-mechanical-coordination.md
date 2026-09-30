@@ -33,7 +33,7 @@ The boundary becomes invalid if callback or provider history must become the onl
 ## Consequences
 
 - AWS hosting may use provider-specific infrastructure while preserving one portable TPF execution model.
-- A provider-neutral coordination-host seam must separate semantic actions and checkpoints from host mechanics.
+- The coordination-host seam separates `PipelineControlPlane` actions and the reconstructable TPF checkpoint from native-loop or provider mechanics.
 - Current AWS FUNCTION support remains distinct from this future durable coordination host until supported packaging and operations exist.
 - Other providers may implement optimised hosts if they pass the same conformance properties; infrastructure uniformity is not required.
 - AWS callback/history contract questions remain suitable for direct provider validation, but they do not move TPF semantic authority.

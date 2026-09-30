@@ -26,7 +26,7 @@ flowchart LR
 
 ## Coordination-Host Seam
 
-`PipelineControlPlane` remains the single semantic action boundary. A coordination host decides when and how to invoke those bounded, idempotent actions; it does not define another execution model.
+`PipelineControlPlane` remains the single semantic action boundary. A coordination host decides when and how to invoke those bounded, idempotent actions; it does not define another execution model. The native sweep host now has an explicit architecture fitness rule requiring that contract, while the retained AWS proof gateway separates TPF action adaptation from AWS callback mechanics.
 
 The portable seam therefore separates:
 
@@ -34,7 +34,7 @@ The portable seam therefore separates:
 - host mechanics such as process scheduling, durable checkpoints, provider callbacks, provider history, and wake-up delivery;
 - worker transport, which remains SQS in the proved AWS architecture for backpressure, redelivery, DLQ evidence, and uncertain remote outcomes.
 
-AWS callback IDs, durable execution ARNs, provider history events, and callback generations are hosting details. They must not enter the provider-neutral semantic checkpoint.
+AWS callback IDs, durable execution ARNs, provider history events, and callback generations are hosting details. They do not enter the provider-neutral semantic checkpoint: the proof's driver checkpoint wraps the TPF checkpoint with its AWS generation instead.
 
 ## Deployed Evidence
 
@@ -64,7 +64,7 @@ The callback binding is disposable mechanical state. It can wake a driver; it ca
 
 ## Promotion Boundary
 
-The proof implementation is deliberately non-production and non-published. Production support still requires the coordination-host seam, supported packaging, IAM and tenant isolation, quotas and alarms, version-retirement policy, disaster recovery, and operator runbooks.
+The proof implementation is deliberately non-production and non-published. Production support still requires supported packaging, IAM and tenant isolation, quotas and alarms, version-retirement policy, disaster recovery, and operator runbooks.
 
 Reject the AWS host if a supported implementation cannot preserve any of these invariants:
 
