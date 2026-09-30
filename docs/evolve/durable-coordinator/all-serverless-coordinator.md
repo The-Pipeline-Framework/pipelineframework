@@ -223,6 +223,6 @@ The first implementation path should not assume either mapping. Build the TPF-na
 
 ## Current Decision
 
-Extract a provider-neutral coordination-host seam over `PipelineControlPlane`. Keep native loop hosts as the portable reference implementation and package the AWS Durable proof behind the same seam. The mapping and deployed fault tests demonstrate that a provider durable execution can own substantial mechanical durability while remaining reconstructable from TPF state; provider history, retry/DLQ evidence, and provider re-drive remain non-authoritative.
+The provider-neutral coordination-host seam is `PipelineControlPlane`. Native loop hosts invoke it directly; the AWS Durable proof uses a transport adapter for those actions and a separate adapter for provider callback mechanics. Its reconstructable TPF checkpoint excludes provider generation and callback state. The mapping and deployed fault tests demonstrate that a provider durable execution can own substantial mechanical durability while remaining reconstructable from TPF state; provider history, retry/DLQ evidence, and provider re-drive remain non-authoritative.
 
 The AWS proof is not current supported Lambda deployment. Provider packaging, release, security, quotas, and operations remain separate work.
