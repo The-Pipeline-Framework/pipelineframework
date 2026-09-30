@@ -96,15 +96,15 @@ Duplicate completions and terminal publications are handled by fact keys. Retryi
 Queue-async segment execution is modeled as a small reactive flow over immutable decisions:
 
 1. `QueueAsyncSegmentPipeline` claims one due `ExecutionRecord` and wraps it as a `ClaimedSegment`.
-2. The claimed segment builds the transition command from its pinned pipeline, contract, release, step index, attempt, and input payload.
-3. The transition worker returns a `TransitionResultEnvelope`.
+2. The claimed segment builds the transition command from its pinned pipeline, contract, release, step index, attempt, input payload, and optional page context.
+3. The transition worker returns a `TransitionResultEnvelope`, including page completion metadata when it opened a paged source.
 4. `SegmentCommitPlan` converts that envelope into one immutable decision: `CompletedSegment`, `SuspendedSegment`, or `FailedSegment`.
 5. `SegmentCommitEffects` interprets that decision against the current projection stores and appends the matching control-plane facts.
-6. `TerminalPublicationBoundary` handles checkpoint and Object Publish side effects before success is committed.
+6. `TerminalPublicationBoundary` handles checkpoint and Object Publish side effects before a page advances or the logical run succeeds.
 
 The split is deliberate. `SegmentCommitPlan` is pure: it validates result shape and describes what happened without calling stores, publishers, telemetry, or dispatchers. Effects are interpreted afterwards through narrow boundaries.
 
-Terminal publication is a prepare/complete barrier before run success. When a control-plane journal is available, `TerminalPublicationBoundary` appends `TerminalPublicationPrepared` before checkpoint or Object Publish side effects run, then appends `TerminalPublicationCompleted` after the side effect succeeds. A retry that sees a completed publication skips the external effect. A retry that sees only a prepared publication may run the effect again with the same deterministic idempotency key, so the checkpoint target or object provider still needs idempotent writes. The future Dynamo append-only journal work in issue #396 is the durable storage implementation for this same model.
+Terminal publication is a prepare/complete barrier before page advancement or run success. For a non-exhausted page, it commits stable page-part manifests before the fenced successor checkpoint is stored and the next page is queued. For an exhausted page, ordered part composition completes before run success. When a control-plane journal is available, `TerminalPublicationBoundary` appends `TerminalPublicationPrepared` before checkpoint or Object Publish side effects run, then appends `TerminalPublicationCompleted` after the side effect succeeds. A retry that sees a completed publication skips the external effect. A retry that sees only a prepared publication may run the effect again with the same deterministic idempotency key, so the checkpoint target or object provider still needs idempotent writes. The future Dynamo append-only journal work in issue #396 is the durable storage implementation for this same model.
 
 ```mermaid
 sequenceDiagram
@@ -116,6 +116,7 @@ sequenceDiagram
     participant Effects as "SegmentCommitEffects"
     participant Publish as "TerminalPublicationBoundary"
     participant Store as "Projection stores"
+    participant Dispatch as "WorkDispatcher"
     participant Ledger as "SegmentBoundaryLedger"
 
     Queue->>Pipeline: "process work item"
@@ -130,12 +131,19 @@ sequenceDiagram
     Pipeline->>Effects: "interpret immutable plan"
     alt completed segment
       Effects->>Ledger: "append SegmentCompleted"
-      Effects->>Publish: "checkpoint + Object Publish"
-      Publish-->>Effects: "published or no-op"
-      Effects->>Store: "commit success projection"
-      Effects->>Ledger: "append RunSucceeded"
+      alt non-exhausted paged source
+        Effects->>Publish: "commit stable page-part manifests"
+        Publish-->>Effects: "page output committed"
+        Effects->>Store: "fenced advancePage(successor checkpoint)"
+        Effects->>Dispatch: "enqueue next page"
+      else exhausted page or unpaged terminal
+        Effects->>Publish: "compose page parts / terminal publication"
+        Publish-->>Effects: "published or no-op"
+        Effects->>Store: "commit success projection"
+        Effects->>Ledger: "append RunSucceeded"
+      end
     else suspended segment
-      Effects->>Store: "persist WAITING_EXTERNAL projection"
+      Effects->>Store: "persist WAITING_EXTERNAL + optional page completion"
       Effects->>Ledger: "append SegmentSuspended"
       Effects->>Store: "release ready continuation work"
     else failed segment

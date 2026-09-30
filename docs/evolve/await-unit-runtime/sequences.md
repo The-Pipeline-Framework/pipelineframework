@@ -30,7 +30,7 @@ Suspension is normal control flow. It should not be logged as a failed step or r
 
 ## One-To-One Over Stream
 
-An operation emitting a `Multi` creates a stream of unary completions inside one owning unit. This is the model used by `csv-payments`: each `PaymentRecord` operation result is one request and each provider completion is one final output.
+An operation emitting a `Multi` creates a stream of unary completions inside one owning unit. This is the model used by `csv-payments`: each `PaymentRecord` operation result is one request and each provider completion is one final output. For a paged source, that unit belongs to the current page transition. Its page identity scopes item positions, correlations, and idempotency keys so the same page can replay safely without colliding with another page.
 
 For brokered completion transports, the preferred queue-async path is live. `AwaitCompletionSupport` opens a live await session for the unit, source dispatch is bounded by the configured in-flight window, and each completion is recorded before it is emitted to the resumed suffix. If that live session is unavailable, the coordinator falls back to durable item continuations.
 
@@ -92,10 +92,12 @@ For an operation-result stream, the unit groups item interactions for ordering, 
 
 ## CSV Payments Itemized Await
 
-This is the concrete connector-first `csv-payments` shape. `Process Csv Payments Input` emits parsed records through a Kafka completion overlay, the approved and unapproved status branches can run per completed item through the live await session, `Finalize Payment Output` performs the mandatory terminal merge, and Object Publish writes output chunks before success is committed.
+This is the concrete connector-first `csv-payments` shape. The user submits one CSV object. `Process Csv Payments Input` opens one bounded page and emits parser-valid logical records through a Kafka completion overlay. The approved and unapproved status branches can run per completed item through the live await session, `Finalize Payment Output` joins the terminal branches, and Object Publish stages page parts. A fenced page commit starts the next page; only an exhausted page permits ordered composition and logical execution success.
 
 ```mermaid
 sequenceDiagram
+    participant Coord as QueueAsyncCoordinator
+    participant State as ExecutionStateStore
     participant Input as Process Csv Payments Input
     participant Runner as PipelineRunner
     participant Await as Process Csv Payments Input + completion
@@ -110,9 +112,12 @@ sequenceDiagram
     participant Finalize as Finalize Payment Output
     participant Publish as Object Publish
 
-    Input-->>Runner: PaymentRecord item 0
+    Coord->>State: claim page 0 at start checkpoint
+    Coord->>Input: open page(maxRecords, start checkpoint)
+
+    Input-->>Runner: page 0, PaymentRecord item 0 on demand
     Runner->>Await: execute item 0
-    Await->>AwaitCoord: create item interaction(itemIndex=0)
+    Await->>AwaitCoord: create item interaction(page 0, itemIndex=0)
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
     Provider-->>Kafka: PaymentStatus item 0
@@ -127,11 +132,12 @@ sequenceDiagram
         Live->>Unapproved: emit item 0 when requested
         Unapproved-->>Finalize: UnapprovedPaymentOutput item 0
     end
-    Finalize-->>Publish: PaymentOutput item 0 chunk
+    Finalize-->>Publish: stage page 0 output chunk
+    Note over Live,Publish: Admitted item progress does not wait for page completion or seal
 
-    Input-->>Runner: PaymentRecord item 1
+    Input-->>Runner: page 0, PaymentRecord item 1 on demand
     Runner->>Await: execute item 1
-    Await->>AwaitCoord: create item interaction(itemIndex=1)
+    Await->>AwaitCoord: create item interaction(page 0, itemIndex=1)
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
 
@@ -147,22 +153,31 @@ sequenceDiagram
         Live->>Unapproved: emit item 1 when requested
         Unapproved-->>Finalize: UnapprovedPaymentOutput item 1
     end
-    Finalize-->>Publish: PaymentOutput item 1 chunk
+    Finalize-->>Publish: stage page 0 output chunk
 
     alt no live owner after retry or re-execution
       Queue->>AwaitCoord: rebuild fallback aggregate from completed interactions
       Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
-      Await-->>Queue: suspend parent execution(awaitUnitId)
-      Queue->>Queue: persist WAITING_EXTERNAL(awaitUnitId)
+      Await-->>Queue: suspend parent execution(awaitUnitId, page completion)
+      Queue->>State: persist WAITING_EXTERNAL + suspended page completion
       Queue->>Approved: dispatch durable item continuation
       Queue->>Unapproved: dispatch durable item continuation
     end
 
-    Publish-->>Queue: target sessions closed
-    Queue->>Queue: commit execution success
+    Input-->>Runner: publisher complete after resource release
+    Runner-->>Coord: page completion(consumed, next checkpoint, exhausted=false)
+    Publish-->>Coord: page part manifest committed
+    Coord->>State: fenced commit page 0 successor checkpoint
+    Coord->>Input: open page 1 at successor checkpoint
+    Note over Coord,Publish: Repeat the same demand-driven flow for each page
+    Runner-->>Coord: exhausted page completion
+    Publish-->>Coord: final page part manifest committed
+    Coord->>Publish: compose page parts in page order
+    Publish-->>Coord: single final object published
+    Coord->>State: commit logical execution success
 ```
 
-The model is itemized until the next aggregate or terminal boundary. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, durable fallback resumes the parent execution there with the collected ordered item outputs. If the suffix remains itemized through the terminal output, Object Publish owns final grouping and object writes.
+The model is itemized until the next aggregate or terminal boundary. For an unpaged source, an authored downstream `MANY_TO_ONE` or `MANY_TO_MANY` step can resume from the collected ordered item outputs. The first paging contract rejects cross-page aggregates, so a paged suffix must remain streaming through its terminal consumer. Object Publish groups values within the live stream, commits bounded page-part manifests, and composes those parts only after source exhaustion.
 
 ```mermaid
 sequenceDiagram
@@ -173,9 +188,10 @@ sequenceDiagram
     participant Unapproved as Process Unapproved Payment Status
     participant Finalize as Finalize Payment Output
     participant Publish as Object Publish
+    participant State as ExecutionStateStore
 
     Queue->>AwaitCoord: completion already recorded, no live session
-    Queue->>ExecStore: require WAITING_EXTERNAL(awaitUnitId)
+    Queue->>ExecStore: require WAITING_EXTERNAL(awaitUnitId, page completion)
     Queue->>AwaitCoord: require dispatchComplete
     alt approved continuation
         Queue->>Approved: continue item 1
@@ -185,9 +201,19 @@ sequenceDiagram
         Unapproved-->>Finalize: UnapprovedPaymentOutput item 1
     end
     Finalize-->>Queue: PaymentOutput item 1
-    Queue->>Publish: publish terminal output before success
-    Queue->>Queue: commit execution success
+    Queue->>Publish: stage output in current page part
+    alt current page has a successor checkpoint
+        Publish-->>Queue: page part manifest committed
+        Queue->>State: fenced page advance using suspended completion
+        Queue->>Queue: enqueue next page
+    else suspended completion is exhausted
+        Publish-->>Queue: final page part manifest committed
+        Queue->>Publish: compose page parts in page order
+        Queue->>State: commit logical execution success
+    end
 ```
+
+Persisting the page completion with `WAITING_EXTERNAL` lets a resumed suffix finish the same page transition. The fallback aggregate gates reconstruction after owner loss; it does not gate an item that an active live session has already admitted.
 
 ## Durable Item Continuation Recovery
 

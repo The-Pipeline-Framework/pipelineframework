@@ -35,13 +35,14 @@ boundary. The generated descriptor pins that boundary; runtime does not reconstr
 There is no aggregate Await cardinality. Model a provider-visible batch as an explicit
 bounded canonical collection and use ordinary expansion or reduction around it.
 
-`csv-payments` uses an authored `EXPANSION` operation that emits `PaymentRecord`
+`csv-payments` uses an authored paged `ONE_TO_MANY` operation that emits `PaymentRecord`
 results. Each record receives one unary completion interaction; the framework does
-not materialize the stream into an aggregate Await request.
+not materialize the page or source into an aggregate Await request. `EXPANSION` remains
+the historical compatibility alias for the same emitted-result shape.
 
 ## Itemized Queue-Async Mechanics
 
-When a decorated operation emits a stream, TPF creates one owning await unit and one interaction per operation result. The unit gives the whole boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and item index.
+When a decorated operation emits a stream, TPF creates one owning await unit and one interaction per operation result. For a paged source, the unit belongs to the current page transition. The unit gives that boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and page-relative item index.
 
 For brokered completion transports such as Kafka, the normal path is a live await session:
 
@@ -61,7 +62,7 @@ This handles crash recovery, fast providers, and broker redelivery safely. A com
 
 The live path does not write `dispatchComplete` or update item aggregate state merely to deliver a completed item. Those are fallback-only facts, rebuilt from durable interaction rows when a live owner has been lost. Nested and recursive deferred completion remains unsupported until invocation-instance identity can preserve the exact continuation position.
 
-For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally and dispatches each trusted result through its deferred-completion overlay. The approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` performs the terminal merge before Object Publish writes `PaymentOutput` objects.
+For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally from one bounded page and dispatches each trusted result through its deferred-completion overlay. The approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` joins and normalises the terminal branches before Object Publish stages `PaymentOutput` page parts. A page-part manifest and fenced page commit precede the next page; final object composition happens after source exhaustion.
 
 ```mermaid
 sequenceDiagram
@@ -74,9 +75,10 @@ sequenceDiagram
     participant Live as "Live await session"
     participant Status as "Item continuation"
     participant Exec as "Execution store"
+    participant Page as "Page state"
 
     Input->>Await: item 0
-    Await->>Interaction: create durable interaction itemIndex=0
+    Await->>Interaction: create durable interaction pageIndex=0, itemIndex=0
     Await-->>Kafka: dispatch request 0
     Kafka-->>Queue: completion item 0
     Queue->>Interaction: complete durable interaction 0
@@ -87,8 +89,13 @@ sequenceDiagram
       Queue->>Exec: require parent WAITING_EXTERNAL(awaitUnitId)
       Queue->>Unit: require dispatchComplete for fallback release
       Queue->>Status: dispatch durable item continuation
+      Note over Exec,Page: WAITING_EXTERNAL retains validated page completion when the source publisher has finished
+      Status-->>Page: terminal suffix completes current page
+      Page->>Exec: advance page or finalise exhausted source
     end
 ```
+
+The page result becomes usable only after the source publisher completes normally and releases its resources. Cancellation or failure cannot advance its checkpoint. This page lifecycle is shown end to end in [Queue-Async And Background Execution](/deploy/orchestrator-runtime/queue-async#execution-lifecycle).
 
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits completion envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS standard queues.
 
