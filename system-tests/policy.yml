@@ -13,6 +13,7 @@
   "suites": {
     "compiler-verify": {"owner": "compiler", "entrypoint": "verify", "tier": "pr", "shard": "semantic"},
     "runtime-deployment": {"owner": "runtime", "entrypoint": "deployment", "tier": "pr", "shard": "runtime"},
+    "cli-verify": {"owner": "cli", "entrypoint": "verify", "tier": "pr", "shard": "runtime"},
     "connectors-verify": {"owner": "connectors", "entrypoint": "verify", "tier": "pr", "shard": "ecosystem"},
     "blocks-verify": {"owner": "blocks", "entrypoint": "verify", "tier": "pr", "shard": "ecosystem"},
     "expansions-resolution": {"owner": "expansions", "entrypoint": "resolution", "tier": "pr", "shard": "ecosystem"},
@@ -32,9 +33,10 @@
     "live-providers": {"owner": "connectors", "entrypoint": "live-providers", "tier": "heavy", "shard": "cloud-live"}
   },
   "componentPolicy": {
-    "contracts": {"required": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "contracts": {"required": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
     "compiler": {"required": ["runtime-deployment", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["native-builds", "cloud-deployments"]},
-    "runtime": {"required": ["connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "runtime": {"required": ["cli-verify", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "cli": {"required": ["cli-verify"], "postMerge": [], "heavy": []},
     "connectors": {"required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "cloud-deployments", "live-providers"]},
     "blocks": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
     "expansions": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
@@ -47,6 +49,7 @@
     {"component": "contracts", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "compiler", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "runtime", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
+    {"component": "cli", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "connectors", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "blocks", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "expansions", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
@@ -55,5 +58,5 @@
     {"component": "csvPayments", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "ragTurnkey", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []}
   ],
-  "fullTrain": ["compiler-verify", "runtime-deployment", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
+  "fullTrain": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
 }

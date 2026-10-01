@@ -17,7 +17,7 @@ const sourcePom = `<?xml version="1.0" encoding="UTF-8"?>
   <parent>
     <groupId>org.pipelineframework</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>26.9.4-SNAPSHOT</version>
+    <version>26.10.1-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>pipelineframework-bom</artifactId>
@@ -33,7 +33,7 @@ const sourcePom = `<?xml version="1.0" encoding="UTF-8"?>
 
 function resolvedSet() {
   const components = Object.fromEntries(
-    ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions']
+    ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions']
       .map((component) => [component, {
         repository: `The-Pipeline-Framework/pipelineframework-${component}`,
         sha,

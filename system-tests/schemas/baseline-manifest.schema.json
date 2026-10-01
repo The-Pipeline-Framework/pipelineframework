@@ -11,12 +11,13 @@
     "generatedAt": {"type": "string", "format": "date-time"},
     "components": {
       "type": "object",
-      "required": ["contracts", "compiler", "runtime", "connectors", "blocks", "expansions"],
+      "required": ["contracts", "compiler", "runtime", "cli", "connectors", "blocks", "expansions"],
       "additionalProperties": false,
       "properties": {
         "contracts": {"$ref": "#/$defs/mavenComponent"},
         "compiler": {"$ref": "#/$defs/mavenComponent"},
         "runtime": {"$ref": "#/$defs/mavenComponent"},
+        "cli": {"$ref": "#/$defs/mavenComponent"},
         "connectors": {"$ref": "#/$defs/mavenComponent"},
         "blocks": {"$ref": "#/$defs/mavenComponent"},
         "expansions": {"$ref": "#/$defs/mavenComponent"}

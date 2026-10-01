@@ -10,6 +10,7 @@
     "compiler": "pipelineframework.compiler.version",
     "connectors": "pipelineframework.connectors.version",
     "contracts": "pipelineframework.contracts.version",
+    "cli": "pipelineframework.cli.version",
     "expansions": "pipelineframework.expansions.version",
     "runtime": "pipelineframework.runtime.version"
   },
@@ -50,6 +51,7 @@
         "org.pipelineframework:persistence-plugin:jar",
         "org.pipelineframework:pipelineframework-deployment:jar",
         "org.pipelineframework:pipelineframework-release-maven-plugin:jar",
+        "org.pipelineframework:pipelineframework-release-producer:jar",
         "org.pipelineframework:pipelineframework-runtime-parent:pom",
         "org.pipelineframework:pipelineframework-runtime-spring:jar",
         "org.pipelineframework:pipelineframework:jar",
@@ -59,6 +61,22 @@
         "compiler": "tpf.compiler.version",
         "contracts": "tpf.contracts.version"
       },
+      "suiteManifest": ".github/tpf-system-tests.json"
+    },
+    "cli": {
+      "repository": "The-Pipeline-Framework/pipelineframework-cli",
+      "kind": "maven",
+      "buildJavaVersion": 21,
+      "allowedCoordinates": [
+        "org.pipelineframework:pipelineframework-cli-parent:pom",
+        "org.pipelineframework:tpf-cli:jar",
+        "org.pipelineframework:tpf-deployment-api:jar",
+        "org.pipelineframework:tpf-deployment-core:jar",
+        "org.pipelineframework:tpf-deployment-target-cloud:jar",
+        "org.pipelineframework:tpf-deployment-target-local:jar",
+        "org.pipelineframework:tpf-release-resolver:jar"
+      ],
+      "consumerVersionProperties": {"contracts": "tpf.version"},
       "suiteManifest": ".github/tpf-system-tests.json"
     },
     "connectors": {

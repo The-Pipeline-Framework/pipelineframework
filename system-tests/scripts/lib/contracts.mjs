@@ -6,7 +6,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const CANDIDATE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)-(?:pr\.([1-9][0-9]*)|main)\.([0-9a-f]{12})$/;
 const SET_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const MAVEN_COMPONENTS = ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions'];
+const MAVEN_COMPONENTS = ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions'];
 const SOURCE_COMPONENTS = ['examples', 'references', 'csvPayments', 'ragTurnkey'];
 
 export async function readJson(path) {

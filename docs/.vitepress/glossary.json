@@ -21,6 +21,7 @@
   "Connector requirement": "A capability a reusable Block declares without choosing the consuming application's endpoint, credentials, tenant, or Command authority.",
   "Dead-letter queue": "A durable destination for terminal execution failures that require investigation or controlled replay, commonly abbreviated DLQ.",
   "Deployment pattern": "A composed runtime and deployment shape, such as HTTP_LAMBDA; it is not a Transport mode.",
+  "Deployment Target": "A configured provider that deploys an already-verified Release through only the lifecycle stages that target owns.",
   "Discriminated union": "A closed canonical type with explicitly named variants whose discriminator remains stable across generated representations.",
   "Execution posture": "A Command policy constraint describing whether an effect may execute automatically or requires stronger human or machine control.",
   "Expansion": "A versioned distribution package containing related Blocks, Connectors, types, configuration, examples, documentation, or operational assets; it is not a cardinality.",
@@ -63,6 +64,7 @@
   "Step": "One typed unit in a Pipeline, implemented by authored code, an Operator, a Connector-backed boundary, Await, or another supported semantic kind.",
   "Terminal step": "A Step whose accepted result completes the current Pipeline or nested Pipeline definition.",
   "Transport mode": "The generated component call mode selected by pipeline.transport: GRPC, REST, or LOCAL.",
+  "TPF CLI": "The build-tool-neutral command and libraries that verify a Release Descriptor and deploy it to a named environment without rebuilding or rewriting it.",
   "Trusted argument": "A callable-input field copied from typed application state rather than authored by the model, then merged before canonical validation.",
   "Wire/envelope protocol": "The payload or invocation envelope layered on a transport boundary, such as PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1.",
   "Worker invocation protocol": "The narrower protocol by which a queue-async coordinator invokes remote transition workers, such as REST, gRPC, or SQS-style targets."

@@ -255,6 +255,7 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/deploy/'},
             {text: 'Pipeline Release Descriptors', link: '/deploy/release-descriptors'},
+            {text: 'TPF Deployment CLI', link: '/deploy/deployment-cli'},
             {
                 text: 'Runtime Layouts',
                 link: '/deploy/runtime-layouts/',

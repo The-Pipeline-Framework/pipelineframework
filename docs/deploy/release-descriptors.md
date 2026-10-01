@@ -49,6 +49,12 @@ named carrier contains the complete `META-INF/pipeline/**` tree byte for byte.
 `tpf.release.version` never defaults to `${project.version}`. A mutable `SNAPSHOT` must not accidentally become an
 immutable Release identity.
 
+The Mojo delegates hashing, deterministic materialisation, carrier comparison, immutable-output locking, and shared
+validation to the framework-neutral `pipelineframework-release-producer` library. A future Gradle integration calls
+that library directly; it does not need to reproduce Maven behaviour or Release semantics.
+
+After preserving the descriptor, [verify and deploy it with the TPF CLI](./deployment-cli).
+
 ## Parameters
 
 | Parameter | Default | Purpose |

@@ -132,7 +132,7 @@ function mainManifest(overrides = {}) {
 
 function baseline() {
   const components = Object.fromEntries(
-    ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions'].map((name, index) => [name, {
+    ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions'].map((name, index) => [name, {
       repository: config.components[name].repository,
       sha: index % 2 === 0 ? sha : otherSha,
       mavenVersion: '26.9.3',
@@ -148,14 +148,15 @@ function baseline() {
   return {schemaVersion: 1, revision: 7, generatedAt: '2026-09-23T00:00:00.000Z', components, testHarnesses, images: {}};
 }
 
-test('configuration covers exactly the ten extracted repositories', () => {
-  assert.equal(Object.keys(config.components).length, 10);
-  assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 10);
+test('configuration covers exactly the eleven extracted repositories', () => {
+  assert.equal(Object.keys(config.components).length, 11);
+  assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 11);
   assert.deepEqual(config.components.runtime.allowedCoordinates, [
     'org.pipelineframework:cache-plugin:jar',
     'org.pipelineframework:persistence-plugin:jar',
     'org.pipelineframework:pipelineframework-deployment:jar',
     'org.pipelineframework:pipelineframework-release-maven-plugin:jar',
+    'org.pipelineframework:pipelineframework-release-producer:jar',
     'org.pipelineframework:pipelineframework-runtime-parent:pom',
     'org.pipelineframework:pipelineframework-runtime-spring:jar',
     'org.pipelineframework:pipelineframework:jar',
@@ -176,7 +177,7 @@ test('candidate identity binds PR number and full source SHA', () => {
   });
   assert.equal(validateCandidateEvent(event(), config).component, 'blocks');
   assert.throws(() => validateCandidateEvent(event({source_sha: otherSha}), config), /short SHA/);
-  assert.throws(() => validateCandidateEvent(event({candidate_version: '26.9.4-SNAPSHOT'}), config), /does not match/);
+  assert.throws(() => validateCandidateEvent(event({candidate_version: '26.10.1-SNAPSHOT'}), config), /does not match/);
 });
 
 test('candidate event rejects unknown repositories and extra properties', () => {
@@ -217,7 +218,7 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   foreign.mavenArtifacts[0].groupId = 'com.example';
   assert.throws(() => validateCandidateManifest(foreign, config), /not owned/);
   const floating = manifest();
-  floating.mavenArtifacts[0].version = '26.9.4-SNAPSHOT';
+  floating.mavenArtifacts[0].version = '26.10.1-SNAPSHOT';
   assert.throws(() => validateCandidateManifest(floating, config), /must equal candidateVersion/);
 });
 
@@ -383,7 +384,7 @@ test('main provenance binds the candidate SHA to the default-branch build, not t
 test('baseline forbids floating Maven versions and container tags', () => {
   assert.equal(validateBaseline(baseline(), config).revision, 7);
   const floating = baseline();
-  floating.components.runtime.mavenVersion = '26.9.4-SNAPSHOT';
+  floating.components.runtime.mavenVersion = '26.10.1-SNAPSHOT';
   assert.throws(() => validateBaseline(floating, config), /floating/);
   const taggedImage = baseline();
   taggedImage.images['ghcr.io/the-pipeline-framework/csv'] = 'latest';

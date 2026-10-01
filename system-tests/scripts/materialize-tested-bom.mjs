@@ -4,7 +4,7 @@ import {dirname, join} from 'node:path';
 import {parseArgs} from 'node:util';
 import {canonicalJson, readJson} from './lib/contracts.mjs';
 
-const MAVEN_COMPONENTS = ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions'];
+const MAVEN_COMPONENTS = ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions'];
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const VERSION_PATTERN = /^(\d+\.\d+\.\d+)(?:$|[-.][A-Za-z0-9.-]+$)/;
 

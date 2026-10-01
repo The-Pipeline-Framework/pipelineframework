@@ -15,8 +15,8 @@ async function fixture(command) {
   await writeFile(join(directory, 'wrapper.sh'), '#!/usr/bin/env bash\nprintf \'%s\\n\' "${MAVEN_ARGS:-}" > "$TPF_CAPTURE"\n');
   await chmod(join(directory, 'wrapper.sh'), 0o755);
   await writeFile(join(directory, 'pom.xml'), `<project><properties>
-    <pipelineframework.contracts.version>26.9.4-SNAPSHOT</pipelineframework.contracts.version>
-    <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
+    <pipelineframework.contracts.version>26.10.1-SNAPSHOT</pipelineframework.contracts.version>
+    <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
   </properties></project>`);
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({schemaVersion: 1, suites: {verify: {command, timeoutMinutes: 1}}}));
   await writeFile(join(directory, 'resolved.json'), JSON.stringify({
