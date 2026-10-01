@@ -178,7 +178,23 @@ completion/resume events. That means the parser is being paced by reactive deman
 deferred-completion in-flight window, not by a forced sleep. Object Publish runs at the terminal
 boundary after status output exists and before success is committed.
 
-The repository also keeps a 10k self-host acceptance for one user-submitted source. That acceptance is the paging proof: it exercises bounded transitions and final composition across multiple pages. It is separate from the one-page replay capture and does not turn its timing into a large-workload SLA. A slow downstream can still make one bounded page exceed a remote worker deadline.
+Two additional [viewer datasets](/replay-viewer/) capture paging in the CSV Payments LOCAL
+monolith. Each run submits one file. Both use `paging.maxRecords: 1000`, the same deterministic
+`0.08` provider-rejection rule, and a 60-second provider permit wait. The only pacing change is
+the mock provider's rate limit:
+
+| Capture | Provider permits/s | Source pages | Output rows | Replay duration | Events |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1k slow provider | 10 | 1 | 1,000 | 100.811s | 17,007 |
+| 10k paged | 100 | 10 | 10,000 | 100.932s | 170,043 |
+
+The 10k replay has ten source starts and completions, 10,000 source emits, and 10,000 each of
+Await dispatch, admission acquisition, and admission release. It records 9,170 approved and
+830 unapproved branch starts. The first status item appears at 0.925s, while the last source
+item appears at 93.379s; healthy downstream work overlaps source progress. The final CSV has
+one header and exactly 10,000 rows. The paired timings show provider-paced throughput in these
+captured runs, not a general throughput guarantee. These LOCAL captures do not establish
+remote-worker takeover or a remote paged-source transport.
 
 Command telemetry has two layers:
 
@@ -225,6 +241,8 @@ It ships with built-in datasets and also accepts imported replay JSON files gene
 The viewer exposes:
 
 - `CSV Payments built-in`
+- `CSV Payments 1k slow provider`
+- `CSV Payments 10k paged`
 - `Search built-in pre-warm`
 - `Search built-in`
 - `Custom replay`

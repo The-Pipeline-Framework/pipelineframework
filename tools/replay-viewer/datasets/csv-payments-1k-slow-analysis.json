@@ -1,0 +1,37 @@
+{
+  "sourceReplay": "tools/replay-viewer/datasets/csv-payments-1k-slow.json.gz",
+  "generatedFrom": "csv-kafka-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json",
+  "inputFile": "csv-kafka-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+  "capture": {
+    "layout": "monolith",
+    "providerPermitsPerSecond": 10.0,
+    "providerPermitTimeoutMillis": 60000,
+    "providerRejectProbability": 0.08,
+    "pagingMaxRecords": 1000
+  },
+  "artifactRun": {
+    "sourceRecords": 1000,
+    "outputRecords": 1000,
+    "pageCount": 1,
+    "replayDurationMs": 100811,
+    "executionBoundaryDurationMs": 100224,
+    "replayEventCount": 17007,
+    "sourceEmits": 1000,
+    "awaitDispatched": 1000,
+    "awaitAdmissionAcquired": 1000,
+    "awaitAdmissionReleased": 1000,
+    "branchStarts": {
+      "approved": 907,
+      "unapproved": 93
+    },
+    "timingSeconds": {
+      "firstStatus": 0.833,
+      "lastSourceEmit": 25.706,
+      "lastObjectPublish": 100.811
+    }
+  },
+  "provenance": {
+    "compressedSha256": "e118f3a9e2a8daa46106d6d1fb384be0cb6ad497c7650d62ea178eefc44b5633",
+    "rawSha256": "a2cda0734cd2c2747e2d1affced2d808f34e4e73e1fa8b55d293cf2c1364093e"
+  }
+}

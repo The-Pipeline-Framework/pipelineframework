@@ -586,7 +586,7 @@ The parser pace in the connector-first path is reactive. The OpenCSV provider st
 Application code renders terminal values into object payload chunks. TPF owns grouping, key templating, provider selection, write idempotency, backpressure, telemetry, and lifecycle reporting.
 
 ```java
-public final class CsvPaymentOutputPublishMapper
+public final class ExampleStreamingPaymentOutputMapper
     implements StreamingObjectPublishMapper<PaymentOutput> {
 
   @Override
@@ -618,6 +618,12 @@ public final class CsvPaymentOutputPublishMapper
   }
 }
 ```
+
+For a paged source, the terminal mapper implements `PagedStreamingObjectPublishMapper<T>`.
+`openPageGroup` renders only a page's body; `groupPrefix` and `groupSuffix` render once around
+the composed object, and `combinePageMetadata` folds bounded metadata across pages. CSV
+Payments puts its header in `groupPrefix` and omits the per-page writer header from each body,
+so ten page parts still produce one CSV header and one final object.
 
 ## Connectors
 
