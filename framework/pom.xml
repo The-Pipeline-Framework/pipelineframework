@@ -175,6 +175,7 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
+                            <checksums>required</checksums>
                             <excludeArtifacts>
                                 <!-- Keep in sync with public-artifacts.json; the verifier checks the effective plugin configuration. -->
                                 <excludeArtifact>transport-completeness-tests</excludeArtifact>
