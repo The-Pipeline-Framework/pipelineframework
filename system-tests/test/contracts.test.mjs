@@ -177,7 +177,7 @@ test('candidate identity binds PR number and full source SHA', () => {
   });
   assert.equal(validateCandidateEvent(event(), config).component, 'blocks');
   assert.throws(() => validateCandidateEvent(event({source_sha: otherSha}), config), /short SHA/);
-  assert.throws(() => validateCandidateEvent(event({candidate_version: '26.9.4-SNAPSHOT'}), config), /does not match/);
+  assert.throws(() => validateCandidateEvent(event({candidate_version: '26.10.1-SNAPSHOT'}), config), /does not match/);
 });
 
 test('candidate event rejects unknown repositories and extra properties', () => {
@@ -218,7 +218,7 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   foreign.mavenArtifacts[0].groupId = 'com.example';
   assert.throws(() => validateCandidateManifest(foreign, config), /not owned/);
   const floating = manifest();
-  floating.mavenArtifacts[0].version = '26.9.4-SNAPSHOT';
+  floating.mavenArtifacts[0].version = '26.10.1-SNAPSHOT';
   assert.throws(() => validateCandidateManifest(floating, config), /must equal candidateVersion/);
 });
 
@@ -384,7 +384,7 @@ test('main provenance binds the candidate SHA to the default-branch build, not t
 test('baseline forbids floating Maven versions and container tags', () => {
   assert.equal(validateBaseline(baseline(), config).revision, 7);
   const floating = baseline();
-  floating.components.runtime.mavenVersion = '26.9.4-SNAPSHOT';
+  floating.components.runtime.mavenVersion = '26.10.1-SNAPSHOT';
   assert.throws(() => validateBaseline(floating, config), /floating/);
   const taggedImage = baseline();
   taggedImage.images['ghcr.io/the-pipeline-framework/csv'] = 'latest';

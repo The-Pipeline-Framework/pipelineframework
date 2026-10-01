@@ -65,7 +65,7 @@ fixtures and deployment-topology assertions belong to their application reposito
 
 ## Cross-artifact compatibility
 
-`pipelineframework` owns the product BOM and `framework/transport-completeness-tests`. For `26.9.4-SNAPSHOT`, that
+`pipelineframework` owns the product BOM and `framework/transport-completeness-tests`. For `26.10.1-SNAPSHOT`, that
 module checks compatibility between the compiler, runtime and Connector artifacts selected by the product BOM. It
 currently establishes:
 

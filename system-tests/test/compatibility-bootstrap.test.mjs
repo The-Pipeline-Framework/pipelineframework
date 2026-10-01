@@ -32,7 +32,7 @@ test('compatibility candidate identity is derived from the exact PR head', () =>
   assert.equal(expectedCandidateVersion({components: {}}, {...target('runtime', null), merged: true}, sourcePom), '26.10.0-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
-  assert.throws(() => candidateFromOutput('candidate=26.9.4-SNAPSHOT\n'), /exactly one valid version/);
+  assert.throws(() => candidateFromOutput('candidate=26.10.1-SNAPSHOT\n'), /exactly one valid version/);
 });
 
 test('candidate versions use only the active root project version', () => {
@@ -73,7 +73,7 @@ test('compatibility bootstrap installs candidates without repeating owner test s
 });
 
 test('candidate POMs persist exact predecessor versions for downstream consumers', () => {
-  const source = '<properties>\n<tpf.contracts.version>26.9.4-SNAPSHOT</tpf.contracts.version>\n</properties>\n';
+  const source = '<properties>\n<tpf.contracts.version>26.10.1-SNAPSHOT</tpf.contracts.version>\n</properties>\n';
   assert.equal(
     pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-pr.35.abcdef123456'}),
     '<properties>\n<tpf.contracts.version>26.9.4-pr.35.abcdef123456</tpf.contracts.version>\n</properties>\n'
@@ -83,7 +83,7 @@ test('candidate POMs persist exact predecessor versions for downstream consumers
     /must declare missing\.version exactly once/
   );
   assert.throws(
-    () => pinDependencyProperties(source, {'tpf.contracts.version': '26.9.4-SNAPSHOT'}),
+    () => pinDependencyProperties(source, {'tpf.contracts.version': '26.10.1-SNAPSHOT'}),
     /must use an immutable version/
   );
   const withCommentedDeclaration = `<!-- <tpf.contracts.version>obsolete</tpf.contracts.version> -->\n${source}`;

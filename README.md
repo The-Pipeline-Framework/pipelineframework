@@ -196,7 +196,7 @@ Import `pipelineframework-bom` to use the component versions verified together b
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-bom</artifactId>
-            <version>26.9.4-SNAPSHOT</version>
+            <version>26.10.1-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
