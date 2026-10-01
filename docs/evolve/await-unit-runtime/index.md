@@ -245,7 +245,7 @@ classDiagram
 
     class CsvAwaitUnitRecord {
       stepId = Process Csv Payments Input
-      cardinality = ONE_TO_ONE
+      cardinality = ONE_TO_MANY
       expectedItemCount = payment records
       completedItemCount = provider completions
       dispatchComplete

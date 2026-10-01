@@ -127,7 +127,7 @@ flowchart LR
 
 The loop advances only after the current publisher has completed, released its source resources, and committed its page output. A slow Await provider or Object Publish target withholds downstream capacity, which stops parser demand inside the open page. Opening a page therefore does not drain it, and page completion does not gate an item already admitted to the live suffix.
 
-The built-in CSV Payments replay predates paging and proves the live path reused inside each page.
+The built-in CSV Payments replay predates paging and shows live demand and early per-item progress in one unpaged execution.
 That proof run used execution max concurrency `250` and
 a deterministic `0.08` provider-rejection rule. It processed 1k records in `19.685s` of replay
 time and showed both status paths starting at `1.573s`, before parser emission finished at
