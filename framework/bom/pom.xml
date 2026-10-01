@@ -12,7 +12,7 @@
     <artifactId>pipelineframework-bom</artifactId>
     <packaging>pom</packaging>
     <name>The Pipeline Framework BOM</name>
-    <description>Tested compatible versions of TPF contracts, compiler, runtime, connectors, Blocks, and Expansions.</description>
+    <description>Tested compatible versions of TPF contracts, compiler, runtime, deployment tooling, connectors, Blocks, and Expansions.</description>
 
     <build>
         <plugins>
@@ -100,6 +100,17 @@
             </dependency>
             <dependency>
                 <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-release-producer</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-release-maven-plugin</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+                <type>maven-plugin</type>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
                 <artifactId>persistence-plugin</artifactId>
                 <version>${pipelineframework.runtime.version}</version>
             </dependency>
@@ -112,6 +123,38 @@
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>repository-plugin</artifactId>
                 <version>${pipelineframework.runtime.version}</version>
+            </dependency>
+
+            <!-- Build-tool-neutral Release resolution and deployment tooling. -->
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-release-resolver</artifactId>
+                <version>${pipelineframework.cli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-deployment-api</artifactId>
+                <version>${pipelineframework.cli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-deployment-core</artifactId>
+                <version>${pipelineframework.cli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-deployment-target-local</artifactId>
+                <version>${pipelineframework.cli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-deployment-target-cloud</artifactId>
+                <version>${pipelineframework.cli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>tpf-cli</artifactId>
+                <version>${pipelineframework.cli.version}</version>
             </dependency>
 
             <!-- Connector contracts, providers, and host integrations. -->

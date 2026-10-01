@@ -22,6 +22,7 @@ flowchart TD
   apps --> blocks[Blocks]
   apps --> connectors[Connectors]
   apps --> runtime[Runtime integrations]
+  cli[TPF CLI and deployment libraries] --> contracts
   apps --> contracts[Contracts]
 
   expansions --> blocks
@@ -39,6 +40,7 @@ flowchart TD
   coordination --> compiler
   coordination --> contracts
   coordination --> runtime
+  coordination --> cli
   coordination --> connectors
   coordination --> blocks
   coordination --> expansions
@@ -55,7 +57,8 @@ suites.
 | --- | --- | --- |
 | [`pipelineframework-contracts`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts) | Authored API, semantic model, DSL, shared serialization, runtime API/protocol/SPI, and portable runtime core | Compiler implementation, Quarkus/Spring integration, provider implementations |
 | [`pipelineframework-compiler`](https://github.com/The-Pipeline-Framework/pipelineframework-compiler) | Production JSR-269 build host, semantic phases, validation, contract generation, and source renderers | Runtime implementation or Quarkus deployment ownership |
-| [`pipelineframework-runtime`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime) | Quarkus runtime/deployment pair, Spring runtime adapter, foundational plugins, and their smoke tests | Compiler semantics, Connectors, Blocks, or applications |
+| [`pipelineframework-runtime`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime) | Quarkus runtime/deployment pair, Spring runtime adapter, foundational plugins, framework-neutral Release producer, Maven Release adapter, and their tests | Compiler semantics, deployment environments, Connectors, Blocks, or applications |
+| [`pipelineframework-cli`](https://github.com/The-Pipeline-Framework/pipelineframework-cli) | Release resolution, deployment contracts and orchestration, local target, public Cloud API client, and standalone CLI | Build output inference, private Cloud domain logic, or infrastructure engines |
 | [`pipelineframework-connectors`](https://github.com/The-Pipeline-Framework/pipelineframework-connectors) | Typed I/O implementations, representation providers, import tooling, and TPF-owned external-service hosts | Runtime semantics or reusable Pipeline composition |
 | [`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks) | Reusable compile-time Pipeline definitions | Application bindings, credentials, Command authority, or runtime implementations |
 | [`pipelineframework-expansions`](https://github.com/The-Pipeline-Framework/pipelineframework-expansions) | Version-aligned distribution POMs over related Blocks, Connectors, and integration assets | A new step kind, compiler semantics, or application authority |
@@ -84,6 +87,11 @@ The runtime repository publishes the Quarkus runtime/deployment artifacts, Sprin
 artifacts. The paired Quarkus artifacts may evolve atomically inside that repository while their dependencies on
 compiler and contract artifacts remain ordinary released dependencies.
 
+It also publishes `pipelineframework-release-producer` and `pipelineframework-release-maven-plugin`. The producer
+owns build-tool-neutral Release materialisation; the Mojo only adapts Maven inputs. The CLI repository publishes the
+resolver, deployment API/core, local and Cloud target adapters, and executable `tpf` distribution. Its Cloud adapter
+is a client of a public API, not the private TPF Cloud service implementation.
+
 ## Shared runtime seam
 
 Application code and separately operated execution infrastructure may both depend on the portable runtime contract
@@ -93,8 +101,8 @@ SPIs.
 
 It must not expose Quarkus or Spring internals, worker implementations, provider clients, resolved secrets,
 tenant-specific connection policy, or deployment wiring. Those details belong to the runtime host or Connector that
-implements the contract. TPF does not currently publish a hosted SaaS runtime; this boundary exists so self-hosted
-deployments and any future separately operated workers do not have to share implementation ownership.
+implements the contract. The OSS distribution does not contain the private TPF Cloud service; this boundary lets
+self-hosted deployments and separately operated workers share contracts without sharing implementation ownership.
 
 ## Releases and compatibility
 

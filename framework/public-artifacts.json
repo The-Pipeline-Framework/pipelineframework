@@ -147,6 +147,60 @@
       "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
+      "artifactId": "pipelineframework-release-producer",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "pipelineframework-release-maven-plugin",
+      "packaging": "maven-plugin",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-runtime repository"
+    },
+    {
+      "artifactId": "pipelineframework-cli-parent",
+      "packaging": "pom",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-release-resolver",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-deployment-api",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-deployment-core",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-deployment-target-local",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-deployment-target-cloud",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
+      "artifactId": "tpf-cli",
+      "packaging": "jar",
+      "ownership": "external",
+      "note": "Published from the standalone pipelineframework-cli repository"
+    },
+    {
       "artifactId": "persistence-plugin",
       "packaging": "jar",
       "ownership": "external",

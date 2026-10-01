@@ -132,7 +132,7 @@ function mainManifest(overrides = {}) {
 
 function baseline() {
   const components = Object.fromEntries(
-    ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions'].map((name, index) => [name, {
+    ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions'].map((name, index) => [name, {
       repository: config.components[name].repository,
       sha: index % 2 === 0 ? sha : otherSha,
       mavenVersion: '26.9.3',
@@ -148,14 +148,15 @@ function baseline() {
   return {schemaVersion: 1, revision: 7, generatedAt: '2026-09-23T00:00:00.000Z', components, testHarnesses, images: {}};
 }
 
-test('configuration covers exactly the ten extracted repositories', () => {
-  assert.equal(Object.keys(config.components).length, 10);
-  assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 10);
+test('configuration covers exactly the eleven extracted repositories', () => {
+  assert.equal(Object.keys(config.components).length, 11);
+  assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 11);
   assert.deepEqual(config.components.runtime.allowedCoordinates, [
     'org.pipelineframework:cache-plugin:jar',
     'org.pipelineframework:persistence-plugin:jar',
     'org.pipelineframework:pipelineframework-deployment:jar',
     'org.pipelineframework:pipelineframework-release-maven-plugin:jar',
+    'org.pipelineframework:pipelineframework-release-producer:jar',
     'org.pipelineframework:pipelineframework-runtime-parent:pom',
     'org.pipelineframework:pipelineframework-runtime-spring:jar',
     'org.pipelineframework:pipelineframework:jar',

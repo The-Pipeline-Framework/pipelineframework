@@ -33,7 +33,7 @@ const sourcePom = `<?xml version="1.0" encoding="UTF-8"?>
 
 function resolvedSet() {
   const components = Object.fromEntries(
-    ['contracts', 'compiler', 'runtime', 'connectors', 'blocks', 'expansions']
+    ['contracts', 'compiler', 'runtime', 'cli', 'connectors', 'blocks', 'expansions']
       .map((component) => [component, {
         repository: `The-Pipeline-Framework/pipelineframework-${component}`,
         sha,

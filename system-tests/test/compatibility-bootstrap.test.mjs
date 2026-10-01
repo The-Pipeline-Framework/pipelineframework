@@ -14,13 +14,14 @@ test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
     ['connectors', target('connectors', 17)],
     ['runtime', target('runtime', 7)],
+    ['cli', target('cli', 9)],
     ['compiler', target('compiler', 7)],
     ['contracts', target('contracts', 28)],
     ['csvPayments', target('csvPayments', 5)]
   ]);
   assert.deepEqual(
     orderedMavenTargets(config, targets).map(({component}) => component),
-    ['contracts', 'compiler', 'runtime', 'connectors']
+    ['contracts', 'cli', 'compiler', 'runtime', 'connectors']
   );
 });
 
