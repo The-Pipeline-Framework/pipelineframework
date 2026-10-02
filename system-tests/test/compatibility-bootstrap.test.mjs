@@ -115,6 +115,13 @@ test('compatibility targets include changed main and the complete downstream Mav
   );
   assert.equal(augmented.targets.find(({component}) => component === 'connectors').sourceSha, connectorSha);
   assert.equal(augmented.targets.find(({component}) => component === 'blocks').pullRequestNumber, null);
+  delete baseline.components.cli;
+  const onboarding = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('runtime', 7)]}, heads);
+  const cli = onboarding.targets.find(({component}) => component === 'cli');
+  assert.equal(cli.sourceSha, baselineSha);
+  assert.equal(cli.pullRequestNumber, null);
+  delete baseline.components.contracts;
+  assert.throws(() => augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: []}, heads), /baseline entry is missing for contracts/);
 });
 
 test('compatibility baseline is portable and cached by immutable digest before bootstrap', () => {

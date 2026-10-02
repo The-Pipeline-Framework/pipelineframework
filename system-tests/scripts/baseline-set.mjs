@@ -17,7 +17,7 @@ for (const name of ['components', 'baseline', 'baselineDigest', 'output']) {
 }
 if (!/^sha256:[0-9a-f]{64}$/.test(values.baselineDigest)) throw new Error('--baselineDigest must be immutable');
 const config = validateComponentsConfig(await readJson(values.components));
-const baseline = validateBaseline(await readJson(values.baseline), config);
+const baseline = validateBaseline(await readJson(values.baseline), config, {allowPreCli: true});
 const resolved = {
   schemaVersion: 1,
   baselineDigest: values.baselineDigest,

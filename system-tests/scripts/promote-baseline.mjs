@@ -17,7 +17,7 @@ for (const name of ['components', 'current', 'resolvedSet', 'generatedAt', 'outp
   if (values[name] === undefined) throw new Error(`--${name} is required`);
 }
 const config = validateComponentsConfig(await readJson(values.components));
-const current = validateBaseline(await readJson(values.current), config);
+const current = validateBaseline(await readJson(values.current), config, {allowPreCli: true});
 const next = nextBaseline(current, await readJson(values.resolvedSet), values.generatedAt);
 validateBaseline(next, config);
 await writeFile(values.output, `${JSON.stringify(next, null, 2)}\n`);
