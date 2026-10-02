@@ -28,6 +28,7 @@ Add the release plugin to the application module that owns the deployable artefa
     </configuration>
     <executions>
         <execution>
+            <phase>verify</phase>
             <goals>
                 <goal>generate-release-descriptor</goal>
             </goals>
@@ -39,7 +40,7 @@ Add the release plugin to the application module that owns the deployable artefa
 The goal runs in Maven's `verify` phase. Supply the immutable Release version explicitly:
 
 ```sh
-./mvnw verify -Dtpf.release.version=2026.09.28.1
+./mvnw verify -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 The output is `target/pipeline-release.json`. The goal reads
@@ -53,7 +54,19 @@ The Mojo delegates hashing, deterministic materialisation, carrier comparison, i
 validation to the framework-neutral `pipelineframework-release-producer` library. A future Gradle integration calls
 that library directly; it does not need to reproduce Maven behaviour or Release semantics.
 
-After preserving the descriptor, [verify and deploy it with the TPF CLI](./deployment-cli).
+Optionally publish the Maven artefacts referenced by its immutable coordinates:
+
+```sh
+./mvnw deploy -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+Standard `deploy` traverses `verify` again; use the same Release version and keep final bytes identical. Preserve
+`target/pipeline-release.json` separately and unchanged. Configure the plugin → run `mvn verify` → optionally publish
+with `mvn deploy` → preserve the descriptor → [verify or deploy it with the CLI](./deployment-cli).
+[Install the CLI container](./cli-installation) for the Maven-to-CLI hand-off.
+
+The plugin produces a Release. It has no deployment-target selection and is not a Cloud deployment client; there is
+no `tpf:deploy` Maven goal.
 
 ## Parameters
 
@@ -98,7 +111,8 @@ through different Maven repository roots or environment-specific access to its n
 its Release identity.
 
 Promotable Maven locations reject `SNAPSHOT` versions. Publish the exact bytes under an immutable repository
-coordinate before producing the final descriptor.
+coordinate using standard Maven publication before an independent CLI consumer attempts resolution. The descriptor
+can be produced during `verify` before publication; its digests must still match the exact subsequently published bytes.
 
 S3 URLs, HTTP endpoints, tags, and mutable Maven coordinates are not canonical Release locations. A post-push tool
 may add an OCI image only after it can observe the authoritative digest; it uses the same Release model rather than

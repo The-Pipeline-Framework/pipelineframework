@@ -3,6 +3,9 @@
 The public `tpf` CLI starts from an existing [Pipeline Release Descriptor](./release-descriptors). It never invokes
 Maven or Gradle, rebuilds an artefact, or changes Release identity.
 
+[Install the Docker/Podman CLI wrapper](./cli-installation) before following these commands. The initial supported
+distribution is the Java 21 GHCR image; native downloads and JReleaser packaging follow native conformance.
+
 ```mermaid
 flowchart LR
     P[mvn package] --> V[mvn verify]
@@ -12,21 +15,25 @@ flowchart LR
     R --> Verify[tpf release verify]
     Verify --> Deploy[tpf deploy environment]
     Deploy --> Local[Local process target]
-    Deploy --> Cloud[TPF Cloud public API]
+    Deploy --> Cloud[Documented Cloud service API]
 ```
 
-## Build, publish, and preserve
+## Maven publication and the CLI hand-off
 
-Build the application normally. The Release plugin runs during `verify`, after packaging, so its digests describe the
-final bytes:
+Configure [`pipelineframework-release-maven-plugin:generate-release-descriptor`](./release-descriptors#configure-the-maven-goal)
+in the application POM, then build normally. The Release plugin runs during `verify`, after packaging, so its digests
+describe the final bytes:
 
 ```sh
-./mvnw verify -Dtpf.release.version=2026.09.28.1
-./mvnw deploy
+./mvnw verify -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+# Optional: publish the exact Maven artefacts referenced by the descriptor.
+./mvnw deploy -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-`mvn deploy` publishes Maven artefacts; it does not deploy the application. Preserve the unchanged
-`target/pipeline-release.json` as a separate CI artefact and pass it to later verification and deployment jobs.
+`mvn deploy` publishes Maven artefacts; it does not deploy the application. It also traverses `verify`, so supply the
+same Release version again and preserve the resulting descriptor. The plugin is the Release producer, not an
+alternative Cloud deployment client; there is no `tpf:deploy` Maven goal or Maven deployment-target selection. Preserve
+the unchanged `target/pipeline-release.json` as a separate CI artefact and pass it to later verification and deployment jobs.
 
 ## Verify from the descriptor
 
@@ -52,7 +59,8 @@ Deployment inputs live in strict `tpf-deploy.yaml`, separate from the Release:
 resolverProfiles:
   default:
     maven:
-      settings: ~/.m2/settings.xml
+      settings: /home/tpf/.m2/settings.xml
+      localRepository: /home/tpf/.tpf/maven
     oci:
       credentials: docker-config
 
@@ -80,10 +88,20 @@ environments:
 ```
 
 Resolver profiles may point at different repository endpoints and credential sources. Secret values stay in Maven
-settings, Docker credential helpers, environment variables, or workload identity systems; they do not belong in the
-configuration file or Release Descriptor. Unknown keys, duplicate names, and references to unknown profiles fail.
+settings, Docker credential configuration, environment variables, or workload identity systems; they do not belong
+in the configuration file or Release Descriptor. In the container, host Docker helpers are unavailable unless explicitly
+provided with their backing stores; use dedicated `auths` configuration or credential references. Unknown keys,
+duplicate names, and references to unknown profiles fail.
 
-## Deploy locally
+## Local author use
+
+Verify a local descriptor using the [same-path mount for host `file:` URIs](./cli-installation#configure-container-paths):
+
+```sh
+tpf release verify --release target/pipeline-release.json
+```
+
+The `local-process` provider is available in source builds:
 
 ```sh
 tpf deploy local --release pipeline-release.json
@@ -92,25 +110,59 @@ tpf deploy local --release pipeline-release.json
 The initial `local-process` target supports verified `jar` and `native-binary` units selected by Release
 `artifactId`. JARs use the configured Java executable and native units execute directly. All artefacts and Compiled
 Truth verify before any process starts. Readiness failure stops processes started by that attempt; success ends in
-`ACTIVE`.
+`ACTIVE`. The container wrapper stops when the CLI exits and cannot preserve child application processes beyond
+that lifetime; it is suitable for verification and Cloud registration, not a persistent local runtime.
 
 Local containers, Kubernetes, LocalStack, and Lambda emulation are separate future Deployment Target providers. A
 local target is not defined as “run one JVM”.
 
-## Register with TPF Cloud
+## Human Cloud deployment
+
+Configure the available Cloud endpoint, existing Application and Environment in `tpf-deploy.yaml`. The CLI is currently
+non-interactive: obtain an authorised bearer token through the organisation's identity flow before running it.
+The installation wrapper forwards the selected variable by name:
 
 ```sh
+# TPF_CREDENTIAL_TPF_STAGING is supplied securely by your identity/session tooling.
+export TPF_CLOUD_CREDENTIAL_ENV=TPF_CREDENTIAL_TPF_STAGING
+tpf release verify --release pipeline-release.json
 tpf deploy staging --release pipeline-release.json
 ```
 
-The OSS CLI sends the exact descriptor bytes, bearer or workload credentials, and an idempotency key to the public
+The OSS CLI sends the exact descriptor bytes, bearer or workload credentials, and an idempotency key to the documented
 TPF Cloud API. The first Cloud target registers an immutable Release and creates a `CUSTOMER_MANAGED` Deployment for
 an existing Application and Environment. Its successful terminal status is `REGISTERED`; physical infrastructure,
 runtime verification, and activation are reported as `NOT_REQUESTED`.
 
+Cloud deployment, onboarding and related external services are private and are not shipped with the OSS CLI.
+Their APIs must be deployed and reachable before a Cloud command can work. An example URL is not an available
+service. The caller must already have organisation authority and the target Application and Environment.
+
 TPF Cloud itself is not part of the OSS repository. Organisation authority, Cloud domain records, provisioning, and
 Coordinator association remain in that private service. The public module is a thin API client and contains none of
 that private implementation.
+
+## CI Cloud deployment
+
+Start the deployment job in a fresh directory with only the preserved `pipeline-release.json` plus external resolver
+and deployment configuration. Install the wrapper, use the digest reported by the successful CLI publication, and
+supply a short-lived bearer credential through the CI secret or workload-identity system:
+
+```sh
+export TPF_IMAGE='ghcr.io/the-pipeline-framework/tpf@sha256:<reported 64-character digest>'
+export TPF_MAVEN_SETTINGS="$CI_RESOLVER_DIR/settings.xml"
+export TPF_OCI_CONFIG="$CI_RESOLVER_DIR/oci-config.json"
+export TPF_CREDENTIAL_DIR="$CI_STATE_DIR/tpf"
+export TPF_CLOUD_CREDENTIAL_ENV=TPF_CREDENTIAL_TPF_STAGING
+# CI supplies TPF_CREDENTIAL_TPF_STAGING; do not echo it or put it in the descriptor.
+tpf release verify --release pipeline-release.json --config tpf-deploy.yaml --output json
+tpf deploy staging --release pipeline-release.json --config tpf-deploy.yaml --output json
+```
+
+Replace the digest placeholder, use absolute host resolver/state paths and container paths inside the YAML. Point
+Maven repositories at already-published immutable coordinates. This job needs a container engine, external resolver
+configuration and available Cloud APIs; it needs neither a source checkout nor Maven. Successful registration returns
+`REGISTERED` and a deployment ID, with physical deployment, runtime verification and activation `NOT_REQUESTED`.
 
 ## Promote unchanged bytes
 
