@@ -42,7 +42,11 @@ TPF_ARCHIVE="tpf-$TPF_VERSION-$TPF_PLATFORM.zip"
 TPF_RELEASE="https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/v$TPF_VERSION"
 curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE"
 curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE.sha256"
-shasum -a 256 -c "$TPF_ARCHIVE.sha256"
+case "$(uname -s)" in
+  Darwin) shasum -a 256 -c "$TPF_ARCHIVE.sha256" ;;
+  Linux) sha256sum -c "$TPF_ARCHIVE.sha256" ;;
+  *) echo 'Unsupported native host' >&2; exit 1 ;;
+esac
 unzip "$TPF_ARCHIVE"
 mkdir -p "$HOME/.local/bin"
 install -m 0755 "tpf-$TPF_VERSION-$TPF_PLATFORM/bin/tpf" "$HOME/.local/bin/tpf"
@@ -193,7 +197,9 @@ environments: {}
 Save this as `tpf-deploy.yaml` in the working directory. The persistent directory stores the resolver cache in this
 example and is also mounted at Maven Resolver's default `/home/tpf/.m2/repository` path, so configuration that omits
 `localRepository` stays writable. For human Cloud login, mount a dedicated credential directory at a persistent container path and set
-`TPF_CREDENTIAL_DIRECTORY` to that path on every auth/deploy invocation. CI uses injected service credentials. Verification output is written beneath
+`TPF_CREDENTIAL_DIRECTORY` to that path on every auth/deploy invocation. When using the wrapper, also export
+`TPF_CLOUD_CREDENTIAL_ENV=TPF_CREDENTIAL_DIRECTORY` on every auth/deploy invocation so it forwards that selected
+container path. CI uses injected service credentials. Verification output is written beneath
 `/work/.tpf/verification`.
 
 An absolute `file:` URI is resolved in the container's filesystem. A host URI such as

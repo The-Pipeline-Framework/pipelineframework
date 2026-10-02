@@ -164,7 +164,25 @@ tpf deploy staging --release pipeline-release.json --output json
 CI acquires a short-lived token through client credentials, without reading human credential files or prompting.
 It needs neither a source checkout nor Maven. Successful Cloud registration reports `REGISTERED`; physical deployment,
 runtime verification and activation remain `NOT_REQUESTED`. Container CI can still pin the published image digest and
-use the [container mounts](./cli-installation#container-alternative) instead.
+use the [container mounts](./cli-installation#container-alternative) instead. The container wrapper forwards one
+selected `TPF_CREDENTIAL_*` variable; for `oauth-client:ci`, explicitly forward all three OAuth variables:
+
+```sh
+# TPF_IMAGE is a pinned digest; OAuth values are already injected by the CI secret store.
+docker run --rm --init --user "$(id -u):$(id -g)" \
+  --mount "type=bind,src=$PWD,dst=/work" \
+  --mount "type=bind,src=$TPF_CREDENTIAL_DIR,dst=/home/tpf/.tpf" \
+  --mount "type=bind,src=$TPF_CREDENTIAL_DIR/maven,dst=/home/tpf/.m2/repository" \
+  --mount "type=bind,src=$TPF_MAVEN_SETTINGS,dst=/home/tpf/.m2/settings.xml,readonly" \
+  --mount "type=bind,src=$TPF_OCI_CONFIG,dst=/home/tpf/.docker/config.json,readonly" \
+  --env TPF_OAUTH_CI_ISSUER \
+  --env TPF_OAUTH_CI_CLIENT_ID \
+  --env TPF_OAUTH_CI_CLIENT_SECRET \
+  "$TPF_IMAGE" deploy staging --release pipeline-release.json --output json
+```
+
+Prepare the persistent cache directories and resolver files as in the installation page. The mounted
+`tpf-deploy.yaml` must select `credential: oauth-client:ci` and use container-visible resolver paths.
 
 ## Promote unchanged bytes
 
