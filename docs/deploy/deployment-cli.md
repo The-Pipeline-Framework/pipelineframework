@@ -95,13 +95,14 @@ duplicate names, and references to unknown profiles fail.
 
 ## Local author use
 
-Verify a local descriptor using the [same-path mount for host `file:` URIs](./cli-installation#configure-container-paths):
+Verify a local descriptor from the application directory. The native installation reads host paths directly; container
+users need the [same-path mount for host `file:` URIs](./cli-installation#configure-container-paths):
 
 ```sh
 tpf release verify --release target/pipeline-release.json
 ```
 
-The `local-process` provider is available in source builds:
+The `local-process` provider is included in the installed CLI:
 
 ```sh
 tpf deploy local --release pipeline-release.json
@@ -118,16 +119,22 @@ local target is not defined as “run one JVM”.
 
 ## Human Cloud deployment
 
-Configure the available Cloud endpoint, existing Application and Environment in `tpf-deploy.yaml`. The CLI is currently
-non-interactive: obtain an authorised bearer token through the organisation's identity flow before running it.
-The installation wrapper forwards the selected variable by name:
+Configure the existing Application and Environment in `tpf-deploy.yaml`, using `credential: oauth-session:cloud`.
+Obtain the public CLI client ID and HTTPS issuer from your Cloud operator, then sign in explicitly:
 
 ```sh
-# TPF_CREDENTIAL_TPF_STAGING is supplied securely by your identity/session tooling.
-export TPF_CLOUD_CREDENTIAL_ENV=TPF_CREDENTIAL_TPF_STAGING
+tpf auth login --issuer https://auth.example.com --client-id client_public
+tpf auth status
 tpf release verify --release pipeline-release.json
 tpf deploy staging --release pipeline-release.json
 ```
+
+Login prints a verification URL and user code. Approve the sign-in there. Credentials live in the dedicated
+`$HOME/.tpf/credentials` directory with owner-only permissions; expired sessions are refreshed when possible.
+`auth status` checks local credentials, not remote tenant membership. `auth logout` removes local credentials.
+An alternate verification host requires an explicit operator-approved `--verification-host` value.
+`deploy` never starts an interactive login. See the
+[CLI authentication reference](https://github.com/The-Pipeline-Framework/pipelineframework-cli/blob/main/docs/cloud-authentication.md).
 
 The OSS CLI sends the exact descriptor bytes, bearer or workload credentials, and an idempotency key to the documented
 TPF Cloud API. The first Cloud target registers an immutable Release and creates a `CUSTOMER_MANAGED` Deployment for
@@ -144,25 +151,20 @@ that private implementation.
 
 ## CI Cloud deployment
 
-Start the deployment job in a fresh directory with only the preserved `pipeline-release.json` plus external resolver
-and deployment configuration. Install the wrapper, use the digest reported by the successful CLI publication, and
-supply a short-lived bearer credential through the CI secret or workload-identity system:
+Start in a fresh directory with only the preserved descriptor plus external resolver and deployment configuration.
+Install a pinned native release and verify its checksum. Use `credential: oauth-client:ci` in the Cloud target and
+inject `TPF_OAUTH_CI_ISSUER`, `TPF_OAUTH_CI_CLIENT_ID`, and `TPF_OAUTH_CI_CLIENT_SECRET` through the CI secret store.
+Never put the secret in YAML, the descriptor or a build cache. The issuer and Cloud APIs must be reachable.
 
 ```sh
-export TPF_IMAGE='ghcr.io/the-pipeline-framework/tpf@sha256:<reported 64-character digest>'
-export TPF_MAVEN_SETTINGS="$CI_RESOLVER_DIR/settings.xml"
-export TPF_OCI_CONFIG="$CI_RESOLVER_DIR/oci-config.json"
-export TPF_CREDENTIAL_DIR="$CI_STATE_DIR/tpf"
-export TPF_CLOUD_CREDENTIAL_ENV=TPF_CREDENTIAL_TPF_STAGING
-# CI supplies TPF_CREDENTIAL_TPF_STAGING; do not echo it or put it in the descriptor.
-tpf release verify --release pipeline-release.json --config tpf-deploy.yaml --output json
-tpf deploy staging --release pipeline-release.json --config tpf-deploy.yaml --output json
+tpf release verify --release pipeline-release.json --output json
+tpf deploy staging --release pipeline-release.json --output json
 ```
 
-Replace the digest placeholder, use absolute host resolver/state paths and container paths inside the YAML. Point
-Maven repositories at already-published immutable coordinates. This job needs a container engine, external resolver
-configuration and available Cloud APIs; it needs neither a source checkout nor Maven. Successful registration returns
-`REGISTERED` and a deployment ID, with physical deployment, runtime verification and activation `NOT_REQUESTED`.
+CI acquires a short-lived token through client credentials, without reading human credential files or prompting.
+It needs neither a source checkout nor Maven. Successful Cloud registration reports `REGISTERED`; physical deployment,
+runtime verification and activation remain `NOT_REQUESTED`. Container CI can still pin the published image digest and
+use the [container mounts](./cli-installation#container-alternative) instead.
 
 ## Promote unchanged bytes
 
@@ -187,5 +189,5 @@ URIs, digests, associations, or Compiled Truth. Promotable releases must not con
 | `6` | Target deployment failure. |
 | `7` | Runtime verification or activation failure. |
 
-The first CLI is non-interactive. Terraform, OpenTofu, Pulumi, and custom CI can consume the same Release Descriptor
+Deployment is non-interactive; human authentication is an explicit `auth login` command. Terraform, OpenTofu, Pulumi, and custom CI can consume the same Release Descriptor
 and environment/provider inputs directly; the CLI does not embed or execute an IaC engine.

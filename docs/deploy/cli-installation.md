@@ -1,20 +1,88 @@
 # Install the TPF CLI
 
-The initial supported distribution is the Java 21 CLI container at
-`ghcr.io/the-pipeline-framework/tpf`. Docker or Podman supplies the runtime; the host does not need Java or Maven to
-verify or register a Release. The first image targets `linux/amd64`; other architectures need container-engine
-emulation. Use the publication workflow's successful anonymous-pull result to confirm availability.
+Native releases provide `tpf` for macOS Apple Silicon and Linux x64/ARM64 without requiring Java, Maven or Docker.
+Homebrew is the recommended installation. Check [CLI releases](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases)
+for a published native version: the tap becomes usable after all platform and installation checks pass.
+Until the first native release is published, the public GHCR image remains available below.
 
 ```mermaid
 flowchart LR
-    W[Working directory and pipeline-release.json] --> CLI[TPF CLI container]
-    C[Read-only Maven and OCI configuration] --> CLI
-    S[Persistent TPF directory and external credentials] --> CLI
-    CLI --> R[Resolve and verify artefacts]
-    R --> API[Available private Cloud service API]
+    B[Homebrew or checksummed archive] --> CLI[Installed tpf]
+    W[Working directory and pipeline-release.json] --> CLI
+    C[Host resolver configuration and credentials] --> CLI
+    CLI --> V[Resolve and verify artefacts]
+    V --> API[Available private Cloud and identity APIs]
 ```
 
-## Pull and run
+## Homebrew
+
+On a supported macOS or Linux host with Homebrew installed:
+
+```sh
+brew install The-Pipeline-Framework/tap/tpf
+tpf --version
+tpf --help
+tpf release verify --help
+```
+
+Upgrade with `brew upgrade tpf`. Native releases support macOS ARM64 and Ubuntu 24.04 x64/ARM64 or a compatible
+glibc-based system. Intel macOS, Windows and Alpine are not supported native targets. The native executable needs
+no Java runtime; application JARs launched by the local-process target still need their own Java runtime.
+
+## Download an archive
+
+Download the ZIP for your platform and its SHA-256 file from the same release. Replace the version below with an
+actually published version. The archive has `LICENSE`, `README.md` and `bin/tpf` beneath its named root directory.
+
+```sh
+TPF_VERSION='<published version>'
+# macOS Apple Silicon; Linux alternatives: linux-x86_64 or linux-aarch_64
+TPF_PLATFORM=osx-aarch_64
+TPF_ARCHIVE="tpf-$TPF_VERSION-$TPF_PLATFORM.zip"
+TPF_RELEASE="https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/v$TPF_VERSION"
+curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE"
+curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE.sha256"
+shasum -a 256 -c "$TPF_ARCHIVE.sha256"
+unzip "$TPF_ARCHIVE"
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "tpf-$TPF_VERSION-$TPF_PLATFORM/bin/tpf" "$HOME/.local/bin/tpf"
+export PATH="$HOME/.local/bin:$PATH"
+tpf --version
+```
+
+Add `$HOME/.local/bin` to your shell's persistent `PATH` for later sessions. In CI, pin the release version and verify
+the archive checksum; preserve the checksum independently when you need an independently pinned installation.
+macOS archives are initially unsigned and unnotarized. Prefer Homebrew. For a verified direct download, if Gatekeeper
+blocks execution, approve that executable in System Settings → Privacy & Security; do not disable Gatekeeper globally.
+
+## Use the application directory
+
+```sh
+cd /path/to/payments
+tpf release verify
+```
+
+The installed CLI reads `pipeline-release.json` or `target/pipeline-release.json` relative to your current directory.
+Use `--release` when both exist. It does not build the application: produce the descriptor with
+[the Maven Release producer](./release-descriptors), or obtain the preserved descriptor from CI.
+Host `file:` paths work directly. Resolver settings, Docker credential helpers and deployment configuration also use
+host paths. No folder mounts are involved. Cache writes use the configured Maven repository or `$HOME/.m2/repository`.
+Human credentials default to `$HOME/.tpf/credentials`, kept separate from the application workspace.
+
+For [human Cloud deployment and CI Cloud deployment](./deployment-cli), configure the existing private Cloud and
+identity APIs. Human users run `tpf auth login` explicitly; `deploy` remains non-interactive.
+
+## Container alternative
+
+The public image is `ghcr.io/the-pipeline-framework/tpf`, with a Java 25 runtime and non-root default user.
+It currently targets Linux AMD64; ARM hosts need emulation. Docker's short image name `tpf` does not name the GHCR
+image. Always use the full name, or explicitly create a local image tag.
+
+A container has its own filesystem. Mounting the working directory lets it read your descriptor and write verification
+results; separate mounts provide a persistent cache and credentials, with resolver configuration read-only.
+Use the following wrapper only when choosing the container installation.
+
+### Pull and run
 
 For an initial development check, use the trusted `main` build:
 
@@ -39,7 +107,7 @@ Replace the digest placeholder before running. A commit tag identifies source; r
 image or snapshot dependencies. The reported digest pins the actual CLI image bytes and is separate from every
 application artefact digest in `pipeline-release.json`.
 
-## Install a shell wrapper
+### Install a shell wrapper
 
 Save this as `tpf` in a directory on your `PATH`, then make it executable with `chmod +x tpf`. It mounts the current
 directory read-write, a persistent TPF directory, and two resolver configuration files read-only. Paths supplied in
@@ -106,7 +174,7 @@ executable and backing store inside the container; host helpers are not bundled.
 references backed by selected `TPF_CREDENTIAL_*` variables, or a dedicated protected `auths` file. Never put secrets in
 the Release Descriptor.
 
-## Configure container paths
+### Configure container paths
 
 The current host directory appears as `/work`; Java's user home is `/home/tpf`. Deployment configuration must use
 paths visible inside the container:
@@ -124,8 +192,8 @@ environments: {}
 
 Save this as `tpf-deploy.yaml` in the working directory. The persistent directory stores the resolver cache in this
 example and is also mounted at Maven Resolver's default `/home/tpf/.m2/repository` path, so configuration that omits
-`localRepository` stays writable. Deployment credentials are resolved from selected environment variables; the initial CLI does not implement
-a login command or automatically read a credential file from this directory. Verification output is written beneath
+`localRepository` stays writable. For human Cloud login, mount a dedicated credential directory at a persistent container path and set
+`TPF_CREDENTIAL_DIRECTORY` to that path on every auth/deploy invocation. CI uses injected service credentials. Verification output is written beneath
 `/work/.tpf/verification`.
 
 An absolute `file:` URI is resolved in the container's filesystem. A host URI such as
@@ -138,7 +206,7 @@ The initial `local-process` target starts children inside the CLI container. A `
 when the CLI exits, so it cannot keep a local application running afterwards. Use this wrapper for verification and
 Cloud registration; a durable local-container Deployment Target is a separate capability.
 
-## Local author use
+### Local author use
 
 After configuring the [Release producer](./release-descriptors), build a local descriptor on the host:
 
@@ -157,9 +225,9 @@ For Maven publication, human Cloud deployment and CI Cloud deployment, follow
 [Verify and Deploy a Release](./deployment-cli). Those examples use the same unchanged descriptor and keep repository
 publication separate from target selection.
 
-## Distribution verification
+### Distribution verification
 
-The CLI publication workflow tests Java 21 first, builds a non-root image, and publishes only from trusted `main` or
+The CLI publication workflow tests Java 25 first, builds a non-root image, and publishes only from trusted `main` or
 release code using repository `GITHUB_TOKEN` with package-write permission. A package administrator must make the GHCR
 package public on first publication; the workflow fails until an anonymous pull succeeds.
 [GitHub documents these publication and visibility rules](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
@@ -169,9 +237,3 @@ Each working directory begins with only `pipeline-release.json`; resolver and de
 externally and caches begin empty. Controlled authenticated Maven, OCI and Cloud API fixtures check resolution,
 digests, JSON output, authentication failure and exact-byte Cloud registration. This proves the installed client
 contract, not availability of the private Cloud service.
-
-Native executables and JReleaser downloads are not currently supported installations. They follow a passing native
-conformance build covering JSON, Maven Resolver, OCI and authentication using this plain-Java CLI's own
-[Native Build Tools](https://graalvm.github.io/native-build-tools/latest/maven-plugin)/Mandrel configuration and
-reachability checks. Quarkus container-native CI is useful prior art;
-[JReleaser packaging](https://jreleaser.org/guide/latest/reference/distributions.html) follows that evidence.
