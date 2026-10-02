@@ -58,7 +58,11 @@ export function augmentCompatibilityTargets(config, baseline, targetDocument, cu
     const current = currentHeads[component];
     if (current === undefined) throw new Error(`current main head is missing for ${component}`);
     const baselineEntry = definition.kind === 'maven' ? baseline.components[component] : baseline.testHarnesses[component];
-    if (baselineEntry === undefined) throw new Error(`baseline entry is missing for ${component}`);
+    if (baselineEntry === undefined) {
+      if (component !== 'cli') throw new Error(`baseline entry is missing for ${component}`);
+      selectedMaven.add(component);
+      continue;
+    }
     if (current.sha !== baselineEntry.sha && definition.kind === 'maven') selectedMaven.add(component);
     if (current.sha !== baselineEntry.sha && definition.kind === 'source' && !targets.has(component)) {
       targets.set(component, mainTarget(component, definition, current));

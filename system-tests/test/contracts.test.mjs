@@ -148,6 +148,39 @@ function baseline() {
   return {schemaVersion: 1, revision: 7, generatedAt: '2026-09-23T00:00:00.000Z', components, testHarnesses, images: {}};
 }
 
+test('pre-CLI baseline is completed only by an exact current-main CLI candidate', () => {
+  const previous = baseline();
+  delete previous.components.cli;
+  assert.throws(() => validateBaseline(previous, config), /missing required properties: cli/);
+  assert.equal(validateBaseline(previous, config, {allowPreCli: true}), previous);
+  const candidate = mainManifest({component: 'cli', repository: config.components.cli.repository});
+  candidate.provenance.build.repository = candidate.repository;
+  candidate.provenance.publication.repository = candidate.repository;
+  candidate.mavenArtifacts = config.components.cli.allowedCoordinates.map((coordinate) => {
+    const [groupId, artifactId, packaging] = coordinate.split(':');
+    return {
+      groupId, artifactId, packaging, version: candidate.candidateVersion,
+      files: [...new Set(['pom', packaging])].map((extension) => ({
+        name: `${artifactId}-${candidate.candidateVersion}.${extension}`, sha256: 'b'.repeat(64)
+      }))
+    };
+  });
+  const resolved = reconcileMainCandidates(previous, digest, [candidate], [digest], {cli: sha}, config);
+  assert.equal(resolved.components.cli.sha, sha);
+  assert.equal(resolved.components.cli.manifestDigest, digest);
+  assert.deepEqual(resolved.components.contracts, previous.components.contracts);
+  assert.equal(resolved.candidates[0].component, 'cli');
+  assert.ok(selectSuites('cli', policy).includes('cli-verify'));
+  const promoted = nextBaseline(previous, resolved, '2026-10-02T00:00:00Z');
+  assert.equal(validateBaseline(promoted, config).components.cli.sha, sha);
+  assert.throws(() => reconcileMainCandidates(previous, digest, [], [], {}, config), /missing required properties: cli/);
+  assert.throws(() => reconcileMainCandidates(previous, digest, [candidate], [digest], {cli: otherSha}, config), /missing required properties: cli/);
+  assert.throws(() => overlayBaseline(previous, digest, [mainManifest()], [digest], config), /missing required properties: cli/);
+  const incomplete = structuredClone(previous);
+  delete incomplete.components.runtime;
+  assert.throws(() => validateBaseline(incomplete, config, {allowPreCli: true}), /runtime/);
+});
+
 test('configuration covers exactly the eleven extracted repositories', () => {
   assert.equal(Object.keys(config.components).length, 11);
   assert.equal(new Set(Object.values(config.components).map((component) => component.repository)).size, 11);

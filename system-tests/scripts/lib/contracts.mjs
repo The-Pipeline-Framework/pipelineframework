@@ -353,14 +353,18 @@ function validateSourceEntry(entry, expectedRepository, name) {
   requireSha(entry.sha, `${name}.sha`);
 }
 
-export function validateBaseline(baseline, config) {
+export function validateBaseline(baseline, config, {allowPreCli = false} = {}) {
   exactKeys(baseline, ['schemaVersion', 'revision', 'generatedAt', 'components', 'testHarnesses', 'images'], ['schemaVersion', 'revision', 'generatedAt', 'components', 'testHarnesses', 'images'], 'baseline');
   if (baseline.schemaVersion !== 1) fail('baseline schemaVersion must be 1');
   integer(baseline.revision, 'baseline revision');
   if (typeof baseline.generatedAt !== 'string' || Number.isNaN(Date.parse(baseline.generatedAt))) fail('baseline generatedAt must be an ISO date-time');
-  exactKeys(baseline.components, MAVEN_COMPONENTS, MAVEN_COMPONENTS, 'baseline components');
+  // The previous green baseline predates CLI registration. Only historical
+  // inputs may omit it; resolved sets and promoted baselines must be complete.
+  const requiredComponents = allowPreCli ? MAVEN_COMPONENTS.filter((name) => name !== 'cli') : MAVEN_COMPONENTS;
+  exactKeys(baseline.components, MAVEN_COMPONENTS, requiredComponents, 'baseline components');
   exactKeys(baseline.testHarnesses, SOURCE_COMPONENTS, SOURCE_COMPONENTS, 'baseline testHarnesses');
   for (const name of MAVEN_COMPONENTS) {
+    if (allowPreCli && name === 'cli' && baseline.components.cli === undefined) continue;
     const entry = baseline.components[name];
     exactKeys(entry, ['repository', 'sha', 'mavenVersion', 'manifestDigest'], ['repository', 'sha', 'mavenVersion', 'manifestDigest'], `baseline component ${name}`);
     if (entry.repository !== config.components[name].repository) fail(`baseline component ${name}.repository is invalid`);
@@ -466,7 +470,7 @@ export function selectPostMergeSuites(component, policy) {
 }
 
 export function overlayBaseline(baseline, baselineDigest, candidates, candidateDigests, config) {
-  validateBaseline(baseline, config);
+  validateBaseline(baseline, config, {allowPreCli: true});
   requireDigest(baselineDigest, 'baseline digest');
   if (!Array.isArray(candidates) || candidates.length === 0) fail('at least one candidate is required');
   if (!Array.isArray(candidateDigests) || candidateDigests.length !== candidates.length) fail('candidate digests must align with candidates');
@@ -514,7 +518,7 @@ function baselinePin(baseline, component, config) {
 }
 
 export function reconcileMainCandidates(baseline, baselineDigest, candidates, candidateDigests, currentHeads, config) {
-  validateBaseline(baseline, config);
+  validateBaseline(baseline, config, {allowPreCli: true});
   requireDigest(baselineDigest, 'baseline digest');
   if (!Array.isArray(candidates)) fail('main candidates must be an array');
   if (!Array.isArray(candidateDigests) || candidateDigests.length !== candidates.length) {
@@ -530,12 +534,13 @@ export function reconcileMainCandidates(baseline, baselineDigest, candidates, ca
     requireSha(currentHeads[candidate.component], `current main head for ${candidate.component}`);
     if (candidate.sourceSha !== currentHeads[candidate.component]) return;
     const pin = baselinePin(baseline, candidate.component, config);
-    if (pin.sha === candidate.sourceSha && (pin.mavenVersion === undefined || pin.mavenVersion === candidate.candidateVersion)) return;
+    if (pin?.sha === candidate.sourceSha && (pin.mavenVersion === undefined || pin.mavenVersion === candidate.candidateVersion)) return;
     current.push(candidate);
     digests.push(candidateDigests[index]);
   });
 
   if (current.length > 0) return overlayBaseline(baseline, baselineDigest, current, digests, config);
+  validateBaseline(baseline, config);
   return {
     schemaVersion: 1,
     baselineDigest,
