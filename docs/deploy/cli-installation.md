@@ -53,12 +53,13 @@ set -eu
 : "${TPF_OCI_CONFIG:?Set TPF_OCI_CONFIG to a readable Docker config.json}"
 engine=${TPF_CONTAINER_ENGINE:-docker}
 credentials=${TPF_CREDENTIAL_DIR:-"$HOME/.tpf"}
-mkdir -p "$credentials"
+mkdir -p "$credentials/maven"
 test -f "$TPF_MAVEN_SETTINGS"
 test -f "$TPF_OCI_CONFIG"
 set -- run --rm --init --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$PWD,dst=/work" \
   --mount "type=bind,src=$credentials,dst=/home/tpf/.tpf" \
+  --mount "type=bind,src=$credentials/maven,dst=/home/tpf/.m2/repository" \
   --mount "type=bind,src=$TPF_MAVEN_SETTINGS,dst=/home/tpf/.m2/settings.xml,readonly" \
   --mount "type=bind,src=$TPF_OCI_CONFIG,dst=/home/tpf/.docker/config.json,readonly" \
   "$TPF_IMAGE" "$@"
@@ -122,7 +123,8 @@ environments: {}
 ```
 
 Save this as `tpf-deploy.yaml` in the working directory. The persistent directory stores the resolver cache in this
-example. Deployment credentials are resolved from selected environment variables; the initial CLI does not implement
+example and is also mounted at Maven Resolver's default `/home/tpf/.m2/repository` path, so configuration that omits
+`localRepository` stays writable. Deployment credentials are resolved from selected environment variables; the initial CLI does not implement
 a login command or automatically read a credential file from this directory. Verification output is written beneath
 `/work/.tpf/verification`.
 
