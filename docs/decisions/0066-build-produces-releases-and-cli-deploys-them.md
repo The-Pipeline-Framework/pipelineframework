@@ -45,6 +45,27 @@ flowchart LR
     D --> I[IaC or custom target]
 ```
 
+### Initial CLI distribution
+
+The initial supported installation is the public `ghcr.io/the-pipeline-framework/tpf` Java 21 container from the
+OSS CLI repository, with a non-root runtime, version/full-commit tags and a reported image digest. Trusted main and
+release workflows test the CLI before publishing with repository `GITHUB_TOKEN` and package-write permission.
+Untrusted PR code receives no publication credentials. The published digest is pulled anonymously and tested from
+only a Release Descriptor plus external resolver and deployment configuration. Package visibility must be public
+before distribution is considered usable.
+
+Container mounts preserve the working directory, a persistent TPF directory and read-only resolver configuration.
+Absolute `file:` references keep their identity and need the same container-visible paths; promotion uses Maven or
+OCI references. CI pins the CLI image digest separately from application Release digests.
+
+Native binaries and JReleaser packaging are the next distribution slice, gated on a plain-Java native-image
+conformance build for JSON, Maven Resolver, OCI and authentication using Native Build Tools/Mandrel and reachability
+checks. Quarkus native CI is prior art, not evidence of CLI native installability.
+
+The public Cloud adapter requires available private external service APIs and authorised credentials. Container
+conformance uses controlled protocol fixtures and does not establish live Cloud availability. Maven remains the
+Release producer throughout; no Maven deployment goal or deployment-target selection is introduced.
+
 ## Rationale
 
 This boundary keeps normal build-tool behaviour unsurprising, makes deployment usable from any CI system, and gives
@@ -62,3 +83,7 @@ inputs without learning Maven module layout or compiler output conventions.
 - TPF Cloud remains a separate private service. Only its public machine API contract and the thin OSS client cross
   the repository boundary.
 - Terraform, OpenTofu, Pulumi, and custom CI remain parallel consumers of the same descriptor and environment inputs.
+
+See [CLI installation](../deploy/cli-installation), [Maven Release production](../deploy/release-descriptors) and
+[verification and deployment](../deploy/deployment-cli) for the supported hand-off and separate local, publication,
+human Cloud and CI Cloud examples.
