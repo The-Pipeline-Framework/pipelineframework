@@ -3,7 +3,8 @@
 Native releases provide `tpf` for macOS Apple Silicon and Linux x64/ARM64 without requiring Java, Maven or Docker.
 Homebrew is the recommended installation. Check [CLI releases](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases)
 for a published native version: the tap becomes usable after all platform and installation checks pass.
-Until the first native release is published, the public GHCR image remains available below.
+Development snapshots are available as archives in the `latest` prerelease after main passes the publication gates.
+Homebrew installs stable releases; snapshot archives do not require Homebrew. The public GHCR image remains a secondary option.
 
 ```mermaid
 flowchart LR
@@ -58,6 +59,18 @@ Add `$HOME/.local/bin` to your shell's persistent `PATH` for later sessions. In 
 the archive checksum; preserve the checksum independently when you need an independently pinned installation.
 macOS archives are initially unsigned and unnotarized. Prefer Homebrew. For a verified direct download, if Gatekeeper
 blocks execution, approve that executable in System Settings → Privacy & Security; do not disable Gatekeeper globally.
+
+For a development snapshot, open the [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest)
+and use its exact `-SNAPSHOT` version in the archive commands above, replacing the release URL with:
+
+```sh
+TPF_VERSION='<published version>-SNAPSHOT'
+TPF_RELEASE='https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/latest'
+```
+
+Set these variables before calculating `TPF_ARCHIVE` and downloading. `tpf --version` retains `-SNAPSHOT`.
+`latest` moves as verified main builds are published; retain the archive, checksum and adjacent JSON metadata
+(including its source commit) for repeatable CI. A later download from the same URL can contain different bytes.
 
 ## Use the application directory
 

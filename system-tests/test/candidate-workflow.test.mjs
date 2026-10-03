@@ -1,8 +1,37 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
+import {runInNewContext} from 'node:vm';
 
 const workflow = await readFile(new URL('../../.github/workflows/system-test-candidate.yml', import.meta.url), 'utf8');
+
+test('main candidate continues after skipped PR coalescing, while prerequisite failures stop tests', () => {
+  const needs = {
+    intake: {result: 'success'}, coalesce: {result: 'skipped'}, retrieve: {result: 'success'},
+    baseline: {result: 'success', outputs: {has_shards: 'true'}}, materialize: {result: 'success'}
+  };
+  for (const [job, prerequisites] of [
+    ['baseline', ['intake', 'retrieve']], ['materialize', ['baseline']],
+    ['run-product-shard', ['baseline', 'materialize']]
+  ]) {
+    const block = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [a-z][a-z-]*:\n/)[0];
+    const condition = block.match(/^    if: >-\n((?:      .*\n)+)/m)[1].trim().replace(/\n\s*/g, ' ');
+    assert.match(condition, /always\(\)/, `${job} must survive skipped ancestors`);
+    assert.equal(runInNewContext(condition, {needs, always: () => true}, {timeout: 100}), true);
+    for (const prerequisite of prerequisites) {
+      for (const result of ['failure', 'cancelled', 'skipped']) {
+        const rejected = structuredClone(needs);
+        rejected[prerequisite].result = result;
+        assert.equal(runInNewContext(condition, {needs: rejected, always: () => true}, {timeout: 100}), false,
+          `${job} must reject ${prerequisite}=${result}`);
+      }
+    }
+    if (job === 'run-product-shard') {
+      const empty = structuredClone(needs); empty.baseline.outputs.has_shards = 'false';
+      assert.equal(runInNewContext(condition, {needs: empty, always: () => true}, {timeout: 100}), false);
+    }
+  }
+});
 
 test('candidate provenance resolves the exact attested build attempt', () => {
   assert.match(

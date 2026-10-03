@@ -57,7 +57,11 @@ Native conformance covers JSON/YAML, file/Maven/OCI resolution, credential helpe
 non-interactive CI authentication, TLS trust and rejection, and exact-byte Cloud registration. Compilation or
 Quarkus native CI alone does not establish native CLI conformance. macOS archives are initially unsigned.
 
-Trusted version-tag workflows publish tested archives using the repository `GITHUB_TOKEN`. A dedicated GitHub App
+Trusted version-tag workflows publish tested stable archives using the repository `GITHUB_TOKEN`. Trusted main
+`-SNAPSHOT` builds also publish a moving `latest` prerelease after the same owner, compatibility and native
+conformance gates pass. Snapshot archives preserve their version and commit metadata; stale main runs are rejected.
+The `latest` archive channel uses only `GITHUB_TOKEN` and does not wait for Homebrew provisioning. Homebrew remains
+a stable-release channel; version-tag releases remain immutable. A dedicated GitHub App
 restricted to the Homebrew tap supplies short-lived formula-publication tokens. Build jobs receive no publication
 credentials. Package publication remains separate from Maven verification or deployment lifecycle goals.
 

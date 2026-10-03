@@ -293,6 +293,10 @@ jobs:
 
   baseline:
     name: Resolve baseline and select suites
+    if: >-
+      always() &&
+      needs.intake.result == 'success' &&
+      needs.retrieve.result == 'success'
     needs: [intake, retrieve]
     runs-on: ubuntu-latest
     permissions:
@@ -464,6 +468,9 @@ jobs:
 
   materialize:
     name: Materialize immutable Maven inputs
+    if: >-
+      always() &&
+      needs.baseline.result == 'success'
     needs: baseline
     runs-on: ubuntu-latest
     permissions:
@@ -557,7 +564,11 @@ jobs:
   run-product-shard:
     name: ${{ matrix.displayName }}
     needs: [baseline, materialize]
-    if: needs.baseline.outputs.has_shards == 'true'
+    if: >-
+      always() &&
+      needs.baseline.result == 'success' &&
+      needs.materialize.result == 'success' &&
+      needs.baseline.outputs.has_shards == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.baseline.outputs.matrix) }}
