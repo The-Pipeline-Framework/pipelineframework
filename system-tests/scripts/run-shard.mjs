@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 
@@ -21,6 +21,7 @@ for (const name of ['shard', 'coordination', 'owners', 'resolvedSet', 'mavenRepo
 const shard = JSON.parse(await readFile(values.shard, 'utf8'));
 if (!Array.isArray(shard.suites) || shard.suites.length === 0) throw new Error('shard must contain at least one suite');
 const runner = new URL('run-suite.mjs', import.meta.url).pathname;
+const components = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8')).components;
 const failures = [];
 for (const suite of shard.suites) {
   const suiteRoot = suite.owner === 'coordination'
@@ -31,6 +32,14 @@ for (const suite of shard.suites) {
     : join(suiteRoot, suite.manifest);
   process.stdout.write(`::group::${suite.suite}\n`);
   try {
+    const javaVersion = components[suite.owner]?.buildJavaVersion ?? 21;
+    const javaHome = process.env[`TPF_JAVA_${javaVersion}_HOME`];
+    if (!javaHome) throw new Error(`JDK ${javaVersion} is required for ${suite.owner}; TPF_JAVA_${javaVersion}_HOME is missing`);
+    const environment = {
+      ...process.env,
+      JAVA_HOME: javaHome,
+      PATH: `${join(javaHome, 'bin')}${delimiter}${process.env.PATH ?? ''}`
+    };
     await run(process.execPath, [
       runner,
       '--manifest', manifest,
@@ -39,7 +48,7 @@ for (const suite of shard.suites) {
       '--versionProperties', JSON.stringify(suite.versionProperties),
       '--cwd', suiteRoot,
       '--mavenRepository', resolve(values.mavenRepository)
-    ]);
+    ], environment);
   } catch (error) {
     failures.push(suite.suite);
     process.stderr.write(`${error.message}\n`);
@@ -49,9 +58,9 @@ for (const suite of shard.suites) {
 }
 if (failures.length > 0) throw new Error(`product shard failed: ${failures.join(', ')}`);
 
-function run(command, arguments_) {
+function run(command, arguments_, environment) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, arguments_, {stdio: 'inherit', shell: false});
+    const child = spawn(command, arguments_, {stdio: 'inherit', shell: false, env: environment});
     child.once('error', reject);
     child.once('exit', (code, signal) => {
       if (code === 0) resolvePromise();

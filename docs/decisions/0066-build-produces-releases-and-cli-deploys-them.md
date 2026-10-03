@@ -45,26 +45,30 @@ flowchart LR
     D --> I[IaC or custom target]
 ```
 
-### Initial CLI distribution
+### CLI distribution
 
-The initial supported installation is the public `ghcr.io/the-pipeline-framework/tpf` Java 21 container from the
-OSS CLI repository, with a non-root runtime, version/full-commit tags and a reported image digest. Trusted main and
-release workflows test the CLI before publishing with repository `GITHUB_TOKEN` and package-write permission.
-Untrusted PR code receives no publication credentials. The published digest is pulled anonymously and tested from
-only a Release Descriptor plus external resolver and deployment configuration. Package visibility must be public
-before distribution is considered usable.
+The first distribution was the public non-root Java container at `ghcr.io/the-pipeline-framework/tpf`. Native
+installation now uses the plain-Java CLI's own Java 25 Native Build Tools/Mandrel configuration and reviewed
+reachability metadata. JReleaser packages platform-labelled `BINARY` archives for macOS ARM64 and Linux x64/ARM64,
+with Homebrew as the recommended native installation. Windows, Intel macOS and Alpine are outside this distribution.
+Native releases are installable only after all platform conformance and installation gates pass.
 
-Container mounts preserve the working directory, a persistent TPF directory and read-only resolver configuration.
-Absolute `file:` references keep their identity and need the same container-visible paths; promotion uses Maven or
-OCI references. CI pins the CLI image digest separately from application Release digests.
+Native conformance covers JSON/YAML, file/Maven/OCI resolution, credential helpers, device login and refresh,
+non-interactive CI authentication, TLS trust and rejection, and exact-byte Cloud registration. Compilation or
+Quarkus native CI alone does not establish native CLI conformance. macOS archives are initially unsigned.
 
-Native binaries and JReleaser packaging are the next distribution slice, gated on a plain-Java native-image
-conformance build for JSON, Maven Resolver, OCI and authentication using Native Build Tools/Mandrel and reachability
-checks. Quarkus native CI is prior art, not evidence of CLI native installability.
+Trusted version-tag workflows publish tested archives using the repository `GITHUB_TOKEN`. A dedicated GitHub App
+restricted to the Homebrew tap supplies short-lived formula-publication tokens. Build jobs receive no publication
+credentials. Package publication remains separate from Maven verification or deployment lifecycle goals.
 
-The public Cloud adapter requires available private external service APIs and authorised credentials. Container
-conformance uses controlled protocol fixtures and does not establish live Cloud availability. Maven remains the
-Release producer throughout; no Maven deployment goal or deployment-target selection is introduced.
+The secondary container uses Java 25, version/full-commit tags and a reported digest. Its public GHCR publication
+uses repository `GITHUB_TOKEN` with package-write permission and requires anonymous pulling and published-image
+conformance. Container mounts expose host files and persist resolver caches and human credentials; native installation
+uses host paths directly. Promotion preserves descriptor bytes and uses Maven/OCI references.
+
+The public Cloud adapter requires available private Cloud and identity APIs. Conformance uses controlled protocol
+fixtures and does not establish live Cloud availability. Maven remains the Release producer; no Maven deployment
+goal or deployment-target selection is introduced.
 
 ## Rationale
 
