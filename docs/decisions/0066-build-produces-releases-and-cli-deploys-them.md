@@ -58,7 +58,7 @@ non-interactive CI authentication, TLS trust and rejection, and exact-byte Cloud
 Quarkus native CI alone does not establish native CLI conformance. macOS archives are initially unsigned.
 
 Trusted version-tag workflows publish tested stable archives using the repository `GITHUB_TOKEN`. Trusted main
-`-SNAPSHOT` builds also publish a moving `latest` prerelease after the same owner, compatibility and native
+`-SNAPSHOT` builds also publish a moving `latest` prerelease nightly or through manual publication, after the same owner, compatibility and native
 conformance gates pass. Snapshot archives preserve their version and commit metadata; stale main runs are rejected.
 The `latest` archive channel uses only `GITHUB_TOKEN` and does not wait for Homebrew provisioning. Homebrew remains
 a stable-release channel; version-tag releases remain immutable. A dedicated GitHub App
