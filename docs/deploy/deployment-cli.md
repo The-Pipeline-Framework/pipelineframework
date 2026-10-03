@@ -3,8 +3,9 @@
 The public `tpf` CLI starts from an existing [Pipeline Release Descriptor](./release-descriptors). It never invokes
 Maven or Gradle, rebuilds an artefact, or changes Release identity.
 
-[Install the Docker/Podman CLI wrapper](./cli-installation) before following these commands. The initial supported
-distribution is the Java 21 GHCR image; native downloads and JReleaser packaging follow native conformance.
+[Install the TPF CLI](./cli-installation) before following these commands. Native installation runs directly on
+macOS Apple Silicon and supported Linux hosts. Choose a stable release or a nightly snapshot on the installation
+page; the Docker/Podman wrapper remains a secondary option.
 
 ```mermaid
 flowchart LR
@@ -59,8 +60,8 @@ Deployment inputs live in strict `tpf-deploy.yaml`, separate from the Release:
 resolverProfiles:
   default:
     maven:
-      settings: /home/tpf/.m2/settings.xml
-      localRepository: /home/tpf/.tpf/maven
+      settings: /home/alex/.m2/settings.xml
+      localRepository: /home/alex/.m2/repository
     oci:
       credentials: docker-config
 
@@ -84,10 +85,12 @@ environments:
       application: payments
       environment: staging
       mode: CUSTOMER_MANAGED
-      credential: tpf-staging
+      credential: oauth-session:cloud
 ```
 
-Resolver profiles may point at different repository endpoints and credential sources. Secret values stay in Maven
+Replace the example Maven paths with absolute paths on your host. Container installations use the
+[container-visible paths](./cli-installation#configure-container-paths) instead. Resolver profiles may point at
+different repository endpoints and credential sources. Secret values stay in Maven
 settings, Docker credential configuration, environment variables, or workload identity systems; they do not belong
 in the configuration file or Release Descriptor. In the container, host Docker helpers are unavailable unless explicitly
 provided with their backing stores; use dedicated `auths` configuration or credential references. Unknown keys,
@@ -129,12 +132,30 @@ tpf release verify --release pipeline-release.json
 tpf deploy staging --release pipeline-release.json
 ```
 
-Login prints a verification URL and user code. Approve the sign-in there. Credentials live in the dedicated
-`$HOME/.tpf/credentials` directory with owner-only permissions; expired sessions are refreshed when possible.
-`auth status` checks local credentials, not remote tenant membership. `auth logout` removes local credentials.
-An alternate verification host requires an explicit operator-approved `--verification-host` value.
-`deploy` never starts an interactive login. See the
-[CLI authentication reference](https://github.com/The-Pipeline-Framework/pipelineframework-cli/blob/main/docs/cloud-authentication.md).
+Login prints a verification URL and user code. Open that URL, approve access to your organisation and enter the code.
+Verification URLs trust the issuer hostname by default. If the provider uses another hostname, add
+`--verification-host login.example.com` to `auth login` for each exact operator-approved hostname. Wildcards are not
+accepted. Use HTTPS; loopback HTTP is reserved for local protocol testing.
+
+Human credentials default to `$HOME/.tpf/credentials`. Status checks local credentials and refreshes expired sessions
+when possible; it does not check remote tenant membership or deploy permission. Logout deletes local credentials,
+but does not revoke tokens already issued by the provider:
+
+```sh
+tpf auth logout
+```
+
+The default profile is `cloud`. To keep another profile, use `--profile <name>` with auth commands and select
+`credential: oauth-session:<name>` in the target. Use `TPF_CREDENTIAL_DIRECTORY` to select a different credential
+directory consistently across auth and deploy commands; auth commands also accept `--credential-dir`. The directory
+requires a POSIX filesystem with owner-only permissions (directory `0700`, files `0600`) and no symlinked path
+components. Refresh credentials are saved atomically; invalid refresh grants remove unusable credentials, while
+temporary outages preserve them. Keep this directory out of application workspaces, caches and uploaded artefacts.
+Container users must [mount it persistently and forward its container path](./cli-installation#configure-container-paths).
+
+`deploy` never starts an interactive login. Missing, expired or rejected credentials return authentication exit `5`.
+A permission denial can mean missing deploy permission or organisation authority; signing in again cannot grant that
+access. Do not put access tokens, refresh tokens, API keys or client secrets in YAML or the Release Descriptor.
 
 The OSS CLI sends the exact descriptor bytes, bearer or workload credentials, and an idempotency key to the documented
 TPF Cloud API. The first Cloud target registers an immutable Release and creates a `CUSTOMER_MANAGED` Deployment for
@@ -161,7 +182,12 @@ tpf release verify --release pipeline-release.json --output json
 tpf deploy staging --release pipeline-release.json --output json
 ```
 
-CI acquires a short-lived token through client credentials, without reading human credential files or prompting.
+Provision a separate organisation-scoped OAuth service application with `tpf:deploy` access through your Cloud
+operator. The private identity API validates its credentials and organisation authority. A credential source with a
+different name uses `TPF_OAUTH_<UPPERCASE_NAME>_ISSUER`, `_CLIENT_ID` and `_CLIENT_SECRET`; hyphens become underscores.
+
+CI acquires a short-lived token through client credentials at deployment time, without reading human credential files
+or prompting. Do not supply a developer's credential directory to a CI job.
 It needs neither a source checkout nor Maven. Successful Cloud registration reports `REGISTERED`; physical deployment,
 runtime verification and activation remain `NOT_REQUESTED`. Container CI can still pin the published image digest and
 use the [container mounts](./cli-installation#container-alternative) instead. The container wrapper forwards one
