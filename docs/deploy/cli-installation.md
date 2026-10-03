@@ -230,7 +230,7 @@ Cloud registration; a durable local-container Deployment Target is a separate ca
 After configuring the [Release producer](./release-descriptors), build a local descriptor on the host:
 
 ```sh
-./mvnw verify -Dtpf.release.version=local-1 -Dtpf.release.allowLocalUris=true \
+./mvnw verify -Dtpf.release.skip=false -Dtpf.release.version=local-1 -Dtpf.release.allowLocalUris=true \
   -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
