@@ -26,9 +26,9 @@ in the application POM, then build normally. The Release plugin runs during `ver
 describe the final bytes:
 
 ```sh
-./mvnw verify -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw verify -Dtpf.release.skip=false -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 # Optional: publish the exact Maven artefacts referenced by the descriptor.
-./mvnw deploy -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw deploy -Dtpf.release.skip=false -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 `mvn deploy` publishes Maven artefacts; it does not deploy the application. It also traverses `verify`, so supply the

@@ -40,12 +40,16 @@ Add the release plugin to the application module that owns the deployable artefa
 The goal runs in Maven's `verify` phase. Supply the immutable Release version explicitly:
 
 ```sh
-./mvnw verify -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw verify -Dtpf.release.skip=false -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 The output is `target/pipeline-release.json`. The goal reads
 `target/classes/META-INF/pipeline/pipeline-contract.json`, hashes the exact packaged bytes, and verifies that the
 named carrier contains the complete `META-INF/pipeline/**` tree byte for byte.
+
+Release production is skipped by default, so adding the plugin does not make ordinary `mvn verify` builds
+require a Release version or packaged inputs. Keep the execution bound to `verify`; enable production explicitly
+with `-Dtpf.release.skip=false` and supply an immutable version. Skipping writes no descriptor.
 
 `tpf.release.version` never defaults to `${project.version}`. A mutable `SNAPSHOT` must not accidentally become an
 immutable Release identity.
@@ -57,13 +61,13 @@ that library directly; it does not need to reproduce Maven behaviour or Release 
 Optionally publish the Maven artefacts referenced by its immutable coordinates:
 
 ```sh
-./mvnw deploy -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw deploy -Dtpf.release.skip=false -Dtpf.release.version=2026.10.02.1 -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 Standard `deploy` traverses `verify` again; use the same Release version and keep final bytes identical. Preserve
 `target/pipeline-release.json` separately and unchanged. Configure the plugin → run `mvn verify` → optionally publish
 with `mvn deploy` → preserve the descriptor → [verify or deploy it with the CLI](./deployment-cli).
-[Install the CLI container](./cli-installation) for the Maven-to-CLI hand-off.
+[Install the CLI](./cli-installation) for the Maven-to-CLI hand-off.
 
 The plugin produces a Release. It has no deployment-target selection and is not a Cloud deployment client; there is
 no `tpf:deploy` Maven goal.
@@ -72,6 +76,7 @@ no `tpf:deploy` Maven goal.
 
 | Parameter | Default | Purpose |
 | --- | --- | --- |
+| `tpf.release.skip` | `true` | Skip descriptor production for ordinary development builds. |
 | `tpf.release.version` | none | Required immutable Release version. |
 | `tpf.release.output` | `target/pipeline-release.json` | External descriptor output. |
 | `tpf.release.contractFile` | `target/classes/META-INF/pipeline/pipeline-contract.json` | Compiler-produced Pipeline Contract. |
@@ -89,6 +94,7 @@ If no stable repository URI is configured, opt into a local-only descriptor expl
 
 ```sh
 ./mvnw verify \
+  -Dtpf.release.skip=false \
   -Dtpf.release.version=local-1 \
   -Dtpf.release.allowLocalUris=true
 ```
