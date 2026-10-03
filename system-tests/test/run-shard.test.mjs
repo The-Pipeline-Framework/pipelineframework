@@ -40,7 +40,7 @@ test('product shard runs owner suites sequentially against one resolved set and 
     '--owners', owners,
     '--resolvedSet', join(directory, 'resolved.json'),
     '--mavenRepository', join(directory, 'm2')
-  ], {env: {...process.env, TPF_CAPTURE: capture}, encoding: 'utf8'});
+  ], {env: {...process.env, TPF_JAVA_21_HOME: directory, TPF_CAPTURE: capture}, encoding: 'utf8'});
 
   assert.equal(result.status, 0, result.stderr);
   const captured = await readFile(capture, 'utf8');
@@ -82,7 +82,7 @@ test('product shard runs remaining suites after one suite fails', async () => {
     '--owners', join(directory, 'owners'),
     '--resolvedSet', join(directory, 'resolved.json'),
     '--mavenRepository', join(directory, 'm2')
-  ], {env: {...process.env, TPF_CAPTURE: capture}, encoding: 'utf8'});
+  ], {env: {...process.env, TPF_JAVA_21_HOME: directory, TPF_CAPTURE: capture}, encoding: 'utf8'});
 
   assert.notEqual(result.status, 0);
   assert.equal(await readFile(capture, 'utf8'), 'after');
@@ -121,26 +121,28 @@ test('mixed shard selects the registered JDK per owner without leaking CLI Java 
   ]);
 });
 
-test('CLI verification refuses an absent Java 25 toolchain before invoking its suite', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tpf-shard-missing-jdk-'));
-  const owner = join(directory, 'owners', 'cli');
-  const capture = join(directory, 'capture.txt');
-  await mkdir(owner, {recursive: true});
-  await writeFile(join(owner, 'suite.json'), JSON.stringify({schemaVersion: 1, suites: {
-    verify: {command: ['bash', '-c', 'printf ran > "$TPF_CAPTURE"'], timeoutMinutes: 1}
-  }}));
-  await writeFile(join(directory, 'resolved.json'), JSON.stringify({components: {}}));
-  await writeFile(join(directory, 'shard.json'), JSON.stringify({suites: [
-    {suite: 'cli-verify', owner: 'cli', manifest: 'suite.json', entrypoint: 'verify', versionProperties: {}}
-  ]}));
-  const environment = {...process.env, TPF_CAPTURE: capture};
-  delete environment.TPF_JAVA_25_HOME;
-  const result = spawnSync(process.execPath, [runner,
-    '--shard', join(directory, 'shard.json'), '--coordination', directory,
-    '--owners', join(directory, 'owners'), '--resolvedSet', join(directory, 'resolved.json'),
-    '--mavenRepository', join(directory, 'm2')
-  ], {env: environment, encoding: 'utf8'});
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /JDK 25 is required for cli; TPF_JAVA_25_HOME is missing/);
-  await assert.rejects(readFile(capture), {code: 'ENOENT'});
-});
+for (const [owner, version] of [['runtime', 21], ['cli', 25]]) {
+  test(`${owner} verification refuses an absent Java ${version} home despite inherited Java 25`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tpf-shard-missing-jdk-'));
+    const ownerDirectory = join(directory, 'owners', owner);
+    const capture = join(directory, 'capture.txt');
+    await mkdir(ownerDirectory, {recursive: true});
+    await writeFile(join(ownerDirectory, 'suite.json'), JSON.stringify({schemaVersion: 1, suites: {
+      verify: {command: ['bash', '-c', 'printf ran > "$TPF_CAPTURE"'], timeoutMinutes: 1}
+    }}));
+    await writeFile(join(directory, 'resolved.json'), JSON.stringify({components: {}}));
+    await writeFile(join(directory, 'shard.json'), JSON.stringify({suites: [
+      {suite: `${owner}-verify`, owner, manifest: 'suite.json', entrypoint: 'verify', versionProperties: {}}
+    ]}));
+    const environment = {...process.env, JAVA_HOME: join(directory, 'jdk25'), TPF_CAPTURE: capture};
+    delete environment[`TPF_JAVA_${version}_HOME`];
+    const result = spawnSync(process.execPath, [runner,
+      '--shard', join(directory, 'shard.json'), '--coordination', directory,
+      '--owners', join(directory, 'owners'), '--resolvedSet', join(directory, 'resolved.json'),
+      '--mavenRepository', join(directory, 'm2')
+    ], {env: environment, encoding: 'utf8'});
+    assert.notEqual(result.status, 0);
+    assert.ok(result.stderr.includes(`JDK ${version} is required for ${owner}; TPF_JAVA_${version}_HOME is missing`), result.stderr);
+    await assert.rejects(readFile(capture), {code: 'ENOENT'});
+  });
+}

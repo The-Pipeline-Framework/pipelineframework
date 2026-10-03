@@ -34,12 +34,12 @@ for (const suite of shard.suites) {
   try {
     const javaVersion = components[suite.owner]?.buildJavaVersion ?? 21;
     const javaHome = process.env[`TPF_JAVA_${javaVersion}_HOME`];
-    if (!javaHome && javaVersion !== 21) throw new Error(`JDK ${javaVersion} is required for ${suite.owner}; TPF_JAVA_${javaVersion}_HOME is missing`);
-    const environment = javaHome ? {
+    if (!javaHome) throw new Error(`JDK ${javaVersion} is required for ${suite.owner}; TPF_JAVA_${javaVersion}_HOME is missing`);
+    const environment = {
       ...process.env,
       JAVA_HOME: javaHome,
       PATH: `${join(javaHome, 'bin')}${delimiter}${process.env.PATH ?? ''}`
-    } : process.env;
+    };
     await run(process.execPath, [
       runner,
       '--manifest', manifest,
