@@ -1,10 +1,25 @@
 # Install the TPF CLI
 
 Native releases provide `tpf` for macOS Apple Silicon and Linux x64/ARM64 without requiring Java, Maven or Docker.
-Homebrew is the recommended installation. Check [CLI releases](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases)
-for a published native version: the tap becomes usable after all platform and installation checks pass.
-Development snapshots are available as archives in the `latest` prerelease after main passes the publication gates.
-Homebrew installs stable releases; snapshot archives do not require Homebrew. The public GHCR image remains a secondary option.
+Check [CLI downloads](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases) for an available build.
+Choose a stable release for regular use or a nightly snapshot to try changes on main. The container is a secondary option.
+
+## Stable and nightly downloads
+
+| Channel | Download | Updates | Installation |
+| --- | --- | --- | --- |
+| Stable | A version release, such as `v26.10.1` | When a stable version is released; published version assets stay fixed | Homebrew or checksummed ZIP |
+| Nightly snapshot | The [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest), with a version such as `26.10.1-SNAPSHOT` | Each successful nightly build of main; manual publication is also possible | Checksummed ZIP |
+
+The nightly build starts daily at **20:47 UTC**, alongside the separate Maven snapshot publication. Downloads update
+only after build, compatibility and candidate installation checks pass. If those checks fail, the previous snapshot
+remains available.
+Merging a CLI PR validates its changes but does not immediately publish a native snapshot. The next successful nightly
+build includes the changes on main.
+
+The name `latest` identifies the development snapshot channel. It does not replace a stable version release or update
+the stable Homebrew formula. Check the prerelease's version and source commit before installing; if no native assets
+are available yet, use the container alternative below.
 
 ```mermaid
 flowchart LR
@@ -32,17 +47,29 @@ no Java runtime; application JARs launched by the local-process target still nee
 
 ## Download an archive
 
-Download the ZIP for your platform and its SHA-256 file from the same release. Replace the version below with an
-actually published version. The archive has `LICENSE`, `README.md` and `bin/tpf` beneath its named root directory.
+Open the chosen [stable release or nightly prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases)
+and copy the version from its native ZIP filename, including `-SNAPSHOT` when present. Select your platform:
+
+| Host | `TPF_PLATFORM` |
+| --- | --- |
+| macOS Apple Silicon | `osx-aarch_64` |
+| Linux x64 | `linux-x86_64` |
+| Linux ARM64 | `linux-aarch_64` |
+
+The same commands install either channel. The version suffix selects the download location automatically:
 
 ```sh
-TPF_VERSION='<published version>'
-# macOS Apple Silicon; Linux alternatives: linux-x86_64 or linux-aarch_64
+TPF_VERSION='<exact published version, including -SNAPSHOT if present>'
 TPF_PLATFORM=osx-aarch_64
+case "$TPF_VERSION" in
+  *-SNAPSHOT) TPF_TAG=latest ;;
+  *) TPF_TAG="v$TPF_VERSION" ;;
+esac
 TPF_ARCHIVE="tpf-$TPF_VERSION-$TPF_PLATFORM.zip"
-TPF_RELEASE="https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/v$TPF_VERSION"
+TPF_RELEASE="https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/$TPF_TAG"
 curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE"
 curl -fLO "$TPF_RELEASE/$TPF_ARCHIVE.sha256"
+curl -fLO "$TPF_RELEASE/tpf-$TPF_VERSION-$TPF_PLATFORM.json"
 case "$(uname -s)" in
   Darwin) shasum -a 256 -c "$TPF_ARCHIVE.sha256" ;;
   Linux) sha256sum -c "$TPF_ARCHIVE.sha256" ;;
@@ -55,22 +82,18 @@ export PATH="$HOME/.local/bin:$PATH"
 tpf --version
 ```
 
-Add `$HOME/.local/bin` to your shell's persistent `PATH` for later sessions. In CI, pin the release version and verify
-the archive checksum; preserve the checksum independently when you need an independently pinned installation.
-macOS archives are initially unsigned and unnotarized. Prefer Homebrew. For a verified direct download, if Gatekeeper
-blocks execution, approve that executable in System Settings → Privacy & Security; do not disable Gatekeeper globally.
+The ZIP contains `LICENSE`, an installation README and `bin/tpf` beneath its named root directory.
+Add `$HOME/.local/bin` to your shell's persistent `PATH` for later sessions. To upgrade an archive installation,
+repeat these steps with the desired download; this replaces your installed executable. Snapshot executables report
+their full `-SNAPSHOT` version.
 
-For a development snapshot, open the [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest)
-and use its exact `-SNAPSHOT` version in the archive commands above, replacing the release URL with:
+For repeatable CI, preserve the archive, checksum and JSON metadata, which records the source commit and toolchain.
+Pin the expected checksum independently. The moving `latest` URL can return different bytes even when the snapshot
+version string stays the same; the version alone does not pin a snapshot installation.
 
-```sh
-TPF_VERSION='<published version>-SNAPSHOT'
-TPF_RELEASE='https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/download/latest'
-```
-
-Set these variables before calculating `TPF_ARCHIVE` and downloading. `tpf --version` retains `-SNAPSHOT`.
-`latest` moves as verified main builds are published; retain the archive, checksum and adjacent JSON metadata
-(including its source commit) for repeatable CI. A later download from the same URL can contain different bytes.
+macOS archives are initially unsigned and unnotarised. Prefer Homebrew for stable releases. For a verified direct
+download, if Gatekeeper blocks execution, approve that executable in System Settings → Privacy & Security; do not
+disable Gatekeeper globally.
 
 ## Use the application directory
 
