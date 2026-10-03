@@ -562,31 +562,31 @@ CSV Payments uses both sides of the object shell in the default path.
 | Concern | Legacy file-step path | Connector-first path |
 | --- | --- | --- |
 | Source discovery | `ProcessFolderService` listed folders as a business step. | Object Ingest lists and admits source objects, then submits deterministic queue-async executions. |
-| CSV parsing | `ProcessCsvPaymentsInputService` parsed the selected file. | `ProcessCsvPaymentsInputService` still parses the source object domain input. |
+| CSV parsing | `ProcessCsvPaymentsInputService` parsed the selected file. | The paged OpenCSV source opens the pinned object at a provider-owned checkpoint and emits parser-valid logical records on demand. |
 | Provider wait | `Await Payment Provider` dispatched one interaction per row. | `Process Csv Payments Input` emits each parsed row through deferred completion; TPF coordinates itemised completion through durable await units and a live session when the queue-async transition is active. |
-| Output file | `ProcessCsvPaymentsOutputFileService` grouped and wrote final files. | Object Publish groups terminal `PaymentOutput` values and writes `{groupKey}.out`. |
-| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | The parser advances by reactive demand, the deferred-completion in-flight window, and streaming publish backpressure. |
+| Output file | `ProcessCsvPaymentsOutputFileService` grouped and wrote final files. | Object Publish stages bounded page parts, then composes them in page order into one `{groupKey}.out` after exhaustion. |
+| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | Backpressure controls demand inside the open page; `paging.maxRecords` bounds transition ownership and replay between pages. |
 
 The business pipeline therefore ends at the last domain transition, not at a file-writing step:
 
 ```text
 Object Ingest
-  -> Process Csv Payments Input [deferred completion]
+  -> Process Csv Payments Input [paged ONE_TO_MANY + deferred completion]
   -> Process Approved Payment Status / Process Unapproved Payment Status
-  -> Finalize Payment Output
-  -> Object Publish
+  -> Finalize Payment Output [terminal branch join]
+  -> Object Publish [page parts -> final object]
 ```
 
 `Object Ingest` and `Object Publish` are framework-owned I/O shells around the pipeline. They are not replacement names for user-authored steps.
 
-The parser pace in the connector-first path is reactive. `ProcessCsvPaymentsInputService` still owns CSV parsing, but it is requested by the pipeline as downstream capacity becomes available. It is not held back by the deprecated CSV demand pacer.
+The parser pace in the connector-first path is reactive. The OpenCSV provider still owns CSV cursor interpretation, but it emits records only as the pipeline requests them. A page checkpoint becomes eligible only after normal publisher completion and resource release; failure or cancellation cannot advance it. Paging therefore bounds source progress without turning the page into a list or delaying an admitted item's downstream progress.
 
 ## Publish Mapper
 
 Application code renders terminal values into object payload chunks. TPF owns grouping, key templating, provider selection, write idempotency, backpressure, telemetry, and lifecycle reporting.
 
 ```java
-public final class CsvPaymentOutputPublishMapper
+public final class ExampleStreamingPaymentOutputMapper
     implements StreamingObjectPublishMapper<PaymentOutput> {
 
   @Override
@@ -618,6 +618,12 @@ public final class CsvPaymentOutputPublishMapper
   }
 }
 ```
+
+For a paged source, the terminal mapper implements `PagedStreamingObjectPublishMapper<T>`.
+`openPageGroup` renders only a page's body; `groupPrefix` and `groupSuffix` render once around
+the composed object, and `combinePageMetadata` folds bounded metadata across pages. CSV
+Payments puts its header in `groupPrefix` and omits the per-page writer header from each body,
+so ten page parts still produce one CSV header and one final object.
 
 ## Connectors
 
@@ -684,7 +690,7 @@ publish:
 
 Object ingest v1 requires `pipeline.orchestrator.mode=QUEUE_ASYNC`. TPF submits each mapped input with a deterministic idempotency key derived from object identity, so duplicate listing results resolve to existing async executions.
 
-Object Publish also targets queue-async terminal output. Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only. Publication happens before the queue-async execution is marked successful, so a successful execution does not silently miss its configured output object.
+Object Publish also targets queue-async terminal output. Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only. For a paged source, Object Publish commits attempt-safe page-part manifests before the page advances and composes them with bounded memory after exhaustion. The final object is published before the queue-async execution is marked successful, so a successful execution does not silently miss its configured output object.
 
 FUNCTION pipelines are rejected in v1. Quarkus currently hosts the bootstrap, but the ingest runner and provider SPI are plain Java so a Spring Boot host can wire the same semantics later.
 

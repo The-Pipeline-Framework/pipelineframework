@@ -64,7 +64,16 @@ classDiagram
       currentStepIndex
       status
       awaitUnitId
+      pagingState
       version
+    }
+
+    class PagedExecutionState {
+      pageIndex
+      sourceIdentity
+      startCheckpoint
+      maxRecords
+      suspendedCompletion
     }
 
     class AwaitUnitRecord {
@@ -118,6 +127,7 @@ classDiagram
     class ExecutionStateStore
 
     ExecutionRecord --> AwaitUnitRecord : awaitUnitId
+    ExecutionRecord --> PagedExecutionState : pagingState
     AwaitUnitRecord "1" --> "1..n" AwaitInteractionRecord : owns
     PipelineExecutionService --> PipelineRunner : run / resume steps
     PipelineRunner --> AwaitCompletionSupport : decorate operation result
@@ -211,12 +221,12 @@ progress.
 
 `csv-payments` applies this model to a Kafka-backed payment-provider boundary:
 
-1. `Process Csv Payments Input` expands an input file into a stream of `PaymentRecord` items.
-2. `await:` modifies the authored `Process Csv Payments Input` expansion service; it is not a property of the emitted `PaymentRecord` values.
-3. Because that operation emits a stream, its cardinality causes TPF to create one owning await unit with one item interaction per emitted `PaymentRecord`.
+1. `Process Csv Payments Input` is a paged `ONE_TO_MANY` source. It opens the pinned input object at the current opaque checkpoint and emits at most `paging.maxRecords` parser-valid logical records for that page.
+2. `await:` modifies the authored source operation; it is not a property of the emitted `PaymentRecord` values.
+3. Because that operation emits a stream, TPF creates one page-scoped await unit with one item interaction per emitted `PaymentRecord`. Page identity plus page-relative item position keeps derived interaction and effect identities stable across replay and distinct across pages.
 4. The Kafka adapter publishes requests to `csv-payments.payment.requests`; the mock provider publishes completions to `csv-payments.payment.results`.
 5. Completed item outputs are `PaymentStatus` union variants. In the live Kafka path, completions are recorded and signalled into the live await session so the approved or unapproved status branch can run as downstream demand accepts it. In the fallback path, the runtime resumes per-item work from durable item continuations.
-6. In the connector-first default path, terminal `PaymentOutput` records are published by Object Publish rather than by a `ProcessCsvPaymentsOutputFileService` business step.
+6. In the connector-first default path, terminal `PaymentOutput` records are staged by Object Publish under stable page and group identities rather than by a `ProcessCsvPaymentsOutputFileService` business step. After the exhausted page, Object Publish composes the page parts into the existing single final object per group.
 
 The following class view shows the durable fallback representation after the live owner is unavailable:
 
@@ -227,18 +237,29 @@ classDiagram
       currentStepIndex = Process Csv Payments Input
       status = WAITING_EXTERNAL
       awaitUnitId = csv payment unit
+      pageIndex
+      startCheckpoint
+      maxRecords
+      suspendedPageCompletion
     }
 
     class CsvAwaitUnitRecord {
       stepId = Process Csv Payments Input
-      cardinality = ONE_TO_ONE
+      cardinality = ONE_TO_MANY
       expectedItemCount = payment records
       completedItemCount = provider completions
       dispatchComplete
       status
     }
 
+    class PagedTransitionCompletion {
+      consumedRecords
+      nextCheckpoint
+      exhausted
+    }
+
     class PaymentInteraction0 {
+      pageIndex
       itemIndex = 0
       requestPayload = PaymentRecord
       responsePayload = PaymentStatus
@@ -247,6 +268,7 @@ classDiagram
     }
 
     class PaymentInteraction1 {
+      pageIndex
       itemIndex = 1
       requestPayload = PaymentRecord
       responsePayload = PaymentStatus
@@ -260,15 +282,16 @@ classDiagram
     }
 
     CsvExecutionRecord --> CsvAwaitUnitRecord : awaitUnitId
+    CsvExecutionRecord --> PagedTransitionCompletion : suspended completion
     CsvAwaitUnitRecord "1" --> "0..n" PaymentInteraction0 : owns ordered item
     CsvAwaitUnitRecord "1" --> "0..n" PaymentInteraction1 : owns ordered item
     PaymentInteraction0 --> KafkaTopics : dispatch / complete
     PaymentInteraction1 --> KafkaTopics : dispatch / complete
 ```
 
-The important detail is that CSV does not model the provider as a pipeline step. The provider is an external actor reached through the await transport. The pipeline resumes from admitted `PaymentStatus` completions.
+The important detail is that CSV does not model the provider as a pipeline step. The provider is an external actor reached through the await transport. The pipeline resumes from admitted `PaymentStatus` completions. `itemIndex` is ordered within its page identity; it is not a source-global offset.
 
-`WAITING_EXTERNAL` is still the durable recovery pointer. It is not the live-path release gate when a live await session is active and accepting completions.
+`WAITING_EXTERNAL` is still the durable recovery pointer. When a page publisher has completed before the durable Await suffix finishes, the execution also retains that page's validated `PagedTransitionCompletion`. The resumed suffix uses it to advance the page or finalise an exhausted source instead of treating the resumed page as the whole logical execution. `WAITING_EXTERNAL` is not the live-path release gate when a live await session is active and accepting completions.
 
 ## Operation Results As Unit Shape
 

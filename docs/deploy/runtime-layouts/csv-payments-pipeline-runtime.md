@@ -17,6 +17,26 @@ below are relative to that repository's root.
 - `pipeline-runtime-svc`: grouped pipeline step runtime (all regular steps)
 - `persistence-svc`: plugin/aspect runtime (persistence side effects)
 
+For a paged CSV source, the coordinator's REST transition worker opens one page through the generated source client. With `pipeline.transport=GRPC`, that client calls the source host's `remoteOpenPage` server stream; with `pipeline.transport=REST`, it calls a separate streaming page endpoint. The ordinary `remoteProcess` operation remains available for unpaged calls. The source host validates the shared canonical type catalogue fingerprint and its configured `pipeline.orchestrator.release-version` against the request before it opens the source. It then parses CSV records and validates the pinned snapshot and opaque checkpoint. The worker receives demanded items and one terminal page completion, then follows the normal Await and Object Publish path before the coordinator commits the page.
+
+```mermaid
+sequenceDiagram
+  participant C as Coordinator
+  participant W as REST transition worker
+  participant S as Source step host
+  participant D as Downstream Await and publish
+  C->>W: Run bounded page transition
+  W->>S: Open page with pinned release and checkpoint
+  D->>W: Request item demand
+  W->>S: Request bounded transport demand
+  S-->>W: Item frames
+  W-->>D: Live items
+  S-->>W: Completion frame, then normal close
+  D-->>W: Durable terminal completion
+  W-->>C: Page completion
+  C->>C: Fenced page commit
+```
+
 ## Build
 
 ```bash

@@ -65,6 +65,8 @@ When the viewer is hosted from the docs site, the shell exposes a persistent `Ba
 The viewer ships with:
 
 - `CSV Payments built-in`
+- `CSV Payments 1k slow provider`
+- `CSV Payments 10k paged`
 - `Search built-in pre-warm`
 - `Search built-in`
 - `Custom replay`

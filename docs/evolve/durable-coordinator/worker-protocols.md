@@ -12,12 +12,12 @@ sequenceDiagram
     participant Worker as "Transition worker"
     participant Steps as "Step/runtime services"
 
-    Coord->>Worker: TransitionCommandEnvelope
+    Coord->>Worker: TransitionCommandEnvelope + optional page context
     Worker->>Steps: execute bounded continuation
     alt await requires durable fallback
         Worker-->>Coord: WAITING_EXTERNAL
     else transition completed
-        Worker-->>Coord: COMPLETED
+        Worker-->>Coord: COMPLETED + optional page completion
     else business/protocol failure
         Worker-->>Coord: FAILED
     end
@@ -31,15 +31,18 @@ The worker receives a `TransitionCommandEnvelope` containing:
 2. pipeline, contract, and release identity,
 3. current step index and attempt,
 4. transition key and result shape,
-5. typed serialized payload metadata.
+5. typed serialized payload metadata,
+6. optional page index, opaque start checkpoint, pinned source identity, and record limit.
 
 The worker returns a `TransitionResultEnvelope`:
 
-1. `COMPLETED` with serialized output payloads,
-2. `WAITING_EXTERNAL` with await suspension metadata,
+1. `COMPLETED` with serialized output payloads and optional page completion metadata,
+2. `WAITING_EXTERNAL` with await suspension metadata and any validated suspended page completion,
 3. `FAILED` with classified failure details.
 
-An eligible live itemized await remains inside the active worker with its live session and terminal stream. It therefore returns `COMPLETED` when that bounded transition finishes; it does not return `WAITING_EXTERNAL` merely because its await adapter is remote.
+Page context is control metadata, separate from domain payloads. The worker opens the pinned provider snapshot from the opaque start checkpoint and reports consumed logical records, an optional successor checkpoint, and exhaustion only after normal publisher completion and resource release. The coordinator alone performs the fenced page commit and queues the successor page.
+
+An eligible live itemized await remains inside the active worker with its live session and terminal stream. It therefore returns `COMPLETED` when that bounded transition finishes; it does not return `WAITING_EXTERNAL` merely because its await adapter is remote. If durable fallback suspends after the source publisher has completed, the worker includes the validated page completion so the resumed terminal suffix can commit the same page.
 
 ## Selection
 

@@ -67,7 +67,7 @@ const FIRST_VISIT_AUTOLOAD_SOURCE_KEY = "csv-payments";
 const FIRST_VISIT_AUTOLOAD_STORAGE_KEY = "tpf-replay-viewer-first-visit-autoloaded:v1";
 const COMPLETION_PROMPT_DELAY_MS = 3000;
 const LAYOUT_STORAGE_PREFIX = "tpf-replay-viewer-layout";
-const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, { label: entry.label, path: entry.path }]));
+const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, entry]));
 const EFFECT_PRESETS = {
   pulse: {
     start: { duration: 0.72, startScale: 0.92, endScale: 2.7, opacity: 0.96 },
@@ -1036,6 +1036,22 @@ async function readResponseTextWithProgress(response, label) {
   return chunks.join("");
 }
 
+async function readGzipResponseText(response, label) {
+  setLoadProgress(true, 0.35, `Downloading ${label}...`);
+  await nextAnimationFrame();
+  const compressed = await response.arrayBuffer();
+  const bytes = new Uint8Array(compressed);
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
+    return new TextDecoder().decode(bytes);
+  }
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("This browser cannot decompress this replay. Decompress the dataset and import its JSON file.");
+  }
+  setLoadProgress(true, 0.75, `Decompressing ${label}...`);
+  await nextAnimationFrame();
+  return new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
 function hexToRgbTriplet(hexColor) {
   const value = hexColor.replace("#", "");
   const normalized = value.length === 3
@@ -1809,7 +1825,9 @@ async function loadBuiltInReplay(datasetKey) {
   if (!response.ok) {
     throw new Error(`Failed to fetch built-in dataset (${response.status})`);
   }
-  const text = await readResponseTextWithProgress(response, dataset.label);
+  const text = dataset.compression === "gzip"
+    ? await readGzipResponseText(response, dataset.label)
+    : await readResponseTextWithProgress(response, dataset.label);
   setLoadProgress(true, 0.88, `Parsing ${dataset.label}...`);
   await nextAnimationFrame();
   let document;

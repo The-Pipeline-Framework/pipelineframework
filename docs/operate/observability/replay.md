@@ -111,7 +111,7 @@ retain execution and item identity that must not become a metric label.
 
 Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
-Connector-first pipelines add framework-owned participants that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Process Csv Payments Input` as the semantic operation with a deferred-completion overlay, the Kafka broker and provider as external participants, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the explicit terminal merge, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, merge, and publish progress should overlap. The old folder, standalone Await, single `Process Payment Status`, and output-file services should only appear when a historical release dataset is being replayed.
+Connector-first pipelines add framework-owned participants that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Process Csv Payments Input` as the semantic operation with paging and a deferred-completion overlay, the Kafka broker and provider as external participants, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the terminal branch join, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, branch joining, and page-part staging should overlap. The old folder, standalone Await, single `Process Payment Status`, and output-file services should only appear when a historical release dataset is being replayed.
 
 Telemetry impact for live itemized await:
 
@@ -143,7 +143,10 @@ Branch-aware replay also uses the normal event stream:
 
 The built-in CSV Payments replay is a captured proof run, not a benchmark promise. It is useful because it shows the intended connector-first shape and the timing relationship between parser dispatch, await completions, status processing, and Object Publish.
 
-The current dataset was captured from the healthy 1k provider-reject replay lane. Its concurrent
+The current built-in dataset was captured from the healthy 1k provider-reject replay lane
+before paging was introduced. It proves live demand and early per-item progress, but it
+does not prove page boundaries, successor-checkpoint commits, multi-page replay bounds, or
+ordered cross-page composition. Its concurrent
 provider mock uses the deterministic `0.08` rejection rule, so both live status paths appear in
 the proof:
 
@@ -175,7 +178,23 @@ completion/resume events. That means the parser is being paced by reactive deman
 deferred-completion in-flight window, not by a forced sleep. Object Publish runs at the terminal
 boundary after status output exists and before success is committed.
 
-The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture. Do not extrapolate the replay timing into a large-workload SLA.
+Two additional [viewer datasets](/replay-viewer/) capture paging in the CSV Payments LOCAL
+monolith. Each run submits one file. Both use `paging.maxRecords: 1000`, the same deterministic
+`0.08` provider-rejection rule, and a 60-second provider permit wait. The only pacing change is
+the mock provider's rate limit:
+
+| Capture | Provider permits/s | Source pages | Output rows | Replay duration | Events |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1k slow provider | 10 | 1 | 1,000 | 100.811s | 17,007 |
+| 10k paged | 100 | 10 | 10,000 | 100.932s | 170,043 |
+
+The 10k replay has ten source starts and completions, 10,000 source emits, and 10,000 each of
+Await dispatch, admission acquisition, and admission release. It records 9,170 approved and
+830 unapproved branch starts. The first status item appears at 0.925s, while the last source
+item appears at 93.379s; healthy downstream work overlaps source progress. The final CSV has
+one header and exactly 10,000 rows. The paired timings show provider-paced throughput in these
+captured runs, not a general throughput guarantee. These LOCAL captures do not establish
+remote-worker takeover or a remote paged-source transport.
 
 Command telemetry has two layers:
 
@@ -194,7 +213,7 @@ Example branch-routing replay checks:
 
 - branch-specific steps show `skip` events for non-applicable alternatives instead of synthetic no-op business executions;
 - only the matching branch step shows normal `start`/`success` item flow for a given item;
-- the terminal merge step receives only valid branch-end types.
+- the terminal branch-join step receives only valid branch-end types.
 
 ## Replay exporter configuration
 
@@ -222,6 +241,8 @@ It ships with built-in datasets and also accepts imported replay JSON files gene
 The viewer exposes:
 
 - `CSV Payments built-in`
+- `CSV Payments 1k slow provider`
+- `CSV Payments 10k paged`
 - `Search built-in pre-warm`
 - `Search built-in`
 - `Custom replay`

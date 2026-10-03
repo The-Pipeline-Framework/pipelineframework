@@ -11,6 +11,11 @@ on:
         description: Comma- or newline-separated GitHub pull-request URLs (2–10, one per component)
         required: true
         type: string
+      include_csv_ha_scale:
+        description: Run the 10k CSV self-host HA scale suite for a set containing CSV Payments
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: tpf-system-test-set-${{ inputs.set_id }}
@@ -35,6 +40,7 @@ jobs:
         env:
           PULL_REQUESTS: ${{ inputs.pull_requests }}
           SET_ID: ${{ inputs.set_id }}
+          INCLUDE_CSV_HA_SCALE: ${{ inputs.include_csv_ha_scale }}
         run: |
           printf '%s\n' "$PULL_REQUESTS" > pull-requests.txt
           node system-tests/scripts/parse-compatibility-prs.mjs \
@@ -42,6 +48,11 @@ jobs:
             --input pull-requests.txt \
             --setId "$SET_ID" \
             --output compatibility-set-request.json
+          if [[ "$INCLUDE_CSV_HA_SCALE" == true ]]; then
+            jq -e '.requests | any(.component == "csvPayments")' compatibility-set-request.json > /dev/null
+            jq '. + {requestedSuites: ["csv-ha-scale"]}' compatibility-set-request.json > compatibility-set-request.next.json
+            mv compatibility-set-request.next.json compatibility-set-request.json
+          fi
           echo "repository_names=$(jq -r '[.requests[].repositoryName] | join(",")' compatibility-set-request.json)" >> "$GITHUB_OUTPUT"
 
       - name: Preserve validated request
