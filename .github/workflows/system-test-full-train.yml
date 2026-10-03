@@ -268,6 +268,18 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Record JDK 21
+        run: echo "TPF_JAVA_21_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Record JDK 25
+        run: echo "TPF_JAVA_25_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
       - name: Download credential-free test inputs
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:

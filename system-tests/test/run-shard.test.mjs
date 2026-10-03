@@ -88,3 +88,59 @@ test('product shard runs remaining suites after one suite fails', async () => {
   assert.equal(await readFile(capture, 'utf8'), 'after');
   assert.match(result.stderr, /product shard failed: first/);
 });
+
+test('mixed shard selects the registered JDK per owner without leaking CLI Java 25', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tpf-shard-jdks-'));
+  const owners = join(directory, 'owners');
+  const capture = join(directory, 'capture.txt');
+  const java21 = join(directory, 'jdk21');
+  const java25 = join(directory, 'jdk25');
+  for (const [home, version] of [[java21, 21], [java25, 25]]) {
+    await mkdir(join(home, 'bin'), {recursive: true});
+    await writeFile(join(home, 'bin', 'java'), `#!/bin/sh\nprintf '${version}\\n'\n`, {mode: 0o755});
+  }
+  for (const owner of ['cli', 'runtime']) {
+    await mkdir(join(owners, owner), {recursive: true});
+    await writeFile(join(owners, owner, 'suite.json'), JSON.stringify({schemaVersion: 1, suites: {
+      verify: {command: ['bash', '-c', 'printf "%s:" "$JAVA_HOME" >> "$TPF_CAPTURE"; java >> "$TPF_CAPTURE"'], timeoutMinutes: 1}
+    }}));
+  }
+  await writeFile(join(directory, 'resolved.json'), JSON.stringify({components: {}}));
+  await writeFile(join(directory, 'shard.json'), JSON.stringify({suites: ['cli', 'runtime', 'cli'].map((owner) => ({
+    suite: `${owner}-verify`, owner, manifest: 'suite.json', entrypoint: 'verify', versionProperties: {}
+  }))}));
+  const result = spawnSync(process.execPath, [runner,
+    '--shard', join(directory, 'shard.json'), '--coordination', directory,
+    '--owners', owners, '--resolvedSet', join(directory, 'resolved.json'),
+    '--mavenRepository', join(directory, 'm2')
+  ], {env: {...process.env, JAVA_HOME: java21, TPF_JAVA_21_HOME: java21,
+    TPF_JAVA_25_HOME: java25, TPF_CAPTURE: capture}, encoding: 'utf8'});
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual((await readFile(capture, 'utf8')).trim().split('\n'), [
+    `${java25}:25`, `${java21}:21`, `${java25}:25`
+  ]);
+});
+
+test('CLI verification refuses an absent Java 25 toolchain before invoking its suite', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tpf-shard-missing-jdk-'));
+  const owner = join(directory, 'owners', 'cli');
+  const capture = join(directory, 'capture.txt');
+  await mkdir(owner, {recursive: true});
+  await writeFile(join(owner, 'suite.json'), JSON.stringify({schemaVersion: 1, suites: {
+    verify: {command: ['bash', '-c', 'printf ran > "$TPF_CAPTURE"'], timeoutMinutes: 1}
+  }}));
+  await writeFile(join(directory, 'resolved.json'), JSON.stringify({components: {}}));
+  await writeFile(join(directory, 'shard.json'), JSON.stringify({suites: [
+    {suite: 'cli-verify', owner: 'cli', manifest: 'suite.json', entrypoint: 'verify', versionProperties: {}}
+  ]}));
+  const environment = {...process.env, TPF_CAPTURE: capture};
+  delete environment.TPF_JAVA_25_HOME;
+  const result = spawnSync(process.execPath, [runner,
+    '--shard', join(directory, 'shard.json'), '--coordination', directory,
+    '--owners', join(directory, 'owners'), '--resolvedSet', join(directory, 'resolved.json'),
+    '--mavenRepository', join(directory, 'm2')
+  ], {env: environment, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /JDK 25 is required for cli; TPF_JAVA_25_HOME is missing/);
+  await assert.rejects(readFile(capture), {code: 'ENOENT'});
+});
