@@ -47,6 +47,17 @@ The output is `target/pipeline-release.json`. The goal reads
 `target/classes/META-INF/pipeline/pipeline-contract.json`, hashes the exact packaged bytes, and verifies that the
 named carrier contains the complete `META-INF/pipeline/**` tree byte for byte.
 
+Applications that also use `verify` for ordinary development can set `<tpf.release.skip>true</tpf.release.skip>`
+in their POM properties. Keep the execution bound to `verify`; enable production explicitly when making a Release:
+
+```sh
+./mvnw verify -Dtpf.release.skip=false -Dtpf.release.version=2026.10.02.1 \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+Skipping does not write a descriptor and needs no version or packaged inputs. When enabled, the plugin still requires
+an explicit immutable version. The plugin itself defaults to production enabled.
+
 `tpf.release.version` never defaults to `${project.version}`. A mutable `SNAPSHOT` must not accidentally become an
 immutable Release identity.
 
@@ -63,7 +74,7 @@ Optionally publish the Maven artefacts referenced by its immutable coordinates:
 Standard `deploy` traverses `verify` again; use the same Release version and keep final bytes identical. Preserve
 `target/pipeline-release.json` separately and unchanged. Configure the plugin → run `mvn verify` → optionally publish
 with `mvn deploy` → preserve the descriptor → [verify or deploy it with the CLI](./deployment-cli).
-[Install the CLI container](./cli-installation) for the Maven-to-CLI hand-off.
+[Install the CLI](./cli-installation) for the Maven-to-CLI hand-off.
 
 The plugin produces a Release. It has no deployment-target selection and is not a Cloud deployment client; there is
 no `tpf:deploy` Maven goal.
@@ -72,6 +83,7 @@ no `tpf:deploy` Maven goal.
 
 | Parameter | Default | Purpose |
 | --- | --- | --- |
+| `tpf.release.skip` | `false` | Skip descriptor production for ordinary development builds. |
 | `tpf.release.version` | none | Required immutable Release version. |
 | `tpf.release.output` | `target/pipeline-release.json` | External descriptor output. |
 | `tpf.release.contractFile` | `target/classes/META-INF/pipeline/pipeline-contract.json` | Compiler-produced Pipeline Contract. |
