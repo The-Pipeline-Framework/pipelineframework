@@ -456,6 +456,18 @@ test('non-semantic path rules suppress product tests while mixed changes fall ba
   assert.deepEqual(selectPostMergeSuites('runtime', policy), ['csv-ha']);
 });
 
+test('runtime and CSV changes require observability evidence pinned to the application source', () => {
+  for (const component of ['runtime', 'csvPayments']) {
+    assert.ok(selectSuites(component, policy).includes('csv-observability'));
+  }
+  assert.ok(policy.fullTrain.includes('csv-observability'));
+  const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
+  const [suite] = suiteMatrix(['csv-observability'], policy, resolved, config);
+  assert.equal(suite.repository, config.components.csvPayments.repository);
+  assert.equal(suite.sha, resolved.testHarnesses.csvPayments.sha);
+  assert.equal(suite.entrypoint, 'observability');
+});
+
 test('suite matrix pins owner source SHAs from the resolved set', () => {
   const resolved = overlayBaseline(baseline(), digest, [manifest()], ['c'.repeat(64)], config);
   const [suite] = suiteMatrix(['expansions-resolution'], policy, resolved, config);
