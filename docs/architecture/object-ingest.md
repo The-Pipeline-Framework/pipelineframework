@@ -585,6 +585,8 @@ The parser pace in the connector-first path is reactive. The OpenCSV provider st
 
 Application code renders terminal values into object payload chunks. TPF owns grouping, key templating, provider selection, write idempotency, backpressure, telemetry, and lifecycle reporting.
 
+The following generic mapper is separate from the CSV Payments YAML above. That application binds `CsvPaymentOutputPublishMapper`, which also supplies page rendering for its paged output.
+
 ```java
 public final class ExampleStreamingPaymentOutputMapper
     implements StreamingObjectPublishMapper<PaymentOutput> {
