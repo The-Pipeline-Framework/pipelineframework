@@ -185,10 +185,7 @@
       "kind": "source",
       "consumerVersionProperties": {
         "coordinationBom": "pipelineframework.bom.version",
-        "contracts": "pipelineframework.contracts.version",
-        "compiler": "pipelineframework.compiler.version",
-        "connectors": "pipelineframework.connectors.version",
-        "runtime": "pipelineframework.runtime.version"
+        "runtime": "tpf.release.maven-plugin.version"
       },
       "suiteManifest": ".github/tpf-system-tests.json"
     },
