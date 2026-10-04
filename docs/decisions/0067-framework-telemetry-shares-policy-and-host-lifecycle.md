@@ -50,6 +50,17 @@ flowchart LR
   Export --> Report
 ```
 
+## Rationale
+
+Resolving policy independently of pipeline execution lets boundary emitters share framework
+intent without constructing execution services. Focused collaborators retain signal ownership,
+while host-owned activity state and gauge registrations prevent stale callbacks and activity
+from leaking between host instances.
+
+Separating framework intent, build capability and exporter routing makes missing signals
+diagnosable without coupling instrumentation to a backend. Startup configuration can explain
+why a signal is unavailable; exporter logs and backend data establish whether delivery succeeds.
+
 ## Consequences
 
 - Framework switches behave consistently at every managed boundary in each process.
