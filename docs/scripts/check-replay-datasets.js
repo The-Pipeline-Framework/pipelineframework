@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BUILT_IN_REPLAYS_CONFIG } from "../../tools/replay-viewer/built-in-replays.js";
@@ -41,7 +42,8 @@ const emptySourceKey = "none";
 const datasetEntries = BUILT_IN_REPLAYS_CONFIG.map((entry) => ({
   key: entry.key,
   label: entry.label,
-  path: entry.path
+  path: entry.path,
+  compression: entry.compression
 }));
 
 if (datasetEntries.length === 0) {
@@ -97,6 +99,53 @@ if (branchStarts.approved !== 907 || branchStarts.unapproved !== 93) {
   throw new Error(
     `CSV Payments built-in replay must preserve the deterministic 907/93 approved/unapproved split; got ${branchStarts.approved}/${branchStarts.unapproved}.`,
   );
+}
+
+const paged10kEntry = datasetEntries.find((entry) => entry.key === "csv-payments-10k");
+if (!paged10kEntry || paged10kEntry.compression !== "gzip") {
+  throw new Error("The compressed CSV Payments 10k paging replay is not registered.");
+}
+const paged10kReplay = JSON.parse(gunzipSync(readFileSync(
+  path.join(viewerDir, paged10kEntry.path.replace(/^\.\//, "")),
+)).toString("utf8"));
+const count10k = (step, event) => paged10kReplay.events.filter((entry) =>
+  entry.step === step && entry.event === event).length;
+if (paged10kReplay.status !== "completed"
+    || count10k("ProcessCsvPaymentsInput", "start") !== 10
+    || count10k("ProcessCsvPaymentsInput", "emit") !== 10_000
+    || count10k("ProcessCsvPaymentsInput", "success") !== 10
+    || count10k("ProcessApprovedPaymentStatus", "start") !== 9_170
+    || count10k("ProcessUnapprovedPaymentStatus", "start") !== 830
+    || paged10kReplay.events.some((event) => event.step === "PagedSourceStepAdapter")) {
+  throw new Error("CSV Payments 10k replay must preserve ten semantic source pages and all 10,000 item paths.");
+}
+const first10kStatus = Math.min(...paged10kReplay.events
+  .filter((event) => event.event === "start" &&
+    (event.step === "ProcessApprovedPaymentStatus" || event.step === "ProcessUnapprovedPaymentStatus"))
+  .map((event) => event.startTime));
+const last10kSourceEmit = Math.max(...paged10kReplay.events
+  .filter((event) => event.step === "ProcessCsvPaymentsInput" && event.event === "emit")
+  .map((event) => event.startTime));
+if (!(first10kStatus < last10kSourceEmit)) {
+  throw new Error("CSV Payments 10k replay must show downstream status progress before source exhaustion.");
+}
+
+const slow1kEntry = datasetEntries.find((entry) => entry.key === "csv-payments-1k-slow");
+if (!slow1kEntry || slow1kEntry.compression !== "gzip") {
+  throw new Error("The compressed CSV Payments 1k slow-provider replay is not registered.");
+}
+const slow1kReplay = JSON.parse(gunzipSync(readFileSync(
+  path.join(viewerDir, slow1kEntry.path.replace(/^\.\//, "")),
+)).toString("utf8"));
+const countSlow1k = (step, event) => slow1kReplay.events.filter((entry) =>
+  entry.step === step && entry.event === event).length;
+if (slow1kReplay.status !== "completed"
+    || countSlow1k("ProcessCsvPaymentsInput", "start") !== 1
+    || countSlow1k("ProcessCsvPaymentsInput", "emit") !== 1_000
+    || countSlow1k("ProcessApprovedPaymentStatus", "start") !== 907
+    || countSlow1k("ProcessUnapprovedPaymentStatus", "start") !== 93
+    || Math.abs(slow1kReplay.durationMs - paged10kReplay.durationMs) > 5_000) {
+  throw new Error("The slow 1k replay must preserve its one-page output and matched provider-paced duration.");
 }
 
 const homepageManifestPath = path.join(repoRoot, "docs", "public", "home", "replay-proof-manifest.json");

@@ -30,5 +30,16 @@ for (const request of compatibilitySet.requests) {
   if (candidate === undefined) throw new Error(`resolved set is missing candidate ${request.component}`);
   for (const suite of selectSuites(request.component, policy, [], candidate.suiteHints ?? [])) selected.add(suite);
 }
+const requestedSuites = compatibilitySet.requestedSuites ?? [];
+if (!Array.isArray(requestedSuites)
+  || requestedSuites.some((suite) => suite !== 'csv-ha-scale')
+  || new Set(requestedSuites).size !== requestedSuites.length) {
+  throw new Error('compatibility set requested an unsupported extra suite');
+}
+if (requestedSuites.length > 0
+  && !compatibilitySet.requests.some((request) => request.component === 'csvPayments')) {
+  throw new Error('csv-ha-scale requires a CSV Payments candidate');
+}
+for (const suite of requestedSuites) selected.add(suite);
 const matrix = shardMatrix([...selected].sort(), policy, resolvedSet, config);
 await writeFile(values.output, `${JSON.stringify({include: matrix}, null, 2)}\n`);

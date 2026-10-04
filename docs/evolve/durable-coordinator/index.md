@@ -14,7 +14,7 @@ The current self-host HA path is compute-first. For the future FUNCTION/all-serv
 
 | Area | Current state |
 | --- | --- |
-| Execution state | `ExecutionRecord` with leases, attempts, status, result, pinned pipeline/contract/release identity |
+| Execution state | `ExecutionRecord` with leases, attempts, status, result, pinned pipeline/contract/release identity, and optional page state |
 | Await state | `AwaitUnitRecord` plus pending/completion interaction records |
 | Worker boundary | portable command/result envelopes over local, REST, gRPC, or SQS |
 | Contract/release identity | generated `META-INF/pipeline/pipeline-contract.json`, release descriptor registration, activation, execution pinning, and worker identity validation |
@@ -25,25 +25,33 @@ sequenceDiagram
     participant Client
     participant Coordinator
     participant Store as "Execution/Await Stores"
+    participant Work as "Work queue"
     participant Worker
+    participant Publish as "Object Publish"
 
     Client->>Coordinator: submit execution
     Coordinator->>Store: create execution + enqueue work
-    Coordinator->>Worker: TransitionCommandEnvelope
+    Coordinator->>Worker: TransitionCommandEnvelope + optional page context
     alt await requires durable fallback
-        Worker-->>Coordinator: WAITING_EXTERNAL await unit id
-        Coordinator->>Store: park execution as WAITING_EXTERNAL
+        Worker-->>Coordinator: WAITING_EXTERNAL + optional page completion
+        Coordinator->>Store: park execution and suspended page completion
         Client->>Coordinator: complete interaction
         Coordinator->>Store: admit completion into await unit
         Coordinator->>Store: fallback release if unit complete and parent waits
-    else completed transition
-        Worker-->>Coordinator: COMPLETED payload
-        Coordinator->>Store: commit result / enqueue next
+    else completed non-exhausted page
+        Worker-->>Coordinator: COMPLETED + successor checkpoint
+        Coordinator->>Publish: commit page-part manifests
+        Coordinator->>Store: fenced page advance
+        Coordinator->>Work: enqueue next page
+    else exhausted page or unpaged transition
+        Worker-->>Coordinator: COMPLETED + optional exhausted page result
+        Coordinator->>Publish: compose parts / publish terminal output
+        Coordinator->>Store: commit logical execution success
     end
     Client->>Coordinator: status/result
 ```
 
-An eligible live itemized await remains in the active transition worker and follows the `COMPLETED` branch when its terminal stream finishes. `WAITING_EXTERNAL` is the outcome for an await that requires durable fallback, not a mandatory outcome for every await boundary.
+An eligible live itemized await remains in the active transition worker and follows a `COMPLETED` branch when its terminal stream finishes. For a paged source, `COMPLETED` means that one page can advance or finalise; it does not by itself mean that the logical execution succeeded. `WAITING_EXTERNAL` is the outcome for an await that requires durable fallback, not a mandatory outcome for every await boundary.
 
 ## Guides
 

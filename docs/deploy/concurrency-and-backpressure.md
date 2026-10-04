@@ -104,28 +104,60 @@ With source paging enabled, CSV Payments still submits one CSV object. OpenCSV a
 
 ```mermaid
 flowchart LR
-    A["Object Ingest<br/>source object"] --> B["CSV parser<br/>demand-driven iterator"]
+    A["Object Ingest<br/>one source object"] --> P["Coordinator<br/>open bounded page"]
+    P --> B["CSV parser<br/>demand-driven logical records"]
     B --> C["Process CSV Payments Input<br/>deferred-completion budget"]
     C --> D["Kafka/provider<br/>external latency"]
-    D -. "active eligible live owner<br/>in-process or portable REST/gRPC worker" .-> E["Live await session<br/>completion admitted first"]
+    D -. "active eligible live owner<br/>in-process in the captured paging proof" .-> E["Live await session<br/>completion admitted first"]
     E --> F["Process Approved Payment Status"]
     E --> G["Process Unapproved Payment Status"]
     F --> H["Finalize Payment Output"]
     G --> H
-    H --> I["Object Publish<br/>streaming target session"]
+    H --> I["Object Publish<br/>stage page parts"]
     D -. "no live session, ineligible portable shape,<br/>interaction API, or webhook" .-> J["WAITING_EXTERNAL<br/>coordinator continuation"]
     J -. "durable continuation" .-> F
     J -. "durable continuation" .-> G
+    I --> M["Commit page-part manifest"]
+    M --> K{"Source exhausted?"}
+    K -->|no| L["Fenced page commit<br/>successor checkpoint"]
+    L --> P
+    K -->|yes| N["Compose ordered parts<br/>publish final object"]
+    E -. "downstream capacity<br/>releases source demand" .-> B
 ```
 
-The repo proof run for the built-in CSV Payments replay used execution max concurrency `250` and
+The loop advances only after the current publisher has completed, released its source resources, and committed its page output. A slow Await provider or Object Publish target withholds downstream capacity, which stops parser demand inside the open page. Opening a page therefore does not drain it, and page completion does not gate an item already admitted to the live suffix.
+
+The built-in CSV Payments replay predates paging and shows live demand and early per-item progress in one unpaged execution.
+That proof run used execution max concurrency `250` and
 a deterministic `0.08` provider-rejection rule. It processed 1k records in `19.685s` of replay
 time and showed both status paths starting at `1.573s`, before parser emission finished at
 `16.208s`. The capture records completion admission and interaction-dispatch events on the
 decorated `Process CSV Payments Input` operation, with no standalone Await node and no durable
 await-unit completion or resume events. That overlap is the backpressure signal to look for: the
-parser, brokered completion, status steps, terminal merge, and Object Publish are moving as
+parser, brokered completion, status steps, terminal branch join, and Object Publish are moving as
 connected live segments, with durable fallback available for recovery.
+
+### Measured page-size cost
+
+An exploratory LOCAL monolith comparison submitted the same 1,000-record CSV as one file in
+each run, with the mock provider held at 250 permits per second and replay capture disabled.
+The span below runs from the first `PIPELINE BEGINS` to the last `PIPELINE FINISHED`; it measures
+transition execution, while final-object row parity was checked separately.
+
+| `paging.maxRecords` | Pages | Transition span | Change from one page |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 1 | 8.107s | baseline |
+| 100 | 10 | 8.338s | +0.231s (+2.8%) |
+| 10 | 100 | 9.854s | +1.747s (+21.5%) |
+
+Every run produced exactly 1,000 rows, one CSV header, and 1,000 database records. The
+100-page run shows measurable coordinator/page overhead at small page sizes, but the absolute
+increase was under two seconds in this environment. These are single runs, not a sizing SLA.
+
+The [paired replay captures](/operate/observability/replay) test a different limit: one 1k page
+at 10 provider permits per second took 100.811s of replay time, while one 10k file across ten
+pages at 100 permits per second took 100.932s. Both preserve early item progress. This is the
+expected provider-paced result when the provider is slower than the healthy pipeline.
 
 ### HA scale fixture budgets
 
