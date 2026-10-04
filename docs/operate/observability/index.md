@@ -42,6 +42,51 @@ When a signal is missing, diagnose the layers in order:
 TPF uses metrics for low-cardinality operational aggregates. Execution, interaction,
 correlation, and request identities belong in traces, replay, or logs rather than metric labels.
 
+## Shared Runtime Ownership
+
+All managed framework emitters use one policy snapshot per host, including pipeline runs,
+Await and provider completion, pages, Query, object boundaries, transport diagnostics and
+transition workers. Metrics and tracing can be enabled independently. Observable gauges
+and activity counters belong to the host lifecycle, so replacing a host does not retain
+callbacks or share activity with another instance.
+
+```mermaid
+flowchart LR
+  Policy[Host telemetry policy] --> Pipeline[Pipeline signals]
+  Policy --> Boundary[Boundary signals]
+  Policy --> Worker[Worker signals]
+  Pipeline --> SDK[Host OpenTelemetry SDK]
+  Boundary --> SDK
+  Worker --> SDK
+  SDK --> Export[Deployment exporter or reader]
+  Export --> Backend[Observability backend]
+```
+
+Quarkus startup reports each signal's requested policy, built capability, SDK disablement,
+exporter selection and OTLP routing. `delivery=unverified` means that the report describes
+configuration; inspect exporter logs and backend data to establish delivery. Requested
+instrumentation with an unavailable capability or disabled SDK produces a warning and the
+application continues to start. An enabled instrument with an intentionally disabled
+exporter is valid.
+
+| Observed state | Interpretation | Next check |
+|---|---|---|
+| Framework signal disabled | No framework SDK instrument is acquired for that signal | Confirm the intended host policy |
+| Signal enabled, exporter disabled | Instrumentation exists; external delivery is not requested | Check configured readers or enable the intended exporter |
+| Signal enabled, backend has data | Export is proven for the observed signal and process | Verify worker and asynchronous boundary coverage |
+| Signal enabled, backend has no data | Delivery remains unproven | Check built capability, SDK disablement, exporter logs and endpoint configuration |
+
+For a split runtime, apply the intended telemetry configuration to the coordinator,
+workers and boundary hosts. The CSV Payments repository provides a small self-host
+`observability` system-test suite over Kafka and SQS. It requires positive framework
+metrics and spans from the coordinator, worker and runtime, plus a parent or durable origin
+link on admitted Await completion spans. It fails if another process emits successfully
+while worker instrumentation disappears.
+
+See [ADR-0067](/decisions/0067-framework-telemetry-shares-policy-and-host-lifecycle) for the
+runtime ownership decision. Replay keeps the prerequisites documented in
+[Replay & Live Topology](/operate/observability/replay).
+
 ## Semantic Coverage
 
 TPF records semantic runtime facts explicitly at their ownership seams. Metrics, traces, and replay

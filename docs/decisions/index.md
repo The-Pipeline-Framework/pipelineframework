@@ -75,6 +75,7 @@ authoritative for exact syntax and release support.
 | [0064](./0064-release-descriptors-are-produced-after-packaging.md) | Produce a closed immutable Release from final artefact bytes and recoverable Compiled Truth. |
 | [0065](./0065-paged-resumable-sources-preserve-live-demand.md) | Bound resumable source transitions by pages while preserving live item demand and existing recovery ownership. |
 | [0066](./0066-build-produces-releases-and-cli-deploys-them.md) | Keep Release production in builds and deploy existing Releases through the build-tool-neutral TPF CLI. |
+| [0067](./0067-framework-telemetry-shares-policy-and-host-lifecycle.md) | Give all managed runtime telemetry the same host policy and instrument lifecycle. |
 
 ## Maintenance
 
