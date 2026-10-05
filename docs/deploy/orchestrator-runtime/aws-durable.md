@@ -69,6 +69,19 @@ Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted L
 
 Keep each numbered Durable function version for at least the longest supported execution lifetime. New deployments move the alias for new executions; existing executions must retain their pinned code version and release identity.
 
+### Semantic table upgrade
+
+Before enabling the AWS Durable host against an existing Await interaction table, add these `ALL`-projected indexes and wait until both report `ACTIVE`:
+
+| Index | Partition key | Sort key |
+| --- | --- | --- |
+| `await-interaction-by-execution` | `query_execution_key` (`S`) | `query_execution_sort` (`S`) |
+| `await-interaction-continuation-work` | `query_continuation_key` (`S`) | `query_continuation_due_epoch_ms` (`N`) |
+
+Backfill every non-expired interaction with its tenant-scoped execution key and deterministic execution sort key. For an already-completed item interaction, inspect the matching Await unit: when the unit has no durable continuation-completion fact for that item, write `query_continuation_key=ready`, a due timestamp and `continuation_attempt=1`; when the fact already exists, write `continuation_completed=true` without a ready key. New writes maintain these projections, and a duplicate completion conditionally repairs a missing ready projection, but neither mechanism can discover an older row that is absent from the new indexes.
+
+Complete the backfill and verify the indexes before attaching the Await Stream event source or admitting new Durable executions. This keeps reconstruction and continuation discovery query-based; production hosts must not compensate with a table scan.
+
 ## Await callback binding
 
 TPF-first admission is mandatory:
