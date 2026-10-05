@@ -1,8 +1,8 @@
-name: Publish — Nightly Maven Central Snapshots
+name: Publish — Main Maven Central Snapshots
 
 on:
-  schedule:
-    - cron: '0 2 * * *'
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -40,7 +40,7 @@ jobs:
       - name: Resolve snapshot identity
         id: snapshot
         run: |
-          VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          VERSION="$(./mvnw -q -N -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository")"
           case "$VERSION" in *-SNAPSHOT) ;; *) exit 1;; esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
