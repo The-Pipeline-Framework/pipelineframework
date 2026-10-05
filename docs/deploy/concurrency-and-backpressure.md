@@ -9,9 +9,9 @@ Backpressure controls how much work can flow through a live reactive path. It is
 
 These mechanisms are complementary. Backpressure does not prevent rapid connection-refused loops, and a circuit does not replace demand propagation or provider-capacity sizing. See [Execution Safety](/architecture/execution-safety) and [Operate Circuit Protection](/operate/circuit-breakers).
 
-Paging adds a third bound for large resumable sources. `paging.maxRecords` limits logical source work owned and replayed by one transition; it does not prefetch that many records. The current page still follows normal reactive demand, Await admission, and downstream capacity. One page is active per logical source, and the next page starts only after normal stream completion, resource release, page-output manifest commit, and a fenced execution-state commit.
+Paging adds a third bound for large resumable sources. `paging.maxRecords` limits logical source work owned and replayed by one transition; it does not prefetch that many records. The current page still follows normal reactive demand, Await admission, and downstream capacity. One page is active per logical source, with no concurrent next-page acquisition. The next page starts only after normal stream completion, resource release, page-output publication, and a fenced execution-state commit.
 
-A smaller page reduces replay and remote-transition exposure, while slow downstream work may still make that page exceed a REST request deadline. Size the page from acceptable replay cost and transition lifetime, then size concurrency and buffers from provider and memory capacity. Do not use a larger buffer to imitate a page, or a larger page to override backpressure.
+A smaller page generally reduces replay and remote-transition exposure after confirmed worker loss, at the cost of more source opens, coordinator commits, queue dispatches, and publication/checkpoint overhead. A larger page improves batching efficiency but increases the active-page replay window. Slow downstream work may still make either page exceed a worker invocation or transport deadline. Size the page from acceptable replay cost and transition lifetime, then size concurrency and buffers from provider and memory capacity. Page size does not need to equal buffer capacity or concurrency. Do not use a larger buffer to imitate a page, or a larger page to override backpressure.
 
 ### How to size `pipeline.max-concurrency`
 
@@ -42,31 +42,40 @@ Observe `tpf.await.admission.pending` for reservations made by the current runti
 
 1. **Size for burst absorption**:
    - Buffer capacity should cover a burst window you are willing to absorb, not the entire dataset.
-2. **Estimate memory impact**:
-   - `buffer capacity × average item size = memory footprint per step`.
-   - Example: 4-core pod, 1 KB average item size, buffer 4,000 → ~4 MB per step (plus overhead).
+2. **Estimate retained memory, not only payload bytes**:
+   - Include deserialized payloads, transformation scratch space, SDK objects, retry state, and any `ONE_TO_MANY` expansion retained at that step.
+   - A first approximation is `buffer capacity × worst-case retained bytes per queued item` for each live buffered step.
 3. **Use the buffer metrics**:
    - `tpf.step.buffer.queued` should spike and drain.
    - Flat, high values indicate backpressure is not propagating or downstream is too slow.
 
-### Practical starting point (example)
+### Size concurrency, buffers, and pages together
 
-For a 4-core Graviton pod running platform-owned I/O-heavy steps:
-- `pipeline.max-concurrency`: start at 32–64 for I/O-heavy steps, 4–8 for CPU-heavy steps.
-- `pipeline.defaults.backpressure-buffer-capacity`: start at 2,048–8,192 for bursty streams and tune downward.
+Use measurements from representative records rather than copying a default:
 
-Always validate in your environment using the in-flight and buffer metrics and adjust per step when needed.
+1. Reserve memory for the JVM/runtime, code, telemetry, provider clients, and safety margin. The remainder is the worker's **stream-work budget**.
+2. Measure average and high-percentile retained bytes for an input item at each step, including per-item working memory. For `ONE_TO_MANY`, measure the largest live fan-out, not only the source record size.
+3. Choose concurrency from CPU and dependency capacity. Estimate active memory as `concurrency × per-item working bytes` at each concurrently executing step.
+4. Allocate the remaining stream-work budget across the live step buffers. Estimate queued memory as `buffer capacity × retained bytes per queued item` per buffer. Sum across steps; a pipeline can have several buffers live at once.
+5. Choose `paging.maxRecords` no larger than both the source-fetch/batch target and the acceptable confirmed-loss replay window. Estimate replay cost from all transformations and effects reachable from those source records, including fan-out. A page of one record can still have a large replay envelope when that record expands heavily.
+6. Verify that worst-case page processing fits the worker invocation or transport deadline with recovery margin. Reduce the page or use a different worker boundary when it does not.
+7. Exercise burst, slow-provider, failure, and high-percentile item-size cases. Tune downward when memory, GC, queue time, or replay cost exceeds the budget; tune upward only when measurements show spare capacity and source/checkpoint overhead is material.
 
-### Quick rule-of-thumb table
+A conservative memory check for `T` concurrent transition workers is:
 
-| Workload profile | `pipeline.max-concurrency` (per step) | Buffer capacity guidance |
-|------------------|---------------------------------------|--------------------------|
-| CPU-bound        | 1–2 × vCPU cores                       | Small (128–1,024)        |
-| Mixed            | 4–16 × vCPU cores                      | Medium (1,024–4,096)     |
-| I/O-bound        | 8–32 × vCPU cores                      | Larger (2,048–8,192)     |
+```text
+T × (source/page state
+     + sum(step buffer capacity × worst-case retained queued-item bytes)
+     + sum(step concurrency × worst-case per-item working bytes)
+     + open publication/provider state)
+<= stream-work memory budget
+```
 
-Tune downward if the buffer stays high or GC increases, and upward only when `tpf.step.inflight` is consistently
-below the limit while `tpf.step.buffer.queued` spikes.
+This is an envelope, not an allocation guarantee. Account separately for provider-internal read-ahead or buffering. The built-in resumable-source path opens one page at a time and does not add concurrent-page prefetch, so there is no extra `prefetched pages × page size` term today.
+
+For **COMPUTE**, multiply by the number of transition invocations admitted concurrently in the process or pod, and leave headroom for heap fragmentation, GC, native buffers, and co-located requests. For **FUNCTION**, the same retained-memory calculation must fit the configured function memory, while worst-case page time must fit the provider invocation limit and TPF's worker deadline. Smaller pages can reduce duration and retry cost, but increase request, checkpoint, queue, and publication operations.
+
+Example: if a worker has 1 GiB available after runtime and safety reserves, admits four transitions, and assigns 60% of that remainder to stream work, each transition has roughly 150 MiB. Measure the pipeline's active-work and buffered-item footprint against that number, then choose the page size from the smaller of the source's efficient batch and the number of records whose repeated processing is acceptable. Do not derive page size from the buffer capacity merely because both are counts.
 
 ### Sizing a third-party await
 
@@ -125,7 +134,7 @@ flowchart LR
     E -. "downstream capacity<br/>releases source demand" .-> B
 ```
 
-The loop advances only after the current publisher has completed, released its source resources, and committed its page output. A slow Await provider or Object Publish target withholds downstream capacity, which stops parser demand inside the open page. Opening a page therefore does not drain it, and page completion does not gate an item already admitted to the live suffix.
+The loop advances only after the current publisher has completed, released its source resources, and committed its page output. A slow Await provider or Object Publish target withholds downstream capacity, which stops parser demand inside the open page. Opening a page therefore does not drain it, and page completion does not gate an item already admitted to the live suffix. After confirmed worker loss, the durable start checkpoint reopens the active page; previously committed pages are not reread. Pure computation and idempotent effects in that active page may repeat, so page size is part of the recovery envelope as well as the fetch and batching policy.
 
 The built-in CSV Payments replay predates paging and shows live demand and early per-item progress in one unpaged execution.
 That proof run used execution max concurrency `250` and
