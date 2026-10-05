@@ -277,6 +277,7 @@ const mainSidebar = [
                 items: [
                     {text: 'Overview', link: '/deploy/orchestrator-runtime/'},
                     {text: 'Queue-Async Runtime', link: '/deploy/orchestrator-runtime/queue-async'},
+                    {text: 'AWS Durable Coordination', link: '/deploy/orchestrator-runtime/aws-durable'},
                     {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
                     {text: 'Command Steps', link: '/deploy/orchestrator-runtime/command'},
                     {text: 'Await Runtime Setup', link: '/deploy/orchestrator-runtime/await'}

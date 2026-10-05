@@ -2,6 +2,8 @@
 
 `QUEUE_ASYNC` is the background execution path. The caller submits work and receives an execution id instead of waiting for the whole pipeline result. TPF stores the execution, dispatches work through the configured dispatcher, retries failed transitions, and exposes status/result endpoints for follow-up.
 
+The same semantics have two supported coordination hosts: the native compute-first coordinator and [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable). AWS Durable changes mechanical hosting, not execution authority or the worker protocol.
+
 It can use in-process providers for local development or durable providers such as DynamoDB/SQS-backed implementations for production-style recovery. To get real HA behaviour, use durable providers and more than one worker-capable runtime instance. `memory` + `event` is useful for local development, but it does not give crash-surviving distributed recovery.
 
 For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance).

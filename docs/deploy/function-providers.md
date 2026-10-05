@@ -22,9 +22,9 @@ Important runtime constraint:
 | Path | What TPF owns | Current HA meaning |
 | --- | --- | --- |
 | `COMPUTE` + `QUEUE_ASYNC` durable coordinator | Execution records, leases, await units, retry/DLQ, re-drive, release pinning, and worker lifecycle. | TPF-owned durable orchestration path for self-hosted HA. |
-| `FUNCTION` | Generated provider handlers and serverless invocation adapters for REST-backed pipeline or step calls. | Platform invocation availability only; not TPF-owned durable orchestration HA. |
+| `FUNCTION` | Generated provider handlers and serverless invocation adapters for REST-backed pipeline or step calls. | Worker placement, orthogonal to coordination hosting. AWS workers may participate in supported Durable-hosted `QUEUE_ASYNC` through SQS. |
 
-Use `FUNCTION` when you want serverless invocation packaging for supported handlers and can rely on caller/platform retries plus application idempotency. Use `COMPUTE` + `QUEUE_ASYNC` when the pipeline needs TPF-owned durable execution state, await recovery, DLQ/re-drive, or checkpoint-style orchestration semantics.
+Use `FUNCTION` for serverless worker placement. For AWS `QUEUE_ASYNC`, choose either the native coordinator or the [AWS Durable coordination host](/deploy/orchestrator-runtime/aws-durable); both retain TPF-owned execution state, Await, retry/DLQ evidence and re-drive decisions.
 
 ## Architecture
 
@@ -59,13 +59,9 @@ It does not currently document or implement:
 1. Google Cloud Run services as a generic container/service target,
 2. Azure Durable Functions as a separate TPF runtime model,
 3. `gRPC` as a `FUNCTION` transport,
-4. all-serverless durable orchestration.
+4. Durable coordination hosts for Azure or Google Cloud.
 
-If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
-
-An all-serverless durable coordinator would be a separate design, backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
-
-The current architecture spike for that future path is [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). It evaluates TPF-native single-shot coordinator actions first, and provider durable workflow engines such as Lambda durable functions, Step Functions, Azure Durable Functions, and Google Cloud Workflows as possible later adapters.
+`FUNCTION` does not itself select a coordinator. The [AWS Durable coordination host](/deploy/orchestrator-runtime/aws-durable) combines Lambda Durable mechanical liveness with TPF semantic state and SQS workers. The native coordinator remains the portable reference, conformance implementation and fallback. Azure and Google provider-native coordination remain deferred.
 
 ## Quick Start
 

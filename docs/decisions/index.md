@@ -79,6 +79,8 @@ publication and the distinction from immutable test and release inputs.
 | [0065](./0065-paged-resumable-sources-preserve-live-demand.md) | Bound resumable source transitions by pages while preserving live item demand and existing recovery ownership. |
 | [0066](./0066-build-produces-releases-and-cli-deploys-them.md) | Keep Release production in builds and deploy existing Releases through the build-tool-neutral TPF CLI. |
 | [0067](./0067-framework-telemetry-shares-policy-and-host-lifecycle.md) | Give all managed runtime telemetry the same host policy and instrument lifecycle. |
+| [0068](./0068-main-consumes-active-snapshots.md) | Make `main` consume active development snapshots while immutable compatibility inputs remain explicit. |
+| [0069](./0069-aws-durable-hosts-mechanical-coordination.md) | Prefer AWS Durable for mechanical `QUEUE_ASYNC` coordination while TPF retains semantic authority. |
 
 ## Maintenance
 
