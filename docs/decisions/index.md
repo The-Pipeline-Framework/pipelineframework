@@ -7,6 +7,9 @@ authoritative for exact syntax and release support.
 
 ## Catalogue
 
+[ADR-0068](./0068-main-consumes-active-snapshots.md) defines development snapshot defaults, merge-triggered
+publication and the distinction from immutable test and release inputs.
+
 | ADR | Decision |
 | --- | --- |
 | [0001](./0001-functional-core-and-explicit-dataflow.md) | Keep business transformations in a functional core and carry known facts explicitly. |
