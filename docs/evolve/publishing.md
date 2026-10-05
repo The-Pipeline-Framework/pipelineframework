@@ -35,10 +35,22 @@ Use this page as the release front door. The older full procedure remains availa
 | Need | Page |
 | --- | --- |
 | Cut and publish framework artifacts | [Framework Release Process](/evolve/framework-release-process) |
-| Consume or republish the current framework snapshot | [Publishing Reference — Nightly Snapshot Publishing](/evolve/publishing-reference#nightly-snapshot-publishing) |
+| Consume or republish the current framework snapshot | [Publishing Reference — Development Snapshot Publishing](/evolve/publishing-reference#nightly-snapshot-publishing) |
 | Validate docs snapshots and route rewrites | [Docs Snapshot Process](/evolve/docs-snapshot-process) |
 | Publish or recover versioned docs artifacts | [Docs Snapshot Process](/evolve/docs-snapshot-process) |
 | Troubleshoot Maven Central details | [Publishing Reference](/evolve/publishing-reference) |
+
+## Maven Central monthly limits
+
+Sonatype support confirmed an OSS exemption on 5 October 2026 for the
+`org.pipelineframework` namespace: **12 releases, 150 MB and 3,840 files per
+month**. These are shared namespace limits, not separate allowances for each
+repository. If publishing patterns change, request a review from Sonatype.
+
+The exemption does not change publication eligibility. Keep the explicit public
+artifact manifests and publication verification; do not publish internal modules
+or republish unchanged components merely because there is additional headroom.
+CI candidates remain in GitHub Packages/GHCR rather than Maven Central.
 
 ## Docs deployment
 

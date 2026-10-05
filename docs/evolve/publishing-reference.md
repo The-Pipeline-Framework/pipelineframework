@@ -3,8 +3,10 @@
 ## Public reactor verification
 
 Publish the framework reactor with `./mvnw -f framework/pom.xml`. Before a
-Central release, deploy with `-Ppublication-verification` to a temporary file
-repository and run `scripts/verify-framework-publication.mjs`. The verifier is
+Central release, run `scripts/verify-framework-publication.mjs` against the
+canonical reactor's effective `central-publishing` configuration and the staged
+publication artifacts, as the publication workflows do. No verification-only
+Maven profile or alternate reactor is used. The verifier is
 packaging-aware: public `pom` artifacts require their POM and signature, while
 public `jar` artifacts also require main, sources, Javadoc, and signature files.
 
@@ -52,7 +54,7 @@ the deployment, verify Maven Central metadata and create the skipped GitHub rele
 - [Maven Central Publishing Setup](#maven-central-publishing-setup)
 - [settings.xml Configuration](#local-settingsxml-configuration)
 - [GitHub Actions Workflow](#github-actions-workflow)
-- [Nightly Snapshot Publishing](#nightly-snapshot-publishing)
+- [Development Snapshot Publishing](#nightly-snapshot-publishing)
 - [Safe Release Process](#safe-release-process)
 - [Troubleshooting](#troubleshooting)
 
@@ -201,14 +203,18 @@ These secrets must exist in the GitHub repository:
 3. `GPG_PRIVATE_KEY` - Your GPG private key exported with `gpg --export-secret-keys --armor <your-key-id>`
 4. `GPG_PASSPHRASE` - The passphrase for your GPG key
 
-## Nightly Snapshot Publishing
+## Development Snapshot Publishing {#nightly-snapshot-publishing}
 
-The current `main` development version is scheduled for publication daily at 02:00 UTC by
-the snapshot workflow. Publication depends on a successful workflow run and may be delayed.
+The current `main` development version is published by each Maven producer's
+snapshot workflow on pushes to `main`, including merged pull requests.
+Publication depends on a successful workflow run and may be delayed.
 The workflow can also be dispatched manually, but its publish job runs only
 from `main`. It verifies the same framework reactor that the release workflow deploys, then
 publishes the existing `-SNAPSHOT` version with the `central-publishing` profile. It does not
 create a tag or GitHub release.
+
+Snapshot publication is not the nightly system-test train. The train remains
+scheduled to validate the integrated product; it does not republish snapshots.
 
 Sonatype Central snapshots are mutable development artifacts and are currently cleaned up after 90 days.
 Before the first snapshot deployment, enable SNAPSHOT publishing for the project namespace in
