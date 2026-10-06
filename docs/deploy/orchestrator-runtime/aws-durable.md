@@ -96,9 +96,11 @@ TPF-first admission is mandatory:
 
 Callback identifiers and provider execution ARNs are disposable hosting state. They never enter TPF Await records and cannot admit completion. Callback registration runs inside the replayed Durable callback-registration step, while the binding store conditionally admits only one callback for a TPF execution generation. A crash between provider callback creation and binding persistence therefore replays the same registration step and converges on the generation-fenced binding.
 
-If provider history is unavailable or an execution closes before delivery, targeted reconciliation uses the provider-execution index and the TPF semantic checkpoint to start a replacement generation. Reconciliation is exceptional repair; Streams provide normal liveness and no broad scan is required.
+If provider history is unavailable or an execution closes before delivery, targeted reconciliation uses the provider-registration index and the TPF semantic checkpoint to start a replacement generation. Reconciliation is exceptional repair; Streams provide normal liveness and no broad scan is required.
 
-The provider index is eventually consistent. Targeted reconciliation retries when a registration or required semantic checkpoint is unavailable, or replacement admission remains unresolved. Index queries paginate within a bounded budget; a binding record appearing before its registration must not retire repair work.
+The provider index is eventually consistent. Targeted reconciliation retries when a registration or required semantic checkpoint is unavailable, or replacement admission remains unresolved. The `provider-registration-index` uses `provider_execution_arn` as its partition key and `sk` as its sort key, with `ALL` projection. Its query selects the `REGISTRATION#` sort-key prefix before applying the result limit, so binding records cannot hide the registration or exhaust a page budget.
+
+For an existing callback binding table, add this index and wait until it reports `ACTIVE` before upgrading the repair host. Existing records already contain both index keys and need no backfill. Keep the original `provider-execution-index` while retained host versions still use it.
 
 ## Worker placement
 
