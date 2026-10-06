@@ -72,6 +72,43 @@ Late or duplicate completions can be dropped when the target interaction is alre
 
 - `tpf.await.completion.dropped.total`
 
+## Recovering Itemised Continuations
+
+Itemised Await recovery uses `PipelineControlPlane.processAwaitItemContinuation` for one
+reactive continuation attempt. With durable providers, a fresh runtime can rediscover the
+work after completion admission, even if the admitting process stopped before updating the
+Await unit. The continuation-work projection supplies discovery and retry timing; the
+interaction, unit and child execution records retain semantic authority.
+
+Each recovery invocation converges the admitted facts in this order:
+
+1. A completed interaction idempotently records its item completion in the Await unit.
+2. A succeeded child records any missing continuation-completion fact. An existing
+   continuation-completion fact still reconciles the required parent release.
+3. Continuation work is retired only after those consequences have been reconciled. If
+   reconciliation or release delivery fails, the work remains available for another invocation.
+
+`ALREADY_COMPLETED` means the durable outcome has been reconciled, including outstanding
+parent-release bookkeeping. It does not mean that recovery skipped that bookkeeping.
+Sequential and concurrent replay reuse the same child identity and transition key; conditional
+writes prevent another item-completion count, child-success transition or parent release.
+Physical queue delivery remains at-least-once.
+
+```mermaid
+flowchart LR
+    Interaction[Admitted interaction completion] --> Unit[Ensure unit completion fact]
+    Unit --> Child[Continue item or recover succeeded child]
+    Child --> Fact[Ensure continuation-completion fact]
+    Fact --> Parent[Reconcile required parent release]
+    Parent --> Retire[Retire continuation work]
+```
+
+The action does not sleep, schedule retries or subscribe internally. Saturation returns a
+retry disposition without consuming an attempt; a failed continuation records the next retry
+attempt and due time. Native hosting may schedule bounded invocations, and provider hosting
+may invoke them from events, wake-ups or reconciliation. Either host must continue driving
+pending work. See [queue-async recovery](/deploy/orchestrator-runtime/queue-async#durable-execution).
+
 ## Runtime Signals
 
 In `QUEUE_ASYNC`, itemised deferred completion has a live path and a durable fallback path.

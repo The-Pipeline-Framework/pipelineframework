@@ -10,6 +10,13 @@ For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Perfor
 
 ## Durable Execution
 
+Every correctness-relevant `QUEUE_ASYNC` operation can be driven and recovered through
+bounded, idempotent actions without requiring a resident coordinator process. Crash-surviving
+recovery requires durable providers and a host that drives pending work through events,
+wake-ups or reconciliation. Native `COMPUTE` hosting may continue to schedule those actions.
+For itemised Await, replay reconciles unit completion and any required parent release before
+retiring continuation work; see [itemised continuation recovery](/operate/await-boundaries#recovering-itemised-continuations).
+
 Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a coordinator worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.
 
 While a claimed transition is still running, the coordinator renews its execution lease before
