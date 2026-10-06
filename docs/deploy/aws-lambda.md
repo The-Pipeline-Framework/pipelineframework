@@ -12,12 +12,12 @@ This page is the canonical TPF guide for `FUNCTION` platform builds that target 
 
 ## Durability Scope
 
-`FUNCTION` is a serverless invocation and packaging path. It is not the TPF durable orchestration path.
+`FUNCTION` is worker placement and packaging; it is not itself a coordination host. AWS deployments may combine `FUNCTION` workers with the supported AWS Durable `QUEUE_ASYNC` host.
 
 | Path | Current support |
 | --- | --- |
 | `COMPUTE` + `QUEUE_ASYNC` | TPF-owned execution records, leases, await units, retry/DLQ, re-drive, release pinning, and worker lifecycle. |
-| `FUNCTION` | Generated Lambda handlers and adapters for supported REST-backed pipeline or step invocations. The function platform may retry invocations, but TPF does not own durable coordinator state inside Lambda. |
+| `FUNCTION` | Generated Lambda handlers and adapters for supported REST-backed pipeline or step invocations. With AWS Durable coordination, TPF semantic state remains in its stores while Lambda owns mechanical liveness. |
 
 Use Lambda mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
 
@@ -64,9 +64,9 @@ Current scope notes:
 
 1. The Google function path is best described today as Cloud Run functions; the current repo implementation still uses the Quarkus Google Cloud Functions extension.
 2. Azure Durable Functions are not a separate TPF platform mode and do not change TPF runtime semantics.
-3. Queue-backed HA and checkpoint handoff remain part of the `COMPUTE` + `QUEUE_ASYNC` durable coordinator path rather than the `FUNCTION` path.
+3. Queue-backed HA and checkpoint handoff remain `QUEUE_ASYNC` semantics. On AWS, they may be hosted natively or by Lambda Durable Functions with SQS workers.
 
-For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Lambda support.
+For supported packaging, storage, IAM and recovery requirements, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable). The native coordinator remains the portable reference and fallback.
 
 ::: warning Checkpoint Handoff Is Not Available In FUNCTION Mode
 Checkpoint publication and subscription are not available in `FUNCTION` mode.

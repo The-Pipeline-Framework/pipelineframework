@@ -111,6 +111,21 @@
             </dependency>
             <dependency>
                 <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-aws-durable-coordination-model</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-aws-durable-coordination-host</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-aws-durable-coordination-deployment</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
                 <artifactId>persistence-plugin</artifactId>
                 <version>${pipelineframework.runtime.version}</version>
             </dependency>
