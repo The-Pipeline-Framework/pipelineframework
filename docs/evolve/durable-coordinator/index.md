@@ -71,6 +71,7 @@ An eligible live itemized await remains in the active transition worker and foll
 14. [Self-Hosted Deployment](/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
 15. [Self-Hosted HA Roadmap](/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
 16. [Self-Hosted Milestone](/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
+17. [AWS Durable Production Completion Plan](/evolve/durable-coordinator/aws-durable-production-plan) records the merged host audit, remaining support gates, proof disposition and bounded implementation sequence.
 
 ## Limits
 
