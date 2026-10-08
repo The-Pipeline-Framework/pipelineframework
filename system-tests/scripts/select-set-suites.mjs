@@ -32,13 +32,13 @@ for (const request of compatibilitySet.requests) {
 }
 const requestedSuites = compatibilitySet.requestedSuites ?? [];
 if (!Array.isArray(requestedSuites)
-  || requestedSuites.some((suite) => suite !== 'csv-ha-scale')
+  || requestedSuites.some((suite) => !['csv-ha-scale', 'csv-provider-reject'].includes(suite))
   || new Set(requestedSuites).size !== requestedSuites.length) {
   throw new Error('compatibility set requested an unsupported extra suite');
 }
 if (requestedSuites.length > 0
   && !compatibilitySet.requests.some((request) => request.component === 'csvPayments')) {
-  throw new Error('csv-ha-scale requires a CSV Payments candidate');
+  throw new Error('extra CSV suites require a CSV Payments candidate');
 }
 for (const suite of requestedSuites) selected.add(suite);
 const matrix = shardMatrix([...selected].sort(), policy, resolvedSet, config);

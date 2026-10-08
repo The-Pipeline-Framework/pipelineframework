@@ -41,6 +41,14 @@ test('manual compatibility set can add exact-head CSV HA scale without changing 
 });
 
 test('CSV HA scale request is rejected without a CSV Payments candidate', async () => {
-  await assert.rejects(select(['csv-ha-scale'], false), /csv-ha-scale requires a CSV Payments candidate/);
+  await assert.rejects(select(['csv-ha-scale'], false), /extra CSV suites require a CSV Payments candidate/);
   await assert.rejects(select(['unknown-suite']), /unsupported extra suite/);
+});
+
+test('manual compatibility set can add the provider-reject lane for a CSV candidate', async () => {
+  const matrix = await select(['csv-provider-reject']);
+  assert.deepEqual(matrix.include.find(({shard}) => shard === 'csv-provider-reject').suites
+    .map(({suite}) => suite), ['csv-provider-reject']);
+  await assert.rejects(select(['csv-provider-reject'], false),
+    /extra CSV suites require a CSV Payments candidate/);
 });
