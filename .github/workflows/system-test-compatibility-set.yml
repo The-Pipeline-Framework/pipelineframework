@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      include_csv_provider_reject:
+        description: Run the CSV provider-reject replay E2E against the exact candidate set
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: tpf-system-test-set-${{ inputs.set_id }}
@@ -41,6 +46,7 @@ jobs:
           PULL_REQUESTS: ${{ inputs.pull_requests }}
           SET_ID: ${{ inputs.set_id }}
           INCLUDE_CSV_HA_SCALE: ${{ inputs.include_csv_ha_scale }}
+          INCLUDE_CSV_PROVIDER_REJECT: ${{ inputs.include_csv_provider_reject }}
         run: |
           printf '%s\n' "$PULL_REQUESTS" > pull-requests.txt
           node system-tests/scripts/parse-compatibility-prs.mjs \
@@ -48,9 +54,12 @@ jobs:
             --input pull-requests.txt \
             --setId "$SET_ID" \
             --output compatibility-set-request.json
-          if [[ "$INCLUDE_CSV_HA_SCALE" == true ]]; then
+          if [[ "$INCLUDE_CSV_HA_SCALE" == true || "$INCLUDE_CSV_PROVIDER_REJECT" == true ]]; then
             jq -e '.requests | any(.component == "csvPayments")' compatibility-set-request.json > /dev/null
-            jq '. + {requestedSuites: ["csv-ha-scale"]}' compatibility-set-request.json > compatibility-set-request.next.json
+            jq --argjson scale "$INCLUDE_CSV_HA_SCALE" --argjson providerReject "$INCLUDE_CSV_PROVIDER_REJECT" \
+              '. + {requestedSuites: ([if $scale then "csv-ha-scale" else empty end,
+                                      if $providerReject then "csv-provider-reject" else empty end])}' \
+              compatibility-set-request.json > compatibility-set-request.next.json
             mv compatibility-set-request.next.json compatibility-set-request.json
           fi
           echo "repository_names=$(jq -r '[.requests[].repositoryName] | join(",")' compatibility-set-request.json)" >> "$GITHUB_OUTPUT"
