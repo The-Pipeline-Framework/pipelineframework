@@ -8,7 +8,7 @@ If you are trying to understand what happened to the old "orchestrator", start w
 
 This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/deploy/orchestrator-runtime/). The first runnable reference is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host).
 
-The current self-host HA path is compute-first. PR 1 provides a control-plane contract of bounded single-shot actions, including a structured `sweepOnce` result. PR 2 makes the periodic sweeper and SQS pollers replaceable loop hosts over those actions, without starting loops on direct action invocation. PR 3 proves direct action invocation locally against LocalStack DynamoDB and SQS, including restart/event replay, synthetic scheduled sweep, await resume, retry, DLQ, and re-drive. It is an AWS-shaped substrate proof, not Lambda or EventBridge handler support. Provider handlers and durable itemised await-continuation retry remain future FUNCTION/all-serverless HA work; see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
+The current self-host HA path is compute-first. PR 1 provides a control-plane contract of bounded single-shot actions, including a structured `sweepOnce` result. PR 2 makes the periodic sweeper and SQS pollers replaceable loop hosts over those actions, without starting loops on direct action invocation. PR 3 proves direct action invocation locally against LocalStack DynamoDB and SQS. The [durable workflow adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) and [deployed fault proof](/evolve/durable-coordinator/aws-durable-coordination-host) establish AWS Lambda Durable Functions as the preferred candidate AWS coordination host while TPF retains semantic authority. Those pages record the proof stage; current supported packaging and operations are documented in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable).
 
 ## Current Shape
 
@@ -67,11 +67,14 @@ An eligible live itemized await remains in the active transition worker and foll
 10. [Pipeline Contract And Release Model](/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
 11. [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
 12. [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) records the single-shot coordinator actions, replaceable compute-first loop hosts, AWS-shaped local proof, and remaining provider work for FUNCTION/all-serverless HA.
-13. [Local APIs](/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-14. [Self-Hosted Deployment](/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-15. [Self-Hosted HA Roadmap](/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
-16. [Self-Hosted Milestone](/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
-17. [AWS Durable Production Completion Plan](/evolve/durable-coordinator/aws-durable-production-plan) records the merged host audit, remaining support gates, proof disposition and bounded implementation sequence.
+13. [Durable Workflow Backend Adapter Spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) maps provider identities, callbacks, retries, history, DLQ, and re-drive onto the TPF-native action model and records the production-adoption gaps.
+14. [AWS Durable Coordination Host](/evolve/durable-coordinator/aws-durable-coordination-host) records the deployed fault evidence, ownership boundary, and promotion gates.
+15. [AWS Engagement Brief](/evolve/durable-coordinator/aws-engagement-brief) captures the remaining callback, history, limits, and recovery questions for AWS engineering.
+16. [Local APIs](/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
+17. [Self-Hosted Deployment](/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
+18. [Self-Hosted HA Roadmap](/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
+19. [Self-Hosted Milestone](/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
+20. [AWS Durable Production Completion Plan](/evolve/durable-coordinator/aws-durable-production-plan) records the merged host audit, remaining support gates, proof disposition and bounded implementation sequence.
 
 ## Limits
 

@@ -1,16 +1,18 @@
 # All-Serverless Durable Coordinator
 
+This page records the original design/proof stage. For the current supported host and deployment contract, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); the accepted ownership decision is [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination).
+
 This design track asks one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
 
 The answer is **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.
 
-PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. PR 3 proves those boundaries locally against AWS-shaped DynamoDB and SQS substrates without hosting the compute-first loops. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
+PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. PR 3 proves those boundaries locally against AWS-shaped DynamoDB and SQS substrates without hosting the compute-first loops. The [durable workflow adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) then proves that an AWS Lambda durable execution can drive those actions without taking authority from TPF. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
 
 ## Recommendation
 
-Use a **TPF-native single-shot coordinator action model** as the next architecture step.
+Use one **TPF-native single-shot coordinator action model** with replaceable coordination hosts.
 
-Provider durable workflow engines can be useful later, but only as backend adapters if they preserve TPF's control-plane invariants:
+AWS Lambda Durable Functions is the preferred candidate AWS host because the deployed fault proof shows it can own mechanical liveness without taking semantic authority. Other provider engines remain candidates only if they preserve TPF's control-plane invariants:
 
 1. execution identity and idempotent submit,
 2. await unit identity and external completion admission,
@@ -20,6 +22,8 @@ Provider durable workflow engines can be useful later, but only as backend adapt
 6. at-least-once transition execution with stable business idempotency keys.
 
 Provider handlers can now invoke the bounded SQS message actions without reproducing work-item, await-completion, or transition-worker semantics. A complete process-free deployment still needs a durable replacement for itemised await-continuation retry scheduling.
+
+The durable workflow spike and deployed proof establish a deeper driver: AWS owns checkpoints, suspension, callback durability, and stream-triggered wake-up, while generation-fenced callback state remains mechanical. A replacement provider execution reconstructs from the TPF semantic checkpoint without redispatching work. Provider retry, DLQ, and re-drive primitives still do not replace TPF's contracts. See [AWS Durable Coordination Host](/evolve/durable-coordinator/aws-durable-coordination-host).
 
 ## Target Shape
 
@@ -195,6 +199,8 @@ This is already close to single-shot. It must preserve pinned pipeline, contract
 
 Provider durable workflow engines may reduce implementation effort, but they are not drop-in replacements for TPF coordinator semantics.
 
+The [adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) tests AWS Lambda Durable Functions with its Java local runner. It checkpoints submit, dispatch-to-await, callback wait, and resume/result operations around the existing TPF actions. Provider checkpoint loss replays through the stable TPF execution key without duplicating the signed worker transition. Await completion is admitted by TPF before a DynamoDB Stream wake-up completes the current generation's provider callback. A replacement durable execution can attach to the same parked TPF execution, and stale callback generations are ignored.
+
 | Backend option | Value | TPF risk |
 | --- | --- | --- |
 | [AWS Lambda durable functions](https://docs.aws.amazon.com/lambda/latest/dg/durable-functions.html) | AWS documents checkpoint/replay, waits, retries, and long-running durable executions in Lambda code. Useful if TPF can compile coordinator logic into durable operations. | AWS owns replay/history semantics; TPF must map await units, release pinning, re-drive, and worker identity without creating a second inconsistent state machine. |
@@ -215,10 +221,10 @@ The first implementation path should not assume either mapping. Build the TPF-na
 2. **Loop hosting split — complete.** The sweeper and SQS pollers are compute-first loop hosts over bounded actions. Aggregate await-continuation retry scheduling remains explicitly deferred.
 3. **AWS-shaped local proof — complete.** LocalStack DynamoDB/SQS integration invokes the bounded control-plane and message actions directly, including a synthetic scheduled `sweepOnce` wakeup, restart/event replay, await resume, retry, DLQ, and re-drive. It does not claim Lambda or EventBridge handler support.
 4. **Provider function handlers.** Add AWS-first function handlers only after the action model is explicit.
-5. **Durable workflow adapter spike.** Evaluate one provider backend using the same action model and document whether it preserves TPF semantics.
+5. **Durable workflow adapter spike — complete.** The AWS Lambda Durable Execution Java local runner proves an optional, reconstructable driver over the action model, including checkpoint loss, failed and duplicate wake-up, callback-generation fencing, provider-history replacement, Await completion, resume, and result. The subsequent deployed suite injects failure after AWS callback creation, before and after the mechanical registration write, and converges through stream/history/reconciliation repair to a binding and successful completion. That closes the experimental registration-window gate; production adoption still requires the same coverage against the supported host, provider callback/history contract validation, and operator-history integration.
 
 ## Current Decision
 
-Continue from the action contract, replaceable loop hosts, and AWS-shaped local proof into provider handlers. Keep aggregate await-continuation retry scheduling visible as the remaining process-owned exception.
+The provider-neutral coordination-host seam is `PipelineControlPlane`. Native loop hosts invoke it directly; the AWS Durable proof uses a transport adapter for those actions and a separate adapter for provider callback mechanics. Its reconstructable TPF checkpoint excludes provider generation and callback state. The mapping and deployed fault tests demonstrate that a provider durable execution can own substantial mechanical durability while remaining reconstructable from TPF state; provider history, retry/DLQ evidence, and provider re-drive remain non-authoritative.
 
-Do not implement Lambda/Azure/GCP handlers in the action-extraction slice. Do not adopt provider durable workflow engines as the primary coordinator runtime until TPF has a mapping test for await units, release identity, and operator re-drive.
+The AWS proof is not current supported Lambda deployment. Provider packaging, release, security, quotas, and operations remain separate work.
