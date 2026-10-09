@@ -60,6 +60,8 @@ There is no transaction spanning TPF Await admission and AWS callback registrati
 3. Completion is admitted by TPF before callback success wakes the durable execution.
 4. Generation fencing rejects stale callbacks and allows a replacement durable execution to attach after provider-history loss.
 
+The deployed `bothBindingOrdersAndDelayedStreamsConverge` test arms `bind-before-provider-binding` and `bind-after-provider-binding` inside the callback submitter. The first throws after AWS callback creation but before the mechanical registration write; the second throws after that write. Both wait for a generation-1 binding and successful execution. Missing registration can be reconstructed from public provider history by the Await stream handler; unresolved records remain retryable, and the proof reconciler can reconstruct missing bindings. This proves convergence with repair enabled, not a hard process kill or submitter replay alone.
+
 The callback binding is disposable mechanical state. It can wake a driver; it cannot complete an Await, release a parent, execute a transition, or alter a result. AWS should still confirm that public history callback discovery and history-based classification after an uncertain callback outcome are intended long-term integration contracts.
 
 ## Promotion Boundary

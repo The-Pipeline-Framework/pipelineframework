@@ -11,7 +11,7 @@ Its verdict is deliberately bounded, but stronger than the original outer-driver
 - **retain** the native coordinator as the portable semantic reference, conformance implementation, and fallback;
 - **reject** moving TPF execution, Await, release, worker, DLQ, or re-drive authority into a provider history by default.
 
-The [deployed proof evidence](/evolve/durable-coordinator/aws-durable-coordination-host) closes the registration, race, provider-history-loss, and terminal-Await questions against real AWS services. No supported production handler or runtime dependency is added by that proof. The AWS implementation remains non-published and the existing TPF-native coordinator remains unchanged.
+The [deployed proof evidence](/evolve/durable-coordinator/aws-durable-coordination-host) covers the registration-before-binding window: the suite injects a submitter failure after AWS has created the callback but before the mechanical registration write, and another after that write. Both cases converge to a generation-1 binding and successful execution. This is injected action failure, not a hard process-kill test or proof that AWS automatically replays the submitter. Race, provider-history-loss, and terminal-Await recovery were also exercised against real AWS services. No supported production handler or runtime dependency is added by that proof. The AWS implementation remains non-published and the existing TPF-native coordinator remains unchanged.
 
 ## Proof Boundary
 
@@ -69,7 +69,7 @@ The existing AWS-shaped scenarios remain the evidence for scheduled sweep, proce
 | TPF concept | AWS Lambda Durable Functions primitive | Authority in the spike | Gap or constraint |
 | --- | --- | --- | --- |
 | Execution identity and idempotent submit | Durable execution history and named `submit` step | TPF execution record and execution key | Provider execution identity is only correlation. Replaying the provider step must still pass the stable TPF key. |
-| Await unit and interaction | `waitForCallback` and provider callback ID | TPF Await unit, interaction, correlation ID, and completion admission | The callback ID and monotonically increasing driver generation are auxiliary attributes on the Await item. The local proof generation-fences replacement drivers, but does not prove the deployed callback-registration crash window. |
+| Await unit and interaction | `waitForCallback` and provider callback ID | TPF Await unit, interaction, correlation ID, and completion admission | The local proof uses auxiliary callback/generation attributes on the Await item; the deployed proof keeps them in a separate mechanical binding table. The local runner alone does not prove the registration window; the deployed suite injects failure after AWS callback creation and recovers through history-based correlation repair. |
 | Retry | Durable step checkpoint/replay | TPF owns transition retry, lease, and due-time semantics | Provider step retry must not become a second transition-attempt counter or bypass TPF admission. |
 | DLQ evidence | Lambda invocation/event-source failure handling | TPF terminal record and DLQ publication | Provider failure destinations are trigger evidence, not TPF terminal execution evidence. |
 | History | Provider checkpoint and operation history | TPF execution/Await records remain canonical | Operators would otherwise have two histories with different retention and vocabulary. |
@@ -109,6 +109,8 @@ It is conditionally replaced only by a newer generation (or replayed by the same
 
 | Crash or duplicate | Observed recovery |
 | --- | --- |
+| AWS creates callback; submitter fails before mechanical registration is written | Provider history supplies the callback and checkpoint; stream/reconciliation repair joins them to the TPF Await, and the deployed test reaches a generation-1 binding and success. |
+| Mechanical registration commits; submitter fails before its checkpoint | The retained registration can be joined to the TPF Await; the deployed test reaches a generation-1 binding and success. |
 | Provider loses `submit` checkpoint after TPF create | Replay returns the same TPF execution. |
 | Provider loses dispatch checkpoint after TPF worker transition | The driver reads TPF state and skips redispatch. |
 | Await completion commits, wake-up delivery fails | Stream event remains retryable; TPF parent is already `QUEUED`. |
@@ -117,13 +119,15 @@ It is conditionally replaced only by a newer generation (or replayed by the same
 | Old generation's stream event arrives late | Generation comparison acknowledges it without waking the old callback. |
 | Abandoned driver is woken after replacement reaches terminal state | It reads the terminal TPF checkpoint and returns the existing result without another worker transition. |
 
-One crash window remains deliberately open: callback registration may succeed in AWS before its reference is durably bound to the Await item. The production design needs either replay-confirmed registration, an AWS-supported idempotent callback lookup/correlation pattern, or a small reconciliation path. The test demonstrates that this gap can be isolated to mechanical correlation; it does not claim to have removed it.
+The registration-before-binding window was open in the local runner and was subsequently exercised by the deployed `bothBindingOrdersAndDelayedStreamsConverge` test (catalogue scenarios 8 and 9). In `ProofDurableHostActionAdapter.registerCallback`, `bind-before-provider-binding` throws inside the callback submitter before `bindings.register`; `bind-after-provider-binding` throws after that write. AWS has already supplied the callback ID in both cases. These names refer to mechanical registration writes, not TPF completion admission.
+
+If registration is missing, the Await stream handler reconstructs it from public provider history and the stable TPF checkpoint, then conditionally binds it to the authoritative Await interaction. An unresolved stream record remains retryable; the proof reconciler can also reconstruct missing bindings and attempt wake-up. TPF must admit completion before wake-up, and generation fencing remains in force. The tests establish convergence with those repair paths enabled; they do not isolate which path wins or prove submitter replay alone. Production conformance must retain this failure coverage against the supported host, with reconciliation as exceptional repair and the AWS callback/history contract still subject to provider validation.
 
 ## Provider Comparison
 
 | Provider option | Useful mapping | Why it remains deferred |
 | --- | --- | --- |
-| AWS Lambda Durable Functions | Java checkpoints, replay, waits, callbacks, and a local runner fit both a thin driver and a reconstructable semantic-checkpoint driver over TPF actions. | The deeper spike isolates the remaining gap to deployed callback registration/correlation and operational-history integration. |
+| AWS Lambda Durable Functions | Java checkpoints, replay, waits, callbacks, and a local runner fit both a thin driver and a reconstructable semantic-checkpoint driver over TPF actions. | The deployed proof exercises callback registration/correlation repair; supported-host conformance and operational-history integration remain production gates. |
 | AWS Step Functions | Callback task tokens and Standard Workflow re-drive provide strong hosted orchestration primitives. | [Step Functions re-drive](https://docs.aws.amazon.com/step-functions/latest/dg/redrive-executions.html) preserves successful provider steps and resets provider retry counts; that is not TPF's conditional execution re-drive contract. |
 | Azure Durable Functions | Orchestrators and [external events](https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-external-events) can suspend and wake hosted work. | Orchestrator instance, event, replay, and activity identities would need an explicit mapping without displacing TPF Await and execution identities. |
 | Google Cloud Workflows | [Callback endpoints](https://cloud.google.com/workflows/docs/creating-callback-endpoints), waits, retries, and hosted history can drive HTTP actions. | The definition-first workflow becomes a second execution model unless it remains a thin action driver. |
@@ -160,4 +164,4 @@ An AWS coordination-host implementation is acceptable only when it can demonstra
 4. retry, DLQ, uncertain outcome, and re-drive evidence remain visible through TPF's operator contract;
 5. provider history loss or expiry does not remove the records needed to operate or re-drive a TPF execution.
 
-The deployed fault proof demonstrates those properties for the experimental AWS host. That makes AWS Durable the preferred candidate AWS hosting strategy, not current production Lambda support. The next implementation boundary is a provider-neutral coordination-host seam over the existing `PipelineControlPlane`, followed by ordinary release, security, quota, and operations work. The TPF-native compute-first coordinator remains the semantic reference and fallback.
+The deployed fault proof demonstrates those properties for the experimental AWS host, including injected registration-window failure with stream/history/reconciliation repair enabled. That makes AWS Durable the preferred candidate AWS hosting strategy, not current production Lambda support. The next implementation boundary is a provider-neutral coordination-host seam over the existing `PipelineControlPlane`, followed by ordinary release, security, quota, and operations work. The TPF-native compute-first coordinator remains the semantic reference and fallback.
