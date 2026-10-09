@@ -9,7 +9,7 @@
     "applications": {"displayName": "Applications and ordinary HA", "timeoutMinutes": 240},
     "csv-provider-reject": {"displayName": "CSV provider-reject replay E2E", "timeoutMinutes": 120},
     "scale-native": {"displayName": "Scale and native", "timeoutMinutes": 360},
-    "cloud-live": {"displayName": "Cloud and live providers", "timeoutMinutes": 360}
+    "cloud-live": {"displayName": "Cloud deployments", "timeoutMinutes": 360}
   },
   "suites": {
     "compiler-verify": {"owner": "compiler", "entrypoint": "verify", "tier": "pr", "shard": "semantic"},
@@ -32,15 +32,14 @@
     "csv-ha-scale": {"owner": "csvPayments", "entrypoint": "ha-scale", "tier": "heavy", "shard": "scale-native"},
     "csv-provider-reject": {"owner": "csvPayments", "entrypoint": "provider-reject", "tier": "heavy", "shard": "csv-provider-reject"},
     "native-builds": {"owner": "csvPayments", "entrypoint": "native", "tier": "heavy", "shard": "scale-native"},
-    "cloud-deployments": {"owner": "references", "entrypoint": "cloud", "tier": "heavy", "shard": "cloud-live"},
-    "live-providers": {"owner": "connectors", "entrypoint": "live-providers", "tier": "heavy", "shard": "cloud-live"}
+    "cloud-deployments": {"owner": "references", "entrypoint": "cloud", "tier": "heavy", "shard": "cloud-live"}
   },
   "componentPolicy": {
-    "contracts": {"required": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "contracts": {"required": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments"]},
     "compiler": {"required": ["runtime-deployment", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": [], "heavy": ["native-builds", "cloud-deployments"]},
-    "runtime": {"required": ["cli-verify", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-observability", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]},
+    "runtime": {"required": ["cli-verify", "connectors-verify", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "csv-observability", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "native-builds", "cloud-deployments"]},
     "cli": {"required": ["cli-verify"], "postMerge": [], "heavy": []},
-    "connectors": {"required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "cloud-deployments", "live-providers"]},
+    "connectors": {"required": ["blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "references-core", "csv-smoke", "rag-system"], "postMerge": ["csv-ha"], "heavy": ["csv-ha-scale", "cloud-deployments"]},
     "blocks": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
     "expansions": {"required": ["expansions-resolution", "examples-verify", "references-core", "rag-system"], "postMerge": [], "heavy": []},
     "examples": {"required": ["examples-verify"], "postMerge": ["examples-restaurant-ha"], "heavy": []},
@@ -61,5 +60,5 @@
     {"component": "csvPayments", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []},
     {"component": "ragTurnkey", "paths": [".github/ISSUE_TEMPLATE/**", ".github/*.md", ".github/**/*.md", ".github/CODEOWNERS", "docs/**", "AGENTS*.md", "README*.md", "LICENSE", ".gitignore"], "required": []}
   ],
-  "fullTrain": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-observability", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments", "live-providers"]
+  "fullTrain": ["compiler-verify", "runtime-deployment", "cli-verify", "connectors-verify", "blocks-verify", "expansions-resolution", "coordination-compatibility", "examples-verify", "examples-restaurant-ha", "references-checkout", "references-search", "references-quickbooks", "csv-smoke", "csv-observability", "csv-ha", "rag-system", "csv-ha-scale", "native-builds", "cloud-deployments"]
 }
