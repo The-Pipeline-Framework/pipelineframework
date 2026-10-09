@@ -1,0 +1,32 @@
+name: CI — System-test plumbing
+
+on:
+  pull_request:
+    paths:
+      - 'system-tests/**'
+      - '.github/workflows/system-test-*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'system-tests/**'
+      - '.github/workflows/system-test-*.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: system-test-plumbing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate coordination regressions without cloud credentials
+        run: node --test system-tests/test/*.test.mjs
+      - name: Validate changed cloud and full-train workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= .github/workflows/system-test-search-aws.yml .github/workflows/system-test-full-train.yml .github/workflows/system-test-plumbing.yml

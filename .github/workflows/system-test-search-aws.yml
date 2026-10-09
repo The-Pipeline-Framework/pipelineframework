@@ -1,0 +1,257 @@
+name: Reusable — exact-set Search AWS modular test
+
+on:
+  workflow_call:
+    inputs:
+      references_sha:
+        required: true
+        type: string
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+
+jobs:
+  build:
+    # The inherited OIDC trust authorises only coordinator main, not PR/fork code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      manifest_checksum: ${{ steps.bundle.outputs.manifest_checksum }}
+    steps:
+      - name: Reject non-main callers before consuming any source or artifact
+        env:
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_EVENT: ${{ github.event_name }}
+        run: |
+          test "$CALLER_REPOSITORY" = The-Pipeline-Framework/pipelineframework
+          test "$CALLER_REF" = refs/heads/main
+          case "$CALLER_EVENT" in schedule|workflow_dispatch) ;; *) exit 1 ;; esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: coordination
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Pipeline-Framework/pipelineframework-reference-implementations
+          ref: ${{ inputs.references_sha }}
+          path: references
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-full-train-inputs
+          path: inputs
+      - name: Build against the already hydrated exact set, without cloud credentials
+        id: bundle
+        env:
+          SOURCE_SHA: ${{ inputs.references_sha }}
+        run: |
+          test "$(git -C references rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
+          tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
+          node coordination/system-tests/scripts/run-search-cloud.mjs --mode build \
+            --source "$GITHUB_WORKSPACE/references" --sourceSha "$SOURCE_SHA" \
+            --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
+            --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
+          for module in crawl-source-svc parse-document-svc tokenize-content-svc embed-content-svc index-document-svc orchestrator-svc; do
+            test -s "references/search/$module/target/function.zip"
+          done
+          (
+            cd references/search
+            sha256sum {crawl-source-svc,parse-document-svc,tokenize-content-svc,embed-content-svc,index-document-svc,orchestrator-svc}/target/function.zip > cloud-SHA256SUMS
+            echo "manifest_checksum=$(sha256sum cloud-SHA256SUMS | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          )
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: search-aws-function-zips
+          path: |
+            references/search/*/target/function.zip
+            references/search/cloud-SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.apply.outputs.url }}
+      cleanup: ${{ steps.init.outputs.cleanup }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Pipeline-Framework/pipelineframework-reference-implementations
+          ref: ${{ inputs.references_sha }}
+          path: references
+          persist-credentials: false
+      - name: Confirm Terraform source is a merged main commit
+        env:
+          SOURCE_SHA: ${{ inputs.references_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git -C references rev-parse HEAD)" = "$SOURCE_SHA"
+          git -C references fetch --no-tags --unshallow origin main
+          git -C references merge-base --is-ancestor "$SOURCE_SHA" FETCH_HEAD
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: search-aws-function-zips
+          path: references/search
+      - name: Verify immutable build files before assuming cloud authority
+        working-directory: references/search
+        env:
+          EXPECTED_CHECKSUM: ${{ needs.build.outputs.manifest_checksum }}
+        run: |
+          [[ "$EXPECTED_CHECKSUM" =~ ^[a-f0-9]{64}$ ]]
+          test "$(sha256sum cloud-SHA256SUMS | cut -d ' ' -f 1)" = "$EXPECTED_CHECKSUM"
+          sha256sum --check cloud-SHA256SUMS
+      - name: Assume existing coordinator OIDC role
+        uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          role-session-name: tpf-cloud-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 1800
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:search-modular-${{ github.run_id }}-${{ github.run_attempt }}-*"},
+              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/search-modular-${{ github.run_id }}-${{ github.run_attempt }}-lambda-exec"}
+            ]}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+      - name: Initialise disposable deployment
+        id: init
+        working-directory: references/search/terraform/aws-modular
+        run: |
+          terraform init -input=false
+          echo "cleanup=true" >> "$GITHUB_OUTPUT"
+      - name: Deploy exact build and record Function URL
+        id: apply
+        working-directory: references/search/terraform/aws-modular
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          TF_VAR_name_prefix: search-modular-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          terraform apply -input=false -auto-approve
+          echo "url=$(terraform output -raw orchestrator_function_url)" >> "$GITHUB_OUTPUT"
+      - name: Retain state for independent cleanup, including partial apply failure
+        if: always() && steps.init.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: search-aws-terraform-state
+          path: |
+            references/search/terraform/aws-modular/terraform.tfstate*
+            references/search/terraform/aws-modular/.terraform.lock.hcl
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: coordination
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Pipeline-Framework/pipelineframework-reference-implementations
+          ref: ${{ inputs.references_sha }}
+          path: references
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-full-train-inputs
+          path: inputs
+      - name: Test deployed topology without AWS, package or reporting credentials
+        env:
+          SOURCE_SHA: ${{ inputs.references_sha }}
+          AWS_LAMBDA_ORCHESTRATOR_URL: ${{ needs.deploy.outputs.url }}
+        run: |
+          test "$(git -C references rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
+          tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --connect-timeout 5 --max-time 15 "${AWS_LAMBDA_ORCHESTRATOR_URL%/}/q/health/live"; then
+              break
+            fi
+            test "$attempt" -lt 30 || { echo "AWS orchestrator never became healthy" >&2; exit 1; }
+            sleep 10
+          done
+          node coordination/system-tests/scripts/run-search-cloud.mjs --mode test \
+            --source "$GITHUB_WORKSPACE/references" --sourceSha "$SOURCE_SHA" \
+            --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
+            --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: search-aws-test-evidence
+          path: |
+            references/search/**/target/failsafe-reports/*
+            inputs/resolved-set.json
+          if-no-files-found: error
+          retention-days: 14
+
+  cleanup:
+    if: always() && needs.deploy.outputs.cleanup == 'true'
+    needs: [build, deploy, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: The-Pipeline-Framework/pipelineframework-reference-implementations
+          ref: ${{ inputs.references_sha }}
+          path: references
+          persist-credentials: false
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: search-aws-function-zips
+          path: references/search
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: search-aws-terraform-state
+          path: references/search/terraform/aws-modular
+      - uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          role-duration-seconds: 1800
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:search-modular-${{ github.run_id }}-${{ github.run_attempt }}-*"},
+              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/search-modular-${{ github.run_id }}-${{ github.run_attempt }}-lambda-exec"}
+            ]}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+      - name: Destroy only this run and attempt, regardless of test outcome
+        working-directory: references/search/terraform/aws-modular
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          TF_VAR_name_prefix: search-modular-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          terraform init -input=false
+          terraform destroy -input=false -auto-approve
