@@ -81,10 +81,25 @@ test('cloud jobs isolate credentials and baseline promotion requires the relay',
     assert.doesNotMatch(body, /id-token: write|secrets\.|configure-aws-credentials|packages:|statuses:/);
   }
   assert.match(workflow, /cleanup:\n\s+if: always\(\)/);
-  assert.match(workflow, /role\/search-modular-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}-lambda-exec/);
+  assert.match(workflow, /role\/\$\{\{ steps.identity.outputs.name_prefix \}\}-lambda-exec/);
   assert.doesNotMatch(workflow, /cancel-in-progress: true/);
   const full = await readFile(new URL('../../.github/workflows/system-test-full-train.yml', import.meta.url), 'utf8');
   assert.match(full, /uses: \.\/\.github\/workflows\/system-test-search-aws.yml/);
   assert.match(full, /needs\.cloud-deployments.result == 'success'/);
   assert.match(full, /select\(\.suite != "cloud-deployments"\)/);
+});
+test('cleanup-only reruns retain the original deployment prefix in Terraform and both policy ARNs', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/system-test-search-aws.yml', import.meta.url), 'utf8');
+  const deploy = workflow.split('\n  deploy:\n')[1].split('\n  test:\n')[0];
+  assert.match(deploy, /name_prefix: \$\{\{ steps.identity.outputs.name_prefix \}\}/);
+  assert.ok(deploy.indexOf('id: identity') < deploy.indexOf('terraform apply'));
+  const cleanup = workflow.split('\n  cleanup:\n')[1];
+  assert.doesNotMatch(cleanup, /github.run_attempt/);
+  assert.match(cleanup, /TF_VAR_name_prefix: \$\{\{ needs.deploy.outputs.name_prefix \}\}/);
+  const rendered = cleanup.replaceAll('${{ needs.deploy.outputs.name_prefix }}', 'search-modular-123-1');
+  const policy = JSON.parse(rendered.match(/inline-session-policy: >-\n\s*(\{[\s\S]*?\n\s*\]\})/)[1]);
+  assert.deepEqual(policy.Statement.map((statement) => statement.Resource), [
+    'arn:aws:lambda:*:*:function:search-modular-123-1-*',
+    'arn:aws:iam::*:role/search-modular-123-1-lambda-exec'
+  ]);
 });

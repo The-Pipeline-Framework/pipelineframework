@@ -86,7 +86,11 @@ jobs:
     outputs:
       url: ${{ steps.apply.outputs.url }}
       cleanup: ${{ steps.init.outputs.cleanup }}
+      name_prefix: ${{ steps.identity.outputs.name_prefix }}
     steps:
+      - name: Record deployment identity before creating resources
+        id: identity
+        run: echo "name_prefix=search-modular-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: The-Pipeline-Framework/pipelineframework-reference-implementations
@@ -122,8 +126,8 @@ jobs:
           role-duration-seconds: 1800
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
-              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:search-modular-${{ github.run_id }}-${{ github.run_attempt }}-*"},
-              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/search-modular-${{ github.run_id }}-${{ github.run_attempt }}-lambda-exec"}
+              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ steps.identity.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-lambda-exec"}
             ]}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
@@ -140,7 +144,7 @@ jobs:
         working-directory: references/search/terraform/aws-modular
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
-          TF_VAR_name_prefix: search-modular-${{ github.run_id }}-${{ github.run_attempt }}
+          TF_VAR_name_prefix: ${{ steps.identity.outputs.name_prefix }}
         run: |
           terraform apply -input=false -auto-approve
           echo "url=$(terraform output -raw orchestrator_function_url)" >> "$GITHUB_OUTPUT"
@@ -233,6 +237,10 @@ jobs:
         with:
           name: search-aws-terraform-state
           path: references/search/terraform/aws-modular
+      - name: Validate retained deployment identity before cleanup authority
+        env:
+          DEPLOYMENT_PREFIX: ${{ needs.deploy.outputs.name_prefix }}
+        run: '[[ "$DEPLOYMENT_PREFIX" =~ ^search-modular-[0-9]+-[0-9]+$ ]]'
       - uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -240,18 +248,18 @@ jobs:
           role-duration-seconds: 1800
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
-              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:search-modular-${{ github.run_id }}-${{ github.run_attempt }}-*"},
-              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/search-modular-${{ github.run_id }}-${{ github.run_attempt }}-lambda-exec"}
+              {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ needs.deploy.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-lambda-exec"}
             ]}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: 1.9.0
           terraform_wrapper: false
-      - name: Destroy only this run and attempt, regardless of test outcome
+      - name: Destroy the retained deployment, regardless of rerun attempt
         working-directory: references/search/terraform/aws-modular
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
-          TF_VAR_name_prefix: search-modular-${{ github.run_id }}-${{ github.run_attempt }}
+          TF_VAR_name_prefix: ${{ needs.deploy.outputs.name_prefix }}
         run: |
           terraform init -input=false
           terraform destroy -input=false -auto-approve
