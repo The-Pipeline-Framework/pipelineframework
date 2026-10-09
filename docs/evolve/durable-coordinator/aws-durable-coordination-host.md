@@ -1,5 +1,7 @@
 # AWS Durable Coordination Host
 
+This page records the original design/proof stage. For the current supported host and deployment contract, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); the accepted ownership decision is [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination).
+
 AWS Lambda Durable Functions is the preferred candidate AWS coordination host for `QUEUE_ASYNC`. This is an architecture decision backed by a deployed fault proof, not a declaration of current production support.
 
 AWS owns mechanical orchestration liveness: durable checkpoints, suspension, callback wake-up, and mechanical retry timing. TPF remains authoritative for execution and Await identity, typed completion admission, parent release, release pinning, signed worker transitions, retry and DLQ evidence, results, and operator-authorised re-drive. The native coordinator remains the portable semantic reference, conformance implementation, and fallback.

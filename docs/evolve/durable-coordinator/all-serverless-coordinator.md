@@ -1,5 +1,7 @@
 # All-Serverless Durable Coordinator
 
+This page records the original design/proof stage. For the current supported host and deployment contract, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); the accepted ownership decision is [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination).
+
 This design track asks one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
 
 The answer is **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.

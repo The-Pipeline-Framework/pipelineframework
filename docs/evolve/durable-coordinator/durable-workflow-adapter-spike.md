@@ -1,5 +1,7 @@
 # Durable Workflow Backend Adapter Spike
 
+This page records the original design/proof stage. For the current supported host and deployment contract, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); the accepted ownership decision is [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination).
+
 Provider workflow engines can drive TPF coordinator actions, but they should not become a second authority for pipeline execution.
 
 The spike now has two stages. The first puts the AWS Lambda Durable Execution Java local runner around the AWS-shaped actions. The second pushes to the maximum currently safe delegation boundary: AWS owns the durable wait and wake-up machinery, while a compact TPF semantic checkpoint remains sufficient to reconstruct the driver after provider-history loss.
