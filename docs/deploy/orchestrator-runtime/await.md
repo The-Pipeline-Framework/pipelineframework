@@ -23,6 +23,32 @@ contracts all use the same canonical/transport distinction when deferred complet
 boundary. The generated descriptor pins that boundary; runtime does not reconstruct it from
 `pipeline.yaml`.
 
+For request-aware completion, the completion representation and the operation's final output can
+be different canonical types. The generated `AwaitCompletionDescriptor.outputFromTransport`
+conversion (for example, `fromProto`) runs before
+`AwaitCompletionProjector` receives the restored canonical request, canonical completion and
+completion metadata. The projector is a pure transformation into the canonical final output;
+it must not receive the wire representation or perform provider I/O.
+
+```mermaid
+flowchart TD
+    Wire[Validated wire completion] --> Convert[Generated fromTransport conversion]
+    Convert --> Completion[Canonical completion]
+    Request[Restored canonical request] --> Projector[Pure completion projector]
+    Completion --> Projector
+    Projector --> Final[Validated canonical final output]
+    Final --> Store[Persist admitted final value]
+    Store --> Resume[Resume or replay stored value without reprojection]
+```
+
+Conversion, projection and final-type validation precede durable completion admission. Rejected
+conversion or projection does not record a completed interaction or resume the pipeline. New
+interaction records retain the canonical final value, so restart and replay restore it without
+running the conversion or projector again. The existing legacy transport-value restoration path
+remains available for older records; it is not permission to reproject a stored canonical final value.
+Non-request-aware completion continues to use its generated transport-to-output conversion without
+a request-aware projector.
+
 ## Supported Runtime Shapes
 
 | Authored operation cardinality | Immediate operation results | Deferred completion |
