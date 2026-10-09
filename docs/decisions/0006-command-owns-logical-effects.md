@@ -56,3 +56,19 @@ logical identity and recorded authority can prevent unsafe accidental redispatch
 - Retry/redrive support must preserve effect identity and reject unsafe unsupported paths.
 - Execution stores must preserve deliberate retry intent until the targeted transition is
   claimed; effect stores remain the sole authority for whether another attempt is legal.
+
+## Provider-reconciled native recovery
+
+An opted-in native operation may supply authoritative success evidence for an interrupted attempt.
+The effect store remains the authority: the original request, configuration, target and execution
+binding is retained before reservation and checked again before a conditional settlement. A bound
+`PENDING` attempt uses the same strict single-winner dispatch claim for its original executor and
+its recovery executor. A bound `DISPATCHING` or `AMBIGUOUS` attempt permits only a read-only
+provider inquiry and exact-binding typed-success settlement, not redispatch based on absence,
+elapsed time or TTL.
+
+This does not grant the execution control plane or application permission to manufacture effect
+state, clear unrelated barriers, or create another attempt. Unsupported providers/stores, callback
+invocations and old unbound records retain their existing barriers. See
+[provider-reconciled recovery](/deploy/orchestrator-runtime/command#provider-reconciled-recovery)
+for current support and durable-record rollout limits.
