@@ -319,8 +319,16 @@ runs and one deliberate regression failure for that repository.
 
 Owner-local unit, contract and integration suites continue on every pull request. The central pull-request gate adds
 affected product compatibility, application smoke and reference coverage. Established ordinary HA lanes remain on
-`main`; nightly and release trains add the complete compatibility matrix, HA scale, native builds, cloud deployment
-and live-provider suites. Publisher hints may widen that set but cannot make it smaller.
+`main`; nightly and release trains add the complete compatibility matrix, HA scale, native builds and cloud
+deployment coverage. Publisher hints may widen that set but cannot make it smaller.
+
+Connector service integration coverage runs once, in `connectors-verify`, against the resolved exact set.
+Its owner command runs `clean verify` with Failsafe enabled and requires passing, unskipped reports for
+Hibernate Reactive queries, pgvector and OIDC connection restart. These tests use disposable databases and a
+local authorisation fixture; no commercial-provider account secret is needed. The former monorepo full
+framework build ran this coverage too. There is no separate credentialed `live-providers` gate: that was
+an unimplemented requirement, not a migrated test suite. Testing commercial providers against real accounts
+would be additional coverage, not a prerequisite for restoring the existing safety net.
 
 Different candidate sets use isolated Actions jobs and Maven repositories. The singleton concurrency key is
 repository plus pull request; a coordinated set uses its explicit set ID. New commits cancel only older runs for
