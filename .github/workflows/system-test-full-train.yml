@@ -20,6 +20,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       baseline_digest: ${{ steps.baseline.outputs.digest }}
       has_candidates: ${{ steps.baseline.outputs.has_candidates }}
+      references_sha: ${{ steps.matrix.outputs.references_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,7 +138,12 @@ jobs:
 
       - name: Export suite matrix
         id: matrix
-        run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          # Cloud coverage has a separate credential-isolated relay, not a shell
+          # entrypoint in the credential-free product shard.
+          jq -e '[.include[].suites[] | select(.suite == "cloud-deployments")] | length == 1' resolved/suite-matrix.json
+          echo "references_sha=$(jq -er '.testHarnesses.references.sha' resolved/resolved-set.json)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c '.include |= map(.suites |= map(select(.suite != "cloud-deployments"))) | .include |= map(select(.suites | length > 0))' resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
 
       - name: Record exact tested set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -300,14 +306,27 @@ jobs:
             --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
             --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
 
+  cloud-deployments:
+    name: Search AWS modular cloud coverage
+    needs: [resolve, materialize]
+    uses: ./.github/workflows/system-test-search-aws.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      references_sha: ${{ needs.resolve.outputs.references_sha }}
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+
   promote:
     name: Promote green current-main set
     if: >-
       always() && needs.resolve.result == 'success' &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
-      needs.run-product-shard.result == 'success'
-    needs: [resolve, materialize, run-product-shard]
+      needs.run-product-shard.result == 'success' &&
+      needs.cloud-deployments.result == 'success'
+    needs: [resolve, materialize, run-product-shard, cloud-deployments]
     concurrency:
       group: tpf-system-test-baseline-promotion
       cancel-in-progress: false
