@@ -156,9 +156,11 @@ CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful refer
 
 ## Relationship To Current Runtime
 
-The current self-host runtime registers local releases directly. It uses the shared structural and semantic
-validator, verifies local bytes, and reads the contract from the named Compiled Truth carrier. An independent Cloud
-consumer can instead resolve canonical `maven:` and `oci:` locations through environment-owned resolvers while
-preserving the descriptor unchanged.
+The self-host runtime retains local file/JAR registration and uses the shared verifier for closures containing
+canonical `maven:` locations. It resolves the closure through environment-owned repository configuration, verifies
+every artefact digest and reads the contract from the named Compiled Truth carrier before storing verified bytes.
+Native Coordinator admission does not configure an OCI resolver. Independent consumers can supply supported Maven
+and OCI resolver profiles without changing Release identity. See the current
+[Coordinator admission configuration](/deploy/release-descriptors#register-with-a-self-hosted-coordinator).
 
 The coordinator validates, activates, pins, and dispatches releases. Platform-specific tools still deploy artifacts outside TPF.

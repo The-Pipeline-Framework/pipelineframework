@@ -10,6 +10,23 @@ const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
 const currentHead = (value) => ({baseRef: 'main', sha: value});
 
+test('runtime admission consumes the exact shared CLI resolver candidate', () => {
+  assert.equal(config.components.runtime.consumerVersionProperties.cli, 'tpf.release-resolver.version');
+  const baselineSha = '1'.repeat(40);
+  const heads = Object.fromEntries(Object.keys(config.components).map((component) => [component, currentHead(baselineSha)]));
+  const baseline = {
+    components: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'maven')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}])),
+    testHarnesses: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'source')
+      .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}]))
+  };
+  const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('cli', 9)]}, heads);
+  assert.ok(augmented.targets.some(({component}) => component === 'runtime'), 'resolver changes must rebuild runtime admission');
+  const ordered = orderedMavenTargets(config, new Map(augmented.targets.map((value) => [value.component, value])))
+    .map(({component}) => component);
+  assert.ok(ordered.indexOf('cli') < ordered.indexOf('runtime'));
+});
+
 test('compatibility Maven candidates build in dependency order', () => {
   const targets = new Map([
     ['connectors', target('connectors', 17)],

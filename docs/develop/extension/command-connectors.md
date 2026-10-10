@@ -149,7 +149,9 @@ The queue-async control plane may deliberately re-drive a failed execution with
 the normal generated Command client, which consumes that intent only at the targeted Command step.
 `CommandStepSupport.retry(...)` remains the lower-level runtime primitive: a retry-capable effect
 store atomically appends and claims one new attempt under the same logical `CommandId`. `DLQ`,
-`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers. Ordinary native operations run directly;
+`AMBIGUOUS`, and `USER_ACTION_REQUIRED` remain barriers to deliberate retry. The opt-in
+[provider reconciliation](#provider-reconciled-native-recovery) below can settle authoritative
+success without retrying an uncertain effect. Ordinary native operations run directly;
 only `BlockingCommandOperation` receives framework worker execution. Only `SerializedOperation`
 receives framework-managed concurrency, scoped to its configured binding and operation for the full
 provider-stage lifetime.
@@ -169,6 +171,46 @@ provider idempotency keys.
 policy for that target alone; other successful Commands keep ordinary recorded-output replay. A
 connector does not decide whether reissue is allowed—it receives the occurrence identity only after
 the execution control plane and effect store have atomically admitted it.
+
+### Provider-reconciled native recovery
+
+Native `CommandOperation<I, C, O>` implementations can opt into recovery of a retained invocation.
+Declaring `CommandCapabilities.reconciliationSupported` is necessary but does not implement
+reconciliation. The operation must also provide:
+
+- `recoveryTarget(CommandInvocation<I, C>)`: an optional `CommandRecoveryTarget` containing a
+  stable, non-sensitive destination identity and sanitised provider configuration snapshot;
+- `reconcile(CommandReconciliationInvocation<I, C>)`: a read-only authoritative inquiry returning
+  `CommandReconciliationResult.ConfirmedSucceeded<O>` or `Unresolved<O>`.
+
+The default target is empty and the default inquiry is unresolved. The effect store must explicitly
+support recovery through `CommandEffectStore.supportsRecovery()` and its guarded recovery methods.
+The built-in memory and Dynamo stores implement this contract; memory remains process-local.
+
+Before reservation, TPF retains a `CommandRecoveryBinding`: tenant, logical Command, occurrence,
+attempt, execution, Pipeline/Contract/Release and step identities; provider/operation version and
+binding; declared types; a digest of the typed durable input; operation configuration; and provider
+target. Recovery reconstructs and compares that binding before claiming dispatch or making an inquiry.
+Do not persist resolved credentials or credential hashes. A logical connection name alone is not a
+destination identity: the provider must distinguish a changed account or destination behind that name.
+If it cannot supply that authority, return an empty recovery target rather than guess.
+
+`ConfirmedSucceeded` must carry the exact original binding, typed `CommandOutcome.Succeeded<O>`,
+and a safe authoritative receipt reference with purpose `RECONCILIATION`. The reference kind must be
+declared in `durableReferenceKinds` and the receipt must occur in the outcome's references. Normal
+machine/user confirmation policy still applies. The provider must actually verify immutable provider
+evidence against the original request and destination; echoing the supplied binding is not proof.
+Missing, stale, conflicting or eventually consistent evidence is unresolved, not permission to dispatch.
+
+An ordinary resumed native invocation may claim an exactly bound `PENDING` attempt or inquire about
+a bound `DISPATCHING`/`AMBIGUOUS` attempt. It does not append a retry attempt or new occurrence.
+Both original and recovery executors use the same strict `claimPendingDispatch` gate: only one
+winner may dispatch. See [recovery states and rollout limits](/deploy/orchestrator-runtime/command#provider-reconciled-recovery).
+
+This path excludes callback invocations, legacy `CommandConnector` implementations, old records
+without a retained binding, and custom stores that have not implemented the recovery contract.
+Their existing fail-closed barriers remain. A provider reconciliation hook is neither a recovery
+scheduler nor a guarantee that every interrupted external effect is knowable.
 
 ## Native Provider Queries
 

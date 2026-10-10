@@ -8,6 +8,47 @@ It can use in-process providers for local development or durable providers such 
 
 For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance).
 
+## Release-aware REST targets
+
+The default `pipeline.orchestrator.worker.targeting-mode=legacy` preserves the
+existing local or fixed REST/gRPC/SQS target selection. Opt-in `registered-rest`
+selects a REST worker using the execution's persisted tenant, Pipeline, Contract
+and Release identity. Activating another Release does not redirect retries or
+Await continuations of an existing execution.
+
+Deployment configuration owns named bindings under
+`pipeline.orchestrator.worker.targets.<target-id>`. Each binding contains
+`tenant-id`, `pipeline-id`, `contract-version`, `release-version`, `worker-id`,
+`endpoint`, `shared-secret-ref`, `artifact-id` and `artifact-digest`; `protocol`
+defaults to `rest`. Use the exact immutable Release identities and an existing
+secret reference, such as `env:PAYMENTS_WORKER_SECRET`. Registration does not
+grant a worker authority to choose its destination or replace these identities.
+The `(tenant-id, pipeline-id, worker-id)` tuple must be unique across target
+entries, including entries for different Releases.
+
+This mode requires one whole-bundle `application-archive` covering the Contract's
+steps and declared capabilities. The pinned Contract must equal the Coordinator's
+actual generated Contract, including its layout; equal labels or step counts are
+not enough. Different implementation Releases sharing that Contract are supported.
+Distributed artefact placement and differing Contract/layout coordination are not
+supported by this mode. The Compiled Truth carrier is not assumed to be runnable.
+
+Availability and dispatch use the same target resolution. Both require a matching
+healthy, non-stale, non-draining lifecycle record and authenticated endpoint
+capabilities, including known artefact identity/digest. Missing known identity is
+unverified. Bindings require HTTPS origins without credentials, query, fragment or
+non-root path. Explicit `pipeline.orchestrator.worker.allow-loopback-http=true`
+permits HTTP only for literal loopback development addresses. Do not combine this
+mode with the legacy fixed remote-target switches or customise native REST routes.
+
+Eligible replicas are considered in stable target-id order. An unavailable
+capability check may select another replica of the same pinned Release before
+execution. Once dispatch begins, a possibly executed request does not immediately
+fail over; the existing unknown-remote-outcome rules below still apply.
+Re-registering a draining worker does not undrain it; replacement needs a distinct
+worker identity and its corresponding deployment binding. None of this deploys
+artefacts or changes an existing execution's immutable pin.
+
 ## Durable Execution
 
 Every correctness-relevant `QUEUE_ASYNC` operation can be driven and recovered through

@@ -59,7 +59,8 @@
       ],
       "consumerVersionProperties": {
         "compiler": "tpf.compiler.version",
-        "contracts": "tpf.contracts.version"
+        "contracts": "tpf.contracts.version",
+        "cli": "tpf.release-resolver.version"
       },
       "suiteManifest": ".github/tpf-system-tests.json"
     },

@@ -235,3 +235,32 @@ different content is rejected. A registry remains the cross-build immutability a
 
 Promote the descriptor unchanged. Change resolver credentials, mirrors, target accounts, and Deployment Plans per
 environment. Do not rewrite URIs, digests, placement, or Compiled Truth during promotion.
+
+## Register with a self-hosted Coordinator
+
+The private, default-disabled Coordinator admin API accepts an absolute descriptor path in
+`POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/register`. The descriptor must be readable by the
+Coordinator process; this is not a file-upload endpoint. Enable and protect the admin API through deployment-owned
+configuration, not through Release fields.
+
+For a closure containing canonical `maven:` locations, native admission uses the shared `tpf-release-resolver`
+verifier. It resolves every artefact, verifies every pinned digest and the embedded Pipeline Contract before storing
+the verified closure. It preserves the descriptor unchanged. Existing local file/JAR admission remains available.
+Registering identical immutable content is idempotent; conflicting content for an existing Release identity is rejected.
+
+| Coordinator configuration | Default | Purpose |
+| --- | --- | --- |
+| `pipeline.orchestrator.releases.resolver.maven-settings` | absent | Explicit readable settings file for repository profiles and server credentials. |
+| `pipeline.orchestrator.releases.resolver.maven-local-repository` | `maven` under the Release storage root | Environment-owned resolver cache. |
+| `pipeline.orchestrator.releases.resolver.maven-repositories` | Maven Central | Repository roots available to this Coordinator. |
+
+Keep repository credentials in settings servers, not repository URL user information or the descriptor. The current
+shared Maven provider supports direct server username/password authentication and profile repositories; encrypted
+settings, mirrors and proxies are not covered by this admission contract. OCI resolution is not configured in native
+Coordinator admission, so a Maven closure also requiring OCI resolution is rejected. JVM admission coverage does not
+establish native-image compatibility for the Maven Resolver dependency graph.
+
+Registration and the admin activation operation do not physically start a worker or establish its readiness. The
+Coordinator remains responsible for Release validation, activation, execution pinning and compatibility; the
+Deployment Target owns physical deployment and readiness checks. Do not present a registered or merely
+admin-activated Release as evidence of a successfully deployed, executing application.

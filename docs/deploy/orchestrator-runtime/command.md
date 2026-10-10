@@ -184,6 +184,13 @@ Replay decoding is strict. Unknown snapshot schema versions, unavailable or inco
 types, corrupt JSON, and unknown stored protobuf fields fail as store corruption instead of being
 discarded or reconstructed as generic values.
 
+### Recovery record rollout
+
+The recovery-aware Command codec writes schema version 3 and reads versions 1, 2 and 3. Older
+records remain readable but do not acquire an original recovery binding by inference. Older runtime
+readers cannot read version 3: coordinate all readers before enabling a writer that emits it, including
+when planning a rollback. Retaining the same table does not make mixed-version readers compatible.
+
 ## Duplicate Policy
 
 `RETURN_RECORDED` returns the stored output when the same command id has already succeeded. This is the usual replay-safe setting.
@@ -211,6 +218,47 @@ Queue-Async does not automatically retry failed effects. Deliberate retry is adm
 The configured execution store must preserve deliberate retry intent, and the configured
 `CommandEffectStore` must advertise retry-attempt history support. Older implementations fail this
 operation rather than silently emulating it or discarding attempt identity.
+
+## Provider-reconciled recovery
+
+Recovery is an opt-in native provider and effect-store capability, not a queue-async retry policy.
+The runtime retains the original non-secret request/configuration/destination binding before a
+recoverable reservation. On resumed invocation it validates that exact binding and the declared
+types again. Provider implementation requirements are described in
+[Writing Command Connectors](/develop/extension/command-connectors#provider-reconciled-native-recovery).
+
+| Retained state | Permitted recovery action |
+| --- | --- |
+| Bound `PENDING` | Atomically claim the original attempt; only the single winner may dispatch. |
+| Bound `DISPATCHING` or `AMBIGUOUS` | Read-only provider inquiry; settle only authoritative exact-binding typed success. |
+| Unknown, absent or conflicting provider result | Leave effect history unchanged and report the unresolved barrier or conflict. |
+| Old unbound record, legacy connector, unsupported custom store or callback invocation | Preserve the existing fail-closed behaviour. |
+
+```mermaid
+flowchart TD
+    Pending[Bound PENDING] --> Claim{Strict single-winner claim}
+    Claim -->|winner only| Dispatch[Dispatch original attempt]
+    Uncertain[Bound DISPATCHING or AMBIGUOUS] --> Inquiry[Read-only provider inquiry]
+    Inquiry -->|exact typed receipt and confirmation| Success[Conditional success revision]
+    Inquiry -->|unknown or conflict| Barrier[Preserve retained authority]
+```
+
+Absence, elapsed time, leases and TTL never authorise redispatch from `DISPATCHING` or `AMBIGUOUS`.
+Even a claim acknowledged before a process stops, but before the provider call begins, leaves an
+uncertain `DISPATCHING` cut. Without authoritative success evidence it stays unresolved.
+
+Success settlement conditionally appends one immutable revision for the exact current binding,
+attempt and uncertain state. Concurrent reconcilers and a late original acknowledgement cannot
+overwrite the winner. An exactly matching typed success can converge read-only; a different output,
+receipt, confirmation, attempt or terminal outcome is a conflict. A late failure cannot replace
+settled success. This does not clear unrelated DLQ or user-confirmation barriers, reset effect history,
+or create retry/reissue authority.
+
+There is no automatic recovery scheduler or universal provider-recovery guarantee. Hosting must
+drive resumed invocations, and providers remain responsible for authoritative receipt lookup and
+stable destination identity. Preserve the [record rollout constraints](#recovery-record-rollout).
+
+## Deliberate reissue
 
 An operator can intentionally request one additional occurrence of a retained successful Command
 with `REISSUE_COMMAND`. This is not ordinary replay. The request must identify the observed
