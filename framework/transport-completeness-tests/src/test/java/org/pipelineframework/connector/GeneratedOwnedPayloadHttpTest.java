@@ -20,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /** Exercises compiler-shaped resources through Quarkus REST and a real filesystem binding. */
@@ -98,7 +100,7 @@ class GeneratedOwnedPayloadHttpTest {
     @Test
     @TestSecurity(user = "alice")
     void rejectsOversizeAndDisallowedMediaWithoutPublishingAnObject() throws Exception {
-        long before = completedObjects();
+        Set<Path> before = completedObjects();
         byte[] oversized = new byte[1025];
         Arrays.fill(oversized, (byte) 'x');
         try (HttpClient client = HttpClient.newHttpClient()) {
@@ -134,13 +136,13 @@ class GeneratedOwnedPayloadHttpTest {
             .build();
     }
 
-    private static long completedObjects() throws Exception {
+    private static Set<Path> completedObjects() throws Exception {
         Path root = Path.of("target/owned-payload-http");
         if (!Files.exists(root)) {
-            return 0;
+            return Set.of();
         }
         try (var paths = Files.walk(root)) {
-            return paths.filter(Files::isRegularFile).count();
+            return paths.filter(Files::isRegularFile).map(root::relativize).collect(Collectors.toSet());
         }
     }
 

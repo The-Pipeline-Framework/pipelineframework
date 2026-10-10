@@ -68,7 +68,8 @@ class GeneratedOwnedPayloadHttpCompatibilityTest {
         assertEquals(2, sources.size());
         assertTrue(Files.readString(sources.getFirst()).contains("@Authenticated"));
         assertTrue(Files.readString(sources.getFirst()).contains("transfer().upload"));
-        Path fixture = Path.of("src/test/java/org/example/pipeline");
+        Path fixture = Path.of(System.getProperty("basedir", "."))
+            .resolve("src/test/java/org/example/pipeline");
         for (Path source : sources) {
             assertEquals(Files.readString(source), Files.readString(fixture.resolve(source.getFileName())),
                 "HTTP fixture must be the current compiler output");
