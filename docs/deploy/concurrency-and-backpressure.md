@@ -89,6 +89,18 @@ Backpressure propagates through live reactive segments. A brokered await can par
 
 Durability takes over when the live session is unavailable. A request may complete later through Kafka, SQS, a webhook, a human/API completion, or a restarted worker. In that path, TPF uses await unit state, execution state, and queue admission rather than a single in-memory demand signal.
 
+### Generated owned-payload HTTP boundaries
+
+For `httpPayloads` on a REST/COMPUTE deployment, size Quarkus multipart temporary storage for
+the largest permitted upload multiplied by expected concurrent requests. Quarkus stages each
+multipart part before the generated adapter transfers it to the Object Publish target. Set
+`quarkus.http.limits.max-body-size` to accommodate the declared `maxBytes` plus multipart framing;
+the adapter applies its own per-boundary limit before opening a provider write. The provider
+transfer uses a fixed 64 KiB buffer and waits for each write before reading the next chunk.
+Storage capacity and temporary-directory cleanup therefore remain deployment concerns even
+though application steps never handle the multipart body. See
+[Handling File Operations](/develop/handling-file-operations) for the route and reference contract.
+
 ### Finite streaming Query boundaries
 
 A `StreamingQueryOperation` emits a finite ordered row publisher into an ordinary ONE_TO_MANY step.

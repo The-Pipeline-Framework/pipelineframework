@@ -13,6 +13,7 @@
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>
+        <object.ingest.test.version>${pipelineframework.connectors.version}</object.ingest.test.version>
     </properties>
     <name>The Pipeline Framework - Contributed Protocol Transport Compatibility Tests</name>
     <description>Compiler transport regression fixtures that exercise real contributed connector contracts.</description>
@@ -46,6 +47,24 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>vector-store-connector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>object-ingest-connector</artifactId>
+            <version>${object.ingest.test.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit</artifactId>
+            <version>3.39.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security</artifactId>
+            <version>3.39.2</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.google.testing.compile</groupId>

@@ -21,3 +21,14 @@ Keep attributes and log fields minimal. Prefer identifiers to payloads.
 ## Redaction
 
 If payload content must be logged, redact sensitive fields at the logger or mapper level.
+
+## Owned payload HTTP boundaries
+
+Generated payload routes require an authenticated principal and one application or host
+`PayloadBoundaryAuthorizer`. Treat the tenant and scope headers as untrusted claims; the
+authoriser must verify both against the principal and return the allowed owner. Downloads
+compare that owner with provider-signed reference metadata before opening content. Rotate
+`TPF_OBJECT_REFERENCE_HMAC_KEY` (or `tpf.object.reference.hmac-key`) with care: references
+issued under an older key fail closed once that key is removed. All replicas that must read
+the same references need the same Base64-encoded secret of at least 32 bytes. A missing key
+uses an instance-local key, suitable only when references need not outlive that instance.

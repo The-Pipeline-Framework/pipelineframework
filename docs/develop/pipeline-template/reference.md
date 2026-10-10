@@ -301,6 +301,13 @@ objects. Use `selection.keys` for differently named fields, or `selection.into` 
 the canonical record directly. Complete configuration and Java examples are in
 [Object Ingest and Publish](/architecture/object-ingest#grouped-selection).
 
+For HTTP access to an owned `payload_ref`, version 3 also accepts top-level `httpPayloads`.
+Each route names a record's singular `payload_ref` field, allowed content types, an authorisation
+scope, and a bound object target for upload or bound object source for download. Uploads require
+`maxBytes`; downloads omit it. The initial implementation supports REST on COMPUTE. See
+[Generated owned-payload boundaries](/develop/handling-file-operations#generated-owned-payload-boundaries)
+for the request shape and security contract.
+
 ### Preview representation support
 
 Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step. The `file` consumer is the mapper-free payload-reference boundary for ordinary `Path` services.

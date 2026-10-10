@@ -1,0 +1,21 @@
+version: 3
+basePackage: org.example
+transport: REST
+platform: COMPUTE
+connectors:
+  files:
+    provider: filesystem.objects
+    version: 1
+sources:
+  receipts:
+    kind: object
+    provider: filesystem
+    binding: files
+    location: { root: target/owned-payload-http }
+publish:
+  invoices:
+    kind: object
+    provider: filesystem
+    binding: files
+    location: { root: target/owned-payload-http }
+steps: []

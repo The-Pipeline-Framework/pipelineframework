@@ -1,10 +1,57 @@
 # Handling File Operations with Generated REST Resources
 
-::: warning Legacy Approach
-This page documents a generated-REST-plus-custom-resource approach for file uploads and downloads. For new ingestion flows, prefer connector-based I/O shells such as [Object Ingest](/architecture/object-ingest). Connectors keep listing, identity, filtering, duplicate admission, and payload references out of business steps.
+::: warning Legacy approach
+The custom resource examples below predate generated owned-payload boundaries. Use `httpPayloads` for
+multipart upload and authorised download of Connector-owned `PayloadReference` values. Use
+[Object Ingest](/architecture/object-ingest) when an external object event starts the Pipeline.
 :::
 
 This guide explains how to handle file operations such as downloads and uploads when using the auto-generated REST resources in The Pipeline Framework.
+
+## Generated owned-payload boundaries
+
+Version 3 templates can declare HTTP boundaries around an ordinary typed Pipeline. Each declaration
+names a record field of type `payload_ref`, an existing bound Object Publish target or Object Ingest
+source, media types, and an authorisation scope. The initial generated shape requires REST transport
+and the COMPUTE platform.
+
+```yaml
+httpPayloads:
+  invoice-file:
+    direction: upload
+    object: invoices       # a bound object target under publish
+    canonicalType: InvoiceInput
+    referenceField: payload_ref
+    contentTypes: [application/pdf]
+    maxBytes: 10485760
+    authorizationScope: invoice.write
+  invoice-result:
+    direction: download
+    object: results        # a bound object source under sources
+    canonicalType: InvoiceResult
+    referenceField: payload_ref
+    contentTypes: [application/pdf]
+    authorizationScope: invoice.read
+```
+
+The generated upload route is `POST /tpf/payloads/invoice-file/upload`. Send one multipart `file`
+part. The response contains the provider-issued reference under `payload_ref`; submit that value
+through the Pipeline's usual typed admission route. Uploading does not start a Pipeline execution.
+Quarkus stages the multipart file in temporary storage before the generated adapter reads it in
+bounded chunks. Set `quarkus.http.limits.max-body-size` above the largest declared `maxBytes` plus
+multipart framing, and size the temporary upload directory for concurrent requests. The adapter
+still enforces each boundary's own limit before committing an object.
+The generated download route is `POST /tpf/payloads/invoice-result/download`, with the owned
+`PayloadReference` as its JSON body. It streams the content with a private, non-cacheable response.
+Byte-range requests receive HTTP 416 in this version.
+
+Both routes require an authenticated principal and exactly one application or host
+`PayloadBoundaryAuthorizer` bean. The `X-Tenant-Id` and `X-Scope-Id` headers are untrusted requests;
+the authoriser must verify them against the authenticated principal and return the authorised
+`PayloadBoundaryOwner`. Downloads compare that owner with signed reference metadata before opening
+the Connector. The host rejects an unavailable binding or modified reference. Public deployments
+must configure durable provider capability authority so issued references remain usable across
+instances and restarts.
 
 ## Overview
 
