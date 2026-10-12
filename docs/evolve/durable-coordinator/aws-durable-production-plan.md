@@ -156,14 +156,24 @@ Replacement claims the next generation before starting the deterministic provide
 
 The storage upgrade is intentionally fail-closed. Do not run unfenced retained action/wake-up/repair writers against this table alongside the new protocol. New installations create claims normally. Existing live executions need a quiesced, validated claim-chain migration, with semantic release identity checked through the control plane, before the new writers or event sources resume. Missing claims retry rather than silently bootstrap from callback TTL rows. Retained generations and fences cannot be removed until the execution's supported recovery lifetime has ended. Automated migration and coexistence with old retained host versions remain a rollout gate; this slice does not declare existing deployments safe to upgrade in place.
 
-D1 retains the current registration and binding keys. Callback occurrence identity, neutral semantic Stream decoding, complete reconstruction locators and suspended due-work timing remain D follow-ups. Local transaction tests cover concurrent old binding/new generation admission, replay/conflict and callback-row deletion; unit tests cover lost provider-start acknowledgement and repair retry. Real-AWS randomized conformance against these production artifacts remains required.
+D1 retains the current registration and binding keys. Callback occurrence identity, complete reconstruction locators and suspended due-work timing remain D follow-ups. The independently reviewable semantic Stream boundary is described below. Local transaction tests cover concurrent old binding/new generation admission, replay/conflict and callback-row deletion; unit tests cover lost provider-start acknowledgement and repair retry. Real-AWS randomized conformance against these production artifacts remains required.
+
+### D2: storage-owned semantic Stream observation
+
+The semantic Stream path no longer decodes Await images in `AwsDurableAwaitStreamProcessor`. The runtime storage owner exports `DynamoAwaitInteractionKeyDecoder`, using the interaction store's own primary-key names, to produce only tenant and interaction locators. `AwsDurableHostServices` converts the Lambda key representation and reads the existing bounded `PipelineControlPlane.getAwaitSemanticCheckpoint` observation. The processor receives the current semantic checkpoint, not internal table fields. No new control-plane operation or multi-cloud SPI is introduced.
+
+The read is provider neutral: it exposes TPF execution, interaction, correlation, status and pinned release identity without callback, provider-history or ARN fields. Native recovery and operators can use the same observation. Stream images are disposable notification evidence and may be stale; current semantic state controls whether binding/wake-up is appropriate. Missing checkpoints, malformed keys, read failures and unexpected source ARNs keep the record retryable. Known Stream removals and non-registration mechanical records do not create semantic completion.
+
+Exact semantic and mechanical Stream ARNs are required host configuration and are wired to the matching SAM mappings. Tests cover stale/poisoned images, keys-only events, both arrival paths, retained-generation repair retry, missing checkpoints, semantic read failure, unknown source and removal handling. This closes production-host semantic image parsing; historical proof decoders still remain fixture code until conformance migrates to production handlers.
+
+Repeated-Await work must combine deterministic occurrence identity with correct interaction selection. The current registration join still selects the first execution Await checkpoint, so adding an occurrence counter alone cannot close that gate. Sequential/concurrent Await, complete reconstruction, suspended timing, retained-version migration and real-AWS production conformance remain outstanding.
 
 ## 10 Support acceptance criteria
 
 - [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
 - [ ] All four production coordinates published and BOM/candidate closure verified without proof runtime substitutes.
 - [ ] Conditional, occurrence-aware generation protocol proves replay, conflict and stale fencing under randomized races.
-- [ ] Host uses semantic control-plane observations; no internal semantic-table decoding or scanning.
+- [x] Production host uses semantic control-plane observations; storage-owned key decoding replaces internal semantic-image parsing, with no semantic-table scans. Production conformance migration remains a separate gate.
 - [ ] Public provider inspection distinguishes success, closed/missing history and unknown; bounded retries and repair never retire unresolved work.
 - [ ] Missing history, lost mechanical rows, pre-registration loss and nonterminal execution recovery converge from TPF state without semantic resubmit/re-drive.
 - [ ] Sequential/concurrent Await, item continuation and timeout progress while Durable is suspended.
