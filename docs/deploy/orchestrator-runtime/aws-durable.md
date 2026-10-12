@@ -97,7 +97,7 @@ flowchart TB
 
 This diagram describes the existing targeted replacement path when the required
 mechanical locator and semantic checkpoint are available. Recovery after missing
-mechanical rows and repeated Await handling remain support gates below. A generation
+mechanical rows and concurrent/itemised Await handling remain support gates below. A generation
 claim alone does not finish recovery. Normal wake-up uses Streams; reconciliation
 repairs exceptional failures.
 
@@ -171,8 +171,8 @@ Complete the backfill and verify the indexes before attaching the Await Stream e
 
 TPF-first admission is mandatory:
 
-1. the Durable driver checkpoints its callback registration;
-2. an immutable registration record associates the provider execution and callback with a TPF execution generation;
+1. the Durable driver checkpoints the current semantic Await observation and its callback registration;
+2. an immutable registration pins the callback to that interaction and a mechanical generation/occurrence;
 3. TPF admits typed Await completion and releases the parent;
 4. DynamoDB Streams join the admitted Await to the registration and wake the matching callback;
 5. generation fencing prevents a stale execution from consuming a later wake-up.
@@ -197,7 +197,48 @@ Generation claims and predecessor-successor fences are retained mechanical evide
 
 Generation claims and fences do not inherit callback TTL. Remove them only after the execution and its recovery lifetime end. New installations can establish claims during registration. Existing live executions require a quiesced, validated claim-chain migration before enabling the fenced writers. The template requires `CallbackGenerationMigrationValidation=validated`, with no default, and rejects deployment without that attestation. Set it only after validating the migration, or confirming a fresh table has no retained executions; it does not inspect the table automatically. Keep unfenced retained action, wake-up and repair versions away from the upgraded table; a missing claim remains retryable rather than authorising a stale generation. Automated migration and retained-version coexistence must be validated before an in-place upgrade. Transaction conditions require scoped `dynamodb:ConditionCheckItem` alongside the existing callback-table write grants ([AWS transaction IAM rules](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html)).
 
-The current registration key still identifies one callback per generation. Sequential/concurrent Await occurrence handling, complete recovery after lost mechanical rows and the migration tooling remain support gates in the [completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
+### Repeated Await and protocol upgrade
+
+Each callback wait has a deterministic, positive occurrence number within its provider
+generation. The driver records the observed interaction before registering its callback;
+registration, binding, delivery evidence and callback signals carry that occurrence.
+A late completion for an earlier interaction cannot bind or wake a later callback.
+The receiver checks tenant, execution, interaction, correlation, generation, occurrence
+and admitted completion status.
+
+`PipelineControlPlane.getCurrentAwaitSemanticCheckpoint(tenant, execution)` follows the
+execution's parked Await unit to its primary interaction through bounded point reads.
+It retains a completed interaction while the parent is still `WAITING_EXTERNAL`:
+completion can precede callback registration without losing the recovery locator.
+This is a semantic observation of the execution's current wait, useful to native hosts
+and status/recovery tooling as well. It accepts no AWS identities and exposes no
+provider generation or backing-table schema. It does not enumerate concurrent items
+or prove that the unit's consequences have finished.
+
+Schema version 3 registrations store the pinned interaction, correlation and occurrence.
+Occurrence one retains the existing `REGISTRATION#<padded-generation>` and
+`GEN#<padded-generation>` keys; later occurrences append
+`#OCCURRENCE#<padded-occurrence>`. Delivery evidence is also scoped to occurrence.
+The provider-registration index reads descending keys to locate the latest registration.
+Registration Stream repair reads the pinned interaction directly, including after
+completion. Terminal repair reads the execution's current Await; if it has advanced,
+the old callback is used only as a replacement locator and is never bound to the new
+interaction.
+
+The template requires `CallbackOccurrenceMigrationValidation=validated`, without a
+default. Set it only for a fresh table, or after legacy callback executions drain and
+old writers are quiesced or isolated on their original table. Retained coordinator,
+action, wake-up and repair packages must use compatible protocols. Legacy registration
+rows lack the pinned interaction and cannot be processed by the new registration
+Stream or terminal repair path; no inferred backfill or automatic migration is provided.
+Retained old callback signals and Durable checkpoints must not be replayed with the new
+handler. The attestation does not inspect or migrate those resources.
+
+Local tests cover sequential callback occurrences, late completion, completion before
+registration, wrong wake-up identity, generation fencing and provider loss before a
+later registration. Concurrent/itemised Await, complete recovery after lost mechanical
+rows, migration tooling and real-AWS repeated-Await conformance remain support gates
+in the [completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
 
 ## Worker placement
 

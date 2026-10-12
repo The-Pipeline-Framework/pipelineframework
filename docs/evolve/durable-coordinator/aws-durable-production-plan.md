@@ -166,7 +166,19 @@ The read is provider neutral: it exposes TPF execution, interaction, correlation
 
 Exact semantic and mechanical Stream ARNs are required host configuration and are wired to the matching SAM mappings. Tests cover stale/poisoned images, keys-only events, both arrival paths, retained-generation repair retry, missing checkpoints, semantic read failure, unknown source and removal handling. This closes production-host semantic image parsing; historical proof decoders still remain fixture code until conformance migrates to production handlers.
 
-Repeated-Await work must combine deterministic occurrence identity with correct interaction selection. The current registration join still selects the first execution Await checkpoint, so adding an occurrence counter alone cannot close that gate. Sequential/concurrent Await, complete reconstruction, suspended timing, retained-version migration and real-AWS production conformance remain outstanding.
+D2 left repeated-Await work open because an occurrence counter alone could not correct the first-checkpoint registration join. The following slice addresses sequential primary interactions; it does not close concurrent/itemised Await or the broader recovery gates.
+
+### D3: sequential callback occurrence and semantic selection
+
+The runtime adds `PipelineControlPlane.getCurrentAwaitSemanticCheckpoint(tenant, execution)`. This provider-neutral observation follows the execution's `WAITING_EXTERNAL` unit to its primary interaction using point reads. It preserves completed status while parent consequences remain outstanding. Native coordinator tests prove the observation without an AWS dependency or execution-history listing; admission runs before storage access. It exposes neither provider identities nor DynamoDB fields.
+
+The driver checkpoints that interaction with the blocked status before creating a callback, then attaches its deterministic generation-local occurrence. Registration schema version 3 pins the interaction/correlation/occurrence; conditional binding checks those fields as well as provider authority and generation fences. First-occurrence storage keys remain readable; later keys include a padded occurrence suffix. Delivery evidence and callback receiver validation include occurrence. The registration index selects descending keys.
+
+Registration Stream repair reads the pinned semantic interaction directly rather than the first of a bounded historical list. A completed interaction remains joinable when completion beats registration. A late semantic event cannot bind a newer callback. Terminal provider recovery locates the execution's current Await and, if it advanced before a later registration, uses the old provider record only to reconstruct a new generation, never to bind the old callback to the new interaction.
+
+`CallbackOccurrenceMigrationValidation=validated` is required without a default. Operators must validate a fresh table or drain/isolate old callback executions and writers. New production registration requires a pinned interaction; legacy registration events and terminal repair fail closed. No automatic migration of rows, old serialized callback signals or Durable checkpoints is claimed. Retained host packages must remain protocol-compatible.
+
+Local Durable driver tests, Stream tests, native semantic-read tests and LocalStack transaction tests cover sequential occurrences, immutable replay/conflict, cross-binding rejection, stale generations, late first completion, completion before registration and pre-registration provider loss for a later Await. Real-AWS conformance against these exact artifacts is still required. Concurrent/itemised Await, missing mechanical locators, suspended due-work timing, migration tooling and complete retained-version validation remain outstanding.
 
 ## 10 Support acceptance criteria
 
