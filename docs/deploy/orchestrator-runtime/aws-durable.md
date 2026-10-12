@@ -167,6 +167,61 @@ Backfill every non-expired interaction with its tenant-scoped execution key and 
 
 Complete the backfill and verify the indexes before attaching the Await Stream event source or admitting new Durable executions. This keeps reconstruction and continuation discovery query-based; production hosts must not compensate with a table scan.
 
+## Due work while the coordinator is suspended
+
+The reference template sends an EventBridge tick to `DueWorkQueue` every minute.
+`AwsDurableDueWorkHandler` invokes the existing bounded
+`PipelineControlPlane.sweepOnce` action using fresh host time. TPF inspects its
+semantic stores for expired Await interactions, due execution dispatch and durable
+item-continuation work. No callback, tenant or execution identity in the tick body
+can choose that work.
+
+```mermaid
+flowchart TB
+    Clock["EventBridge: every minute"] --> Tick["SQS due-work tick"]
+    Tick --> Host["Due-work Lambda"]
+    Host --> CP["PipelineControlPlane.sweepOnce"]
+    CP --> State["TPF semantic state"]
+    CP --> Work["Existing SQS worker protocol"]
+    Durable["Suspended Durable coordinator"]
+    Work --> Consequences["Durable semantic consequences"]
+    Consequences --> Stream["Await Stream: admitted completion"]
+    Stream --> Durable
+```
+
+`DueWorkSweepLimit` defaults to 100 and accepts 1–1,000. It limits the existing
+semantic sweep queries, rather than establishing a new deadline or retry policy.
+The Lambda processes one tick at a time with reserved concurrency 1, a batch size
+of 1 and a 30-second action wait inside its 120-second invocation timeout. Native
+resident loops remain disabled. Duplicate and delayed ticks are harmless hints:
+they re-inspect current semantic state, and future ticks rediscover unresolved work.
+This periodic dispatch is normal liveness; provider-history reconciliation remains
+exceptional repair.
+
+EventBridge delivery retries for up to one hour and then sends failed deliveries
+to `DueWorkDlq`. The tick queue has 720-second visibility, one-day retention and
+redrives after five failed receives. Partial-batch failures leave unsuccessful
+actions available for redelivery. Both failure paths use the same 14-day DLQ;
+EventBridge delivery failures carry its error attributes, while consumer failures
+retain the original tick. Inspect those attributes when responding to the DLQ alarm.
+A queue-age alarm reports sustained age above three minutes. Subscribe the alarms
+to the deployment's operational notification destination.
+
+The due-work role accesses only the declared semantic tables/indexes and the
+existing SQS work, transition-request and transition-response queues. It has no
+callback-table or Durable API authority. Item continuation uses the application's
+existing typed continuation handler and signed worker protocol; it does not invoke
+business functions through AWS Durable directly. Use the same host with FUNCTION
+or COMPUTE SQS workers where the current application protocol supports that placement.
+
+Local handler tests cover fresh time, duplicates and failed delivery; existing
+semantic tests cover timeout, dispatch and continuation convergence. Real-AWS
+suspended-execution coverage remains a support gate. A semantic timeout can fail
+the TPF execution while its provider callback is still waiting: prompt settlement
+of that callback on terminal semantic status is not yet implemented. Keep the
+configured provider execution timeout finite; do not interpret provider suspension
+as an active TPF execution after semantic failure.
+
 ## Await callback binding
 
 TPF-first admission is mandatory:

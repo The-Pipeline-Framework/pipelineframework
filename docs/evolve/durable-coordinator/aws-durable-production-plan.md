@@ -180,6 +180,14 @@ Registration Stream repair reads the pinned semantic interaction directly rather
 
 Local Durable driver tests, Stream tests, native semantic-read tests and LocalStack transaction tests cover sequential occurrences, immutable replay/conflict, cross-binding rejection, stale generations, late first completion, completion before registration and pre-registration provider loss for a later Await. Real-AWS conformance against these exact artifacts is still required. Concurrent/itemised Await, missing mechanical locators, suspended due-work timing, migration tooling and complete retained-version validation remain outstanding.
 
+### D4: bounded due-work hosting during suspension
+
+A production `AwsDurableDueWorkHandler` consumes scheduled SQS ticks and calls the existing `PipelineControlPlane.sweepOnce` with fresh host time. It does not inspect callback rows, provider history or semantic table schemas. The existing local control plane supplies the typed item-continuation handler, so timeout admission, due execution dispatch and durable continuation recovery retain their semantic owner. Tick payloads cannot select tenants, executions or deadlines.
+
+The production SAM adds one-minute EventBridge delivery, a dedicated encrypted tick queue, single-consumer Lambda, bounded sweep limit, retry/DLQ delivery and queue-age/DLQ alarms. Its role grants semantic actions and SQS transition response consumption, with no callback or provider authority. Failed ticks are partial-batch retries; later scheduled ticks also re-inspect retained semantic work. This is normal liveness, not scheduled provider reconciliation.
+
+Deployment-free handler and template tests prove the hosting contract; native sweep/timeout and item-continuation recovery tests remain the semantic reference. Protected real-AWS suspended timeout/continuation evidence is still required. Prompt provider callback settlement after TPF timeout/terminal failure, concurrent/itemised Await callback selection, missing recovery locators, complete release pinning and notification wiring remain open. This slice does not close the overall suspended-Await acceptance gate or claim new deployed evidence.
+
 ## 10 Support acceptance criteria
 
 - [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
