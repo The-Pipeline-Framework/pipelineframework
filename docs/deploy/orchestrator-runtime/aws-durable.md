@@ -18,6 +18,89 @@ flowchart LR
     B --> D
 ```
 
+## What the Durable function actually runs
+
+The Durable function runs `AwsDurableCoordinatorHandler`, a small coordination
+loop. It submits or resumes a TPF execution, calls bounded status/sweep actions,
+waits for an Await wake-up when blocked, and reads the result when TPF reports
+success. It does not run the application's typed business functions itself.
+Those run on the workers through TPF's execution service and `PipelineRunner`.
+See [the execution layers and their state](/architecture/state-model#from-running-steps-to-durable-coordination).
+
+The following sequence shows one successful parked Await. Worker execution and
+completion delivery can race callback registration; the Stream join handles either
+arrival order. This is a responsibility diagram, not a guarantee that every Await
+uses suspension: a live worker can also consume completions through a live Await
+session.
+
+```mermaid
+sequenceDiagram
+    participant D as Durable coordinator handler
+    participant A as TPF action host
+    participant S as TPF semantic stores
+    participant W as SQS worker
+    participant C as Completion adapter
+    participant M as Mechanical callback store
+    participant B as Stream wake-up host
+    D->>A: Submit execution (idempotency key and Release)
+    A->>S: Admit execution and work
+    A->>W: Dispatch signed work through SQS
+    W->>W: Run typed steps through PipelineRunner
+    W->>A: Report Await suspension through TPF protocol
+    A->>S: Record Await and WAITING_EXTERNAL
+    D->>A: Bounded sweep and status observation
+    A-->>D: WAITING_EXTERNAL
+    D->>A: Register provider callback for this generation
+    A->>M: Conditional registration write
+    Note over D: Durable wait suspends between invocations
+    C->>A: Typed Await completion through SQS
+    A->>S: Admit completion and reconcile semantic consequences
+    S-->>B: Await Stream notification
+    B->>A: Read current semantic Await checkpoint
+    A-->>B: TPF-admitted completion
+    B->>M: Join registration and enforce generation fencing
+    B-->>D: Signal matching provider callback
+    Note over D: Durable replay resumes the handler past its wait
+    D->>A: Observe state and drive bounded due work
+    A->>W: Dispatch required continuation through SQS
+    W->>A: Report transition result
+    A->>S: Commit semantic result
+    D->>A: Read status and result
+    A-->>D: TPF result
+```
+
+A Lambda invocation can finish while the Durable execution remains waiting.
+Resumption runs the handler using its recorded Durable operations. Calls that
+reach TPF still rely on TPF's own stable identities and idempotent recovery;
+provider history does not prove that every semantic consequence has finished.
+
+## Recovery when provider history is lost
+
+TPF's execution identity and pinned Release survive replacement of the provider
+execution. The current recovery path reads the semantic Await checkpoint through
+`PipelineControlPlane`, fences the old generation and starts a deterministic new
+generation. It retries an uncertain start using the same identity.
+
+```mermaid
+flowchart TB
+    U[Callback delivery uncertain] --> P[Inspect provider callback state]
+    P --> OK[Already succeeded: record delivery evidence]
+    P --> WAIT[Open or unknown: retry repair]
+    P --> LOST[Closed or history unavailable]
+    LOST --> S[Read TPF semantic checkpoint]
+    S --> G[Conditionally claim successor and fence old generation]
+    G --> START[Start deterministic replacement against same TPF execution]
+    START --> UNCERTAIN[Lost start acknowledgement: retry same start]
+    START --> OBSERVE[Replacement observes TPF state and reconciles due work]
+    UNCERTAIN --> START
+```
+
+This diagram describes the existing targeted replacement path when the required
+mechanical locator and semantic checkpoint are available. Recovery after missing
+mechanical rows and repeated Await handling remain support gates below. A generation
+claim alone does not finish recovery. Normal wake-up uses Streams; reconciliation
+repairs exceptional failures.
+
 ## Dependencies and build selection
 
 Import one `pipelineframework-bom` version. Declare the application runtime and AWS Durable host without versions; keep the compiler on the annotation-processor path using the BOM-managed version.
