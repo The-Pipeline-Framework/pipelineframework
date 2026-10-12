@@ -191,6 +191,12 @@ Keep both forms aligned in docs and processor behavior.
 
 Unit tests use `*Test` with Surefire. Integration tests use `*IT` with Failsafe. E2E tests using containers should run in `verify` unless there is an explicit reason otherwise.
 
+Candidate intake treats a linear GitHub PR stack as one top-of-stack candidate, with exact head SHAs and branch
+relationships recorded for all covered layers. A layer change supersedes the old revision; the top must include
+every current parent head before product tests can pass. Do not manually submit multiple layers from one repository
+as separate compatibility candidates. Local owner CI still runs per PR; the central product run is deduplicated.
+Use the existing cross-repository system-test runbook for status, rerun and stack recovery details.
+
 ## Docs Source of Truth
 
 Canonical docs live under top-level route directories:

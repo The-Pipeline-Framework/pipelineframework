@@ -1,4 +1,5 @@
 name: TPF System Tests — Compatibility Set
+run-name: TPF compatibility ${{ inputs.set_id }} / ${{ inputs.stack_revision }}
 
 on:
   workflow_dispatch:
@@ -10,6 +11,15 @@ on:
       pull_requests:
         description: Comma- or newline-separated GitHub pull-request URLs (2–10, one per component)
         required: true
+        type: string
+      stack_layers:
+        description: Immutable stack layer identities supplied by trusted candidate intake
+        required: false
+        type: string
+        default: '[]'
+      stack_revision:
+        description: SHA-256 of the stack identity snapshot
+        required: false
         type: string
       include_csv_ha_scale:
         description: Run the 10k CSV self-host HA scale suite for a set containing CSV Payments
@@ -47,12 +57,15 @@ jobs:
           SET_ID: ${{ inputs.set_id }}
           INCLUDE_CSV_HA_SCALE: ${{ inputs.include_csv_ha_scale }}
           INCLUDE_CSV_PROVIDER_REJECT: ${{ inputs.include_csv_provider_reject }}
+          STACK_LAYERS: ${{ inputs.stack_layers }}
+          STACK_REVISION: ${{ inputs.stack_revision }}
         run: |
           printf '%s\n' "$PULL_REQUESTS" > pull-requests.txt
           node system-tests/scripts/parse-compatibility-prs.mjs \
             --components system-tests/components.yml \
             --input pull-requests.txt \
             --setId "$SET_ID" \
+            --stacks "$STACK_LAYERS" --revision "$STACK_REVISION" \
             --output compatibility-set-request.json
           if [[ "$INCLUDE_CSV_HA_SCALE" == true || "$INCLUDE_CSV_PROVIDER_REJECT" == true ]]; then
             jq -e '.requests | any(.component == "csvPayments")' compatibility-set-request.json > /dev/null
@@ -79,6 +92,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout trusted stack coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Download validated request
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
@@ -130,6 +147,13 @@ jobs:
           done < <(jq -r '.requests[] | [.component, .repository, .pullRequestNumber] | @tsv' request/compatibility-set-request.json)
           jq -s '{schemaVersion: 1, targets: sort_by(.component)}' targets/targets.ndjson > targets/targets.json
 
+      - name: Verify stack inclusion and preserve every covered SHA
+        env:
+          STACK_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          node system-tests/scripts/coordinate-stack.mjs --mode prepare \
+            --plan request/compatibility-set-request.json --targets targets/targets.json
+
       - name: Mark every participating SHA pending
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -141,7 +165,7 @@ jobs:
               -f context='tpf/system-tests' \
               -f description='TPF coordinated candidate build and product tests are running' \
               -f target_url="$TARGET_URL"
-          done < <(jq -r '.targets[] | [.repository, .sourceSha] | @tsv' targets/targets.json)
+          done < <(jq -r '(.statusTargets // .targets)[] | [.repository, .sourceSha] | @tsv' targets/targets.json)
 
       - name: Preserve immutable targets
         if: always()
@@ -481,6 +505,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout trusted stack coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Download immutable targets
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
@@ -495,6 +523,8 @@ jobs:
           private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
           owner: The-Pipeline-Framework
           repositories: ${{ needs.parse.outputs.repository_names }}
+          permission-contents: read
+          permission-pull-requests: read
           permission-statuses: write
 
       - name: Publish aggregate result
@@ -504,7 +534,12 @@ jobs:
           BOOTSTRAP_RESULT: ${{ needs.bootstrap.result }}
           TEST_RESULT: ${{ needs.run-product-shard.result }}
           TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          STACK_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          if ! node system-tests/scripts/coordinate-stack.mjs --mode report --plan targets/targets.json; then
+            echo '::warning::Stack identities could not be confirmed; refusing obsolete result publication'
+            exit 1
+          fi
           if [ "$BOOTSTRAP_RESULT" = failure ] || [ "$TEST_RESULT" = failure ]; then
             state=failure
             description='A coordinated candidate build or mandatory product-test shard failed'
@@ -521,4 +556,13 @@ jobs:
               -f context='tpf/system-tests' \
               -f description="$description" \
               -f target_url="$TARGET_URL"
-          done < <(jq -r '.targets[] | [.repository, .sourceSha] | @tsv' targets/targets.json)
+          done < <(jq -r '(.statusTargets // .targets)[] | [.repository, .sourceSha] | @tsv' targets/targets.json)
+          if ! node system-tests/scripts/coordinate-stack.mjs --mode report --plan targets/targets.json; then
+            while IFS=$'\t' read -r repository sha; do
+              gh api --method POST "repos/$repository/statuses/$sha" \
+                -f state=pending -f context='tpf/system-tests' \
+                -f description='Stack changed during reporting; awaiting current stack tests' \
+                -f target_url="$TARGET_URL"
+            done < <(jq -r '(.statusTargets // .targets)[] | [.repository, .sourceSha] | @tsv' targets/targets.json)
+            exit 1
+          fi

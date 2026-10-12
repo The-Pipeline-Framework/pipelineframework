@@ -86,7 +86,8 @@ export function augmentCompatibilityTargets(config, baseline, targetDocument, cu
     if (targets.has(component)) continue;
     targets.set(component, mainTarget(component, config.components[component], currentHeads[component]));
   }
-  return {schemaVersion: 1, targets: [...targets.values()].sort((left, right) => left.component.localeCompare(right.component))};
+  return {...structuredClone(targetDocument), schemaVersion: 1,
+    targets: [...targets.values()].sort((left, right) => left.component.localeCompare(right.component))};
 }
 
 function mainTarget(component, definition, current) {

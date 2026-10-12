@@ -21,7 +21,8 @@ const config = validateComponentsConfig(await readJson(values.components));
 const policy = validatePolicy(await readJson(values.policy), config);
 const resolvedSet = await readJson(values.resolvedSet);
 const compatibilitySet = await readJson(values.compatibilitySet);
-if (compatibilitySet.schemaVersion !== 1 || !Array.isArray(compatibilitySet.requests) || compatibilitySet.requests.length < 2) {
+if (compatibilitySet.schemaVersion !== 1 || !Array.isArray(compatibilitySet.requests) || compatibilitySet.requests.length < 1 ||
+    (compatibilitySet.requests.length < 2 && !compatibilitySet.stackSnapshot?.some(stack => stack.layers.length > 1))) {
   throw new Error('compatibility set request is invalid');
 }
 const selected = new Set();

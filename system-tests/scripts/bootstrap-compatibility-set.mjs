@@ -34,7 +34,8 @@ for (const name of ['components', 'baselineResolvedSet', 'targets', 'sources', '
 const config = validateComponentsConfig(await readJson(values.components));
 const baseline = await readJson(values.baselineResolvedSet);
 const targetDocument = await readJson(values.targets);
-if (targetDocument.schemaVersion !== 1 || !Array.isArray(targetDocument.targets) || targetDocument.targets.length < 2) {
+if (targetDocument.schemaVersion !== 1 || !Array.isArray(targetDocument.targets) || targetDocument.targets.length < 1 ||
+    (targetDocument.targets.length < 2 && !targetDocument.stackSnapshot?.some(stack => stack.layers.length > 1))) {
   throw new Error('compatibility targets must contain at least two pull requests');
 }
 const targets = new Map();

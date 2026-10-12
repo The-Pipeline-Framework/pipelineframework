@@ -543,7 +543,8 @@ test('checked-in schemas are valid JSON and do not allow candidate-event extras'
   assert.equal(compatibilityCandidateSchema.properties.provenance.properties.workflowPath.const, '.github/workflows/system-test-compatibility-set.yml');
   const compatibilitySetSchema = JSON.parse(await readFile(new URL('schemas/compatibility-set.schema.json', root), 'utf8'));
   assert.equal(compatibilitySetSchema.additionalProperties, false);
-  assert.equal(compatibilitySetSchema.properties.requests.minItems, 2);
+  assert.equal(compatibilitySetSchema.properties.requests.minItems, 1);
+  assert.deepEqual(compatibilitySetSchema.allOf[0].then.required, ['stackSnapshot', 'stackRevision']);
   assert.equal(compatibilitySetSchema.properties.requests.items.additionalProperties, false);
   const baselineSchema = JSON.parse(await readFile(new URL('schemas/baseline-manifest.schema.json', root), 'utf8'));
   assert.equal(baselineSchema.properties.components.additionalProperties, false);
