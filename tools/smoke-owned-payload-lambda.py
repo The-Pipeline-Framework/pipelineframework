@@ -102,6 +102,9 @@ def main():
         reference = at_path(admitted, args.result_reference_path)
 
     capability = post_json(args.download_url, reference, headers)
+    if (capability["bytes"] != reference["sizeBytes"] or
+            capability["sha256"].lower() != reference["checksum"].lower()):
+        raise RuntimeError("download capability differs from requested reference")
     download_request = urllib.request.Request(capability["url"], headers=capability["headers"])
     downloaded = hashlib.sha256()
     downloaded_bytes = 0
