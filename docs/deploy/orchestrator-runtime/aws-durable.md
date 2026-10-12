@@ -191,8 +191,11 @@ flowchart TB
 
 `DueWorkSweepLimit` defaults to 100 and accepts 1–1,000. It limits the existing
 semantic sweep queries, rather than establishing a new deadline or retry policy.
-The Lambda processes one tick at a time with reserved concurrency 1, a batch size
-of 1 and a 30-second action wait inside its 120-second invocation timeout. Native
+The SQS event source caps delivery at two concurrent batches, and the dedicated
+Lambda reserves two executions. Each batch contains one tick, with a 30-second
+action wait inside its 120-second invocation timeout. Overlapping sweeps may
+redispatch the same stable execution identity; the existing idempotent semantic
+admission and continuation protocol handles that redelivery. Native
 resident loops remain disabled. Duplicate and delayed ticks are harmless hints:
 they re-inspect current semantic state, and future ticks rediscover unresolved work.
 This periodic dispatch is normal liveness; provider-history reconciliation remains
