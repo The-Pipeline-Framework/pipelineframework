@@ -62,8 +62,10 @@ jobs:
 
   pending:
     name: Post pending status
-    if: always() && needs.intake.outputs.repository != '' && needs.intake.outputs.source_sha != ''
-    needs: intake
+    if: >-
+      always() && needs.intake.outputs.repository != '' && needs.intake.outputs.source_sha != '' &&
+      (needs.coalesce.outputs.coalesced != 'true' || needs.dispatch-set.result != 'success')
+    needs: [intake, coalesce, dispatch-set]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,14 +95,16 @@ jobs:
 
   coalesce:
     name: Coalesce same-feature pull requests
-    if: needs.intake.outputs.pull_request_number != '' && needs.pending.result == 'success'
-    needs: [intake, pending]
+    if: needs.intake.result == 'success' && needs.intake.outputs.pull_request_number != ''
+    needs: intake
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
     outputs:
       coalesced: ${{ steps.discovery.outputs.coalesced }}
+      set_id: ${{ steps.discovery.outputs.set_id }}
+      repositories: ${{ steps.discovery.outputs.repositories }}
     steps:
       - name: Checkout trusted coordinator
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,17 +151,58 @@ jobs:
           if [ -n "$REQUESTED_SET_ID" ]; then args+=(--setId "$REQUESTED_SET_ID"); fi
           node system-tests/scripts/discover-compatibility-set.mjs "${args[@]}" > discovery/result.json
           echo "coalesced=$(jq -r '.coalesced' discovery/result.json)" >> "$GITHUB_OUTPUT"
+          echo "set_id=$(jq -r '.setId // ""' discovery/result.json)" >> "$GITHUB_OUTPUT"
+          echo "repositories=$(jq -r '[.stacks[]?.repository | split("/")[1]] | join(",")' discovery/result.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch one compatibility-set run
+      - name: Preserve discovered stack identities
         if: steps.discovery.outputs.coalesced == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-stack-discovery
+          path: discovery/result.json
+          retention-days: 30
+
+  dispatch-set:
+    name: Claim and dispatch one exact stack revision
+    if: needs.coalesce.outputs.coalesced == 'true'
+    needs: coalesce
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tpf-stack-dispatch-${{ needs.coalesce.outputs.set_id }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download discovered stack identities
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-stack-discovery
+          path: discovery
+      - name: Create stack-scoped read and status token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.SYSTEM_TEST_APP_ID }}
+          private-key: ${{ secrets.SYSTEM_TEST_APP_PRIVATE_KEY }}
+          owner: The-Pipeline-Framework
+          repositories: ${{ needs.coalesce.outputs.repositories }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-statuses: write
+      - name: Dispatch only an unclaimed current revision
         env:
           GH_TOKEN: ${{ github.token }}
+          STACK_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          jq '{ref:"main", inputs:{set_id:.setId, pull_requests:(.pullRequests | join("\n"))}}' \
-            discovery/result.json > discovery/dispatch.json
-          gh api --method POST \
-            "repos/${{ github.repository }}/actions/workflows/system-test-compatibility-set.yml/dispatches" \
-            --input discovery/dispatch.json
+          node system-tests/scripts/coordinate-stack.mjs --mode dispatch \
+            --plan discovery/result.json --coordinator '${{ github.repository }}' \
+            --coordinatorSha '${{ github.sha }}'
 
   retrieve:
     name: Retrieve and attest candidate
@@ -165,6 +210,7 @@ jobs:
       always() &&
       needs.intake.result == 'success' &&
       needs.pending.result == 'success' &&
+      (needs.coalesce.result == 'success' || needs.coalesce.result == 'skipped') &&
       needs.coalesce.outputs.coalesced != 'true'
     needs: [intake, pending, coalesce]
     runs-on: ubuntu-latest
@@ -758,8 +804,8 @@ jobs:
     if: >-
       always() &&
       needs.pending.result == 'success' &&
-      (needs.coalesce.result != 'success' || needs.coalesce.outputs.coalesced != 'true')
-    needs: [intake, pending, coalesce, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
+      (needs.coalesce.result != 'success' || needs.coalesce.outputs.coalesced != 'true' || needs.dispatch-set.result != 'success')
+    needs: [intake, pending, coalesce, dispatch-set, retrieve, baseline, materialize, run-product-shard, promote, retry-promotion]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -63,6 +63,6 @@ test('singleton candidates overlay the current attested main set', () => {
 test('candidate status reporting survives a failed coalescing dispatch', () => {
   assert.match(
     workflow,
-    /needs\.pending\.result == 'success' &&\s*\(needs\.coalesce\.result != 'success' \|\| needs\.coalesce\.outputs\.coalesced != 'true'\)/
+    /needs\.pending\.result == 'success' &&\s*\(needs\.coalesce\.result != 'success' \|\| needs\.coalesce\.outputs\.coalesced != 'true' \|\| needs\.dispatch-set\.result != 'success'\)/
   );
 });

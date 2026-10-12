@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {pullStack, stackRevision} from './pull-stack.mjs';
 
 const SET_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -21,13 +22,15 @@ export function discoverCompatibilitySet(config, pulls, {
   if (source.state !== 'open') throw new Error('source pull request is not open');
   if (source.head?.sha !== sourceSha) throw new Error('source pull request head moved after candidate publication');
   const headOwner = source.head?.repo?.owner?.login;
-  const headRef = source.head?.ref;
-  const baseRef = source.base?.ref;
+  const sourceStack = pullStack(pulls, sourceRepository, sourcePullRequest);
+  const headRef = sourceStack.layers[0].headRef;
+  const baseRef = sourceStack.rootBaseRef;
   for (const [value, name] of [[headOwner, 'head owner'], [headRef, 'head ref'], [baseRef, 'base ref']]) {
     if (typeof value !== 'string' || value.length === 0) throw new Error(`source pull request ${name} is missing`);
   }
 
   const selected = [];
+  const stacks = [];
   for (const repository of repositories) {
     const matches = pulls.filter((pull) =>
       pull?.state === 'open' &&
@@ -39,12 +42,15 @@ export function discoverCompatibilitySet(config, pulls, {
     if (matches.length === 1) {
       const number = matches[0].number;
       if (!Number.isSafeInteger(number) || number < 1) throw new Error(`discovered ${repository} pull request number is invalid`);
-      selected.push(`https://github.com/${repository}/pull/${number}`);
+      const stack = pullStack(pulls, repository, number);
+      stacks.push(stack);
+      selected.push(`https://github.com/${repository}/pull/${stack.layers.at(-1).number}`);
     }
   }
 
-  if (selected.length < 2) return {coalesced: false, setId: null, pullRequests: selected};
-  const setId = requestedSetId ?? `auto-${createHash('sha256').update(`${headOwner}\0${headRef}`).digest('hex').slice(0, 20)}`;
+  if (selected.length < 2 && sourceStack.layers.length < 2) return {coalesced: false, setId: null, pullRequests: selected};
+  const identity = selected.length === 1 ? `${sourceRepository}\0${sourceStack.rootPullRequestNumber}` : `${headOwner}\0${headRef}`;
+  const setId = requestedSetId ?? `auto-${createHash('sha256').update(identity).digest('hex').slice(0, 20)}`;
   if (!SET_ID_PATTERN.test(setId)) throw new Error('compatibility set ID is invalid');
-  return {coalesced: true, setId, pullRequests: selected};
+  return {coalesced: true, setId, pullRequests: selected, stacks, revision: stackRevision(stacks)};
 }

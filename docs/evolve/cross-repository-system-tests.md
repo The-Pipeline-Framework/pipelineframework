@@ -194,6 +194,44 @@ against a floating branch name or an older PR head. Consumer-only test harnesses
 resolved with the producer graph. The feature author supplies only the feature pull requests; the coordinator owns
 derivation of current-main and downstream closure targets.
 
+### Same-repository GitHub stacks
+
+A linear PR stack is discovered through its base/head branch relationships. For example, if #48 targets
+#47's head branch and #47 targets `main`, both candidate publications select #48 as the single Runtime
+candidate. The tested merge uses the stack root's target branch, not an untested intermediate branch.
+Cross-repository feature discovery uses the root layer's branch name and selects one top per repository.
+
+```mermaid
+flowchart LR
+    Lower["#47 head + base identity"] --> Revision[Exact stack fingerprint]
+    Upper["#48 head + base identity"] --> Revision
+    Revision --> Claim[Atomic dispatch claim]
+    Claim --> Test[Test top once against root base]
+    Test --> Check[Recheck current layer identities]
+    Check --> Status[Report to both captured head SHAs]
+```
+
+The fingerprint includes every layer's PR number, head SHA and branch relationships. Duplicate publications
+claim the same fingerprint and do not launch another product run or reset a completed status to pending.
+Candidate intake serialises dispatch for a stable set ID, and changed revisions cancel older set runs.
+On intake, changed layers receive blocking statuses; the runner verifies that every upper head contains
+the current parent head. If a parent advanced without a corresponding rebase, testing stops with an explicit
+rebase error rather than claiming coverage. Before and after reporting, the coordinator rechecks the entire
+stack; obsolete results cannot certify unchanged layers of a changed stack. Branching stacks are rejected
+rather than choosing one sibling arbitrarily.
+
+This controls central product-test runs, not owner-local unit tests or candidate builds, which still run per PR.
+Discovery is driven by candidate publication; a changed lower head has no inherited success on its new SHA.
+The central result covers only the recorded revision, not future edits or unrelated branches.
+
+The coordinator needs its repository `GITHUB_TOKEN` to write dispatch claims under
+`refs/tags/tpf-system-test-stack/<set-id>/<fingerprint>` and dispatch Actions. These are internal deduplication
+refs, not product release tags or Maven artifacts. Component read/status authority remains scoped to the
+selected repositories; test jobs receive neither token. An ordinary dispatch failure releases its claim and
+posts an error so intake can be retried. Rerun the canonical compatibility workflow from Actions to retry tests
+for the same revision. If a runner dies after claiming but before dispatch, first confirm no compatibility run
+with that set ID and fingerprint exists, then remove only that exact internal claim and rerun candidate intake.
+
 ```mermaid
 flowchart LR
     PRs[Exact PR heads + current base SHAs] --> Merge[Create deterministic tested merges]
