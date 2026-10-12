@@ -86,7 +86,45 @@ Optional API Gateway REST bridge (v1 events):
 - `io.quarkus:quarkus-amazon-lambda-rest`
 - `io.quarkus:quarkus-amazon-lambda-rest-event-server` (test/dev mock server for REST gateway events)
 
-API Gateway HTTP bridge extensions are outside the canonical TPF FUNCTION path.
+The ordinary generated function handlers use the native Lambda path. Generated
+owned-payload control routes use the HTTP bridge in a separate deployment.
+
+## Owned-payload HTTP control plane
+
+An application using `httpPayloads` on FUNCTION needs a separate Quarkus HTTP
+control-plane deployment with `io.quarkus:quarkus-amazon-lambda-http`, fronted by an
+API Gateway HTTP API. Keep it separate from modules using TPF's native generated
+Lambda handlers so the HTTP bridge has one Lambda handler. Configure the API Gateway
+authoriser and `quarkus.lambda-http.enable-security=true`; the generated resources
+also require an authenticated principal and an application `PayloadBoundaryAuthorizer`.
+
+The control calls carry JSON only. Lambda's synchronous request payload limit is
+[6 MB](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html), and
+API Gateway HTTP API has a [10 MB payload limit](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-quotas.html).
+Large upload bytes travel directly to S3 through short-lived multipart part URLs.
+Downloads use an authorised short-lived S3 GET capability because the HTTP bridge
+does not provide a proven bounded Lambda response-streaming path.
+
+The S3 target and source must share a configured
+`TPF_OBJECT_REFERENCE_HMAC_KEY` (Base64, at least 32 bytes) across all instances.
+The Lambda role needs `s3:PutObject` for multipart creation, part upload, and
+completion, plus `s3:ListMultipartUploadParts`, `s3:AbortMultipartUpload`,
+`s3:GetObject`, and `s3:DeleteObject` on the configured object prefix. Grant
+`s3:ListBucket` limited to that prefix so a missing reservation marker returns 404.
+Configure
+an S3 lifecycle rule to abort incomplete multipart uploads and expire
+`.tpf-delegated/` reservation markers after one day; reservation tokens expire after
+15 minutes. The client needs bucket CORS permission for PUT and GET from its origin.
+Use a new idempotency key after abort or expiry.
+
+The generated API and request sequence are in
+[Handling File Operations](/develop/handling-file-operations#generated-owned-payload-boundaries).
+After deployment, run
+[`tools/smoke-owned-payload-lambda.py`](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/tools/smoke-owned-payload-lambda.py)
+against an authenticated API Gateway HTTP API with a file larger than 6 MiB. Supply
+an ordinary Pipeline admission URL and JSON template containing
+`{{PAYLOAD_REFERENCE}}`, plus the response path of its result reference, to cover
+upload, typed admission, and authorised result download in one run.
 
 ## Generated Lambda Handlers
 

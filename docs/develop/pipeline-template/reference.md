@@ -304,7 +304,8 @@ the canonical record directly. Complete configuration and Java examples are in
 For HTTP access to an owned `payload_ref`, version 3 also accepts top-level `httpPayloads`.
 Each route names a record's singular `payload_ref` field, allowed content types, an authorisation
 scope, and a bound object target for upload or bound object source for download. Uploads require
-`maxBytes`; downloads omit it. The initial implementation supports REST on COMPUTE. See
+`maxBytes`; downloads omit it. REST/COMPUTE streams multipart bodies directly;
+REST/FUNCTION requires an S3 object provider and uses delegated transfer. See
 [Generated owned-payload boundaries](/develop/handling-file-operations#generated-owned-payload-boundaries)
 for the request shape and security contract.
 
