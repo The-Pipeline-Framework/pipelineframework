@@ -38,3 +38,5 @@ The boundary becomes invalid if callback or provider history must become the onl
 - Other providers may implement optimised hosts if they pass the same conformance properties; infrastructure uniformity is not required.
 - Immutable provider-generation claims and successor fences remain mechanical authority outside TPF state. Preserve them beyond callback TTL for the supported recovery lifetime; recording a successor never substitutes for replaying an unresolved provider start.
 - AWS callback/history contract questions remain suitable for direct provider validation, but they do not move TPF semantic authority.
+
+- The control plane may expose a bounded observation of the execution’s current semantic Await unit/primary interaction. Completed interaction status remains observable while parent consequences are pending. Generation and callback occurrence are added only by the mechanical host and do not enter that semantic observation.
