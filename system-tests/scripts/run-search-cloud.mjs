@@ -23,7 +23,7 @@ const config = JSON.parse(await readFile(new URL('../components.yml', import.met
 const pins = {};
 for (const [component, property] of Object.entries(config.components.references.consumerVersionProperties)) {
   const version = (component === 'coordinationBom' ? set.coordinationBom : set.components?.[component])?.mavenVersion;
-  if (typeof version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.]+)?$/.test(version) || version.endsWith('-SNAPSHOT')) {
+  if (typeof version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$/.test(version) || version.endsWith('-SNAPSHOT')) {
     throw new Error(`cloud suite requires an immutable ${component} Maven version`);
   }
   pins[property] = version;
