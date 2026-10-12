@@ -36,4 +36,5 @@ The boundary becomes invalid if callback or provider history must become the onl
 - The coordination-host seam separates `PipelineControlPlane` actions and the reconstructable TPF checkpoint from native-loop or provider mechanics.
 - `FUNCTION` remains worker placement. Selecting AWS Durable changes coordination hosting, not the meaning of `FUNCTION` or the SQS worker protocol.
 - Other providers may implement optimised hosts if they pass the same conformance properties; infrastructure uniformity is not required.
+- Immutable provider-generation claims and successor fences remain mechanical authority outside TPF state. Preserve them beyond callback TTL for the supported recovery lifetime; recording a successor never substitutes for replaying an unresolved provider start.
 - AWS callback/history contract questions remain suitable for direct provider validation, but they do not move TPF semantic authority.

@@ -11,7 +11,7 @@ Audit baseline, 6 October 2026:
 - Compiler: main `c5c29dab1b1c9238e56cfc2cc743765a4b8eb860`.
 - GitNexus used the explicit remote-main indexes, then current source was verified. Runtime graph does not include #37; it is not evidence for that prerequisite. No index refresh or cloud deployment is required for this audit.
 
-The production artifact shape and generic handlers exist. Production support still requires closure of these source-confirmed gaps:
+The production artifact shape and generic handlers exist. The table below records the audit-time gaps; the implementation status below records subsequent closures. Production support requires all remaining acceptance gates.
 
 | Gap | Current source | Consequence |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ The production artifact shape and generic handlers exist. Production support sti
 | Operational template | Version has no retention policies; visibility equals 900-second worker timeout; Stream destination lacks send permission | Deployment can delete parked versions or exhaust delivery retries without adequate retry headroom |
 | Evidence scope | Proof driver/model/repository reuse production, but proof actions, wake-up, resolver and scheduled reconciler still supply behavior | The 22 historical scenarios establish architecture, not complete production-artifact conformance |
 | Platform selection | Compiler rejects AWS_DURABLE unless the coordinator package is FUNCTION | COMPUTE worker protocol reuse is possible; a generated all-COMPUTE application is not currently proven |
+
+Current baseline, 12 October 2026: runtime prerequisite [#37](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/37) and productization [#38](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/38) are merged. Runtime [#45](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/45) replaces registration pagination with the dedicated `provider-registration-index`; [#46](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/46) keeps incomplete history inspection retryable. These are source changes, not new real-AWS conformance evidence.
 
 ## 1 Production modules and packages
 
@@ -72,7 +74,7 @@ Repository contract:
 - Register callback only for the admitted generation/occurrence. Equal semantic checkpoint and provider callback authority replay successfully regardless of housekeeping timestamps. Conflicting callback authority fails closed.
 - Bind only against the matching registration and semantic identity observed through the control plane. Reject stale generation admissions atomically; latest-binding queries alone are not a fence.
 - Record delivery evidence idempotently after provider acceptance or confirmed success in public history. A delivery receipt is mechanical evidence, never proof that TPF continuation work is complete.
-- Query targeted registrations by provider ARN. Index lag or bounded-page exhaustion yields retry; it must not silently retire repair work.
+- Query targeted registrations by provider ARN. The dedicated registration sort-key prefix removes the page-budget lookup failure. Index lag yields retry; it must not silently retire repair work.
 - Distinguish OPEN, SUCCEEDED, CLOSED/missing history and UNKNOWN. Throttling, access denial, transient failure and incomplete history remain UNKNOWN/retry. Closed or expired history authorises only mechanical generation replacement, never semantic resubmission or automatic re-drive.
 
 Public callback delivery and new-generation start cannot participate in a Dynamo transaction. Recheck generation authority before dispatch, verify generation/occurrence on receipt, and prove the race with replacement cannot admit a stale semantic consequence. Describe this limitation honestly rather than claim an exactly-once provider call.
@@ -129,7 +131,7 @@ Migration gates: semantic actions first; production callback/replacement/repair 
 
 | Slice | Scope and evidence | Acceptance |
 | --- | --- | --- |
-| A Targeted repair lookup | Existing host repository/reconciler; bounded GSI pagination and retry on lag; deterministic unit tests | Binding-first index page and temporarily missing registration cannot retire repair |
+| A Targeted repair lookup | Existing host repository/reconciler; dedicated registration GSI and retry on lag; deterministic unit tests | Binding-first index page and temporarily missing registration cannot retire repair |
 | B Deployment retention and delivery | Existing SAM and deployment contract tests; retained function/version, visibility headroom, encryption defaults and Stream destination IAM | Static contract validation and SAM lint; no AWS deployment in PR build |
 | C Production semantic action conformance | Replace proof semantic action algorithms with a fault-decorated production delegate; preserve fixture release preparation and fault points | Existing proof adapter tests and production action tests pass against the same implementation |
 | D Binding lifecycle completion | Generation/occurrence transactional contract, runtime-owned semantic stream adapter, complete targeted recovery locators and suspended due-work hosting | Deterministic crash/race tests including lost history and sequential/concurrent Await; no host semantic schema parsing |
@@ -140,15 +142,25 @@ Do not open issues, commit, push, deploy or publish merely to represent this seq
 
 Owner-local validation: `./mvnw -pl :pipelineframework-aws-durable-coordination-host -am test -Dmaven.repo.local="$PWD/.m2/repository"`; add proof-action host with `-DskipITs verify` for C and deployment contract verification for B. Full canonical runtime verification and cross-repository compatibility sets gate integration; AWS evidence gates support/release separately.
 
-Slices A, B and C are implemented in [runtime PR #38](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/38) on `codex/aws-durable-production-audit`, based on the pinned #37 head. The three commits separate targeted recovery, deployment safeguards and production action conformance. A retries index lag, bounded-page exhaustion, absent Await checkpoint and unresolved replacement admission. B retains coordinator code and mechanical recovery evidence, enables explicit encryption defaults, adds SQS retry headroom and grants the Stream failure destination send permission, with deployment contract tests. C removes duplicate proof semantic actions in favour of the production action implementation, preserving fixture release setup and fault boundaries.
+Slices A, B and C are implemented in [runtime PR #38](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/38) on `codex/aws-durable-production-audit`, based on the pinned #37 head. The three commits separate targeted recovery, deployment safeguards and production action conformance. A retries index lag, absent Await checkpoint and unresolved replacement admission. The later direct registration index removes the bounded-page lookup path. B retains coordinator code and mechanical recovery evidence, enables explicit encryption defaults, adds SQS retry headroom and grants the Stream failure destination send permission, with deployment contract tests. C removes duplicate proof semantic actions in favour of the production action implementation, preserving fixture release setup and fault boundaries.
 
 Validation passed: targeted model/host/deployment/proof-action `verify -DskipITs` (75 Java tests, no failures or errors), SAM lint using the deployment directory's existing configuration, 36 documentation tests and the documentation build. No cloud resources were deployed. CodeRabbit CLI 0.7.6 was authenticated but rejected the review with HTTP 403, “You are not a member of the requested organization”; no CodeRabbit review result is available. Full runtime, cross-repository and real-AWS gates remain required for promotion. Slices D–F and the support checklist remain outstanding.
 
 Graph impact for the initial host edits: repository MEDIUM, six direct dependents (actions, stream processor, wake-up, terminal reconciler, services, proof repository); stream processor LOW and wake-up LOW, normal Stream handler path affected. Recheck impact before later symbol changes. Do not treat this graph result as proof of AWS behavior.
 
+### D1: immutable generation authority
+
+The next runtime slice adds execution-scoped `CLAIM#G` and `SUCCESSOR#G` records to the existing mechanical table. A claim stores schema version 2 and pipeline/contract/release identity. Generation one conditionally creates its claim; G+1 atomically checks the matching predecessor claim, creates its own claim and writes the predecessor's immutable successor fence. These records have no callback TTL. Registration and binding transactions check that the claim exists and its successor fence is absent; binding also checks the registered callback authority. Strong reads classify replay, conflict and stale admission.
+
+Replacement claims the next generation before starting the deterministic provider execution. A failed or uncertain start remains retryable: replay repeats the same start even though the old binding is fenced. Neither terminal reconciliation nor a completed-Await wake-up retires repair merely because the claim exists. A successor that is itself superseded does not start obsolete code; creating the following successor requires its predecessor claim and a callback registration/binding from that provider execution. Known-stale callbacks are not delivered. A callback call already in flight can race replacement because it cannot participate in the Dynamo transaction; semantic completion remains TPF authority.
+
+The storage upgrade is intentionally fail-closed. Do not run unfenced retained action/wake-up/repair writers against this table alongside the new protocol. New installations create claims normally. Existing live executions need a quiesced, validated claim-chain migration, with semantic release identity checked through the control plane, before the new writers or event sources resume. Missing claims retry rather than silently bootstrap from callback TTL rows. Retained generations and fences cannot be removed until the execution's supported recovery lifetime has ended. Automated migration and coexistence with old retained host versions remain a rollout gate; this slice does not declare existing deployments safe to upgrade in place.
+
+D1 retains the current registration and binding keys. Callback occurrence identity, neutral semantic Stream decoding, complete reconstruction locators and suspended due-work timing remain D follow-ups. Local transaction tests cover concurrent old binding/new generation admission, replay/conflict and callback-row deletion; unit tests cover lost provider-start acknowledgement and repair retry. Real-AWS randomized conformance against these production artifacts remains required.
+
 ## 10 Support acceptance criteria
 
-- [ ] Prerequisite #37 merged and its exact runtime candidate included; bounded semantic operations retain restart/convergence coverage.
+- [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
 - [ ] All four production coordinates published and BOM/candidate closure verified without proof runtime substitutes.
 - [ ] Conditional, occurrence-aware generation protocol proves replay, conflict and stale fencing under randomized races.
 - [ ] Host uses semantic control-plane observations; no internal semantic-table decoding or scanning.
