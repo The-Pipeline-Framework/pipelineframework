@@ -182,6 +182,653 @@ Local Durable driver tests, Stream tests, native semantic-read tests and LocalSt
 
 ## 10 Support acceptance criteria
 
+### Completion audit: obligations frozen before new realization
+
+The 12 October 2026 continuation audits runtime PRs #47/#48/#50 at merged main
+`421ef428810917cf57eb97ab96a4cd5433bb5545` and open #51/#52 at candidate #52
+`401990db65d30453742c74be9583aba431290ffa`. Requirements remain this plan,
+the deployment contract and ADR-0069: original documentation pin
+`a1f83ed1852f1ca0e587b87b7fb905540308afa3`, supplemented by documentation main
+`37b2c48d87751710cd51326e86ffba44905948dd`. Foundry guidance is pinned to
+`809b226ba691eacd4d7fedd65784e0dc0cae0b8b`.
+
+Prior exposure: the implementation lead authored the earlier #45/#46 callback
+pagination hardening and has read the supplied D1–D5 contribution summaries and
+PR descriptions. This is retrospective, defect-informed verification, not a
+claim of prospective discovery. New obligations below were recorded before
+reading the new implementation and tests. Later amendments retain their timing.
+The independent `adequacy` consultation assesses verification sufficiency;
+the human requirements owner retains product acceptance. Implementation authors
+cannot certify the support checklist themselves.
+
+| Obligation | Original authority | Challenge and forbidden outcome | Independent oracle and cheapest evidence |
+| --- | --- | --- | --- |
+| D-GEN | §3 generation admission | Race successor claim with registration/binding and expire disposable rows; no stale authority or duplicate semantic consequence | Conditional transaction outcomes and final semantic facts, deterministic Dynamo component races |
+| D-AWAIT | §3, §8 sequential/concurrent Await | More than 100 historical interactions, concurrent/item completions, stale Streams and completion before registration; no wrong interaction or premature parent release | Native semantic checkpoint and durable continuation facts through assembled runtime tests |
+| D-RECOVERY | §3, §8 retained reconstruction | Lose history and mechanical registration before first/later wait, including nonterminal execution; no retired unresolved repair or semantic resubmit | Retained semantic state, stable generation/release and exactly one converged transition; component faults |
+| D-TIMING | §5 suspended timing | Timeout, retry and item continuation while provider callback is suspended; no dependence on proof sweep or stranded terminal callback | Production due-work and execution Stream paths plus authoritative final semantic/provider state |
+| E-RELEASE | §5, §7 retained code | Move aliases, delete/replace resources, recover after history loss; no unqualified incompatible action/worker or competing queue consumers | Immutable manifest/configuration and mixed-placement signed-envelope tests |
+| E-DEPLOY | §5, §6 | Missing provider config, plaintext secrets, absent scoped CMK grants, notifications or quota gates; no admission to incomplete deployment | Template/lint/startup negative cases, real provider contract checks where static evidence cannot suffice |
+| F-PRODUCTION | §8, §10 | Run historical IDs 1–22 and new gaps against generated fixture and production SAM/handlers; no proof semantic/recovery substitute in gated path | Production dependency/handler architecture checks plus exact-candidate protected AWS FUNCTION/COMPUTE conformance |
+
+Ordinary builds remain deployment-free. Local passing evidence cannot close
+AWS IAM/CMK/capability or exact-candidate promotion gates. The user clarified
+that implementation uses merged main, with #51/#52 audited as candidates, and
+set a zero cloud-spend limit. Locate existing E2E configuration read-only and
+prepare the lane; do not launch cloud resources or paid runs. Real-AWS evidence
+remains unsatisfied under this limit.
+Raw logs and provider artifacts stay outside source control; report tested
+revisions, commands, outcomes, limitations and available elapsed/cost accounting
+here. LLM billing and human effort measurements are unavailable unless supplied.
+
+### Executed retrospective evidence, 12 October 2026
+
+The completion implementation is a dirty candidate over runtime `421ef428810917cf57eb97ab96a4cd5433bb5545`,
+not a released compatibility set. PR #47 head `129e260c6eae295d527a17222592bcf0f1d67209`,
+#48 `8039bb93815e2ae6faf96aa242310fedf9406683` and #50
+`8647859539c95cf1626ccab09257e10d306b3676` are audited through merged main.
+#51 `5a154f2cf832aab7c77ff7658a3bdf2cb1144c16` and #52
+`401990db65d30453742c74be9583aba431290ffa` are candidate evidence; selected due-work,
+terminal settlement and retained-recovery changes were reused without assuming acceptance.
+
+| Obligation | Observed outcome and hardening | Evidence boundary |
+| --- | --- | --- |
+| D-AWAIT | Malformed mechanical registration was acknowledged. Three independently specified retry cases failed before the repair; all 15 Stream tests then passed. Unknown registration evidence now fails closed. | Production processor/batch result; substituted semantic reads, no AWS Stream proof |
+| D-RECOVERY | Candidate #52 ordinary client/reconciler suite passed 23 tests, but the new crash-after-SUBMIT test failed while its registered-locator control passed (25 tests, one failure). Admission can commit before any locator is retained. | Actual driver/actions/repository/reconciler with external transports stubbed; the Dynamo fake did not enforce transactions |
+| D-RECOVERY | Pre-admission immutable identity plus neutral client-key observation closes the lost-acknowledgement window without resubmitting semantics. The first repair incorrectly assumed generation-one authority existed; four component passes did not prove that assumption. An independent LocalStack probe failed with `ConditionalCheckFailed`. Establishing the validated original claim before its successor made the unchanged probe pass; adjacent read/recovery/transaction tests passed 46 tests, no failures/errors/skips. | Real repository and Dynamo transaction conditions in LocalStack; semantic observation and provider start remain substituted |
+| D-AWAIT | Required shared Await-store paging, scoped opaque continuation and authoritative point reads replace a full unit traversal in one Durable action. More than 100 members, stale projection, filtered-empty continuation, foreign scope and prior-unit reset have focused coverage. Contracts verify passed 678 tests; focused runtime selection/store/read gate passed 131. A later independent probe exposed imported-identity collision and a prefix-order contradiction (two failures, baseline passed); typed tuple identity/opaque cursor made all 35 in-memory tests pass. A further actual Dynamo imported-GSI tie challenge passed with full last-evaluated-key continuation; the integrated paging gate passed 139 tests. | Contracts main `5c7a60c46b5f54c47e4846c194f9ab24390276a0` plus local changes; engineering artifacts only, no published provider compatibility claim |
+| D-TIMING | The independent native due-work challenge exposed a committed `TIMED_OUT` interaction whose unit/parent/facts never recovered after a unit-store crash. The user approved the shared-store protocol repair. Timeout admission now atomically retains consequences, bounded discovery verifies native authority, required journal failures propagate, and acknowledgement follows convergence. The unchanged crash oracle, three post-commit cuts and completion-winning race pass. Provider discovery also exposed an unbounded active-deadline page walk (one failing adversarial test); one-page admission and retention-expiry cleanup made it pass. | Final targeted gate: 166 unit tests plus 19 actual Dynamo restart and six typed-import ITs, no failures/errors/skips. No provider/AWS timeout execution or historical backfill claim |
+| E-DEPLOY | Explicit provider and secret-version configuration, encryption/grant attestations, bounded queues/concurrency, exclusive worker placement, retained numbered action, finite encrypted logs, notification destinations and actual mechanical outcome counters are implemented. Template/host/model gate passed 152 tests; telemetry passed nine. Subsequent required contract/artifact configuration checks passed six; repository/telemetry/real-generation/deployment gate passed 49. Final deployment gate passed 19, including retained numeric event-source versions, mandatory release isolation, publication identity and native provider operation/state alarms. | Template, startup mapping, LocalStack and lint; actual AWS IAM/CMK/quota/notification behavior remains unproved |
+| F-PRODUCTION | Compiler-built two-Await fixture, production release bootstrap, external call fault proxy and exact-artifact gate replace historical proof authority in the new lane. Legacy promotion now rejects before cloud access. | Generated fixture architecture, proxy and negative gate tests; producer execution and protected AWS evidence remain required. Production beans must be discovered, not merely present in an archive. Scalar generated HTTP controls pass; the published compiler’s item streaming HTTP bridge stalls. The user approved a separate compiler repair; no production conformance claim follows from fixture packaging |
+
+Reproduce selected gates from the runtime checkout with its own cache:
+
+```bash
+./mvnw -pl :pipelineframework-aws-durable-coordination-host -am verify \
+  '-Dtest=AwsDurableAdmissionRecoveryTest,AwsDurableTerminalReconcilerTest,ExecutionReadModelTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=AwsDurableGenerationFencingIT \
+  -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"
+./mvnw -pl :pipelineframework -am test \
+  '-Dtest=QueueAsyncCoordinatorTest,InMemoryAwaitInteractionStoreTest,DynamoAwaitInteractionStoreTest,ExecutionReadModelTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+The timeout gate is reproducible after installing the coordinated local contracts
+candidate into this worktree cache (engineering validation, not publication):
+
+```bash
+./mvnw -pl :pipelineframework -am verify \
+  '-Dtest=AwaitItemContinuationRecoveryTest,AwaitTimeoutFlowTest,AwaitTimeoutPlanTest,InMemoryAwaitInteractionStoreTest,DynamoAwaitInteractionStoreTest,QueueAsyncCoordinatorTest,ExecutionReadModelTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  -Dit.test=AwaitRestartRecoveryIT,DynamoTypedAwaitImportIT \
+  -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"
+python3 -m unittest discover -s aws-durable-proof/conformance -p 'test_production*.py'
+```
+
+The initial producer/gate boundary gate passed 18 local tests; a subsequent combined
+Python gate passed 37 (including seven compiled-operation URL binding controls). These test fault procedures
+and evidence rejection, and execute no AWS calls. Independent challenges found
+an invented native `PENDING` precondition and a false-positive timeout oracle that
+accepted unrelated parent failure. Corrections use native statuses, require the
+exact `AWAIT_TIMEOUT` interaction error and validate pinned Stream mapping roles
+before mutation. Scenario 19 currently proves explicit replay of an actual retained
+registration record; it does not prove general scheduled discovery, and in-flight
+consumers remain a causal limitation.
+
+Subsequent independent resource-history tests passed 12 cases. Native history
+reads now pass API `Marker`/`MaxItems` through CLI JSON input with automatic
+pagination disabled, accept a callback on a later page, reject a later terminal
+callback, and fail on invalid/repeated cursors or the finite page cap. CLI
+`NextToken` was not itself a provider defect: automatic pagination has a different
+CLI contract. The repair makes provider-page work and completeness explicit.
+Logs: `/tmp/tpf-resource-history-boundary-green.log`.
+
+The retained-version collector is advisory. It correlates the immutable manifest
+with bounded native function-version/configuration reads, distinguishing missing,
+mismatched, unmanifested and unknown versions without permitting cleanup or
+claiming semantic execution inventory. Eight independent boundary tests pass.
+Adversarial accepted-input probes found malformed falsy markers incorrectly
+reported exhaustion and unknown signing fields copied into output; strict marker
+validation and a verified-reference output whitelist close those local gaps.
+These are response/report-boundary defects, not evidence that AWS supplied malformed
+markers or that a generated manifest contained secret values. Logs:
+`/tmp/tpf-retained-version-{falsy-marker,manifest-privacy}-probe.log`,
+`/tmp/tpf-retained-version-advisory-green.log`.
+
+The broader owner gate exposed the unchanged architecture guard: coordinator size
+1093 exceeded 1050 lines. Moving read-only Await selection into the existing
+`ExecutionReadModel` reduced the coordinator to 941 lines without changing the
+limit or selection oracles. The affected read-model graph is HIGH risk; status,
+registration and Durable polling share it. Coordinator 57, read-model 22 and
+architecture eight focused tests pass. Full native verification remains unsatisfied;
+`/tmp/tpf-await-read-model-fitness.log` is the focused evidence.
+
+The approved FUNCTION HTTP repair is a separate dirty compiler candidate over
+merged main `6f1b85582590e1cb1a03775f2add47b3b7411862`. The published compiler's
+101-item Lambda bridge timed out while scalar controls passed. A finite JSON-list
+response and paired generated client restore the existing typed stream; COMPUTE
+retains SSE. Full compiler verify passed 925 tests, followed by 22 focused generation
+checks. Actual regenerated FUNCTION HTTP tests passed six cases, including all 101
+results through both the real generated client and actual CDI Step invocation; ordinary
+COMPUTE HTTP/SSE controls passed five, and item contract/alignment tests passed two. Engineering artifacts are installed only in isolated caches. Logs:
+`/tmp/aws-durable-generated-http-repaired-package4.log`,
+`/tmp/aws-durable-generated-item-repaired-package.log`. Infinite streams and
+responses exceeding host limits remain unsupported; these local bridge results
+are not deployed AWS evidence. The final canonical `clean package` passed 2,194
+native unit, 130 host and 19 deployment tests plus the generated fixture controls.
+This package gate does not execute integration tests. A broader native `verify`
+previously exposed fixture issues: inherited timeout tests lacked the deadline GSI,
+global due queries shared unrelated scenario tables, and two test adapters lacked
+new retained-work operations. Correcting fixtures without changing crash oracles
+made the focused 87-unit/21-IT gate pass; full native verify remains pending.
+
+The archived scalar and item candidates still compile operation URLs as
+`UNCONFIGURED` and are intentionally rejected by the new pre-AWS binding check.
+Preparation and promotion require the exact deployed operation host URL to match
+all three literal generated client bindings in the actual archives. Seven new
+URL boundary controls pass, including mismatches, placeholders and configuration
+shadows. Evidence: `/tmp/aws-durable-operation-url-binding-evidence.json`,
+`/tmp/aws-durable-operation-url-boundary-tests.log`. No endpoint was deployed.
+Compiler source/JAR hashes and six-archive hashes are preserved in
+`/tmp/aws-durable-f-engineering-evidence.json`; BOM source provenance is UNATTESTED.
+A documentation SHA is not used as a BOM source revision.
+Those archived runtime candidates predate the new E lifecycle/telemetry edits;
+their hashes do not establish the current dirty candidate's package closure.
+
+Before lifecycle implementation, E verification retains these original observability
+obligations (section 6; adequacy owner is the independent reviewer, with human
+acceptance retained):
+
+- A winning semantic completion retains an immutable first-admission time. Replay,
+  duplicate admission and later mutable status updates cannot replace it. Timeout
+  and rejected completion cannot masquerade as admitted completion.
+- Parent release durably acknowledges its unit/interaction scope at the release CAS.
+  A crash after commit, lost acknowledgement and a later sequential Await must
+  preserve that first release observation. Work is outstanding until authoritative
+  release evidence exists; enqueue or a best-effort log is insufficient.
+- An indexed bounded observation rechecks native authority and returns scoped opaque
+  progress. Empty, filtered or stale pages cannot establish global zero outstanding
+  work. No cross-page snapshot is promised. Foreign tenant/unit/release evidence
+  must fail closed.
+- Required timestamps/projections absent from older retained state remain an explicit
+  migration/unknown condition. Tests must exercise crash cuts, deduplication,
+  clock boundaries and fresh stores; they must not manufacture historical times.
+- Semantic admission-to-parent-release latency and mechanical callback-to-driver-resume
+  latency retain distinct start/end authorities. Missing provider history does not
+  become a zero duration. Command outcomes require their own admitted/released
+  semantics before entering an Await completion inventory.
+
+Independent E consultation confirmed that exact outstanding admission inventory
+and restart-safe admission/release latency cannot be obtained from counters,
+mutable interaction timestamps or best-effort journal facts. A new semantic
+lifecycle protocol requires atomic admission/release evidence across the owning
+stores and a bounded observation contract. The user approved the lifecycle
+protocol extension. Contracts over `5c7a60c46b5f54c47e4846c194f9ab24390276a0`
+passed their full owner verification (688 tests). Native store admission and release
+transactions, bounded strongly consistent primary-table OPEN queries, and neutral
+read-owner observations are implemented as a provisional candidate. Ten memory,
+four actual read-owner, eight Dynamo encoding/query and thirteen LocalStack lifecycle
+cases passed; the two existing Dynamo store suites passed 24 and 50 tests.
+The physical integration challenge initially failed nine cases because legacy
+`ttl_epoch_s=0` was written and then treated as expired by CAS/index predicates.
+Omitting that TTL attribute and accepting retained zero values made the unchanged
+thirteen integration cases pass. This is confirmed compatibility repair, not an
+oracle relaxation. Raw red evidence: `/tmp/tpf-completion-lifecycle-native-first.log`;
+original/corrected reports: `/tmp/tpf-completion-lifecycle-{first,ttl-corrected}-results`.
+
+The subsequent independent reissue probe is **confirmed failing**, not acceptance:
+`AwaitCompletionReopenedAdmissionTest` executes native `REISSUE_COMMAND`, creates
+and admits a distinct ordinary Await interaction in the previously completed unit,
+and pauses before the replacement suspension CAS. The read owner erroneously
+reports RELEASED and retires the new OPEN projection using the old unit ACK.
+The probe failed both state and retained-work oracles in
+`/tmp/tpf-completion-reopened-admission-red.log`. A nonnegative duration check cannot
+establish causal coverage; primary membership alone changes during creation.
+The shared Await occurrence/admission coverage repair was then escalated for
+additional scope adjudication. At that stage, E lifecycle observations were
+provisional and inadequate for authoritative inventory or cleanup decisions.
+The approved causal continuation below records its local repair and remaining
+production acceptance limits. The independent
+adequacy owner remains `/root/adequacy`; human acceptance remains with the user.
+Host-local counters are sampled query observations, never authoritative inventory.
+The reviewable causal decision package is retained in
+`/tmp/tpf-await-completion-lifecycle-test-consult.md`. It recommends a native Await
+unit occurrence bound before external admission and preserved through worker
+imports, item consequences and the exact parent CAS; it does not authorize
+implementation or silently change ordinary Await replay behavior.
+
+The affected native lifecycle/recovery gate then exposed a duplicate item-release
+regression: an already-QUEUED parent constructed a new step-4 ACK and conflicted
+with its retained step-2 ACK before reaching the normal CAS-loser behavior.
+Requiring the strongly read parent to remain WAITING_EXTERNAL in the exact unit
+before constructing the ACK restored that behavior; the transaction still checks
+version, unit, status, TTL and release pins. The unchanged physical recovery
+oracle passed, along with 96 unit tests and 46 integration tests covering lifecycle,
+restart, typed imports and webhook/Kafka/SQS completion. Three unused mock stubs
+were fixture adaptation errors. Red/corrected logs:
+`/tmp/tpf-completion-lifecycle-affected-native-{verify,corrected-verify}.log`;
+reports: `/tmp/tpf-completion-affected-native-{red,corrected}-results`.
+Command: `./mvnw -pl runtime -am verify '-Dtest=AwaitCompletionLifecycleProtocolTest,AwaitCompletionObservationProtocolTest,DynamoAwaitCompletionLifecycleRepositoryTest,DynamoAwaitInteractionStoreTest,DynamoExecutionStateStoreTest' '-Dit.test=AwaitCompletionLifecycleProtocolIT,AwaitRestartRecoveryIT,DynamoTypedAwaitImportIT,WebhookCompletionDynamoIT,KafkaAwaitCompletionDynamoIT,SqsAwaitCompletionDynamoIT,AwsShapedCoordinatorActionsIT' -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+This focused passing gate excludes the separately retained failing reissue probe;
+it is not a passing full canonical runtime verification.
+
+### Causal coverage continuation, 13 October 2026
+
+The user approved explicit Await occurrence/admission coverage in shared contracts
+and native stores. This is the next coordinated local repair, with no deployment,
+publication or acceptance certificate. Prior knowledge includes the retained
+reissue red and the independent decision package; later probes are defect-informed.
+The original section 6 boundary remains authoritative. Independent adequacy stays
+with `/root/adequacy`, while the implementation lead owns integration and the user
+owns acceptance.
+
+The chosen representation is one occurrence-qualified full unit identity carried
+through existing exact unit-ID fields, rather than a second parallel lifecycle.
+The execution owner persists the initial cause and creates a fresh cause at the
+successful authorized reissue CAS. Retry/replay preserve it; page identity remains
+part of the unit scope. Commands retain their own effect identities. Every parent
+CAS and imported worker suspension must match the retained cause and page scope.
+Qualified terminal units are sealed against fresh members, and their deduplication
+replays the exact existing interaction. Item convergence retains exact interaction
+completion keys rather than accepting only the same item index. Historical
+observation reads its own retained unit/ACK independently of the current execution
+cause. Legacy records without coverage remain UNKNOWN and keep unresolved OPEN
+work; clocks and current membership cannot migrate them.
+
+Required consequential checks: second admission before suspension remains OPEN;
+second suspension/consequence/release and lost-response replay use their own ACK;
+first-cycle observations remain immutable; equal/regressing clocks cannot prove
+coverage; old completions, same-index children and worker imports cannot satisfy
+another cycle; legacy and foreign-scope inputs fail closed. Both native providers,
+signed wire round trips, context copies and Command retry/reissue controls are
+compatibility obligations. Full native verification and published compatibility
+sets remain separate gates. The local repair has bounded passing component evidence; the full canonical gate
+remains separate. No red result is promoted to passing evidence before execution. The complete contracts reactor
+passes 694 tests with the occurrence, retained-cause and wire contracts
+(`/tmp/tpf-await-causal-contracts-verify.log`). Three runtime gates stopped before
+causal test execution: initial-record constructor calls failed compilation, a new
+context test named an absent enum constant, and two migrated item fixtures called
+a missing helper overload. These mistakes were corrected; they are harness/integration
+failures, not evidence for the causal oracle. Independent
+source review then selected a non-atomic primary-attachment seal challenge. The
+unchanged memory and physical LocalStack probes each fail once without harness
+errors: open and dispatch-sealed primaries can change, and same-primary replay
+mutates version/time. Dynamo also changes a terminal primary; memory already
+preserves terminal state, correcting the broader source prediction. Logs:
+`/tmp/tpf-await-primary-seal{,-physical}-red.log`; reports and frozen source hashes:
+`/tmp/tpf-await-primary-seal-red-reports`. The affected gate below executes the
+conditional repair. These store-level reds do not claim an executed end-to-end false-release race. Qualified
+primary guards and coordinator winner checks repair the observed mutation in
+source; exact replay is immutable and legacy configured-key deduplication remains
+supported. Interaction creation and unit sealing remain separate writes, so this
+work does not prove atomic item admission or orphan-cleanup liveness. A matching
+terminal-failure ACK settles its failed occurrence without successful continuation
+or resume latency. The
+subsequent review found that the not-yet-reached unattached positive fixture used
+a blank primary rather than the native absent state; setup now uses native creation
+and sealing while preserving the consequence assertions. The docs gate also found
+and corrected an ADR link typo; 36 tests and the full build with 64 public-content
+checks pass (`/tmp/tpf-await-causal-docs-{tests,build-corrected}.log`).
+
+The next canonical runtime gate reached 2,226 unit tests but stopped before ITs
+on four fixture classes. Fresh causeful parents rejected old unqualified WAIT
+identities; one helper embedded the wrong execution. Independent review confirmed
+those setup failures, and also found a passing scalar fixture that ignored a
+rejected WAIT and therefore did not establish suspended-release evidence. Fixtures
+now bind the same actual retained cause across parent/unit/interaction and require
+successful suspension; original ordering, crash and retry assertions remain.
+The reissue (3), lifecycle (10), observation (5), memory unit (10), coordinator (35),
+segment (8), context (12), signed gRPC (8) and worker (22) suites passed in that
+incomplete run. These 113 passing tests do not make the full gate green. Log:
+`/tmp/tpf-await-causal-runtime-canonical-corrected-verify.log`; fresh reports:
+`/tmp/tpf-await-causal-canonical-fixture-results`. This is retained failed-gate
+evidence; corrected physical execution follows below.
+
+The affected native gate passed 353 unit tests and 53 of 56 physical IT cases,
+including the corrected memory/physical seal oracle and recovery cuts. Three
+physical reissue cases reached a real provider-validation failure: the native
+REISSUE expression supplied unused `:dlq` and LocalStack rejected the request
+before the reissue CAS. The unconditional value is also present on base main;
+existing mock-based store tests did not validate expression binding usage. The
+minimal repair includes that value only for the DLQ redrive branch. The unchanged
+reissue gate then passed 51 native-store units, three reopened-admission units and
+three physical reopened-admission cases, without failures, errors or skips. Log:
+`/tmp/tpf-await-causal-reissue-physical-corrected-verify.log`; fresh reports:
+`/tmp/tpf-await-causal-reissue-green-results`. Command:
+`./mvnw -pl runtime -am verify '-Dtest=DynamoExecutionStateStoreTest,AwaitCompletionReopenedAdmissionTest' '-Dit.test=AwaitCompletionReopenedAdmissionIT' -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+This is a confirmed native request defect,
+not a fixture error or real-AWS result. Log: `/tmp/tpf-await-causal-native-affected-verify.log`;
+fresh reports: `/tmp/tpf-await-causal-affected-red-results`. Source impact is UNKNOWN
+in the stale index; native provider selection and actual test callers were checked.
+The corrected source snapshot is `/tmp/tpf-await-causal-corrected-final-gate-source.json`: runtime
+`05d0dc094708484af49b0e5baffa3dee77ff9143acd00bb5b5f4b910b402c2a3`, contracts
+`32574e9b44aae058a65d2510237b65e72fd8bff734332664cc0b7c5855a66eb8`, compiler
+`b23487d770493a6b2310014ef620fcbf0dbc258da8fafe6c991c9b4bbd89f3cd`.
+These hash the sorted changed-file digest maps and exclude the pre-existing proof
+README and initial-obligations publication exclusions. Contracts and compiler
+artifacts are local unpublished engineering dependencies. Full canonical command:
+`./mvnw verify -Dtpf.proof.stack= -Dmaven.repo.local="$PWD/.m2/repository"`; the blank
+proof stack keeps the deployed-AWS lane inactive. Cloud resources created and
+cloud spend remain zero; LLM, human and CI billing are unavailable. Independent
+source and copied-report review supports the bounded local causal repair, including
+old-ACK exclusion, own-occurrence release, historical observations, clock controls
+and native seals. The full canonical result, publication/migration and live AWS
+gates remain separate; see `/tmp/tpf-await-completion-lifecycle-test-consult.md`.
+
+A full canonical run subsequently passed 2,251 unit cases and reached 134 physical
+cases, with three failures confined to the five-case AWS-shaped fixture. Its shared
+seed helper still imported an unqualified unit for a newly admitted causeful parent;
+the actual worker's rejected suspension explains FAILED and the two absent callback
+bridges. Independent source/XML review confirmed fixture classification and retained
+the two passing retry/DLQ controls. The helper now derives the same qualified unit
+from the actual retained execution cause/page across imports and the suspension;
+restart, callback, pinning and no-business-replay assertions are unchanged.
+Red log: `/tmp/tpf-await-causal-runtime-final-canonical-verify.log`; fresh reports:
+`/tmp/tpf-await-causal-canonical-physical-red-results`. The corrected source snapshot
+is `/tmp/tpf-await-causal-canonical-fixture-corrected-source.json`, runtime digest
+`ed26c0ccebf9db7e84d8abaeada86488753ee72480809a5da9ae9f56c3e35c26`.
+The corrected full canonical run passed all 2,251 initial unit cases and all 134
+native IT cases, including the five AWS-shaped controls. It then reached 2,817
+reported cases across the reactor and failed at six generated FUNCTION HTTP tests:
+four failures and two errors, all actual 404 responses. Generated resources exist
+with the expected routes and finite-list method. This failed run is not classified
+as a fixture error or waived by prior focused HTTP success. Two existing deployment annotation-processor TODO tests were disabled.
+Log: `/tmp/tpf-await-causal-runtime-final-canonical-corrected-verify.log`; fresh reports:
+`/tmp/tpf-await-causal-canonical-generated-http-red-results`. A reached test count
+does not establish complete verification. Final documentation checks passed 36 tests and the full build
+with 64 public-content checks (`/tmp/tpf-await-causal-docs-final-{tests,build}.log`)
+before this result-only update.
+
+The same six generated HTTP tests then passed unchanged in a focused reactor run
+(`/tmp/tpf-generated-http-discovery-focused.log`). One bounded full canonical rerun
+completed with exit zero: **2,856 reported cases, zero failures/errors and two
+pre-existing disabled annotation-processor TODO tests**. Fresh reports (439 XML):
+`/tmp/tpf-await-causal-canonical-bounded-results/summary.json`; log:
+`/tmp/tpf-await-causal-runtime-canonical-bounded-rerun.log`. The same full command
+above left the deployed AWS lane inactive. Source snapshot:
+`/tmp/tpf-await-causal-canonical-rerun-source.json`, runtime digest
+`0b6abd9653a5ed94ecb932b23ec81be72d9bbc42fea4ef0714a8cda5c6744be9`;
+contracts and compiler digests remain as recorded above. Only the two F Python
+files changed between the prior failed Java gate and this rerun; Java, POM and
+configuration bytes were unchanged. Passive listener PID/working-directory
+observations at `/tmp/tpf-generated-http-port-owner.log` show the generated HTTP
+module owning its listener during this passing run. They do not establish the
+cause of the earlier 404s. That failure remains inconclusive context evidence,
+retained separately from the bounded canonical pass. No further blind reruns
+were selected. Local runtime/native integration is now green; protected exact
+candidates, published dependency compatibility, retained-record migration and
+production conformance remain independent acceptance gates.
+
+Independent review subsequently corrected an overconstraint in its E gap register.
+The original pinned section 6 requires useful metrics/alarms, bounded tenant-safe
+correlation and durable convergence before repair retirement. It does not require
+a globally exact snapshot inventory, samples for every lost acknowledgement or
+provider-server timestamps. Scoped admission/ACK observations, verified host
+API-ack-to-resume samples and retained first-observed repair age can meet their
+stated bounded definitions; missing samples and repeated reads keep their limits.
+This corrects an incorrect stronger hypothesis, without weakening the causal
+release oracle or claiming live operational adequacy. The review found a real
+source gap: OUTSTANDING completion observations lacked an alarm. The reference
+SAM now routes that exact existing metric/dimension pair to the owned alarm topic,
+with configurable five-minute observation-count threshold (default 100). Repeated
+reads are not a population gauge; absent samples cannot establish global zero.
+The existing 22 deployment tests and local SAM lint pass:
+`/tmp/tpf-outstanding-completion-alarm-contracts.log`,
+`/tmp/tpf-outstanding-completion-alarm-sam-lint.log`;
+source digest/results: `/tmp/tpf-outstanding-completion-alarm-results.json`.
+No global census or new clock protocol was selected. Live metric/alarm delivery,
+released compatibility and retained migration remain original acceptance gates.
+
+The subsequent host/model/deployment gate passed, including the actual local
+Durable SDK runner, invalid-signal rejection and marker-RPC-failure convergence.
+Its earlier reported 168-test XML inventory included unselected inspector reports;
+that aggregate is superseded by the freshly filtered final gate below. Integration
+tests were explicitly skipped. Immutable normal API-return
+and first resumed-action observations now support a bounded callback latency
+sample, with replay checkpoints and timing records isolated from Stream authority.
+The callback client's public void API is preserved. Log:
+`/tmp/tpf-callback-resume-observability-final-verify-success.log`.
+This measures host API acknowledgement observation to action observation, not
+exact provider acceptance-to-invocation latency; lost acknowledgements/history-only
+delivery produce no sample, negative ordering is UNKNOWN, and claim-before-emission
+can lose a metric on crash. Independent review found caller provider/release
+attribution still unproved at that stage. The review corrected its own unsupported current-only
+criterion: authentic superseded-generation historical observations are permitted,
+but cannot be attributed to a successor or establish semantic authority.
+Its subsequently frozen 11-case challenge confirmed seven false-attribution
+failures: wrong/missing provider, pipeline, contract and release context all
+created timing facts and emitted a sample. The authentic retained generation-one
+control after a real generation-two claim passed. The driver now carries its
+checkpoint and actual provider ARN using existing request fields; the action
+compares those with the exact immutable registration before recording resume.
+The paired regression is unchanged (SHA-256
+`299710ff72e8627dc3c0f2cf250cc7ef4756e99b265ca091817c294fa7cc7c21`);
+red log: `/tmp/tpf-callback-resume-attribution-canonical-red.log`.
+Sampled completion UNKNOWN/native admission-to-release and callback sample/invalid
+timestamp alarms require operator-supplied thresholds. The subsequent deployment
+gate passed 21 tests in
+`/tmp/tpf-callback-completion-observability-alarms-final.log`.
+No sample or empty page establishes health or global zero outstanding work.
+
+Repair-age realization is deliberately bounded to the first immutable host
+observation of one provider ARN and age sampled on each targeted attempt.
+Conditional first writes and strong duplicate reads preserve the original time
+through retries/restarts; full ARN validation uses a non-index attribute. Negative,
+missing, conflicting or unavailable observations produce UNKNOWN without delaying
+repair. The new mechanical record is explicitly acknowledged by Streams. No
+accepted replacement, provider-only outcome or sample retires semantic repair;
+there is no durable open/close inventory or global oldest-age gauge. Five new
+age cases and 19 Stream cases passed in `/tmp/tpf-repair-age-postcleanup-verify.log`.
+Earlier attempts failed only test compilation/cache-topology adaptation, not
+production oracles. The observation has no callback TTL and requires retained
+mechanical cleanup authority; older attempts are not backfilled. Sampled age and
+UNKNOWN alarms require `RepairAgeAlarmMilliseconds` and use the owned repair
+notification destination. Retry exhaustion/DLQ alarms remain separate.
+
+SAM lint exposed a real candidate deployment blocker that the template-reading
+Java tests had not caught: a comma in the inline lifecycle-table Description was
+parsed as another parameter property. Quoting the description made the same lint
+command pass. Logs: `/tmp/tpf-durable-completion-final-sam-lint{,-corrected}.log`.
+Command (deployment directory): `AWS_EC2_METADATA_DISABLED=true sam validate --lint --template-file src/main/resources/aws-durable-queue-async.yaml --region us-east-1`.
+This is local template validation, not AWS IAM/encryption/alarm execution.
+
+The final combined gate passed **208 selected Java tests**: 6 model, 153 host,
+22 deployment and 27 legacy proof-action tests, followed by successful Quarkus
+proof-action packaging. The paired attribution challenge remained byte-for-byte
+unchanged and passed. Three existing host fixtures were adapted to the added
+repair-age event while retaining exact exception, privacy and no-semantic-work
+oracles. The first combined run failed those fixture expectations; after adaptation,
+packaging exposed a missing application-owned input-decoder bean in the legacy
+proof action host. Extracting its existing decoder into that bean restored packaging;
+two decoder controls cover typed input and malformed/JSON-null rejection. This
+legacy application adaptation does not put a proof decoder in production conformance.
+Logs: `/tmp/tpf-durable-completion-final-host-proof-{verify,corrected-verify,packaged-verify}.log`.
+Command (runtime checkout): `./mvnw -pl :pipelineframework-aws-durable-coordination-host,:pipelineframework-aws-durable-coordination-model,:pipelineframework-aws-durable-coordination-deployment,:pipelineframework-aws-durable-proof-action-host -am verify -DskipITs '-Dtest=AwsDurable*Test,Proof*Test' -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+Selected XML reports and per-module totals are retained in
+`/tmp/tpf-durable-completion-final-host-proof-results`; the class-prefix filter
+excludes three stale, unselected `LambdaAwsDurableProviderExecutionInspectorTest`
+reports. This gate skips integration tests and does not include the retained failing
+native reissue probe. It is bounded passing evidence, not acceptance certification.
+Documentation tests (36), the full documentation build and its 64 public-content
+checks also passed; logs: `/tmp/tpf-durable-completion-docs-final-{tests,build}.log`.
+
+F's injected callback-failure diagnostic and procedure 18 now use actual production
+callback/reconciliation and Stream failure boundaries. The diagnostic injects
+callback failure, not elapsed expiry;
+18 captures an actual decoder-rejected mechanical REGISTRATION and correlates
+retained failure metadata to its Stream/shard/sequence/version. A fresh provider
+contract probe found an empty Stream page incorrectly stopped retrieval despite
+a live iterator. Its new controls failed before the bounded traversal correction;
+closed shards and the global 100-read budget remain covered. This follows the
+[GetRecords contract](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_GetRecords.html).
+All 45 deployment-free Python boundary tests initially passed in
+`/tmp/aws-durable-production-boundaries-stream-current.log`; red evidence is
+`/tmp/aws-durable-stream-empty-page-red.log`. The subsequent independent acceptance
+check traced original scenario 14 to a real 20-second callback timeout. Extraction
+had removed that configuration while leaving its proof input flag/test. The new
+injected-failure diagnostic therefore did not preserve its expiry variant, yet the
+runner labelled it PASSED14 and the verifier accepted missing/injected/invalid
+expiry variants. New runner and gate controls failed before the label correction.
+Historical 14 now remains NOT_IMPLEMENTED with separate diagnostic status and
+`elapsedExpiry:false`; promotion rejects PASSED14 unless its declared variant is
+CALLBACK_TIMEOUT and `elapsedExpiry` is boolean true. The syntactically accepted
+control is not executed timeout evidence. Actual CallbackTimedOut conformance
+remains unimplemented; 18 is implemented but AWS-unexecuted. All 47 boundary tests
+then passed in `/tmp/aws-durable-callback-expiry-label-green.log`;
+red logs: `/tmp/aws-durable-callback-expiry-{runner,gate}-red.log`.
+At that stage, twenty-two of the original 23 additional procedure gaps remained: partial 14 and
+21 others. All live production scenarios remain unexecuted on this candidate.
+One final disclosed two-shard probe found the empty first shard could consume
+all 100 reads before the second shard's actual fault record was examined. The
+unchanged global budget now rotates live iterators fairly. Both return-mode
+controls failed before repair, then all 48 Python boundary tests passed in
+`/tmp/aws-durable-stream-shard-fairness-green.log`; red evidence is
+`/tmp/aws-durable-stream-shard-fairness-red.log`. Budget exhaustion remains
+inconclusive and does not establish Stream completeness.
+Two further source-backed production procedures are prepared after reconciliation
+of the original 38 catalog IDs. Nonterminal provider loss pauses the exact owned
+Work mapping before admission, observes a QUEUED native execution and retained
+RECOVERY locator before its first Await, stops that real provider, invokes production
+targeted reconciliation and verifies generation-two native identity, release pins
+and final output after restoring delivery. Suspended continuation uses the generated
+item deployment, verifies the real scheduled due-work wiring, blocks actual
+transition delivery and Await Streams, observes three admitted completions with
+pending retry work and no parent release/ACK while the provider is parked, then
+requires exact child lineage, continuation facts, release ACK, typed order and
+matching pinned provider output after delivery is restored. It invokes no caller
+SWEEP. The terminal-item fixture has no downstream business suffix. COMPUTE
+suspended continuation returns NOT_IMPLEMENTED because its exclusive consumer has
+no owned pause/resume control; common Work mapping control supports nonterminal
+loss for either placement.
+
+All 55 actual-checkout Python test methods pass, with seven new boundary methods
+and an additional permutation subtest. The permutation was accepted by the earlier
+sorted-membership oracle; its new red confirms an ineffective ordering check, then
+exact item sequence rejects it. Logs: `/tmp/tpf-f-two-procedures-order-red.log` and
+`/tmp/tpf-f-two-procedures-ordered-boundaries.log`. Command:
+`python3 -m unittest discover -s aws-durable-proof/conformance -p 'test_*.py' -v`.
+Initial temporary preparation inserted tests into the wrong working directory and
+ran them against the old helper, producing harness errors; the exact checkout
+bytes were restored before integration. This is not behavioral defect evidence.
+Independent review supports the prepared procedures' stated boundaries, not live
+AWS success, nonempty-suffix execution or unique scheduled-invocation causality.
+Source tests and no caller SWEEP cannot alone establish live scheduling causation.
+
+Historical scenario 15 is also prepared using existing production entry points.
+An authentic parked generation-one registration/Stream record is retained; the
+pinned ingress resumes the same semantic execution at generation two. Completion
+and replay of the stale registration must leave generation-two binding/pins intact,
+produce no generation-one delivery, and converge one execution with exactly the
+fixture's two Await interactions. Generation one must remain RUNNING with no
+terminal callback history through generation-two success, before explicit cleanup.
+No semantic re-drive/resubmit or proof recovery substitute is used. The actual
+Python suite passes 56 methods, including ten scenario-15 boundary variants for
+identity/pin changes, fabricated records, stale delivery and premature old-provider
+termination (`/tmp/tpf-f-scenario15-boundaries.log`). This is offline procedure
+preparation, not live fencing evidence or seeded randomized coverage. Java/POM
+bytes remain unchanged from the passing canonical snapshot; this later Python
+source is separately hashed in the current evidence manifest.
+
+Historical scenario 7 FUNCTION preparation now uses a fixture-only SQS fault
+handler around the actual production transition handler. It preserves the original
+before-delegation and after-successful-action acknowledgement cuts. The producer
+pauses the sole owned mapping before start, captures an authentic signed request,
+enqueues unchanged duplicates and requires correlated native caller progress with
+attempt still zero, plus exact lineage/pinned final result. An authentication-drop
+ACK or later retry cannot substitute for that response. Seven Java tests exercise
+the real production signed request/response boundary: send precedes lost ACK,
+duplicates execute/publish once, and invalid authentication acknowledges without
+publication. Legitimate nonce discard remains supported. All 60 Python methods
+pass; scalar/item Quarkus packaging and archive inspection find both the fixture
+wrapper and production delegate CDI beans. Derived fixture SAM lint passes with
+only the inherited merge-anchor warning ignored. The first seven-test gate used
+older cached binaries; it is superseded by the repeated current-artifact gate,
+with exact old/new digests, commands and 12 source hashes in
+`/tmp/tpf-f-scenario7-handoff.json`. Current runtime/host artifacts were warmed into
+one ignored 839 MiB logical APFS cache clone; this is local engineering, not
+publication. Production SAM is unchanged by the wrapper; conformance-only derived
+wiring identifies its fault table/IAM/handler in the fixture manifest. Compiled
+operation URLs remain UNCONFIGURED, so packaging/discovery is not a deployable
+promotion candidate. These are local preparation tests, not AWS success, raw
+response capture, unique scheduling or seeded randomized coverage.
+
+The FUNCTION catalog now has 20 prepared procedure IDs, with 18 missing/partial IDs:
+4, 5, 6, 10, 13, 14, 17, 20, 21, gsi-lag, history-pagination,
+pre-registration-provider-loss, retained-version-cleanup, cmk-iam-failures,
+operation-budget-exhaustion, seeded-generation-races, provider-history-loss and
+release-version-pinning. COMPUTE additionally lacks scenario-7 delivery fault control
+and suspended-continuation control.
+All live production scenarios remain unexecuted. Most remaining cuts need actual
+work/callback SDK fault boundaries or owned deployment controls; scenario 17's
+alias movement conflicts with the current isolation attestation, retained cleanup
+has no cleanup authority, and external CMKs are outside disposable stack mutation
+authority. These require concrete scope/infrastructure adjudication before live
+fault work; local substitute success cannot close them.
+
+The apparent flat-HTTP versus nested-CLI callback-failure error mismatch was an
+incorrect hypothesis: the official [CLI contract](https://docs.aws.amazon.com/cli/latest/reference/lambda/send-durable-execution-callback-failure.html)
+and local `aws lambda send-durable-execution-callback-failure --generate-cli-skeleton input --no-sign-request --region us-east-1 --no-cli-pager`
+both accept the nested `Error` structure. This offline check sends no API request.
+The exact #51 candidate `5a154f2cf832aab7c77ff7658a3bdf2cb1144c16`
+also passed its existing due-work handler (3), deployment contract (11) and
+native sweep (8) tests in a clean checkout with its isolated dependency cache.
+Command: `./mvnw -pl :pipelineframework-aws-durable-coordination-host,:pipelineframework-aws-durable-coordination-deployment -am test '-Dtest=AwsDurableDueWorkHandlerTest,AwsDurableDeploymentContractTest,QueueAsyncSweepFlowTest' -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+This is bounded passing candidate evidence, not an executed timeout-crash or
+provider-suspension challenge on #51. Log: `/tmp/tpf-candidate51-exact-focused.log`.
+The current local source hashes and evidence references are captured in
+`/tmp/tpf-durable-completion-current-evidence.json`; dirty snapshots are not
+immutable published candidates. Cloud resources created and cloud spend remain
+zero; LLM billing, CI billing and human effort are unavailable.
+
+Raw timeout evidence: `/tmp/tpf-native-suspended-due-work-red.log`,
+`/tmp/tpf-active-timeout-bounded-page-red.log`,
+`/tmp/tpf-timeout-protocol-native-verify.log`. The original crash method SHA-256
+remains `92fcad4ca965049151dc78f5b8cb4bca913032e30154cd8a36da7c9bbeefbec2`.
+An initial race setup used completion at the deadline and correctly failed with
+`AwaitInteractionTerminalException`; this was a fixture error, corrected to an
+in-flight pre-deadline completion. Two older coordinator mocks required protocol
+stubs; their null-return errors were harness adaptation failures. Neither is
+reported as a production defect.
+
+Raw evidence is local: `/tmp/tpf-durable-candidate52-{baseline,probe}.log`,
+`/tmp/tpf-integrated-admission-generation-{red,green}.log`,
+`/tmp/await-contracts-final-spi-verify.log`, `/tmp/await-runtime-final-focused.log`;
+the independent consultation is `/tmp/tpf-aws-durable-completion-adequacy.md`.
+Unchanged transaction-probe SHA-256 across red/green:
+`25b3ddb96c286641608e2bf0f4c9524124c596c1e2c4ea783f8d06465e02ef04`.
+Historical paging-only local SPI JAR SHA-256:
+`2aac15cbe9c24fa5e129cd515ba4dea1480ce9287f90a74eee71239412a4e545`.
+These hashes distinguish executed local artifacts from a Git revision or published release.
+
+Timing is retrospective: frozen obligations preceded new realization; the independent
+transaction challenge followed inspection of a passing repair and exposed an ineffective
+storage fake. The ordinary candidate suite did not detect the admission gap. The prior
+first-100 historical lookup hypothesis is not evidence against the scalar primary-interaction
+path, which already uses a targeted semantic read. An unbounded full-unit lookup is an
+ineffective alternative for a bounded action. Additional paging identity/order challenges
+were investigated after implementation inspection, with raw red/green logs at
+`/tmp/tpf-integrated-await-paging-{red,green}.log`.
+
+The new paging SPI's initial global tuple-order promise was an implementation-era
+overconstraint: legacy Dynamo physical index order does not satisfy it for prefix/delimiter
+identities. Original D-AWAIT acceptance requires complete bounded traversal and correct
+interaction selection, not the globally smallest pending item. Independent consumer review
+confirmed native selection compares only one page, point-reads selected status and never
+uses exhaustion as completion. The API now explicitly promises stable provider order,
+complete unchanged-unit enumeration, lifecycle-stable positions and scoped continuation,
+without a cross-page snapshot. Memory uses a typed tuple; Dynamo retains its existing index
+and complete last-evaluated key. This deliberate unpublished contract correction does not
+relax member completeness or require unrelated legacy index migration.
+
+Cloud spend and resources created: zero. Local elapsed execution is available in logs;
+CI billing, LLM billing and human effort are unavailable. Existing Search E2E applies and
+destroys a different Lambda stack; it is configuration precedent, not evidence for this
+Durable deployment or its cost. GitHub environment `aws-durable-proof` currently has no
+protection rules. Protected exact-candidate AWS conformance, released cross-repository
+compatibility, suspended concurrent-item consequences, retained version/key migration,
+live scoped completion/repair observations, callback/resume metrics and alarm delivery, live operation/state/version measurements and released compiler HTTP streaming compatibility remain
+unsatisfied. The checklist below deliberately remains independent of implementation progress.
+
 - [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
 - [ ] All four production coordinates published and BOM/candidate closure verified without proof runtime substitutes.
 - [ ] Conditional, occurrence-aware generation protocol proves replay, conflict and stale fencing under randomized races.
