@@ -105,7 +105,7 @@ flowchart TB
     UNCERTAIN --> START
 ```
 
-This diagram describes targeted replacement when the required retained locator
+This diagram describes targeted replacement when both the retained locator
 and semantic checkpoint are available. Loss of the retained locator, concurrent
 completion and production conformance remain support gates below. A generation
 claim alone does not finish recovery. Normal wake-up uses Streams; reconciliation

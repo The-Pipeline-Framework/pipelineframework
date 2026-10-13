@@ -647,8 +647,11 @@ Command (runtime checkout): `./mvnw -pl :pipelineframework-aws-durable-coordinat
 Selected XML reports and per-module totals are retained in
 `/tmp/tpf-durable-completion-final-host-proof-results`; the class-prefix filter
 excludes three stale, unselected `LambdaAwsDurableProviderExecutionInspectorTest`
-reports. This gate skips integration tests and does not include the retained failing
-native reissue probe. It is bounded passing evidence, not acceptance certification.
+reports. This gate skips integration tests. The earlier
+`AwaitCompletionReopenedAdmissionTest` failure is historical and resolved: the
+corrected reissue gate passed the reopened-admission unit and physical cases
+recorded above. This host/proof gate is bounded passing evidence, not acceptance
+certification.
 Documentation tests (36), the full documentation build and its 64 public-content
 checks also passed; logs: `/tmp/tpf-durable-completion-docs-final-{tests,build}.log`.
 
@@ -859,6 +862,70 @@ require CI evidence; these focused results do not establish production acceptanc
 Local resources were disposable Docker/LocalStack only, with no real-AWS execution,
 cloud resource creation, deployment or spend. README and initial-obligations changes
 remain excluded from the coordinated PRs.
+
+### Proof ownership and reviewable runtime stack, 13 October 2026
+
+The user-authorized relocation moves `aws-durable-proof`, `spring-smoke-tests` and
+`spring-blocking-smoke-tests` to examples #20. ADR 0072 refines the generated-application
+proof boundary; runtime implementation tests remain with their semantic owner. This is
+retrospective verification with prior implementation and CI-failure knowledge, reusing
+the D/E/F obligations above rather than redefining acceptance. Independent adequacy owner
+`/root/split_adequacy` found no confirmed relocation blocker; human acceptance remains
+with the user. Its review is bounded to ownership, source coupling and evidence provenance.
+
+Runtime review is a linear stack: [#56](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/56)
+relocation (88 files, `d656de469d261f243d3e042b587a818383141247`),
+[#57](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/57)
+portable Await repairs (66 files, `b7754c9bfbd7da907eab7146716138fd7d552ed6`), and
+[#58](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/58)
+AWS host changes (49 files, `bba0bd15aacfad952e4ca4e83209b2a89cfa8137`). Each is below
+CodeRabbit's observed 100-file cap. The top tree exactly equals the retained coordinated
+snapshot (`99092cef0a4bfac8708253434fdc6f88bd0b4a30`); these layers require one top-of-stack
+exact compatibility result and must not be merged separately. The original commits remain
+recoverable in local `codex/aws-durable-pre-stack`.
+
+The move exposed two invalid source-location assumptions: evidence inferred the runtime
+SHA from the proof checkout, and an offline template check read sibling runtime source.
+Production bundle preparation now requires the runtime build SHA, separately records
+`examplesRevision`, and requires explicit runtime cleanliness attestation. Promotion checks
+both producer and component identities. Offline tests consume the exact deployment JAR.
+Two provenance regressions passed after their missing-capability red controls; the
+original production scenario/support gates remain unchanged. The existing protected
+workflow also moves to examples, but its environment protection, role/OIDC trust and
+producer configuration still need owner configuration before any separately authorized
+AWS run. No workflow or deployment was dispatched.
+
+Deployment-free results: 10 Spring tests, 51 AWS proof Java tests and 62 Python conformance
+tests passed; the deployed AWS suite executed zero tests without a requested stack.
+Runtime publication checks passed seven regressions and verified 15 effective reactor
+projects. Docs passed 36 tests and 64 public-content build checks. Spring's 28 non-POM files
+and committed README bytes were preserved; local README content and initial-obligations
+edits remain excluded. GitNexus did not cover the moved/deleted files completely; explicit
+source manifests and tree equality supplement the graph result without treating its
+unseen callers as unaffected.
+
+Reproduce in examples after resolving the exact coordinated artifacts:
+`./mvnw -f aws-durable-proof/pom.xml verify -Dtpf.proof.stack= -Dmaven.repo.local="$PWD/.m2/repository"`
+and `./mvnw -pl spring-smoke-tests,spring-blocking-smoke-tests -am verify -Dmaven.repo.local="$PWD/.m2/repository"`.
+The first attempt selecting only the proof aggregator executed no child tests and is
+ineffective evidence. Stale locally cached host/deployment artifacts and a missing exec
+plugin caused setup failures; actual dependency fingerprints were then recorded and the
+real child reactor passed. Local logs/manifests remain under `/tmp/tpf-split-*` and
+`/tmp/tpf-proof-split-*`, not in source control.
+
+The provisioning repair's previous complete exact-set run
+[38377513976](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/38377513976)
+passed all six product shards, resolving the earlier examples/CSV failures. It covers
+runtime `23332dff2332b11d6d838ee4aa549277a0ccd4ef` and examples
+`f75e545ddc03d542b3f3f86d07fd2b94a0ac554a`, not the relocated heads. Fresh exact-stack CI
+is required. Automatic discovery selected runtime #58 and all three stack layers under
+set `auto-620d58288badbe8d2c7a`, revision
+`e12b04436b4b4c346c5eb1b95e5aaf3e643803e90f1e89169333e69c180f6ffa`,
+with examples `59ff431ccdfed0547c9e9539bfa8958c2be1437d`. Local CodeRabbit review
+of the host-only committed diff was blocked by organization membership (HTTP 403);
+hosted review was rate limited, so neither supplies a completed new review. Protected real-AWS F conformance and the unchecked acceptance gates below
+remain unproved. No merge, publication, deployment or real-AWS spend occurred; local
+execution timing is in the logs, while CI/LLM billing and human effort are unavailable.
 
 Cloud spend and resources created: zero. Local elapsed execution is available in logs;
 CI billing, LLM billing and human effort are unavailable. Existing Search E2E applies and
