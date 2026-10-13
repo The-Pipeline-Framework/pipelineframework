@@ -82,6 +82,7 @@ publication and the distinction from immutable test and release inputs.
 | [0068](./0068-main-consumes-active-snapshots.md) | Make `main` consume active development snapshots while immutable compatibility inputs remain explicit. |
 | [0069](./0069-aws-durable-hosts-mechanical-coordination.md) | Prefer AWS Durable for mechanical `QUEUE_ASYNC` coordination while TPF retains semantic authority. |
 | [0070](./0070-generated-owned-payload-http-boundaries.md) | Generate authorised HTTP upload and download boundaries around canonical payload references. |
+| [0071](./0071-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
 
 ## Maintenance
 
