@@ -820,6 +820,46 @@ without a cross-page snapshot. Memory uses a typed tuple; Dynamo retains its exi
 and complete last-evaluated key. This deliberate unpublished contract correction does not
 relax member completeness or require unrelated legacy index migration.
 
+### Coordinated CI provisioning follow-up, 13 October 2026
+
+Compatibility run [38328228077](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/38328228077)
+built the exact coordinated candidates successfully, but the examples and application
+shards failed. The packaged OpenAPI callback returned 503 after restart, and CSV SQS
+completion transactions raised `ResourceNotFoundException`. The lifecycle protocol
+introduced a required table without updating those consumers' provisioning; native
+owner tests already provisioned it, so their passing results missed this dependency.
+
+The repaired example provisions `tpf_await_completion_lifecycle` with string `pk`/`sk`
+keys plus the two recovery indexes used by current native stores. CSV's existing
+bootstrap already has both recovery indexes; it now also creates the lifecycle table
+and selects it explicitly in all three Dynamo-configured hosts. The historical AWS
+proof template owns the same table and supplies its reference through the inherited
+action environment. The production template continues to require an externally owned
+table and its semantic IAM/KMS permissions; no table is created by runtime code.
+
+The packaged callback was reproduced red with the current locally built runtime
+(one test, 503), then passed unchanged completion/restart/deduplication oracles after
+provisioning (one test, zero failures/errors/skips, 12.54 seconds). An earlier local
+pass used the old cached runtime `ac426a70...` and is ineffective evidence for the
+current protocol. Corrected dependency fingerprints are in
+`/tmp/tpf-ci-lifecycle-repro-dependencies.json`; the runtime fingerprint is
+`a3c19dc7a16087d847d77548b74c4706bfcdf5805265eb7df58de2151aacbde5`.
+Red XML/process logs are retained in `/tmp/tpf-ci-packaged-callback-current-red-results`;
+green output is `/tmp/tpf-ci-packaged-callback-repaired.log`.
+
+Reproduce in the examples worktree after resolving the coordinated set:
+`./mvnw -pl openapi-capability-proof/jobs -am verify -DskipUnitTests -Dit.test=PackagedJobCallbackIT -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+Actual LocalStack bootstrap and repeated bootstrap, conditional lifecycle primary-key
+write, strongly consistent query and cleanup passed; all eight CSV interaction indexes
+were ACTIVE. CSV launcher regressions passed eight tests. Runtime offline conformance
+remained green at 60 tests; historical-template lint passed with only inherited YAML
+merge warning `W1100` excluded. The plain SAM lint result including that warning is
+retained separately. Complete CSV HA and the expanded exact compatibility set still
+require CI evidence; these focused results do not establish production acceptance.
+Local resources were disposable Docker/LocalStack only, with no real-AWS execution,
+cloud resource creation, deployment or spend. README and initial-obligations changes
+remain excluded from the coordinated PRs.
+
 Cloud spend and resources created: zero. Local elapsed execution is available in logs;
 CI billing, LLM billing and human effort are unavailable. Existing Search E2E applies and
 destroys a different Lambda stack; it is configuration precedent, not evidence for this

@@ -10,6 +10,23 @@ The memory execution, await, and event-dispatch providers support this behavior 
 
 For modeling guidance, start with [Await Boundaries](/architecture/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
+## Durable completion storage
+
+With the Dynamo execution and Await providers, provision the table selected by
+`pipeline.orchestrator.dynamo.await-completion-lifecycle-table` before admitting
+completions. Its default name is `tpf_await_completion_lifecycle`, with string
+`pk` and `sk` partition/sort keys and no secondary index. It retains immutable
+completion admissions and exact parent-release acknowledgements alongside bounded
+outstanding-work projections. The interaction lookup table has a different key
+schema and cannot substitute for it. Completion and parent release require
+transaction permissions across their existing semantic tables and this table.
+
+Recovery also requires the interaction table's `await-interaction-by-execution`
+index (`query_execution_key` / `query_execution_sort`, both strings) and
+`await-interaction-continuation-work` index (`query_continuation_key` string /
+`query_continuation_due_epoch_ms` number), both with `ALL` projection.
+Provision these for ordinary queue-async hosts as well as AWS Durable hosts.
+
 ## Version 3 completion representation
 
 Version 3 generated completion modifiers keep business code on canonical domain types while their adapter
