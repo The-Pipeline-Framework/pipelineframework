@@ -1107,11 +1107,32 @@ remain open. The user explicitly kept the proposed ECS/Fargate consumer and trus
 production producer infrastructure expansion out of scope. Those dependent gates
 remain open; no deployment, publication, workflow dispatch or spend is authorized here.
 
-Final commands, source/artifact hashes, validation outcomes, limitations and local
-timings are retained in `/tmp/tpf-f-continuation-evidence.json`. Cloud resources and
-spend are zero; billed CI/LLM costs and human effort are unavailable. README and
-initial-obligations edits are excluded. Source preparation is not acceptance
-certification and does not change the checklist.
+The versioned [continuation evidence summary](/evidence/aws-durable/f-continuation-2026-10-15.json)
+retains the non-sensitive commands, prerequisites, all 16 evaluated source hashes,
+package hashes, outcomes, limitations and available timings. Its evaluated examples
+revision is `3cfb221b303b21e716da8b0130f7a687f44b33a7`; it does not depend on the
+temporary working copy. Reproduction requires Java 21 and the matching prewarmed
+engineering cache; that cache was not archived, so the commands do not promise a
+fresh offline build or byte-identical package reconstruction.
+
+| Recorded gate | Outcome | Available local timing |
+| --- | --- | --- |
+| Python procedure/oracle tests | 88 passed | 0.348 s |
+| Java fault-boundary / FUNCTION HTTP / COMPUTE HTTP controls | 17 / 6 / 5 passed; no failures, errors or skips | Unavailable |
+| Scalar/item packaging, CDI discovery and derived-template lint | Passed; packaging skipped tests; lint ignored only W1100 | Unavailable |
+| Documentation tests / build | 36 passed / 64 public-content checks passed; build preceded the final scope annotation | 446.8 ms / 83.14 s |
+
+The raw files are preserved separately in an owner-local restricted archive
+(directory mode 0700, bundle mode 0600), identified by
+`aws-durable/f-continuation-2026-10-15/continuation-evidence.tar.gz`.
+Its SHA-256 is `22a5e7363b00852a46f8aa34af7274641ac9ab2ce08c71d5965b129e0ca83ccd`;
+the summary records the receipt and retention limits. A shared access-controlled
+archive destination and link remain pending owner selection. Raw logs are not
+published in the public documentation, and no remote archive URL is claimed.
+
+Cloud resources and spend are zero; billed CI/LLM costs and human effort are
+unavailable. README and initial-obligations edits are excluded. Source preparation
+is not acceptance certification and does not change the checklist.
 
 - [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
 - [ ] All four production coordinates published and BOM/candidate closure verified without proof runtime substitutes.
