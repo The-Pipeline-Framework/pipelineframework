@@ -1,5 +1,41 @@
 # AWS Durable production completion plan
 
+## Current handoff — 15 October 2026
+
+TPF Cloud owns deployment and will exercise AWS Durable with CSV Payments over
+SQS HA as its first deployed application. Reuse that deployment for integration
+evidence; this work does not create a separate ECS/Fargate fixture or Cloud producer.
+
+| Owner | Next deliverable |
+| --- | --- |
+| Framework/proof work | Finish and review the local examples hardening; retain independent oracles and prepare the remaining provider-fault, retry/re-drive, release and migration checks |
+| Release owners | Establish the compatible published contracts/compiler/runtime/BOM set; merged source and engineering caches do not establish released closure |
+| TPF Cloud | Supply actual deployment/release identities, operation endpoints, scoped IAM/CMK/secret references, semantic-store readiness, and the real SQS consumer's identity and bounded pause/restore controls |
+| Joint verification | Adapt ownership checks to Cloud's actual deployment mechanism, run selected faults with explicit authority, and retain exact revisions/digests, native/provider outcomes and restoration evidence |
+
+The proof runner currently validates CloudFormation stack membership and disposable
+owner tags. Cloud's deployment must provide authentic equivalent ownership evidence;
+do not fabricate a stack ID or bypass the guard. Faults belong in an isolated test
+deployment, with scope and restoration agreed by the Cloud owner. Real callback
+expiry, throttling, history loss, generation races, retry exhaustion/re-drive,
+two-release recovery, version retirement, CMK/IAM and quota evidence remain open.
+
+Current state: coordinated repairs are merged. Local follow-up prepares five more
+procedures (4, 5, 6, 10 and pre-registration loss); 88 Python and 28 Java tests,
+fixture packaging/discovery and template checks pass. Examples follow-up source is
+`3cfb221b303b21e716da8b0130f7a687f44b33a7`. There are 25 prepared FUNCTION catalogue IDs and 13 missing/partial;
+all live production scenarios remain unexecuted. COMPUTE transition fault controls
+and suspended continuation need the real consumer supplied by Cloud.
+
+CSV's reported FUNCTION/REST union-DTO compilation failure is a separate compiler
+gap; the merged finite-stream repair does not resolve it. The earlier six HTTP
+404s also remain unexplained. A first successful Cloud deployment supplies
+integration evidence; full support acceptance still follows the checklist below.
+
+The remaining sections retain requirements, implementation decisions and evidence
+history. Use this handoff for current coordination rather than reconstructing it
+from the chronological audit.
+
 The AWS Durable architecture is settled by ADR-0069. Complete the supported host already merged in runtime PR #34; do not extract another host or revisit semantic decomposition. The bounded, idempotent, recoverable action prerequisite is established. Durable facts must be replayed through inspection, reconciliation of missing consequences, and checkpoint convergence before work is retired.
 
 ## Baseline and audit result
@@ -1009,6 +1045,96 @@ protection rules. Protected exact-candidate AWS conformance, released cross-repo
 compatibility, suspended concurrent-item consequences, retained version/key migration,
 live scoped completion/repair observations, callback/resume metrics and alarm delivery, live operation/state/version measurements and released compiler HTTP streaming compatibility remain
 unsatisfied. The checklist below deliberately remains independent of implementation progress.
+
+### F continuation after coordinated merge, 14–15 October 2026
+
+This is retrospective source preparation over examples `57505eb9fba2b0cb6345cdf174397ad670f5cb67`,
+runtime `3414933c76f4fb3e46a66fe9c248ea684b069f61`, and documentation
+`e77b2324e959c4810fb6b5d01711b7bfa6afd7e9`. The original pinned requirements,
+historical scenario catalogue and unchecked acceptance below remain authoritative.
+The lead disclosed prior repair/404 knowledge. Independent adequacy for these
+changes belongs to `/root/f_compute_controls`; the user retains acceptance.
+
+| Obligation from §§7–8 / historical catalogue | Preparation and forbidden false positive |
+| --- | --- |
+| 4/5: work failure before admission / commit before lost acknowledgement | Fixture delegates the real `AwsDurableWorkItemHandler`/`SqsWorkItemAction`; claims correlate authentic queue body, tenant and execution. For 5, production control-plane point reads must observe matching committed first-Await state **before** the fault claim. Eventual progress after a no-op ACK cannot prove this order |
+| 6: transition response before lost acknowledgement | Isolate the existing AFTER_ACK cut, without injecting scenario-7 duplicates; require correlated native authenticated-response acceptance with attempt unchanged and pinned final output |
+| 10: completion before binding | Pause both owned Stream mappings, observe real semantic COMPLETED while binding/delivery remain absent and provider callback remains unresolved, restore and require production binding, receipt and pinned convergence |
+| Pre-registration provider loss | Immutable fixture HOLD blocks every registration retry before forwarding; retain authentic request/history/RECOVERY evidence, stop provider, release, run production repair and require successor authority. An explicit post-fence predecessor replay must return the exact typed stale-generation failure. Legitimate earlier predecessor rows may remain |
+| Exact artifacts, semantic replay and item order | Match all ten manifested host roles and deployed code digests to inspected coordinator/action packages; bind scenario-12 replay to its checked manifest host, follow empty Stream pages with fair bounded traversal, and require numeric item order for both 3 and 101 results |
+
+New probes confirmed ineffective oracles: reordered item output passed the old
+sorted-membership check; valid empty Stream pages hid later records; foreign
+tenant/correlation or replay targets could supply unrelated acknowledgements;
+missing/incorrect host-package identities passed numeric-version-only checks.
+Red/green logs are `/tmp/tpf-f-observation-{red,green}.log`,
+`/tmp/tpf-f-replay-target-{red,green}.log` and
+`/tmp/tpf-f-host-identity-{red,green}.log`. Independent reconstruction also showed
+scenario 5 accepting an early no-op ACK followed by another delivery's eventual
+commit. The repaired fixture reads authoritative committed state before claiming;
+`/tmp/tpf-f-work-early-ack-{probe.py,red.log,green.log}` preserves that challenge.
+The initial scenario-6 TypeError and intermediate tests run during worker edits
+are harness/integration failures, not historical production defects.
+
+Preparation now covers 25 FUNCTION catalogue IDs, leaving 13 missing/partial:
+13, 14, 17, 20, 21, gsi-lag, history-pagination, retained-version-cleanup,
+cmk-iam-failures, operation-budget-exhaustion, seeded-generation-races,
+provider-history-loss and release-version-pinning. COMPUTE also lacks transition
+6/7 and suspended-continuation controls. Its current generated fixture proves
+HTTP/SSE, disables the SQS server and supplies no owned consumer/pause resource.
+Repeating deterministic generation fencing does not prove the historical seeded
+callback/throttling races. All live production scenarios remain unexecuted.
+
+The work/transition templates have an explicit composite with both fixture
+manifests retaining the original production SAM digest. Packaging/discovery is
+still engineering evidence; operation URLs default to UNCONFIGURED. The standalone
+action-proxy stack is rejected by the new HOLD membership check; an integrated
+owned fixture or separately adjudicated auxiliary-stack authority is required.
+The existing AWS workflow consumes promotion reports but has no production
+execution producer. The relocated examples repository exposes no GitHub
+environments, so protection/role configuration has not moved with the proof.
+
+Release closure is blocked independently: runtime snapshot
+[38635754617](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/actions/runs/38635754617)
+failed on Central connection reset; BOM snapshot
+[38636067496](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/38636067496)
+failed because no GPG secret key was available. Compiler/contracts publishers
+succeeded, which cannot substitute for the coordinated released set. No publisher
+was retried. The earlier HTTP 404 remains unexplained; later passing controls
+cannot establish its cause. Retained-record/key migration, two-release recovery,
+version retirement authority, CMK faults, live quota measurements and cleanup
+remain open. The user explicitly kept the proposed ECS/Fargate consumer and trusted
+production producer infrastructure expansion out of scope. Those dependent gates
+remain open; no deployment, publication, workflow dispatch or spend is authorized here.
+
+The versioned [continuation evidence summary](/evidence/aws-durable/f-continuation-2026-10-15.json)
+retains the non-sensitive commands, prerequisites, all 16 evaluated source hashes,
+package hashes, outcomes, limitations and available timings. Its evaluated examples
+revision is `3cfb221b303b21e716da8b0130f7a687f44b33a7`; it does not depend on the
+temporary working copy. Reproduction requires Java 21 and the matching prewarmed
+engineering cache; that cache was not archived, so the commands do not promise a
+fresh offline build or byte-identical package reconstruction.
+
+| Recorded gate | Outcome | Available local timing |
+| --- | --- | --- |
+| Python procedure/oracle tests | 88 passed | 0.348 s |
+| Java fault-boundary / FUNCTION HTTP / COMPUTE HTTP controls | 17 / 6 / 5 passed; no failures, errors or skips | Unavailable |
+| Scalar/item packaging, CDI discovery and derived-template lint | Passed; packaging skipped tests; lint ignored only W1100 | Unavailable |
+| Documentation tests / build | 36 passed / 64 public-content checks passed; build preceded the final scope annotation | 446.8 ms / 83.14 s |
+
+The raw files are preserved separately in an owner-local restricted archive
+(directory mode 0700, bundle mode 0600), identified by
+`aws-durable/f-continuation-2026-10-15/continuation-evidence.tar.gz`.
+Its SHA-256 is `22a5e7363b00852a46f8aa34af7274641ac9ab2ce08c71d5965b129e0ca83ccd`;
+the summary records the receipt and retention limits. The user selected local
+archival on 15 October 2026; resolve this archive ID under `~/.codex/artifacts/`.
+The committed summary is the handoff record, with raw logs retained as an optional
+fallback for investigating historical results. No shared archive or remote URL is
+required by this retention decision; live acceptance gaps remain unchanged.
+
+Cloud resources and spend are zero; billed CI/LLM costs and human effort are
+unavailable. README and initial-obligations edits are excluded. Source preparation
+is not acceptance certification and does not change the checklist.
 
 - [x] Prerequisite #37 merged; bounded semantic operations retain restart/convergence coverage. Exact candidate inclusion is required again for each production conformance run.
 - [ ] All four production coordinates published and BOM/candidate closure verified without proof runtime substitutes.
