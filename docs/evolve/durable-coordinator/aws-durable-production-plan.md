@@ -22,8 +22,8 @@ two-release recovery, version retirement, CMK/IAM and quota evidence remain open
 
 Current state: coordinated repairs are merged. Local follow-up prepares five more
 procedures (4, 5, 6, 10 and pre-registration loss); 88 Python and 28 Java tests,
-fixture packaging/discovery and template checks pass. These follow-up changes are
-uncommitted. There are 25 prepared FUNCTION catalogue IDs and 13 missing/partial;
+fixture packaging/discovery and template checks pass. Examples follow-up source is
+`3cfb221b303b21e716da8b0130f7a687f44b33a7`. There are 25 prepared FUNCTION catalogue IDs and 13 missing/partial;
 all live production scenarios remain unexecuted. COMPUTE transition fault controls
 and suspended continuation need the real consumer supplied by Cloud.
 
