@@ -227,6 +227,14 @@ Keep each numbered Durable function version for at least the longest supported e
 
 The reference template retains the Durable function, numbered versions and callback binding table on stack deletion or replacement. Retained resources require explicit cleanup after all executions and their recovery windows have expired. Retain the compatible action and worker packages as well: a retained coordinator version alone does not protect an unqualified action target from a later deployment. Validate action-version and replacement-generation release compatibility before moving an alias.
 
+Each host writes through `LoggingConfig.LogGroup` to its retained, encrypted group
+under `/tpf/aws-durable/<stack-name>/<stack-instance>/<host>`. The stack-instance suffix
+comes from `AWS::StackId`, so updates preserve the destination and a newly created stack
+uses a separate name. Existing Lambda-created `/aws/lambda/...` groups remain available
+for historical logs. Authorize CloudWatch Logs to use the host KMS key for the new group
+ARNs before upgrading, and retain old groups through the recovery window before cleanup.
+Function retention and cleanup requirements above still apply.
+
 ### Semantic table upgrade
 
 Before enabling the AWS Durable host against an existing Await interaction table, add these `ALL`-projected indexes and wait until both report `ACTIVE`:

@@ -961,6 +961,46 @@ set. It precedes these review fixes and cannot certify their new heads. The thre
 runtime stack and original D/E/F acceptance boundary remain unchanged; fresh exact-head
 compatibility and protected real-AWS conformance remain separate gates.
 
+### PR 58 logging and secret-gate follow-up, 14 October 2026
+
+Verified review hints against runtime `10f5e10693c39e1fb2d90aee44b5bbf8643f10e1`.
+The no-marker path admitted isolated secret-version/plaintext settings and an empty
+compact deployment object; new parameterized tests reproduced six failures before the
+repair. It now rejects deployment-owned secret references, versions, plaintext/ref signing
+keys and compact configuration before any secret read, while a wholly unconfigured
+ordinary build remains inert. This guard does not reinterpret generic runtime settings
+as deployment ownership. Both existing pinned-secret success/failure tests remain active.
+
+All ten host functions now explicitly route `LoggingConfig.LogGroup` to retained,
+encrypted TPF log groups scoped by stack name and the stack ID instance suffix. The
+logging regression covers destination linkage, unique names and stack-instance selection;
+existing retention/encryption/alarm checks remain. The explicit refs establish creation
+order, so redundant `DependsOn` entries were removed. The three focused classes passed
+37 tests; offline CloudFormation lint passed with only the inherited YAML merge warning
+`W1100` excluded. AWS's [logging configuration contract](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-function-loggingconfig.html)
+and [stack ID contract](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html#cfn-pseudo-param-stackid)
+were checked. Runtime fix commit is `479a0f503b7a9bb6ab51aa9d93f265006ae359f4`.
+No live AWS logging or upgrade outcome is inferred from these deployment-free checks.
+
+Compatibility run [38551365739](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/38551365739)
+failed the executed owned-payload HTTP fixture/source-equality check. Its deterministic
+compiler merge `481dfe4f780b9249d73b6ffa5c49f0f04f08d9ea` combined PR #30 head
+`24c3ee185c2b472da88fa575c598df9eb56fdf98` with base
+`31cb08389ffbe47d7aac20203cb70e449e302831`, which emitted the newer raw multipart
+upload. A minimal fixture refresh passed the unchanged equality oracle against that
+exact renderer. During verification the compiler base advanced to
+`6f1b85582590e1cb1a03775f2add47b3b7411862`; its renderer is byte-identical to the
+original PR-head renderer and again matches the original fixture. The temporary refresh
+was reverted instead of freezing historical output. Both source and HTTP fixture tests
+passed against the restored shape; exact compatibility must be rerun on current bases.
+This is a changed-baseline outcome, not permission to weaken the source-equality oracle.
+
+Raw red/green reports and lint results remain under `/tmp/tpf-pr58-*`; the exact earlier
+renderer oracle receipt is `/tmp/tpf-owned-payload-exact-merge-renderer/validation-receipt.json`.
+Independent inspection confirmed the log linkage/encryption/retention and inert empty
+configuration path. Broader direct-setting validation remains outside this secret-gate
+repair. The original acceptance checklist and protected real-AWS gates remain open.
+
 Cloud spend and resources created: zero. Local elapsed execution is available in logs;
 CI billing, LLM billing and human effort are unavailable. Existing Search E2E applies and
 destroys a different Lambda stack; it is configuration precedent, not evidence for this
