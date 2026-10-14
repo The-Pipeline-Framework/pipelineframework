@@ -1126,9 +1126,11 @@ The raw files are preserved separately in an owner-local restricted archive
 (directory mode 0700, bundle mode 0600), identified by
 `aws-durable/f-continuation-2026-10-15/continuation-evidence.tar.gz`.
 Its SHA-256 is `22a5e7363b00852a46f8aa34af7274641ac9ab2ce08c71d5965b129e0ca83ccd`;
-the summary records the receipt and retention limits. A shared access-controlled
-archive destination and link remain pending owner selection. Raw logs are not
-published in the public documentation, and no remote archive URL is claimed.
+the summary records the receipt and retention limits. The user selected local
+archival on 15 October 2026; resolve this archive ID under `~/.codex/artifacts/`.
+The committed summary is the handoff record, with raw logs retained as an optional
+fallback for investigating historical results. No shared archive or remote URL is
+required by this retention decision; live acceptance gaps remain unchanged.
 
 Cloud resources and spend are zero; billed CI/LLM costs and human effort are
 unavailable. README and initial-obligations edits are excluded. Source preparation

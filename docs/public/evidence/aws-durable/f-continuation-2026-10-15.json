@@ -205,13 +205,15 @@
     "Compiler source provenance for reused engineering cache is not attested by this continuation; successful generated HTTP tests are binary behavior evidence"
   ],
   "rawEvidence": {
-    "status": "Preserved in an owner-local access-controlled archive; shared archive destination pending",
+    "status": "Preserved in the owner-local access-controlled archive selected by the user on 2026-10-15",
     "archiveId": "aws-durable/f-continuation-2026-10-15/continuation-evidence.tar.gz",
     "sha256": "22a5e7363b00852a46f8aa34af7274641ac9ab2ce08c71d5965b129e0ca83ccd",
     "fileCount": 22,
     "missingFileNames": [],
     "access": "Owner-local archive directory mode 0700; archive mode 0600; no raw files published to this public documentation",
-    "sharedUrl": null
+    "sharedUrl": null,
+    "localRoot": "~/.codex/artifacts/",
+    "retentionDecision": "Local archival is sufficient; no shared destination or remote URL required. The versioned summary is the handoff record; raw logs are an optional historical investigation fallback."
   },
   "adequacy": "Independent bounded review by /root/f_compute_controls; user owns acceptance; no live AWS certification"
 }
