@@ -83,6 +83,8 @@ publication and the distinction from immutable test and release inputs.
 | [0069](./0069-aws-durable-hosts-mechanical-coordination.md) | Prefer AWS Durable for mechanical `QUEUE_ASYNC` coordination while TPF retains semantic authority. |
 | [0070](./0070-generated-owned-payload-http-boundaries.md) | Generate authorised HTTP upload and download boundaries around canonical payload references. |
 | [0071](./0071-diskless-owned-payload-delivery.md) | Stream COMPUTE payloads directly and delegate FUNCTION payload bytes to S3 under the same owned reference contract. |
+| [0072](./0072-generated-application-proofs-consume-released-runtime-artifacts.md) | Keep generated Spring and AWS Durable application proofs in examples over released runtime artifacts. |
+| [0073](./0073-await-unit-occurrences-bind-completion-release.md) | Bind completion admission and parent release to one retained Await unit occurrence. |
 
 ## Maintenance
 

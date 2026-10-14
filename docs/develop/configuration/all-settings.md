@@ -275,6 +275,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.dynamo.execution-payload-table` | string | `tpf_execution_payload` | DynamoDB table used for immutable manifests and byte chunks when an execution payload is not stored inline. |
 | `pipeline.orchestrator.dynamo.await-interaction-table` | string | `tpf_await_interaction` | DynamoDB table used for durable await interaction rows. |
 | `pipeline.orchestrator.dynamo.await-interaction-key-table` | string | `tpf_await_interaction_key` | DynamoDB table used for await idempotency and correlation lookup keys. |
+| `pipeline.orchestrator.dynamo.await-completion-lifecycle-table` | string | `tpf_await_completion_lifecycle` | DynamoDB table for immutable completion admissions, parent-release acknowledgements and outstanding-work projections; provision string `pk`/`sk` keys before accepting completions. |
 | `pipeline.orchestrator.dynamo.region` | string | none | Optional DynamoDB region override. |
 | `pipeline.orchestrator.dynamo.endpoint-override` | string | none | Optional DynamoDB endpoint override (local/dev). |
 | `pipeline.orchestrator.sqs.region` | string | none | Optional SQS region override. |
