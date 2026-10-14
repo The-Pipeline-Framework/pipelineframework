@@ -927,6 +927,40 @@ hosted review was rate limited, so neither supplies a completed new review. Prot
 remain unproved. No merge, publication, deployment or real-AWS spend occurred; local
 execution timing is in the logs, while CI/LLM billing and human effort are unavailable.
 
+### PR 57 review follow-up, 14 October 2026
+
+Review hints were verified against runtime layer `b7754c9bfbd7da907eab7146716138fd7d552ed6`.
+New regressions reproduced terminal-unit store calls, timeout sweep abortion after one
+interaction failure, and synchronous client-key checkpoint validation during assembly.
+The repair skips terminal-unit writes and repeat telemetry while retaining admission
+release, defers client-key validation/admission, and isolates each timeout attempt.
+Failed consequences remain unacknowledged; later retained and newly due records continue
+within the original cap. Discovery failures still fail the sweep. Crash-cut tests retain
+their authoritative state and later-convergence oracles under the new per-record policy.
+The focused gate passed 138 tests with no failures/errors/skips:
+`./mvnw -o -pl runtime -Dtest=AwaitCoordinatorCompletionTest,AwaitTimeoutFlowTest,ExecutionReadModelTest,AwaitItemContinuationRecoveryTest,QueueAsyncCoordinatorTest -Dsurefire.failIfNoSpecifiedTests=false test -Dmaven.repo.local="$PWD/.m2/repository"`.
+The actual Dynamo recovery suite also passed 15 tests with zero failures/errors/skips
+(19.1 seconds), using `./mvnw -o -pl runtime verify -DskipUnitTests -Dit.test=AwaitItemContinuationRecoveryIT -Dfailsafe.failIfNoSpecifiedTests=false -Dmaven.repo.local="$PWD/.m2/repository"`.
+The independent bounded adequacy owner `/root/lifecycle_upgrade_finding` found no
+consequential blocker in these fixes; human acceptance remains unchanged. Runtime
+review fixes are in `d4ac27de1d66ad953f6b8a404ce14a7960aa36e4` (#57), propagated to
+`10f5e10693c39e1fb2d90aee44b5bbf8643f10e1` (#58), with the same 66/49-file layer diffs.
+Logs and the initial red XML are retained under `/tmp/tpf-pr57-*`.
+
+The infrastructure finding is already addressed by examples' proof table and CSV's
+bootstrap; the runtime template deliberately takes externally provisioned semantic-table
+ARNs. The Await setup page now explicitly orders table creation, ACTIVE verification,
+transaction permissions and host rollout for an existing deployment. No duplicate semantic
+table ownership or deployment was introduced. PR 1025 was rebased onto current main;
+its unmerged Await occurrence ADR moved to 0073 because main already owns 0071 for diskless
+payload delivery. Both decisions and their rationale remain intact.
+
+Exact-stack run [38385366477](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/38385366477)
+passed the relocated `e12b04436b4b4c346c5eb1b95e5aaf3e643803e90f1e89169333e69c180f6ffa`
+set. It precedes these review fixes and cannot certify their new heads. The three-layer
+runtime stack and original D/E/F acceptance boundary remain unchanged; fresh exact-head
+compatibility and protected real-AWS conformance remain separate gates.
+
 Cloud spend and resources created: zero. Local elapsed execution is available in logs;
 CI billing, LLM billing and human effort are unavailable. Existing Search E2E applies and
 destroys a different Lambda stack; it is configuration precedent, not evidence for this

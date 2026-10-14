@@ -28,7 +28,7 @@ convergence before reporting release or retiring an outstanding projection.
 Provider callbacks, generation claims, history and best-effort telemetry cannot
 establish these semantic facts. Missing historical coverage or timestamps remain
 unknown; current membership and clocks cannot supply the missing relation. The
-[Await occurrence decision](./0071-await-unit-occurrences-bind-completion-release.md)
+[Await occurrence decision](./0073-await-unit-occurrences-bind-completion-release.md)
 defines the retained cause and exact unit identity that carry this coverage.
 
 ## Rationale
