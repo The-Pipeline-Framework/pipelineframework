@@ -21,6 +21,14 @@ outstanding-work projections. The interaction lookup table has a different key
 schema and cannot substitute for it. Completion and parent release require
 transaction permissions across their existing semantic tables and this table.
 
+Before upgrading an existing Dynamo-backed deployment to this completion lifecycle,
+create `tpf_await_completion_lifecycle` (or the configured name) with the schema above,
+wait until the table is active, and grant the runtime role transaction access. Complete
+these steps before rolling out hosts that admit Await completions or acknowledge parent
+release. Runtime code does not create the table; an existing interaction lookup table
+cannot replace it. For AWS Durable hosting, include its exact ARN in
+`SemanticDynamoResourceArns` as described in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable).
+
 Recovery also requires the interaction table's `await-interaction-by-execution`
 index (`query_execution_key` / `query_execution_sort`, both strings) and
 `await-interaction-continuation-work` index (`query_continuation_key` string /
