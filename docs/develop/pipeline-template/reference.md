@@ -6,6 +6,9 @@ connects the template to TPF's Functional Core, Imperative Shell model, start wi
 
 Version 3 describes a pipeline in domain terms. A type says what business value is moving through the pipeline; a step says how that value changes. Protobuf tags, generated bindings, and transport representations are compiler-owned infrastructure.
 
+The pipeline template defaults to version 3 when `version` is omitted. Declare `version: 3`
+when the dialect should remain clear to readers and tooling.
+
 ```mermaid
 flowchart LR
     T[Canonical types] --> P[Typed steps]
