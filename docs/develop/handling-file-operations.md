@@ -12,8 +12,8 @@ This guide explains how to handle file operations such as downloads and uploads 
 
 Version 3 templates can declare HTTP boundaries around an ordinary typed Pipeline. Each declaration
 names a record field of type `payload_ref`, an existing bound Object Publish target or Object Ingest
-source, media types, and an authorisation scope. The initial generated shape requires REST transport
-and the COMPUTE platform.
+source, media types, and an authorisation scope. REST/COMPUTE uses a direct HTTP stream;
+REST/FUNCTION requires an S3 object provider and delegates payload bytes to S3.
 
 ```yaml
 httpPayloads:
@@ -34,16 +34,52 @@ httpPayloads:
     authorizationScope: invoice.read
 ```
 
-The generated upload route is `POST /tpf/payloads/invoice-file/upload`. Send one multipart `file`
-part. The response contains the provider-issued reference under `payload_ref`; submit that value
-through the Pipeline's usual typed admission route. Uploading does not start a Pipeline execution.
-Quarkus stages the multipart file in temporary storage before the generated adapter reads it in
-bounded chunks. Set `quarkus.http.limits.max-body-size` above the largest declared `maxBytes` plus
-multipart framing, and size the temporary upload directory for concurrent requests. The adapter
-still enforces each boundary's own limit before committing an object.
+On COMPUTE, the generated upload route is `POST /tpf/payloads/invoice-file/upload`.
+Send one multipart `file` part. The adapter reads the live request stream, checks its
+framing with bounded headers, and waits for each Connector write before reading more
+bytes. It creates no payload temporary file. Set `quarkus.http.limits.max-body-size`
+above the largest declared `maxBytes` plus multipart framing; the boundary also
+enforces its own limit. The response contains the provider-issued reference under
+`payload_ref`; submit that value through the Pipeline's usual typed admission route.
+Uploading does not start a Pipeline execution.
 The generated download route is `POST /tpf/payloads/invoice-result/download`, with the owned
 `PayloadReference` as its JSON body. It streams the content with a private, non-cacheable response.
 Byte-range requests receive HTTP 416 in this version.
+
+On FUNCTION, the generated upload boundary is a small control API:
+
+1. `POST /tpf/payloads/invoice-file/upload/initiate` with JSON
+   `{ "contentType": "application/pdf", "bytes": 6291456, "sha256": "<64 hex digits>",
+   "idempotencyKey": "client-stable-key" }`. It returns a signed reservation token, part size,
+   and expiry. Repeating the call with the same key and owner returns the reservation.
+2. `POST .../upload/part` with `{ "token": "...", "partNumber": 1 }` returns a
+   short-lived URL for that S3 part. Upload each part directly to S3, with every part
+   except the last exactly the returned part size.
+3. `POST .../upload/complete` with `{ "token": "..." }` verifies S3's actual parts,
+   size, and SHA-256, then returns the owned reference under `payload_ref`.
+   `POST .../upload/abort` with the same body cancels an unfinished upload.
+
+The FUNCTION download route accepts the owned reference as JSON and returns a
+five-minute S3 GET capability with expected byte count and SHA-256. The client checks
+those values while consuming the response. The URL is a temporary transport credential;
+only the returned `PayloadReference` can be submitted to a Pipeline or used for another
+authorised download request. S3 may serve byte ranges through its capability even though
+the COMPUTE route itself rejects `Range`.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Boundary as Generated FUNCTION boundary
+    participant S3
+    Client->>Boundary: Initiate with size, SHA-256, owner and idempotency key
+    Boundary-->>Client: Signed reservation
+    Client->>Boundary: Request part capability
+    Boundary-->>Client: Short-lived part URL
+    Client->>S3: Upload part bytes directly
+    Client->>Boundary: Complete reservation
+    Boundary->>S3: List parts and stream checksum verification
+    Boundary-->>Client: Owned PayloadReference
+```
 
 Both routes require an authenticated principal and exactly one application or host
 `PayloadBoundaryAuthorizer` bean. The `X-Tenant-Id` and `X-Scope-Id` headers are untrusted requests;

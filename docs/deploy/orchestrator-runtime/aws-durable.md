@@ -77,9 +77,19 @@ provider history does not prove that every semantic consequence has finished.
 ## Recovery when provider history is lost
 
 TPF's execution identity and pinned Release survive replacement of the provider
-execution. The current recovery path reads the semantic Await checkpoint through
-`PipelineControlPlane`, fences the old generation and starts a deterministic new
-generation. It retries an uncertain start using the same identity.
+execution. Recovery reads current semantic state through `PipelineControlPlane`,
+fences the old generation and starts a deterministic new generation. It retries
+an uncertain start using the same identity.
+
+The completion candidate retains a mechanical admission locator before submitting
+to TPF and an execution locator after admission. If submission commits but its
+acknowledgement or the later locator is lost, TPF resolves the existing execution
+using its normalised client-key lookup. Recovery checks pipeline, contract and
+Release identity before starting a replacement. An absent admission retries;
+it does not permit another submission or re-drive. This path requires an explicit
+client-key idempotency policy. Input-derived keys need a separately supported
+recovery contract. The candidate remains subject to the production conformance
+and coordinated release gates in the [production plan](/evolve/durable-coordinator/aws-durable-production-plan).
 
 ```mermaid
 flowchart TB
@@ -95,9 +105,9 @@ flowchart TB
     UNCERTAIN --> START
 ```
 
-This diagram describes the existing targeted replacement path when the required
-mechanical locator and semantic checkpoint are available. Recovery after missing
-mechanical rows and concurrent/itemised Await handling remain support gates below. A generation
+This diagram describes targeted replacement when both the retained locator
+and semantic checkpoint are available. Loss of the retained locator, concurrent
+completion and production conformance remain support gates below. A generation
 claim alone does not finish recovery. Normal wake-up uses Streams; reconciliation
 repairs exceptional failures.
 
@@ -136,6 +146,22 @@ Pass `-Apipeline.coordination.host=AWS_DURABLE` to compilation. The compiler req
 
 The deployment artifact `pipelineframework-aws-durable-coordination-deployment` contains the reference SAM contract. It is a template resource, not an application runtime dependency.
 
+For generated REST step hosts with `pipeline.platform=FUNCTION`, a finite
+`ONE_TO_MANY` result is returned as one JSON array. The paired generated client
+reads that array and restores the typed `Multi` used by the pipeline. Ordinary
+`COMPUTE` REST step hosts retain their SSE response contract. This wire adaptation
+does not change cardinality, Await identity or continuation semantics. The FUNCTION
+bridge buffers to completion; it does not preserve incremental network delivery
+or backpressure across this HTTP boundary.
+
+The FUNCTION response must finish within the configured invocation/HTTP timeout
+and fit the host's memory and response-payload limits. An infinite result cannot
+complete this buffered bridge. Budget the entire JSON response, including the
+Lambda HTTP envelope; this path uses the ordinary synchronous response, whose
+[Lambda payload limit](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html)
+is 6 MB. Validate the generated server and matching client from the same release.
+
+
 ## Deployment contract
 
 Deploy these resources together:
@@ -150,9 +176,64 @@ Deploy these resources together:
 
 Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted Lambdas. This prevents native poll and sweep loops from competing with Lambda event sources. `PipelineControlPlane` actions remain available and initialise their providers without starting resident loops.
 
+Current itemised Await observation uses bounded pages of the current unit rather
+than loading its entire interaction history. Carry the returned tenant/unit-bound
+cursor into the next observation. The runtime rechecks indexed candidates through
+an authoritative interaction read. Empty pages and exhausted cursors never prove
+that parent consequences have finished. A scalar primary interaction remains
+observable after completion while its parent is still waiting.
+
+The hardened deployment contract requires explicit semantic provider/table inputs,
+an owned notification topic and validated quota, region, encryption and retained
+release preflight. The preflight attestation performs no AWS checks itself. Signing
+secrets use exact Secrets Manager ARNs and immutable VersionIds, resolved at host
+startup; each value is a raw SecretString of at least 32 characters. Supply access
+sets containing both current and retained secret/key ARNs. Retain the secret
+versions, signing CMKs, semantic resources and artifact access required by every
+recoverable execution. Moving `AWSCURRENT` does not establish retained-version
+compatibility.
+
+Select exactly one `FUNCTION` or `COMPUTE` transition consumer. `COMPUTE` disables
+the transition Lambda mapping and requires a separately validated SQS consumer
+with the same pinned release, signing and retry/DLQ protocol. Both placements remain
+subject to exact-candidate production conformance.
+
+Supply `CompletionReleaseLatencyAlarmMilliseconds` and
+`CallbackResumeLatencyAlarmMilliseconds`, together with
+`RepairAgeAlarmMilliseconds`, explicitly for the reference template;
+choose thresholds for the application's latency objective. Their alarms use
+sampled observations and the owned notification topic. Configure
+`OutstandingCompletionObservationAlarmCount` for scoped OUTSTANDING observations
+in a five-minute window (default 100). Repeated reads count separately; this
+alarm reports observed unresolved completions rather than population size.
+Missing samples do not establish global zero or health. Callback timing starts at the host's normal callback-success
+API return and ends at its first verified resumed-action observation. This is
+not a provider event timestamp: the response can arrive after the resumed action,
+and different host clocks can disagree. Negative ordering is UNKNOWN; lost API
+acknowledgements and history-only delivery can leave no sample. A crash after the
+immutable measurement claim can also lose external metric publication.
+
+Targeted repair samples age from its first retained host observation of that exact
+provider execution. Retried deliveries and host restarts preserve this timestamp;
+it does not reconstruct the original provider failure time or older attempts.
+Missing or invalid timestamps produce UNKNOWN. Samples stop when attempts stop,
+including retry exhaustion; inspect the repair DLQ and its separate alarm.
+The immutable observation has no callback TTL and supplies neither a complete
+open-repair inventory nor cleanup authority. Preserve it with the execution's
+mechanical recovery evidence until reviewed retention cleanup. An accepted
+replacement does not establish semantic convergence.
+
 Keep each numbered Durable function version for at least the longest supported execution lifetime. New deployments move the alias for new executions; existing executions must retain their pinned code version and release identity.
 
 The reference template retains the Durable function, numbered versions and callback binding table on stack deletion or replacement. Retained resources require explicit cleanup after all executions and their recovery windows have expired. Retain the compatible action and worker packages as well: a retained coordinator version alone does not protect an unqualified action target from a later deployment. Validate action-version and replacement-generation release compatibility before moving an alias.
+
+Each host writes through `LoggingConfig.LogGroup` to its retained, encrypted group
+under `/tpf/aws-durable/<stack-name>/<stack-instance>/<host>`. The stack-instance suffix
+comes from `AWS::StackId`, so updates preserve the destination and a newly created stack
+uses a separate name. Existing Lambda-created `/aws/lambda/...` groups remain available
+for historical logs. Authorize CloudWatch Logs to use the host KMS key for the new group
+ARNs before upgrading, and retain old groups through the recovery window before cleanup.
+Function retention and cleanup requirements above still apply.
 
 ### Semantic table upgrade
 
@@ -165,7 +246,41 @@ Before enabling the AWS Durable host against an existing Await interaction table
 
 Backfill every non-expired interaction with its tenant-scoped execution key and deterministic execution sort key. For an already-completed item interaction, inspect the matching Await unit: when the unit has no durable continuation-completion fact for that item, write `query_continuation_key=ready`, a due timestamp and `continuation_attempt=1`; when the fact already exists, write `continuation_completed=true` without a ready key. New writes maintain these projections, and a duplicate completion conditionally repairs a missing ready projection, but neither mechanism can discover an older row that is absent from the new indexes.
 
+Timeout recovery also uses the existing `await-interaction-pending-by-deadline`
+index, with a separate `TIMEOUT_CONSEQUENCES` partition. New timeout transitions
+retain pending consequences atomically. Recovery acknowledges the projection
+only after unit/admission state, parent state and required journal facts converge.
+An interaction's terminal status alone does not establish that its parent has
+settled. Recovery is limited to the configured semantic retention horizon.
+
+Older timed-out records lack this projection. Before rollout, drain/isolate the
+old release or review a native repair that verifies the original timeout identity
+and rebuilds only unfinished consequences. No automatic historical repair or
+retention extension is supplied. Retain the matching semantic stores and journal
+through the recovery horizon.
+
 Complete the backfill and verify the indexes before attaching the Await Stream event source or admitting new Durable executions. This keeps reconstruction and continuation discovery query-based; production hosts must not compensate with a table scan.
+
+The completion-lifecycle candidate additionally requires an externally owned
+`AwaitCompletionLifecycleTable`, configured as
+`pipeline.orchestrator.dynamo.await-completion-lifecycle-table`. It uses string
+`pk`/`sk` keys, `ttl_epoch_s` for positive expiry only, PITR and deletion protection.
+Native admission and parent-release transactions use it for immutable first facts
+and a bounded tenant-scoped outstanding projection. Supply the exact table ARN
+through the semantic action role's transaction permissions; the wake-up role
+continues to consume semantic observations.
+
+The coordinated lifecycle candidate binds each Await unit and release acknowledgement
+to the execution's retained occurrence cause and page scope. An authorized Command
+reissue creates a fresh cause; retry preserves it. Local native-store regressions
+verify that an old release acknowledgement cannot retire the new admission.
+
+Production rollout still requires the coordinated compatibility set and migration
+validation. Legacy records without occurrence coverage remain UNKNOWN and retain
+unresolved outstanding work. Older facts cannot acquire historical admission times
+or causal coverage through clock or membership backfill. Keep existing releases
+isolated until the [production gates](/evolve/durable-coordinator/aws-durable-production-plan)
+pass.
 
 ## Await callback binding
 

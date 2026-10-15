@@ -60,8 +60,11 @@ Every behaviour has one repository that owns its primary tests:
 - `pipelineframework-reference-implementations`: production-shaped Checkout/TPFGo, Search and QuickBooks E2E paths;
 - `csv-kafka-payments` and `rag-turnkey`: application-specific tests, topology tests, operational proofs and E2E suites.
 
-Spring smoke modules belong to `pipelineframework-runtime`, not the examples catalogue. Application dashboards,
-fixtures and deployment-topology assertions belong to their application repository.
+Generated Spring application smoke modules and the AWS Durable application proof
+belong to `pipelineframework-examples` and consume released adapter/host artifacts.
+Runtime unit, store and deployment integration tests remain with the runtime owner.
+Application dashboards, fixtures and deployment-topology assertions belong to their
+application repository.
 
 ## Cross-artifact compatibility
 

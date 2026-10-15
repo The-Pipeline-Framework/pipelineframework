@@ -6,6 +6,9 @@ connects the template to TPF's Functional Core, Imperative Shell model, start wi
 
 Version 3 describes a pipeline in domain terms. A type says what business value is moving through the pipeline; a step says how that value changes. Protobuf tags, generated bindings, and transport representations are compiler-owned infrastructure.
 
+The pipeline template defaults to version 3 when `version` is omitted. Declare `version: 3`
+when the dialect should remain clear to readers and tooling.
+
 ```mermaid
 flowchart LR
     T[Canonical types] --> P[Typed steps]
@@ -304,7 +307,8 @@ the canonical record directly. Complete configuration and Java examples are in
 For HTTP access to an owned `payload_ref`, version 3 also accepts top-level `httpPayloads`.
 Each route names a record's singular `payload_ref` field, allowed content types, an authorisation
 scope, and a bound object target for upload or bound object source for download. Uploads require
-`maxBytes`; downloads omit it. The initial implementation supports REST on COMPUTE. See
+`maxBytes`; downloads omit it. REST/COMPUTE streams multipart bodies directly;
+REST/FUNCTION requires an S3 object provider and uses delegated transfer. See
 [Generated owned-payload boundaries](/develop/handling-file-operations#generated-owned-payload-boundaries)
 for the request shape and security contract.
 

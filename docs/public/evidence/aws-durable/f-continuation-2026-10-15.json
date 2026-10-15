@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "aws-durable-f-continuation-2026-10-15",
+  "scope": "F source preparation after merge; no acceptance certification",
+  "timing": "Retrospective continuation 14\u201315 October 2026 after all coordinated PRs merged; prior repair and 404 knowledge disclosed",
+  "authority": {
+    "originalDocumentation": "a1f83ed1852f1ca0e587b87b7fb905540308afa3",
+    "examplesBase": "57505eb9fba2b0cb6345cdf174397ad670f5cb67",
+    "runtimeMain": "3414933c76f4fb3e46a66fe9c248ea684b069f61",
+    "contractsSource": "c054a0fb0445245f84bbf85c61aa09e24188bc40",
+    "documentationBase": "e77b2324e959c4810fb6b5d01711b7bfa6afd7e9"
+  },
+  "evaluatedExamplesRevision": "3cfb221b303b21e716da8b0130f7a687f44b33a7",
+  "environment": {
+    "java": "21",
+    "mavenRepository": "worktree-local .m2/repository",
+    "artifactSource": "Engineering cache, including local canonical contracts install; released closure not established",
+    "compilerSourceProvenance": "Unattested for reused compiler binary; only binary behaviour established"
+  },
+  "reproductionPrerequisites": [
+    "Use a clean checkout of evaluatedExamplesRevision with Java 21 and a worktree-local Maven cache matching the artifact hashes below; the original cache bundle is not archived.",
+    "Set TPF_RUNTIME_WORKTREE to the runtime checkout with AWS Durable source matching runtimeMain. Its deployment JAR was rebuilt locally and embedded SAM compared byte-for-byte to source.",
+    "The historical Maven commands run offline after cache warming; they will fail in an empty cache. Source commits alone do not prove the reused binary/cache provenance.",
+    "TPF_DERIVED_FAULT_TEMPLATE is the output of combined_delivery_template in prepare-production-bundle.py applied to the deployment JAR SAM resource. cfn-lint must be installed; W1100 is the only ignored inherited warning."
+  ],
+  "commands": [
+    {
+      "command": "TPF_AWS_DURABLE_DEPLOYMENT_JAR=${TPF_RUNTIME_WORKTREE}/aws-durable-coordination/deployment/target/pipelineframework-aws-durable-coordination-deployment-26.10.1-SNAPSHOT.jar python3 -m unittest discover -s aws-durable-proof/conformance -p 'test_*.py' -v",
+      "exitCode": 0,
+      "tests": 88,
+      "workingRepository": "pipelineframework-examples",
+      "rawLogName": "tpf-f-continuation-final-python.log"
+    },
+    {
+      "command": "JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -o -pl aws-durable-proof/fault-proxy,aws-durable-proof/generated-step-http,aws-durable-proof/generated-compute-http-control -am test -Dquarkus.http.test-port=0 -Dmaven.repo.local=\"$PWD/.m2/repository\" --no-transfer-progress",
+      "exitCode": 0,
+      "results": {
+        "fault-proxy": {
+          "tests": 17,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "generated-step-http": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "generated-compute-http-control": {
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "workingRepository": "pipelineframework-examples",
+      "rawLogName": "tpf-f-combined-java-http.log"
+    },
+    {
+      "command": "JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -o -pl aws-durable-proof/generated-fixture,aws-durable-proof/generated-item-fixture -am package -DskipTests -Dgpg.skip -Dmaven.repo.local=\"$PWD/.m2/repository\" --no-transfer-progress",
+      "exitCode": 0,
+      "classification": "Packaging only; tests skipped, not release publication",
+      "workingRepository": "pipelineframework-examples",
+      "rawLogName": "tpf-f-fixtures-package.log"
+    },
+    {
+      "command": "cfn-lint -i W1100 -t ${TPF_DERIVED_FAULT_TEMPLATE}",
+      "exitCode": 0,
+      "limitation": "Only inherited YAML merge warning ignored",
+      "workingRepository": "pipelineframework-examples",
+      "rawLogName": "tpf-f-worker-faults-lint.log"
+    },
+    {
+      "command": "npm --prefix docs test",
+      "exitCode": 0,
+      "tests": 36,
+      "workingRepository": "pipelineframework",
+      "rawLogName": "tpf-f-continuation-docs-tests.log"
+    },
+    {
+      "command": "npm --prefix docs run build",
+      "exitCode": 0,
+      "publicContentChecks": 64,
+      "limitation": "Passed before final two-line annotation recording user infrastructure exclusion",
+      "workingRepository": "pipelineframework",
+      "rawLogName": "tpf-f-continuation-docs-build.log"
+    },
+    {
+      "command": "npm --prefix docs test",
+      "exitCode": 0,
+      "tests": 36,
+      "scope": "Concise Cloud handoff annotation; requirements/history preserved",
+      "workingRepository": "pipelineframework-examples",
+      "rawLogName": "tpf-f-cloud-handoff-docs-tests.log"
+    }
+  ],
+  "sourceSha256": {
+    "aws-durable-proof/conformance/test_production_binding_races.py": "38e5ac702dcf9364ae2976752a1e44fc6d84f5f1d9214a45c8e3457eec418653",
+    "aws-durable-proof/conformance/test_production_host_identity.py": "4dddc90dceb0dfe086362c752576f2119eb5a54b0107f5d3d9d0ea1e50d8600b",
+    "aws-durable-proof/conformance/test_production_observation_oracles.py": "0fbf43f4220fb9cf713eeae082babaea4b8a1903e48fe105ff588defd5db2df1",
+    "aws-durable-proof/conformance/test_production_resource_faults.py": "b6bcdeee20b735048ee79fabedd51a6b724b57eae1a11c984f9f99f6582c961c",
+    "aws-durable-proof/conformance/test_production_runner.py": "93320fd33abff954c84a0330df9c3ea2d268f2f4ce8a9ed66f2be71d717a238f",
+    "aws-durable-proof/conformance/test_production_work_faults.py": "011d6add17bd8f9fc5e1c6429d73f7ada149c70351a17d92b489738d16198dac",
+    "aws-durable-proof/conformance/test_transition_fault_fixture.py": "87bc64c1ae8cef450ea6b5e8ab28a6a5d470edd46ff1a6f966c67d7b68904e68",
+    "aws-durable-proof/fault-proxy/src/main/java/org/pipelineframework/awsconformance/faults/ActionTransportFaultProxy.java": "5ee8975f00ac8244f4af0ce896aa8993eda2b5f207a1d1c53afeeb19adc13692",
+    "aws-durable-proof/fault-proxy/src/main/java/org/pipelineframework/awsconformance/faults/WorkDeliveryFaultHandler.java": "56027162961099c80a7151c758fbb87269ef90ddf97ef6ca386d37975c12fa16",
+    "aws-durable-proof/fault-proxy/src/test/java/org/pipelineframework/awsconformance/faults/ActionTransportFaultProxyTest.java": "ab9191e7ff4adc42d2da57b66aecf58f07782976196666eca4a794df7cfd26f7",
+    "aws-durable-proof/fault-proxy/src/test/java/org/pipelineframework/orchestrator/WorkDeliveryProductionTest.java": "f4e6b3e282e27bd1a7eee0193227f73e0a7ef8d9300effdf13e67409b2119bf0",
+    "aws-durable-proof/scripts/prepare-production-bundle.py": "d3f6f8232afcc11bfbd9261ea25a5d56c5c41382708c1c2a8019277cf7b995c9",
+    "aws-durable-proof/scripts/production-binding-races.py": "b4e0e963ac6e7530db45245a527bb32f18bb303505955e71b07c98fdbad1fd5c",
+    "aws-durable-proof/scripts/production-resource-faults.py": "5e76a92bb27c6e614950f5fe26ceece9b8de798d74ee9471a9fc034bf29649bb",
+    "aws-durable-proof/scripts/production-work-faults.py": "6fc4a33ebbcc7875ebbb5cd318600e211cb2ed56190fdb72052c2dd00d2ce7c8",
+    "aws-durable-proof/scripts/run-production-conformance.py": "bd213c7ba805ccc2edd9c1678aa7d2f02cf3d8906e3d4e8172b3633e65400992"
+  },
+  "artifactSha256": {
+    "aws-durable-proof/generated-fixture/target/function.zip": "7c2d69f41ed09b152702177e3288a698c643a34bc56759c61375ea1d94292e68",
+    "aws-durable-proof/generated-item-fixture/target/function.zip": "2ed6fb1fdcbafe182aa1386e8e3a267b86296158aeb4c880dc01521506a6c482",
+    ".m2/repository/org/pipelineframework/pipelineframework-runtime-core/26.10.1-SNAPSHOT/pipelineframework-runtime-core-26.10.1-SNAPSHOT.jar": "e0d89c843daeb8ea4e7e642aaf6e4bfecaaed4e73b6af03e0277559adbd36f81",
+    ".m2/repository/org/pipelineframework/pipelineframework/26.10.1-SNAPSHOT/pipelineframework-26.10.1-SNAPSHOT.jar": "e9438fa21795eb5a3061d51e846545ff363c49bca0e85a82e7ff83931521d37f",
+    ".m2/repository/org/pipelineframework/pipelineframework-aws-durable-coordination-host/26.10.1-SNAPSHOT/pipelineframework-aws-durable-coordination-host-26.10.1-SNAPSHOT.jar": "af7c8daca2ac7253cb76d0191da81e1b567124a9f0040ddf606acd55db1c7252",
+    ".m2/repository/org/pipelineframework/pipelineframework-compiler/26.10.1-SNAPSHOT/pipelineframework-compiler-26.10.1-SNAPSHOT.jar": "cedecf2950f3c3f6504831a526cf9479a55d8fe0a753f8afd24fd7ef8e21981d"
+  },
+  "deploymentJarSha256": "ce13b67eaf770c8d6ca47072108d221dbf072d4718ed9e3c8b91211c3127db46",
+  "deploymentTemplateSha256": "c1a46c71da8259d4f6ff38f948de3363229a9565a052e01de7faa938b0302abb",
+  "outcomes": {
+    "confirmedIneffectiveOracles": [
+      "item permutations accepted",
+      "empty Stream page stops traversal",
+      "foreign tenant/correlation accepted",
+      "manifest host package mismatch/completeness accepted",
+      "foreign replay target acknowledged",
+      "early no-op work ACK mistaken for commit"
+    ],
+    "harnessOrEnvironmentResults": [
+      "scenario6 TypeError while introducing new API is preparation error",
+      "intermediate suites overlapped worker edits",
+      "stale cached deployment JAR caught by current LoggingConfig control, rebuilt and byte-matched",
+      "cached core lacked AwaitCompletionCursor; canonical current contracts warmed locally before final 28 Java tests"
+    ],
+    "boundedPassingEvidence": [
+      "88 Python methods",
+      "17 fault-boundary Java tests",
+      "6 generated FUNCTION HTTP tests",
+      "5 generated COMPUTE HTTP/SSE controls",
+      "scalar/item discovered wrapper+production delegate archive checks",
+      "composite SAM lint",
+      "36 docs tests and docs build"
+    ],
+    "inconclusive": [
+      "Earlier six HTTP404s still unexplained despite later success",
+      "all live AWS scenarios unexecuted"
+    ]
+  },
+  "preparedAdditionalIds": [
+    "4",
+    "5",
+    "6",
+    "10",
+    "pre-registration-provider-loss"
+  ],
+  "functionPreparedTotal": 25,
+  "remainingMissingOrPartial": [
+    "13",
+    "14",
+    "17",
+    "20",
+    "21",
+    "gsi-lag",
+    "history-pagination",
+    "retained-version-cleanup",
+    "cmk-iam-failures",
+    "operation-budget-exhaustion",
+    "seeded-generation-races",
+    "provider-history-loss",
+    "release-version-pinning"
+  ],
+  "computeAdditionalGaps": [
+    "6",
+    "7",
+    "suspended-continuation"
+  ],
+  "costs": {
+    "cloudResourcesCreated": 0,
+    "cloudSpend": 0,
+    "availableLocalTimes": {
+      "pythonSeconds": 0.348,
+      "contractsCacheWarmSeconds": 10.297,
+      "docsTestsMilliseconds": 446.79975,
+      "docsBuildSeconds": 83.14
+    },
+    "billedCI": "unavailable",
+    "LLMBillingAndTokens": "unavailable",
+    "humanEffort": "unavailable"
+  },
+  "limitations": [
+    "No live AWS, deployment, publication or workflow dispatch; subsequent commits/pushes explicitly requested by user",
+    "ECS/Fargate consumer and production producer workflow explicitly excluded by user",
+    "Operation URLs UNCONFIGURED; engineering package cannot pass promotion",
+    "Current standalone proxy stack fails owned-stack membership; no auxiliary-stack authority added",
+    "Published runtime/BOM closure blocked by snapshot runs38635754617/38636067496",
+    "Fixtures use engineering cache; published exact-candidate compatibility not established",
+    "Protected examples environment absent",
+    "Migration, retirement, live quota and CMK conformance remain unsatisfied",
+    "Compiler source provenance for reused engineering cache is not attested by this continuation; successful generated HTTP tests are binary behavior evidence"
+  ],
+  "rawEvidence": {
+    "status": "Preserved in the owner-local access-controlled archive selected by the user on 2026-10-15",
+    "archiveId": "aws-durable/f-continuation-2026-10-15/continuation-evidence.tar.gz",
+    "sha256": "22a5e7363b00852a46f8aa34af7274641ac9ab2ce08c71d5965b129e0ca83ccd",
+    "fileCount": 22,
+    "missingFileNames": [],
+    "access": "Owner-local archive directory mode 0700; archive mode 0600; no raw files published to this public documentation",
+    "sharedUrl": null,
+    "localRoot": "~/.codex/artifacts/",
+    "retentionDecision": "Local archival is sufficient; no shared destination or remote URL required. The versioned summary is the handoff record; raw logs are an optional historical investigation fallback."
+  },
+  "adequacy": "Independent bounded review by /root/f_compute_controls; user owns acceptance; no live AWS certification"
+}
