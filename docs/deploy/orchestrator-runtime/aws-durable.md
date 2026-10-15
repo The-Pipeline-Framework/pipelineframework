@@ -235,6 +235,48 @@ for historical logs. Authorize CloudWatch Logs to use the host KMS key for the n
 ARNs before upgrading, and retain old groups through the recovery window before cleanup.
 Function retention and cleanup requirements above still apply.
 
+### Experimental pinned SSM signing source
+
+::: warning Source candidate, not a supported deployment profile
+The [runtime SSM reader](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/61)
+is under review. It is not part of the verified published
+AWS Durable deployment profile. The hardened SAM template and v1 deployment
+manifest still require Secrets Manager. Do not substitute SSM parameters into
+those inputs or treat a successful reader unit test as deployment acceptance.
+:::
+
+The candidate adds an explicit `tpf.aws.durable.signing-source=SSM_STANDARD`
+selection to the existing host configuration source. Leaving that property unset,
+or selecting `SECRETS_MANAGER`, preserves the existing Secrets Manager path.
+The SSM selection requires two distinct full parameter ARNs and exact positive
+numeric versions, in addition to the other validated deployment settings:
+
+```properties
+tpf.aws.durable.signing-source=SSM_STANDARD
+tpf.aws.durable.resume-token-parameter-arn=arn:aws:ssm:eu-west-1:123456789012:parameter/example/resume-token
+tpf.aws.durable.resume-token-parameter-version=7
+tpf.aws.durable.worker-parameter-arn=arn:aws:ssm:eu-west-1:123456789012:parameter/example/worker
+tpf.aws.durable.worker-parameter-version=9
+```
+
+These values identify keys; they do not contain key material. Parameter names
+without full ARNs, labels, floating versions, mixed SSM/Secrets Manager references,
+and literal or environment-backed signing keys are rejected before a provider read.
+The reader requests each exact version with decryption and validates the returned
+ARN, name, version, `SecureString` type and value. Each nonblank value must contain
+at least 32 characters and occupy at most 4,096 UTF-8 bytes. Neither key enters
+the returned runtime configuration unless both reads succeed. Provider failures
+exclude response text and causes that could contain sensitive values.
+
+`deployment-validation=validated` remains an external preflight attestation. The
+reader does not verify Standard tier, IAM isolation, version retention or
+authenticated deployment-manifest provenance. A supported SSM profile must verify
+those properties for both exact ARN/version pairs, preserve versions required by
+recoverable executions and retained Lambda versions, and pass real AWS recovery
+and isolation checks. Keep values out of configuration, Terraform state, logs
+and manifests. The source name alone establishes neither cost nor account-specific
+free-tier availability.
+
 ### Semantic table upgrade
 
 Before enabling the AWS Durable host against an existing Await interaction table, add these `ALL`-projected indexes and wait until both report `ACTIVE`:
