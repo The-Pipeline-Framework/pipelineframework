@@ -37,10 +37,19 @@ approved by the human owner on 15 October 2026.
 - ABSENT at the root or in a position that cannot omit a field fails serialization;
   it must not silently become explicit null.
 
-This policy does not change generated REST DTO mappings, which have their own
-transport contract. It does not make a nullable field optional or relax generated
-canonical constructors. No application-specific deserializer or altered admission
-fixture may substitute for the shared policy.
+[ADR-0016](0016-field-presence-nullability-and-compatibility.md) remains the semantic
+authority for generated REST records as well as canonical JSON. Generated REST
+DTOs select the shared codecs through Jackson annotations so an ordinary host
+mapper preserves the same distinctions. Optional/non-null DTO fields keep their
+Optional API: omission becomes empty, but explicit JSON null is rejected. Nullable
+DTO fields use CanonicalFieldValue to retain null separately from absence; a
+required nullable field rejects absence.
+
+The transport boundary does not make a nullable field optional or relax generated
+canonical constructors. It does not create singular defaults. Repeated fields
+retain their documented missing/null-to-empty-list normalization. No
+application-specific deserializer or altered admission fixture may substitute for
+the shared policy.
 
 ## Consequences
 

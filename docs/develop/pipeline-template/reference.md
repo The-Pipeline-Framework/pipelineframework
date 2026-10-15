@@ -155,6 +155,11 @@ Generated constructors enforce the declared state. Nullable protobuf fields use 
 `oneof` with a value arm and a `google.protobuf.NullValue` arm; no selected arm means absent.
 Compiler-owned tags and names are persisted in `pipeline.idl.json` and reserved when retired.
 
+Generated REST record DTOs enforce these same input states through the shared Jackson codecs:
+optional/non-null fields reject explicit JSON null, and nullable fields preserve null separately
+from absence. A required nullable field still requires its key. The generated transport DTO's Java
+representation does not override the canonical contract.
+
 Defaults are not part of this feature. In particular, an absent field is not silently materialized
 as a default value. Repeated fields retain their existing missing-to-empty-list behavior and cannot
 currently declare presence or nullability modifiers.
