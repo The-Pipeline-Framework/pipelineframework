@@ -9,6 +9,8 @@ status: accepted
 
 Compiler and build-host code, customer-authored code, runtime implementations, and future transition workers all exchange or inspect the same pipeline JSON shapes. Keeping the canonical mapper in the Quarkus-backed runtime artifact makes runtime implementation ownership appear necessary even when a consumer needs only the shared serialization policy.
 
+The dependency restriction below is extended by [ADR-0074](0074-canonical-presence-json.md) for the framework-neutral runtime-core presence model.
+
 ## Decision
 
 `pipelineframework-runtime-serialization` owns `org.pipelineframework.config.pipeline.PipelineJson` and its canonical Jackson configuration. The artifact is framework-neutral and may depend only on the semantic model plus the Jackson and protobuf components required to implement that policy.

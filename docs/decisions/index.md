@@ -104,3 +104,5 @@ choice per file and name the affected repository areas concretely.
 
 GitNexus is a decision index, not architectural authority. Confirm extracted or
 historical records against current repository reality before relying on them.
+
+- [ADR-0074: Canonical field presence survives shared JSON boundaries](0074-canonical-presence-json.md)
