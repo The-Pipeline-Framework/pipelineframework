@@ -72,6 +72,28 @@ test harnesses cross them as exact Git SHAs.
 The `.yml` configuration files intentionally contain JSON, which is valid YAML and can be parsed with the Node
 runtime already present on every runner. No workflow-only package installation is needed to interpret policy.
 
+## Adding a component or public artifact
+
+Register the complete owned publication in the producer's collection, metadata,
+trusted validation and upload lists, its publication regressions, this repository's
+`allowedCoordinates`, and the BOM where the artefact is consumed. Include POM-only
+parents needed to resolve the published JARs. A green reactor build alone does not
+prove that its candidate manifest contains that closure.
+
+Current candidates must contain every registered coordinate. Historical baseline
+manifests may predate an addition, but still retain strict ownership and checksum
+validation; that migration allowance does not make an incomplete new candidate
+complete.
+
+Producer publishers load their validation code from the default branch. A catalogue
+expansion therefore needs a reviewed bootstrap of that trusted contract before a
+new candidate can be accepted. Follow the repository owner's activation procedure
+and record the bootstrap validation separately from downstream acceptance. Do not
+execute PR-provided validation with publication credentials, relax ownership or
+completeness checks, or mutate an existing candidate version to get past this
+boundary. After activation, build a new exact-head candidate and require its normal
+downstream result.
+
 ## Trust boundaries
 
 The singleton candidate workflow has four security zones:
