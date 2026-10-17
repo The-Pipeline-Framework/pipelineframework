@@ -21,6 +21,7 @@ flowchart TB
 | GraphQL Query and Command | `graphql-connector`, `graphql-smallrye-connector` | [GraphQL Connector](/develop/extension/graphql-connector) |
 | MCP Query and Command | `mcp`; internal pin model in `mcp-contract` | [Import MCP tools](/develop/extension/mcp-connector-import) |
 | One-turn LLM Query | `llm-query`, `llm-query-langchain4j` | [LLM Query](/develop/extension/llm-query) |
+| Conversation scope, history and context assembly values | `conversation-context-connector` | [Conversation context values](/develop/connectors/conversation-context) |
 | Embeddings | `embedding-query`, `embedding-query-langchain4j` | [Embedding and vector connectors](/develop/extension/embedding-and-vector-connectors) |
 | Vector storage | `vector-store`, `vector-store-pgvector` | [Embedding and vector connectors](/develop/extension/embedding-and-vector-connectors) |
 | Gmail read Query | `gmail-query` | [Host-authenticated Connectors](/develop/oauth-connections/reference) |
