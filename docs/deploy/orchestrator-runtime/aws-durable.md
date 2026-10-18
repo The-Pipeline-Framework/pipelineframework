@@ -164,7 +164,7 @@ is 6 MB. Validate the generated server and matching client from the same release
 
 ## Deployment contract
 
-Deploy these resources together:
+Deploy these resources together, applying the observation requirements for the selected profile:
 
 - a versioned Lambda Durable coordinator and stable alias;
 - a generated Quarkus action/worker package containing the application pipeline and generated input decoder;
@@ -172,7 +172,7 @@ Deploy these resources together:
 - the append-only callback binding table and its provider-execution index;
 - SQS work, Await-completion and transition queues with DLQs;
 - the Await/binding Stream wake-up handler and the bounded terminal reconciliation handler;
-- alarms for worker DLQs and Stream failure destinations.
+- for `HARDENED`, alarms for worker DLQs and Stream failure destinations with owned response routing; for `RESTRICTED_PILOT`, supervised failure checks for those same destinations.
 
 Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted Lambdas. This prevents native poll and sweep loops from competing with Lambda event sources. `PipelineControlPlane` actions remain available and initialise their providers without starting resident loops.
 
@@ -231,21 +231,23 @@ Each host writes through `LoggingConfig.LogGroup` to its retained, encrypted gro
 under `/tpf/aws-durable/<stack-name>/<stack-instance>/<host>`. The stack-instance suffix
 comes from `AWS::StackId`, so updates preserve the destination and a newly created stack
 uses a separate name. Existing Lambda-created `/aws/lambda/...` groups remain available
-for historical logs. Authorize CloudWatch Logs to use the host KMS key for the new group
-ARNs before upgrading, and retain old groups through the recovery window before cleanup.
+for historical logs. For `HARDENED`, authorise CloudWatch Logs to use the host KMS
+key for the new group ARNs before upgrading. `RESTRICTED_PILOT` retains
+service-default log encryption and requires no host-CMK authorisation for its log groups.
+Retain old groups through the recovery window before cleanup.
 Function retention and cleanup requirements above still apply.
 
 ### Experimental pinned SSM signing source
 
 ::: warning Source candidate, not a supported deployment profile
 The [runtime SSM reader](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/61)
-is under review. It is not part of the verified published
-AWS Durable deployment profile. The hardened SAM template and v1 deployment
+is merged and published. Reader availability alone does not establish a verified
+AWS Durable deployment profile. The published runtime63 hardened SAM template and v1 deployment
 manifest still require Secrets Manager. Do not substitute SSM parameters into
 those inputs or treat a successful reader unit test as deployment acceptance.
 :::
 
-The candidate adds an explicit `tpf.aws.durable.signing-source=SSM_STANDARD`
+The reader supports an explicit `tpf.aws.durable.signing-source=SSM_STANDARD`
 selection to the existing host configuration source. Leaving that property unset,
 or selecting `SECRETS_MANAGER`, preserves the existing Secrets Manager path.
 The SSM selection requires two distinct full parameter ARNs and exact positive
@@ -276,6 +278,104 @@ recoverable executions and retained Lambda versions, and pass real AWS recovery
 and isolation checks. Keep values out of configuration, Terraform state, logs
 and manifests. The source name alone establishes neither cost nor account-specific
 free-tier availability.
+
+### Restricted pilot deployment profile
+
+::: warning Deployment qualification remains separate
+The same-host `RESTRICTED_PILOT` profile is a deployment-contract extension being
+qualified alongside Cloud integration. Its conditional template and local checks
+do not establish signed publication, actual account/IAM configuration, live event
+delivery, recovery conformance or unattended production suitability. Select an exact
+published deployment artifact that includes this profile before using it; the
+runtime63 schema1 template cannot accept these inputs. No alternative host or
+consumer implementation is required.
+:::
+
+`HARDENED` remains the default. The restricted profile changes encryption and
+observation choices for a **fresh, isolated, supervised FUNCTION deployment**;
+it retains the native handlers and mechanical recovery model.
+
+| Concern | `HARDENED` | `RESTRICTED_PILOT` |
+| --- | --- | --- |
+| Signing authority | Exact Secrets Manager ARN/VersionId and retained CMK access | Existing SSM reader; distinct Standard SecureString purpose/generation parameters, `aws/ssm`, exact version 1 |
+| Callback table, Lambda environment/Durable state and logs | Customer-managed encryption keys | Encrypted service defaults |
+| External semantic tables and release/result objects | Explicit scoped CMKs | Verified AWS-owned DynamoDB encryption and S3-managed SSE-S3; retain the same indexes, Streams, versioning and recovery data |
+| Queues other than EventBridge destinations | Host CMK | Explicit SSE-SQS |
+| EventBridge destination queues | Host CMK | Retain a compatible CMK for `DueWorkQueue`, `DueWorkDlq` and `RepairFailureDlq` |
+| Notification alarms | All 64 alarm resources and owned SNS destination | No alarm resources or unused SNS destination; supervised failure checks remain required |
+
+The existing due-work rule, terminal-reconciliation rule, all seven mappings,
+numbered versions, leases, retry/exhaustion behaviour, DLQs, Streams and retained
+state remain. Due-work delivery keeps its one-minute rate, ten retries and
+3,600-second age limit; terminal delivery keeps five retries and the same age
+limit. Notification alarms do not drive those recovery paths. Keep admission
+closed outside the supervised operating window, and retain actual failure,
+pause/restore and recovery evidence. No successful deployment replaces the
+separate fault-conformance catalogue.
+
+```mermaid
+flowchart LR
+  P[Explicit deployment profile] --> E[Encrypted resources and pinned signing references]
+  E --> H[Existing native host and consumers]
+  H --> R[Unchanged retry, Await and recovery paths]
+  H --> L[Retained raw logs and failure state]
+  P --> O[Hardened alarms or supervised failure checks]
+```
+
+Set `DeploymentProfile=RESTRICTED_PILOT`, `SigningSource=SSM_STANDARD`,
+`RestrictedPilotValidation=validated` and
+`SigningParameterLifecycleValidation=validated` only after the owner checks pass.
+Supply `ResumeTokenParameterArn`/`ResumeTokenParameterVersion`,
+`WorkerSharedParameterArn`/`WorkerSharedParameterVersion` and
+`SigningParameterAccessArns`. Each current parameter name follows
+`/tpf/durable/<scope>/<resume-token|worker>/g-<generation-hex>` and uses version `1`.
+The retained access set includes every older generation still needed by retained
+releases and executions. Rotation creates a new parameter name, not another
+version of the old parameter: Standard Parameter Store can evict older versions
+after repeated updates. Deny overwrite, deletion and recreation of held names;
+verify the actual IAM boundaries, metadata and retained obligations before
+admission. An offline owner receipt checks consistency; it does not enforce IAM.
+
+The owner verifies **Standard**, **SecureString**, the actual `aws/ssm` key and
+the account's accepted IAM-only signing boundary. The AWS-managed key does not
+provide a customer-controlled key policy that isolates these signing values from
+other authorised account principals. Restrict all applicable parameter-read,
+history and path APIs, and separate provisioning/retirement authority from runtime
+readers. Keep secret values out of Terraform state, source, ordinary environment
+configuration, manifests and logs. Direct environment signing values remain
+unsupported by this pinned deployment contract.
+
+The restricted profile uses explicit empty inputs for the unused SNS destination,
+Secrets Manager signing references and semantic/signing CMK access sets. The host
+CMK input remains real and retained for EventBridge delivery. Do not use dummy
+ARNs, disable queue encryption or remove a failure destination to reduce cost.
+EventBridge rules do not support AWS-owned encrypted SQS targets **or target
+DLQs**; changing the due-work scheduler alone would leave the terminal rule's
+failure destination unresolved. [AWS EventBridge target constraints](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-targets.html).
+
+Both new profiles emit deployment manifest **schema2**, preserving release,
+publication, code/version, queue/mapping and owner identities. It adds explicit
+`deploymentProfile`, `observability`, `scheduleProvider`, `encryption` and ten
+actual `logGroupNames` references. `signing.source` discriminates Secrets Manager
+`{arn, versionId}` from SSM `{arn, version: 1}` with tier, type, key kind, immutable
+generation lifecycle and retained parameter references. Consumers must verify the
+actual template, parameters, numbered function configuration and CFN membership;
+do not reinterpret a schema1 manifest as the new profile. Existing schema1
+hardened publications retain their established scope.
+
+Alarm omission does not stop Embedded Metric Format extraction. An account logging
+administrator may separately qualify a policy that disables extraction for the
+exact owned log groups while keeping the raw EMF events. Never grant this
+account-administration permission to workload code or disable other applications'
+metrics. [AWS metric-extraction policies](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutAccountPolicy.html).
+
+These choices remove most fixed charges but do not promise a zero bill. A retained
+customer-managed key has a monthly charge; rotation can add retained key material
+charges. SQS empty receives, minute recovery, retained data/PITR/logs and key/API
+calls remain usage, sharing account-level free allowances. The infrastructure
+owner must verify account eligibility, actual policies, limits and costs before
+deployment. Never delete recoverable generations or disable recovery to meet an
+idle-cost target.
 
 ### Semantic table upgrade
 
@@ -411,9 +511,9 @@ Direct Durable-to-worker invocation is not supported. Worker placement remains o
 
 ## Operations and validation
 
-Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, enable point-in-time recovery, and route every DLQ/Stream alarm to an owned response path.
+Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, and enable point-in-time recovery. For `HARDENED`, route every DLQ/Stream alarm to an owned response path; for `RESTRICTED_PILOT`, validate supervised failure checks for those same destinations.
 
-For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. Customer-managed keys, secret references, alarm routing and complete semantic provider configuration remain deployment-owned requirements.
+For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. The selected profile's customer-managed keys, secret references and complete semantic provider configuration remain deployment-owned requirements. `HARDENED` also requires owned alarm routing; `RESTRICTED_PILOT` requires supervised failure checks.
 
 The protected real-AWS conformance lane exercises callback/binding races, duplicate delivery, provider-history loss and expiry, generation replacement, worker failure, terminal Await result passthrough and cleanup. Ordinary repository verification remains deployment-free. Promotion requires that lane to pass against the exact runtime and compiler candidates.
 
