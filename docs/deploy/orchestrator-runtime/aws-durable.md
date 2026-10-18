@@ -164,7 +164,7 @@ is 6 MB. Validate the generated server and matching client from the same release
 
 ## Deployment contract
 
-Deploy these resources together:
+Deploy these resources together, applying the observation requirements for the selected profile:
 
 - a versioned Lambda Durable coordinator and stable alias;
 - a generated Quarkus action/worker package containing the application pipeline and generated input decoder;
@@ -172,7 +172,7 @@ Deploy these resources together:
 - the append-only callback binding table and its provider-execution index;
 - SQS work, Await-completion and transition queues with DLQs;
 - the Await/binding Stream wake-up handler and the bounded terminal reconciliation handler;
-- alarms for worker DLQs and Stream failure destinations.
+- for `HARDENED`, alarms for worker DLQs and Stream failure destinations with owned response routing; for `RESTRICTED_PILOT`, supervised failure checks for those same destinations.
 
 Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted Lambdas. This prevents native poll and sweep loops from competing with Lambda event sources. `PipelineControlPlane` actions remain available and initialise their providers without starting resident loops.
 
@@ -231,8 +231,10 @@ Each host writes through `LoggingConfig.LogGroup` to its retained, encrypted gro
 under `/tpf/aws-durable/<stack-name>/<stack-instance>/<host>`. The stack-instance suffix
 comes from `AWS::StackId`, so updates preserve the destination and a newly created stack
 uses a separate name. Existing Lambda-created `/aws/lambda/...` groups remain available
-for historical logs. Authorize CloudWatch Logs to use the host KMS key for the new group
-ARNs before upgrading, and retain old groups through the recovery window before cleanup.
+for historical logs. For `HARDENED`, authorise CloudWatch Logs to use the host KMS
+key for the new group ARNs before upgrading. `RESTRICTED_PILOT` retains
+service-default log encryption and requires no host-CMK authorisation for its log groups.
+Retain old groups through the recovery window before cleanup.
 Function retention and cleanup requirements above still apply.
 
 ### Experimental pinned SSM signing source
@@ -509,9 +511,9 @@ Direct Durable-to-worker invocation is not supported. Worker placement remains o
 
 ## Operations and validation
 
-Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, enable point-in-time recovery, and route every DLQ/Stream alarm to an owned response path.
+Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, and enable point-in-time recovery. For `HARDENED`, route every DLQ/Stream alarm to an owned response path; for `RESTRICTED_PILOT`, validate supervised failure checks for those same destinations.
 
-For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. Customer-managed keys, secret references, alarm routing and complete semantic provider configuration remain deployment-owned requirements.
+For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. The selected profile's customer-managed keys, secret references and complete semantic provider configuration remain deployment-owned requirements. `HARDENED` also requires owned alarm routing; `RESTRICTED_PILOT` requires supervised failure checks.
 
 The protected real-AWS conformance lane exercises callback/binding races, duplicate delivery, provider-history loss and expiry, generation replacement, worker failure, terminal Await result passthrough and cleanup. Ordinary repository verification remains deployment-free. Promotion requires that lane to pass against the exact runtime and compiler candidates.
 
