@@ -316,4 +316,31 @@ tpf.await.sqs.response-queue-url=https://sqs.us-east-1.amazonaws.com/12345678901
 pipeline.orchestrator.sqs.region=us-east-1
 ```
 
+When a separately configured completion host owns admission, select its response
+binding explicitly instead of naming a coordinator-side response queue:
+
+```yaml
+transport:
+  type: sqs
+  request:
+    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-requests"
+  response:
+    mode: HOST_MANAGED
+```
+
+Keep `tpf.await.sqs.poller.enabled=false` for this binding. `HOST_MANAGED` rejects
+an authored response `queueUrl`, an enabled local response poller, and unknown
+mode values. The request still requires a standard queue. Existing configurations
+without `response.mode` continue to require `response.queueUrl` and retain their
+coordinator-side poller behavior.
+
+The provider sends the existing signed completion envelope to the actual
+completion destination supplied by the host. For AWS Durable, deployment binds
+that provider to the native `AwaitCompletionQueueUrl`; the application does not
+need to compile that generated queue URL into its descriptor. This selection
+does not create a completion receiver or change resume-token, admission, retry,
+timeout, or recovery checks. Dispatch metadata records
+`responseMode=HOST_MANAGED` and omits `responseQueueUrl`; the adapter never claims
+a coordinator-side live await window for this binding.
+
 `pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook, Kafka, and SQS interactions. If `pipeline.orchestrator.resume-token-secret` is missing, signed dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.
