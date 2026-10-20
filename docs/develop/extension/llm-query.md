@@ -197,6 +197,8 @@ The application maps the generic observation into its own state in a later Mappe
 
 ## Compose multiple turns with ordinary recursion
 
+When a later turn needs earlier dialogue, the application can persist accepted turns, read bounded owner-scoped history in a captured Query, and select the model-visible entries before the next LLM Query. The LLM Query connector retains no transcript between invocations. See [Conversation context for an LLM Query](/develop/connectors/conversation-context) for the authoring decisions, pipeline YAML, selection code boundary, model behaviour and limits.
+
 Agentic behavior does not require a second Agent runtime. Put the one-turn Query, dynamic native
 operation, and application-authored reducer inside a named v3 pipeline, then route the reducer's
 state back through an ordinary bounded self-invocation:

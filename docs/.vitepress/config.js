@@ -179,6 +179,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/develop/connectors/'},
                     {text: 'Author a Boundary', link: '/develop/connectors/authoring'},
                     {text: 'Catalogue', link: '/develop/connectors/catalogue'},
+                    {text: 'Conversation Context', link: '/develop/connectors/conversation-context'},
                     {text: 'Import OpenAPI Operations', link: '/develop/connectors/openapi-import'}
                 ]
             },
