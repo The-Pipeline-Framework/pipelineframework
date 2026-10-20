@@ -353,6 +353,33 @@ EventBridge rules do not support AWS-owned encrypted SQS targets **or target
 DLQs**; changing the due-work scheduler alone would leave the terminal rule's
 failure destination unresolved. [AWS EventBridge target constraints](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-targets.html).
 
+`RuntimePermissionsBoundaryArn` optionally supplies one existing, same-account
+customer-managed IAM policy as the permissions boundary on all six native runtime
+roles. Its empty default preserves deployments that do not select a boundary.
+The policy is a maximum permission set, not a grant: each role still needs its
+existing identity policies, service policies and resource permissions. A boundary
+on the CloudFormation execution role is not inherited by the roles it creates.
+
+For every principal that can manage runtime roles, including deployment
+credentials and any CloudFormation execution role, require the exact boundary
+through `iam:PermissionsBoundary` on `iam:CreateRole`. Constrain any allowed
+`iam:PutRolePermissionsBoundary` to that same policy ARN using the same condition,
+and deny `iam:DeleteRolePermissionsBoundary`. Keep changes to the boundary policy itself
+outside those principals. The infrastructure owner must
+retain the policy and check that its maximum permits the selected release's
+checkpoint, action, Await, queue, semantic-store, signing, logging and recovery
+operations. A restricted notification profile does not relax that requirement.
+[AWS permissions-boundary behaviour](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html).
+
+Validate the parameter against the actual account before deployment, then read
+back `PermissionsBoundary.PermissionsBoundaryArn` on all six created roles and
+verify their CloudFormation membership. The optional offline preflight
+`--account-id` checks the selected ARN's account; it does not read IAM, prove the
+policy's contents or authorise deployment. The deployment manifest remains
+schema2: verify the actual selected template and parameters rather than assuming
+that the boundary appears as an additional manifest field. Retained versions
+must keep the authority needed to finish and recover their work.
+
 Both new profiles emit deployment manifest **schema2**, preserving release,
 publication, code/version, queue/mapping and owner identities. It adds explicit
 `deploymentProfile`, `observability`, `scheduleProvider`, `encryption` and ten
