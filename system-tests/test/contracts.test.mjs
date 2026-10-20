@@ -283,6 +283,39 @@ test('runtime candidates require the complete AWS Durable closure', () => {
   }
 });
 
+test('connector catalog admits the complete conversation closure without loosening historical ownership', () => {
+  const version = '26.10.1-pr.42.abcdef123456';
+  const coordinate = 'org.pipelineframework:conversation-context-connector:jar';
+  assert.ok(config.components.connectors.allowedCoordinates.includes(coordinate));
+  const connector = manifest({
+    repository: config.components.connectors.repository,
+    component: 'connectors',
+    candidateVersion: version,
+    mavenArtifacts: config.components.connectors.allowedCoordinates.map(owned => {
+      const [groupId, artifactId, packaging] = owned.split(':');
+      return {groupId, artifactId, packaging, version,
+        files: [...new Set(['pom', packaging])].map(extension => ({
+          name: `${artifactId}-${version}.${extension}`, sha256: 'a'.repeat(64)
+        }))};
+    })
+  });
+  connector.provenance.build.repository = connector.repository;
+  connector.provenance.publication.repository = connector.repository;
+  assert.equal(validateCandidateManifest(connector, config).mavenArtifacts.length, 34);
+  const historical = structuredClone(connector);
+  historical.mavenArtifacts = historical.mavenArtifacts.filter(a => a.artifactId !== 'conversation-context-connector');
+  assert.throws(() => validateCandidateManifest(historical, config), /omits coordinates required.*conversation-context-connector/);
+  assert.equal(validateCandidateManifest(historical, config, {requireAllOwnedCoordinates: false}).mavenArtifacts.length, 33);
+  const foreign = structuredClone(connector);
+  foreign.mavenArtifacts.find(a => a.artifactId === 'conversation-context-connector').artifactId = 'unregistered-connector';
+  for (const requireAllOwnedCoordinates of [true, false]) {
+    assert.throws(() => validateCandidateManifest(foreign, config, {requireAllOwnedCoordinates}), /not owned/);
+  }
+  const priorCatalog = structuredClone(config);
+  priorCatalog.components.connectors.allowedCoordinates = priorCatalog.components.connectors.allowedCoordinates.filter(c => c !== coordinate);
+  assert.throws(() => validateCandidateManifest(connector, priorCatalog), /not owned/);
+});
+
 test('current candidates are complete while historical baseline manifests retain strict ownership', () => {
   const historical = manifest();
   historical.mavenArtifacts = historical.mavenArtifacts.slice(1);
