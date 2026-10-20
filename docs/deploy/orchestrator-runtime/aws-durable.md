@@ -360,9 +360,12 @@ The policy is a maximum permission set, not a grant: each role still needs its
 existing identity policies, service policies and resource permissions. A boundary
 on the CloudFormation execution role is not inherited by the roles it creates.
 
-When deployment credentials may create runtime roles, require the exact boundary
-through `iam:PermissionsBoundary` on `iam:CreateRole`. Keep boundary-policy changes
-and boundary removal outside those credentials. The infrastructure owner must
+For every principal that can manage runtime roles, including deployment
+credentials and any CloudFormation execution role, require the exact boundary
+through `iam:PermissionsBoundary` on `iam:CreateRole`. Constrain any allowed
+`iam:PutRolePermissionsBoundary` to that same policy ARN using the same condition,
+and deny `iam:DeleteRolePermissionsBoundary`. Keep changes to the boundary policy itself
+outside those principals. The infrastructure owner must
 retain the policy and check that its maximum permits the selected release's
 checkpoint, action, Await, queue, semantic-store, signing, logging and recovery
 operations. A restricted notification profile does not relax that requirement.
