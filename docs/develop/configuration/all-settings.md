@@ -367,7 +367,7 @@ Prefix: `tpf.await.sqs`
 | `tpf.await.sqs.wait-time-seconds` | int | `1` | Long-poll wait time for SQS receive calls. Values are clamped to the SQS range `1..20`. |
 | `tpf.await.sqs.max-messages` | int | `1` | Maximum messages received per poll. Values are clamped to the SQS range `1..10`. |
 
-SQS completion dispatch uses the `request.queueUrl` and `response.queueUrl` authored under the operation's `await:` modifier. The completion poller uses the runtime `response-queue-url` so the hosting coordinator can decide which queue it consumes. Region and endpoint override reuse `pipeline.orchestrator.sqs.region` and `pipeline.orchestrator.sqs.endpoint-override`.
+SQS dispatch sends to the `request.queueUrl` authored under the operation's `await:` modifier. By default, `response.queueUrl` names the response queue, and the completion poller uses the runtime `response-queue-url` to select the queue this coordinator consumes. An explicit [`response.mode: HOST_MANAGED`](/deploy/orchestrator-runtime/await#sqs-example) omits the authored response queue and requires the local poller to remain disabled; the provider uses the completion destination supplied by that host. Region and endpoint override reuse `pipeline.orchestrator.sqs.region` and `pipeline.orchestrator.sqs.endpoint-override`.
 
 ### Item Reject Sink
 
