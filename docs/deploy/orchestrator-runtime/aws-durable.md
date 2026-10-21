@@ -174,6 +174,39 @@ Deploy these resources together, applying the observation requirements for the s
 - the Await/binding Stream wake-up handler and the bounded terminal reconciliation handler;
 - for `HARDENED`, alarms for worker DLQs and Stream failure destinations with owned response routing; for `RESTRICTED_PILOT`, supervised failure checks for those same destinations.
 
+The reference SAM template processes transforms in this order:
+
+```yaml
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+```
+
+LanguageExtensions resolves the existing `ActionArtifactUri` parameter before SAM
+parses it. The eight action/worker functions use
+`CodeUri: !Sub '${ActionArtifactUri}'`; retain this expression when the transition
+worker is conditionally omitted in COMPUTE placement. It preserves the complete S3
+object key, including nested prefixes. The 74 deployment parameters, code packages,
+explicit roles and recovery mechanisms remain unchanged.
+
+Allow `cloudformation:CreateChangeSet` on both exact AWS-owned transform ARNs for
+the deployment region: `arn:aws:cloudformation:<region>:aws:transform/LanguageExtensions`
+and `arn:aws:cloudformation:<region>:aws:transform/Serverless-2016-10-31`.
+Grant this scoped permission to the deployment principal that calls CreateChangeSet.
+When a CloudFormation execution role is supplied through RoleARN, grant that role
+the same exact transform permissions as well. These permissions grant no function
+invocation or resource lifecycle authority. Continue to provide the original
+template on updates rather than reusing the processed template, whose parameters
+may already be resolved to literals.
+
+Validate both transform stages before execution. The owner tests use the official
+local LanguageExtensions processor and SAM translator; local success does not
+prove that the AWS-hosted macros accepted the asset. `ValidateTemplate` and
+`GetTemplateSummary` also do not exercise the full SAM transform. Inspect a
+CloudFormation change-set preview without executing it before deploying a newly
+qualified asset. See AWS's [CodeUri reference](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-codeuri)
+and [transform processing guidance](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-language-extensions.html).
+
 Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted Lambdas. This prevents native poll and sweep loops from competing with Lambda event sources. `PipelineControlPlane` actions remain available and initialise their providers without starting resident loops.
 
 Current itemised Await observation uses bounded pages of the current unit rather
