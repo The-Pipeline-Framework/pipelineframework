@@ -322,6 +322,27 @@ ignore files that are physically present because their original authenticated re
 credential-free test job. A materialisation change is complete only when a clean job with no package settings can
 resolve the exact component set.
 
+## Temporary Eclipse formatting outage replay
+
+The candidate workflow has one supervised, default-off recovery entry point for the 21 October 2026
+Eclipse4.34 download outage. It expires at midnight UTC. It accepts only runtime PR68 head
+`44e412812ed1bda3eb23ab07859864d1c5c89754` and original run `39623835075`, from the trusted `main`
+workflow. Repository write authority is required to dispatch it.
+
+The replay verifies the original run provenance, immutable GitHub artifact IDs and archive hashes,
+exact resolved closure and six-group matrix, and the current runtime pull-request head. It reuses the
+original credential-free materialization and unchanged product runners. An explicit boolean enables
+only `-Dspotless.skip=true`; no arbitrary Maven arguments, test exclusions, replacement dependencies or
+baseline promotion are accepted. All six complete functional groups and their aggregate must pass.
+The exception and its fixed outage reason appear in the run summary, retained receipt and final status.
+Ordinary automatic intake keeps formatting enabled.
+
+Activating this incident workflow requires a reviewed trusted-main bootstrap. Only the exact incident
+merge marker, UTC day and checked non-Maven file allowlist suppress that bootstrap's automatic parent/BOM
+publication before the compatibility gate. All other pushes and explicit manual publication retain the
+ordinary publication policy. This narrow bootstrap is not permission to merge the runtime candidate
+before its full replay succeeds.
+
 ## Reruns and failure handling
 
 Candidate identity is immutable. A coordinator or infrastructure correction should rerun the trusted candidate
