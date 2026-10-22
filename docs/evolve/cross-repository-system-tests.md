@@ -324,24 +324,34 @@ resolve the exact component set.
 
 ## Temporary Eclipse formatting outage replay
 
-The candidate workflow has one supervised, default-off recovery entry point for the 21 October 2026
-Eclipse4.34 download outage. It expires at midnight UTC. It accepts only runtime PR68 head
-`44e412812ed1bda3eb23ab07859864d1c5c89754` and original run `39623835075`, from the trusted `main`
-workflow. Repository write authority is required to dispatch it.
+The candidate workflow has supervised, default-off recovery entries for the Eclipse4.34 download
+outage. Repository write authority is required to dispatch the trusted `main` workflow. Each entry
+accepts only its reviewed original run, runtime source and UTC day:
+
+| UTC day | Original run | Exact runtime source |
+| --- | --- | --- |
+| 21 October 2026 | `39623835075` | PR68 `44e412812ed1bda3eb23ab07859864d1c5c89754` |
+| 22 October 2026 | `39705054075` | main `4c0de12a53710a3599a35dd851a1dbfca7e0df1a` |
+
+Each replay expires at midnight UTC after its listed day. This CI window does not extend any cloud
+permission or deployment window. The 22 October entry reuses all nine original suites in six groups;
+it does not replay a closed PR or substitute an earlier candidate closure.
 
 The replay verifies the original run provenance, immutable GitHub artifact IDs and archive hashes,
-exact resolved closure and six-group matrix, and the current runtime pull-request head. It reuses the
-original credential-free materialization and unchanged product runners. An explicit boolean enables
-only `-Dspotless.skip=true`; no arbitrary Maven arguments, test exclusions, replacement dependencies or
-baseline promotion are accepted. All six complete functional groups and their aggregate must pass.
-The exception and its fixed outage reason appear in the run summary, retained receipt and final status.
-Ordinary automatic intake keeps formatting enabled.
+exact resolved closure and six-group matrix, and the current runtime PR or main head as appropriate.
+It reuses the original credential-free materialization and unchanged product runners. An explicit
+boolean enables only `-Dspotless.skip=true`; no arbitrary Maven arguments, test exclusions, replacement
+dependencies or baseline promotion are accepted. All six complete functional groups and their aggregate
+must pass. The exception and fixed outage reason appear in the run summary, retained receipt and final
+status. Ordinary automatic intake keeps formatting enabled.
 
-Activating this incident workflow requires a reviewed trusted-main bootstrap. Only the exact incident
-merge marker, UTC day and checked non-Maven file allowlist suppress that bootstrap's automatic parent/BOM
-publication before the compatibility gate. All other pushes and explicit manual publication retain the
-ordinary publication policy. This narrow bootstrap is not permission to merge the runtime candidate
-before its full replay succeeds.
+Activation requires a reviewed trusted-main bootstrap. Only the exact incident merge marker, matching
+UTC day and checked non-Maven file allowlist suppress that bootstrap's automatic parent/BOM publication.
+For 22 October the exact subject is
+`ci(system-tests): replay Eclipse formatting outage [incident-20261022]`.
+Verify the actual publication-policy job succeeds and publication is skipped before dispatching the
+replay. All other pushes and explicit manual publication retain the ordinary publication policy. This
+mechanism does not waive required source-review or functional CI gates.
 
 ## Reruns and failure handling
 

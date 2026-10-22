@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       source_run_id:
-        description: 'Incident 20261021: original attested run (39623835075 only)'
+        description: 'Reviewed outage: original attested run (39623835075 or 39705054075 only)'
         required: true
         type: string
       source_sha:
-        description: 'Exact reviewed runtime68 head (44e4128... only)'
+        description: 'Exact reviewed runtime head (44e4128... or main4c0de12... only)'
         required: true
         type: string
       formatting_outage_exception:
@@ -908,10 +908,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/The-Pipeline-Framework/pipelineframework/actions/runs/39623835075 > replay-run.json
-          gh api repos/The-Pipeline-Framework/pipelineframework/actions/runs/39623835075/artifacts > replay-artifacts.json
-          gh api repos/The-Pipeline-Framework/pipelineframework/actions/artifacts/12356422381/zip > resolved.zip
-          node system-tests/scripts/formatting-outage-incident.mjs --archive resolved.zip --kind resolved
+          run_id="$(jq -r .originalRunId replay-request.json)"
+          artifact_id="$(jq -r .artifacts.resolved.id replay-request.json)"
+          gh api "repos/The-Pipeline-Framework/pipelineframework/actions/runs/$run_id" > replay-run.json
+          gh api "repos/The-Pipeline-Framework/pipelineframework/actions/runs/$run_id/artifacts" > replay-artifacts.json
+          gh api "repos/The-Pipeline-Framework/pipelineframework/actions/artifacts/$artifact_id/zip" > resolved.zip
+          node system-tests/scripts/formatting-outage-incident.mjs --archive resolved.zip --kind resolved --context replay-context.json
           unzip -q resolved.zip -d original-resolved
       - name: Create source pull-request read token
         id: source-token
@@ -922,12 +924,14 @@ jobs:
           owner: The-Pipeline-Framework
           repositories: pipelineframework-runtime
           permission-pull-requests: read
+          permission-contents: read
       - name: Verify original closure, all six groups and current runtime head
         id: validate
         env:
           GH_TOKEN: ${{ steps.source-token.outputs.token }}
         run: |
-          gh api repos/The-Pipeline-Framework/pipelineframework-runtime/pulls/68 > replay-pull.json
+          source_path="$(jq -r .sourcePath replay-request.json)"
+          gh api "repos/The-Pipeline-Framework/pipelineframework-runtime/$source_path" > replay-pull.json
           node system-tests/scripts/formatting-outage-incident.mjs \
             --context replay-context.json --run replay-run.json --artifacts replay-artifacts.json \
             --pull replay-pull.json --resolved original-resolved/resolved-set.json \
@@ -935,7 +939,7 @@ jobs:
           echo "matrix=$(jq -c .matrix formatting-incident-receipt.json)" >> "$GITHUB_OUTPUT"
           echo "maven_args=$(jq -er '.mavenArgs | select(type == "string")' formatting-incident-receipt.json)" >> "$GITHUB_OUTPUT"
           echo "exception=$(jq -r .formattingException formatting-incident-receipt.json)" >> "$GITHUB_OUTPUT"
-          echo '### ECLIPSE_4_34_SHUTDOWN_20261021 — fixed original closure; six full groups; no baseline promotion' >> "$GITHUB_STEP_SUMMARY"
+          echo '### Fixed Eclipse outage replay — original closure; six full groups; no baseline promotion' >> "$GITHUB_STEP_SUMMARY"
           jq '{reason,originalRunId,sourceSha,formattingException,mavenArgs,resolvedSetSha256,matrixSha256}' formatting-incident-receipt.json >> "$GITHUB_STEP_SUMMARY"
       - name: Retain explicit incident authority and immutable input receipts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -987,12 +991,18 @@ jobs:
           java-version: 25
       - name: Record JDK25
         run: echo "TPF_JAVA_25_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+      - name: Download current supervised request
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-formatting-incident-receipt
       - name: Download and verify original credential-free materialization
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/The-Pipeline-Framework/pipelineframework/actions/artifacts/12358000239/zip > inputs.zip
-          node coordination/system-tests/scripts/formatting-outage-incident.mjs --archive inputs.zip --kind materialized
+          node coordination/system-tests/scripts/formatting-outage-incident.mjs --context replay-context.json > replay-request.json
+          artifact_id="$(jq -r .artifacts.materialized.id replay-request.json)"
+          gh api "repos/The-Pipeline-Framework/pipelineframework/actions/artifacts/$artifact_id/zip" > inputs.zip
+          node coordination/system-tests/scripts/formatting-outage-incident.mjs --archive inputs.zip --kind materialized --context replay-context.json
           unzip -q inputs.zip -d inputs
           mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
           tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
@@ -1015,6 +1025,14 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout trusted coordinator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download current supervised request
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-formatting-incident-receipt
       - name: Create exact source status token
         id: source-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
@@ -1024,6 +1042,7 @@ jobs:
           owner: The-Pipeline-Framework
           repositories: pipelineframework-runtime
           permission-pull-requests: read
+          permission-contents: read
           permission-statuses: write
       - name: Report actual aggregate against unchanged current runtime head
         env:
@@ -1032,7 +1051,11 @@ jobs:
           EXCEPTION: ${{ needs.formatting-replay-intake.outputs.exception }}
           TARGET_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          test "$(gh api repos/The-Pipeline-Framework/pipelineframework-runtime/pulls/68 --jq .head.sha)" = 44e412812ed1bda3eb23ab07859864d1c5c89754
+          node system-tests/scripts/formatting-outage-incident.mjs --context replay-context.json > replay-request.json
+          source_path="$(jq -r .sourcePath replay-request.json)"
+          gh api "repos/The-Pipeline-Framework/pipelineframework-runtime/$source_path" > current-source.json
+          node system-tests/scripts/formatting-outage-incident.mjs --context replay-context.json --pull current-source.json > validated-source.json
+          source_sha="$(jq -r .sourceSha validated-source.json)"
           state=failure
           description='A mandatory incident replay product-test group failed'
           if [ "$TEST_RESULT" = success ]; then
@@ -1040,6 +1063,6 @@ jobs:
             description='All six full groups passed; ordinary formatting enabled'
             if [ "$EXCEPTION" = true ]; then description='All six full groups passed; Eclipse outage formatting-only exemption'; fi
           fi
-          gh api --method POST repos/The-Pipeline-Framework/pipelineframework-runtime/statuses/44e412812ed1bda3eb23ab07859864d1c5c89754 \
+          gh api --method POST "repos/The-Pipeline-Framework/pipelineframework-runtime/statuses/$source_sha" \
             -f state="$state" -f context=tpf/system-tests -f description="$description" -f target_url="$TARGET_URL"
           test "$state" = success

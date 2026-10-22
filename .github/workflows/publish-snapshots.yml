@@ -35,7 +35,8 @@ jobs:
           printf '%s\n' "$POLICY_CONTEXT" > publication-context.json
           first_line="$(jq -r '.message // "" | split("\n")[0]' publication-context.json)"
           if [ "${{ github.event_name }}" = push ] && \
-             [ "$first_line" = 'ci(system-tests): replay Eclipse formatting outage [incident-20261021]' ]; then
+             { [ "$first_line" = 'ci(system-tests): replay Eclipse formatting outage [incident-20261021]' ] || \
+               [ "$first_line" = 'ci(system-tests): replay Eclipse formatting outage [incident-20261022]' ]; }; then
             git diff --name-only "$BEFORE_SHA" "$AFTER_SHA" > publication-changed-paths.txt
             jq -R -s 'split("\n") | map(select(length > 0))' publication-changed-paths.txt > publication-paths.json
           else
