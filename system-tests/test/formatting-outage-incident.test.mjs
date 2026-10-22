@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import test from 'node:test';
-import {incident, bootstrapPaths, publicationDecision, validateArchive, validateReplay, validateRequest}
+import {incident, mainIncident, bootstrapPaths, mainBootstrapPaths, publicationDecision, validateArchive, validateReplay, validateRequest, validateSource}
   from '../scripts/formatting-outage-incident.mjs';
 
 const now = new Date('2026-10-21T16:30:00.000Z');
@@ -159,4 +159,85 @@ test('automatic intake skips every incident job before empty matrix evaluation',
   assert.match(workflow, /formatting-replay-report:[\s\S]*?if: always\(\) && needs.formatting-replay-intake.result == 'success'/);
   const automatic = {eventName: 'repository_dispatch', intake: 'skipped'};
   assert.equal(automatic.eventName === 'workflow_dispatch' && automatic.intake === 'success', false);
+});
+
+const mainNow = new Date('2026-10-22T02:00:00.000Z');
+const mainResolved = await readFile(new URL('./fixtures/eclipse-outage-20261022/resolved-set.json', import.meta.url));
+const mainMatrix = await readFile(new URL('./fixtures/eclipse-outage-20261022/suite-matrix.json', import.meta.url));
+function mainFixture(enabled = true) {
+  const value = fixture(enabled);
+  value.context.inputs.source_run_id = String(mainIncident.sourceRunId);
+  value.context.inputs.source_sha = mainIncident.sourceSha;
+  Object.assign(value.run, {id: mainIncident.sourceRunId, head_sha: mainIncident.coordinatorSha});
+  value.artifacts.artifacts = Object.values(mainIncident.artifacts).map(a => ({id: a.id, name: a.name,
+    expired: false, size_in_bytes: a.bytes, digest: `sha256:${a.sha256}`, workflow_run: {id: mainIncident.sourceRunId}}));
+  value.pull = {ref: 'refs/heads/main', object: {type: 'commit', sha: mainIncident.sourceSha}};
+  return value;
+}
+const validateMain = value => validate(value, mainResolved, mainMatrix, mainNow);
+
+test('22 October replay preserves exact main closure, all nine suites/six groups and default formatting', () => {
+  const result = validateMain(mainFixture());
+  assert.equal(result.mavenArgs, '-Dspotless.skip=true');
+  assert.equal(result.baselinePromotion, false);
+  assert.equal(result.sourceSha, mainIncident.sourceSha);
+  assert.equal(result.sourcePath, 'git/ref/heads/main');
+  assert.equal(result.sourcePullRequest, null);
+  assert.equal(result.resolvedSetSha256, mainIncident.resolvedSetSha256);
+  assert.deepEqual(result.matrix, JSON.parse(mainMatrix));
+  assert.equal(result.matrix.include.length, 6);
+  assert.equal(result.matrix.include.flatMap(group => group.suites).length, 9);
+  assert.equal(validateMain(mainFixture(false)).mavenArgs, '');
+  assert.equal(validateSource(mainFixture().context, mainFixture().pull, mainNow).sourceSha, mainIncident.sourceSha);
+});
+for (const [name, mutate] of [
+  ['stale actual main', f => f.pull.object.sha = incident.sourceSha],
+  ['foreign ref', f => f.pull.ref = 'refs/heads/feature'],
+  ['non-commit ref', f => f.pull.object.type = 'tag'],
+  ['closed PR substituted for main', f => f.pull = fixture().pull],
+  ['old source with new run', f => f.context.inputs.source_sha = incident.sourceSha],
+  ['different original coordinator', f => f.run.head_sha = incident.coordinatorSha],
+  ['original workflow still running', f => f.run.status = 'in_progress'],
+  ['different original repository', f => f.run.repository.full_name = 'foreign/pipelineframework'],
+  ['artifact from old run', f => f.artifacts.artifacts[0].workflow_run.id = incident.sourceRunId],
+  ['wrong artifact size', f => f.artifacts.artifacts[1].size_in_bytes++],
+  ['wrong archive identity', f => f.artifacts.artifacts[1].id++],
+  ['wrong archive digest', f => f.artifacts.artifacts[1].digest = 'sha256:' + '0'.repeat(64)],
+  ['expired archive', f => f.artifacts.artifacts[1].expired = true],
+  ['arbitrary test skip input', f => f.context.inputs.MAVEN_ARGS = '-DskipTests'],
+  ['string flag', f => f.context.inputs.formatting_outage_exception = 'true'],
+  ['automatic exception request', f => f.context.eventName = 'repository_dispatch']
+]) test(`22 October replay rejects ${name}`, () => {
+  const value = mainFixture(); mutate(value); assert.throws(() => validateMain(value));
+});
+test('22 October cannot borrow the earlier day, closure, matrix or archive authority', () => {
+  const f = mainFixture();
+  assert.throws(() => validate(f, mainResolved, mainMatrix, now), /expired/);
+  assert.throws(() => validate(f, mainResolved, mainMatrix, new Date(mainIncident.expiresAt)), /expired/);
+  assert.throws(() => validate(f, resolved, mainMatrix, mainNow), /closure changed/);
+  assert.throws(() => validate(f, mainResolved, matrix, mainNow), /matrix changed/);
+  const reduced = JSON.parse(mainMatrix); reduced.include.pop();
+  assert.throws(() => validate(f, mainResolved, Buffer.from(JSON.stringify(reduced)), mainNow), /matrix changed/);
+  assert.throws(() => validateArchive(Buffer.from('wrong'), 'materialized', f.context, mainNow), /digest mismatch/);
+});
+test('22 October exact non-Maven bootstrap suppresses only its matching publisher push', () => {
+  const context = {...publicationContext, message: mainIncident.mergeMarker};
+  assert.equal(publicationDecision(context, [...mainBootstrapPaths], mainNow).publish, false);
+  assert.throws(() => publicationDecision(context, ['framework/bom/pom.xml'], mainNow), /non-allowlisted/);
+  assert.throws(() => publicationDecision(context, ['docs/deploy/orchestrator-runtime/aws-durable.md'], mainNow), /non-allowlisted/);
+  assert.throws(() => publicationDecision(context, [...mainBootstrapPaths], now), /window/);
+  assert.throws(() => publicationDecision(context, [...mainBootstrapPaths], new Date(mainIncident.expiresAt)), /window/);
+  assert.equal(publicationDecision({...context, message: mainIncident.mergeMarker + ' suffix'}, [], mainNow).publish, true);
+  assert.equal(publicationDecision({...context, eventName: 'workflow_dispatch'}, [], mainNow).publish, true);
+  assert.equal(publicationDecision({...context, message: 'ordinary main push'}, [], mainNow).publish, true);
+});
+test('both fixed replay paths revalidate current source and archives; original automatic path is unchanged', () => {
+  const manual = workflow.split('\n  formatting-replay-intake:')[1];
+  assert.match(manual, /--archive resolved.zip --kind resolved --context replay-context.json/);
+  assert.match(manual, /--archive inputs.zip --kind materialized --context replay-context.json/);
+  assert.match(manual, /source_path="\$\(jq -r .sourcePath replay-request.json\)"/);
+  assert.match(manual, /--pull current-source.json > validated-source.json/);
+  assert.match(manual, /statuses\/\$source_sha/);
+  assert.match(manual, /name: tpf-formatting-incident-receipt/);
+  assert.doesNotMatch(manual, /statuses\/44e4128|pulls\/68|actions\/artifacts\/12358000239/);
 });
