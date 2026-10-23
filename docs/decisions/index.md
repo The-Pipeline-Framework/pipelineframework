@@ -86,6 +86,7 @@ publication and the distinction from immutable test and release inputs.
 | [0072](./0072-generated-application-proofs-consume-released-runtime-artifacts.md) | Keep generated Spring and AWS Durable application proofs in examples over released runtime artifacts. |
 | [0073](./0073-await-unit-occurrences-bind-completion-release.md) | Bind completion admission and parent release to one retained Await unit occurrence. |
 | [0075](./0075-application-owns-conversation-history.md) | Keep approved dialogue history with the application while Connectors supply context vocabulary and external adapters. |
+| [0076](./0076-chat-agent-carries-bounded-conversation-state.md) | Carry authorised, bounded conversation state through ChatAgent and hydrate only at an application-chosen boundary. |
 
 ## Maintenance
 

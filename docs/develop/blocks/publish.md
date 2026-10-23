@@ -38,7 +38,9 @@ may select a fixed operation. It cannot own the consuming application's connecto
 credentials, or Command identity policy.
 
 Current Block imports deliberately reject application/runtime declarations, Await boundaries, remote
-operators, dynamic operations, connector bindings, and checkpoint behaviour. Package definitions
+operators, connector bindings, and checkpoint behaviour. A Block may declare a finite dynamic
+callable catalogue, or one application-bound typed Query callable slot, and dispatch it through
+ordinary Query semantics. Package definitions
 must not collide with local definitions or another package's qualified identity. Prefer qualified
 `namespace/name` references when ambiguity is possible.
 

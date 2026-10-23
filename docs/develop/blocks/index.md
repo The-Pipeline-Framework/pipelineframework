@@ -17,8 +17,8 @@ Use a Block when a reusable computation needs several typed steps, package-owned
 classes, or contributed canonical types. Use an ordinary service for one application's transformation,
 and an operator for a reusable/delegated execution unit that owns its own model or boundary.
 
-Continue with [Use a Block](./use) or [Publish a Block](./publish). The repository currently ships
-document text extraction and GraphQL Blocks under
+Continue with [Use a Block](./use), [ChatAgent](./chat-agent), or [Publish a Block](./publish). The repository ships
+document text extraction, GraphQL and conversational Blocks under
 [`pipelineframework-blocks`](https://github.com/The-Pipeline-Framework/pipelineframework-blocks).
 
 Blocks first shipped as packaged pipeline segments in v26.9.1 and were renamed to Blocks in v26.9.2.
