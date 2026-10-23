@@ -292,6 +292,21 @@
             </dependency>
             <dependency>
                 <groupId>org.pipelineframework.blocks</groupId>
+                <artifactId>chat-agent-core</artifactId>
+                <version>${pipelineframework.blocks.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework.blocks</groupId>
+                <artifactId>chat-agent</artifactId>
+                <version>${pipelineframework.blocks.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework.blocks</groupId>
+                <artifactId>chat-agent-query</artifactId>
+                <version>${pipelineframework.blocks.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework.blocks</groupId>
                 <artifactId>openapi-representation-mapper</artifactId>
                 <version>${pipelineframework.blocks.version}</version>
             </dependency>

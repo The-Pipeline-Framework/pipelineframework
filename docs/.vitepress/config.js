@@ -190,6 +190,7 @@ const mainSidebar = [
                 items: [
                     {text: 'Overview', link: '/develop/blocks/'},
                     {text: 'Use a Block', link: '/develop/blocks/use'},
+                    {text: 'ChatAgent', link: '/develop/blocks/chat-agent'},
                     {text: 'Publish a Block', link: '/develop/blocks/publish'}
                 ]
             },

@@ -99,6 +99,12 @@ other envelope field must have an explicit mapping, and dotted paths address nes
 This projection does not perform another inference or allow model output to overwrite trusted
 application context.
 
+The same `completion` projection can target the non-call payload of a union decision. The model
+authors that payload's selected field, while the connector copies the declared trusted fields from
+the Query input and materializes the union's `complete` variant. Tool call variants retain their
+ordinary typed argument validation. ChatAgent uses this form so a first inference can either reply
+directly or request one application-bound Query.
+
 ## Configure the Query
 
 The named LLM binding owns model configuration. The Query step owns its instructions and explicitly exposed callable catalogue:
@@ -197,7 +203,7 @@ The application maps the generic observation into its own state in a later Mappe
 
 ## Compose multiple turns with ordinary recursion
 
-When a later turn needs earlier dialogue, the application can persist accepted turns, read bounded owner-scoped history in a captured Query, and select the model-visible entries before the next LLM Query. The LLM Query connector retains no transcript between invocations. See [Conversation context for an LLM Query](/develop/connectors/conversation-context) for the authoring decisions, pipeline YAML, selection code boundary, model behaviour and limits.
+When a later turn needs earlier dialogue, carry authorised conversation state between steps and select its model-visible entries. A new execution can optionally hydrate accepted turns through an owner-scoped, captured Query. The LLM Query connector retains no transcript between invocations. See [ChatAgent](/develop/blocks/chat-agent) for a reusable Block and [Conversation context](/develop/connectors/conversation-context) for manual composition, model behaviour and limits.
 
 Agentic behavior does not require a second Agent runtime. Put the one-turn Query, dynamic native
 operation, and application-authored reducer inside a named v3 pipeline, then route the reducer's
