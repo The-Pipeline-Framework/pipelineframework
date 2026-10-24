@@ -25,6 +25,8 @@ An application may select a Quarkus `@Alternative` `HealthCheckService` bean wit
 `protected HttpRequest customizeHttpHealthRequest(String clientType, String clientName, HttpRequest request)`
 to authenticate the probe. The default returns the request unchanged. Preserve its URI, GET method,
 empty body, timeout and TLS verification. Reject unavailable credentials rather than retrying unsigned.
+Requests with `Authorization`, `Cookie` or `X-API-Key` headers require HTTPS, including
+a request returned by the customisation hook. The runtime rejects them before sending over HTTP.
 If customisation throws, the probe fails without an unsigned retry. The normal health-status
 check still requires HTTP 200; authentication must not turn HTTP 503 into
 a healthy result or substitute liveness for readiness.
