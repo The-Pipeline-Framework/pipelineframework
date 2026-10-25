@@ -1,6 +1,6 @@
 # Conversation context for an LLM Query
 
-An [LLM Query](/develop/extension/llm-query) makes one model call from the input supplied to that step. It does not remember an earlier call. To let a later request refer to earlier dialogue, the application saves the turns it accepts, reads relevant history, and puts a selected portion into the next model input.
+An [LLM Query](/develop/extension/llm-query) makes one model call from the input supplied to that step. It does not remember an earlier call. A computation can carry authorised conversation evidence as ordinary typed state between steps. When a **new execution** needs earlier accepted dialogue, the application can read it from its store through a captured Query and add eligible evidence to that state. The [ChatAgent Block](/develop/blocks/chat-agent) packages context selection and inference; this page also shows the manual PadelPot pattern.
 
 The `conversation-context-connector` artifact supplies portable conversation values and a deterministic `ContextAssembler` for selecting bounded model evidence. It supplies neither a transcript database nor automatic history injection. It does not detect whether persistence exists and create a fallback store.
 
@@ -28,7 +28,7 @@ flowchart LR
 | What can the model see? | Select eligible history, mark essential context as required, supply the model window and overhead budgets, inspect selection failures, and put selected entries into an explicit field of the next LLM Query input. |
 | What may happen next? | Validate the model's typed proposal and retain deterministic business rules, human approval and Command authority outside the history text. |
 
-If the application already persists accepted turns, read them from that store. If it needs durable conversation history and has no store, select and configure a persistence provider and map an application value to it. Neither choice is made by the connector at runtime. If durable history is unnecessary, the application can supply explicit request-local context without adding a transcript store.
+If the application already persists accepted turns, read them from that store when a new execution needs them. If it needs durable conversation history and has no store, select and configure a persistence provider and map an application value to it. Neither choice is made by the connector at runtime. If durable history is unnecessary, carry explicit `ChatState` without adding a transcript store or history Query.
 
 `ConversationScope`, `ConversationTurn`, `HistoryReadRequest` and the page types are available when a shared, typed conversation contract is useful. `ConversationTurn` includes a stable event ID, positive store-assigned cursor, speaker, source and text or owned payload reference. Using these types does not require a particular JPA entity or SQL schema. PadelPot keeps its own `ApprovedTurnEntity` and maps its own canonical values; it uses the portable assembler for selection.
 
