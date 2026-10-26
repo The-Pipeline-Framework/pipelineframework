@@ -52,8 +52,9 @@ reactor: that would hide missing publication metadata and recreate source-level 
 
 ## Where the E2E tests live
 
-- Quarkus and Spring runtime smoke coverage is in `pipelineframework-runtime`; both Spring smoke modules are part of
-  its canonical reactor.
+- Quarkus/Spring adapter unit and provider integration coverage is in `pipelineframework-runtime`.
+  The generated application consumers `spring-smoke-tests`, `spring-blocking-smoke-tests`
+  and `aws-durable-proof` are in the canonical `pipelineframework-examples` reactor.
 - Connector integration tests, including database/provider Testcontainers tests, are in
   `pipelineframework-connectors`.
 - Learning-proof integration tests are in `pipelineframework-examples`, including GraphQL, OpenAPI callback, RAG,
@@ -70,11 +71,11 @@ reactor: that would hide missing publication metadata and recreate source-level 
 | --- | --- | --- |
 | contracts | Canonical `clean verify` on pull requests | Owner tests run |
 | compiler | Canonical `clean verify` on pull requests | Owner tests run |
-| runtime | Canonical `clean verify` on pull requests | Runtime and both Spring smoke modules run |
+| runtime | Canonical `clean verify` on pull requests | Runtime, adapter and provider tests run |
 | connectors | `clean verify -DskipTests` plus publication checks | Test sources exist, but PR tests are incorrectly skipped; tracked by [#932](https://github.com/The-Pipeline-Framework/pipelineframework/issues/932) |
 | Blocks | Canonical `clean verify` on pull requests | Owner tests run |
 | Expansions | Distribution verification and dependency resolution | Appropriate for the current POM-only distributions |
-| examples | Canonical `clean verify` plus Restaurant Approval workflows | Focused example integration tests run |
+| examples | Canonical `clean verify` plus Restaurant Approval workflows | Focused examples, generated Spring applications and deployment-free Durable proof tests run |
 | reference implementations | Composed Checkout/TPFGo, Search and QuickBooks workflows | E2E ownership is explicit |
 | CSV/Kafka Payments | Maven reactor plus self-hosted HA and scale workflows | Several former variant/native lanes are missing; tracked by #929 |
 | RAG Turnkey | Canonical `verify` on pull requests | Current contract tests run |
@@ -99,7 +100,7 @@ The missing sources are:
 3. its test-only `ObservabilityObligations` model — both belong in `csv-kafka-payments`
    ([#929](https://github.com/The-Pipeline-Framework/pipelineframework/issues/929)).
 
-File preservation alone is not CI preservation. The Spring workflows were consolidated into the runtime reactor,
+File preservation alone is not CI preservation. The Spring application smoke tests run in the examples reactor,
 TPFGo gates moved into the reference-implementation workflow composition, and the CSV HA/scale workflows moved to
 the application repository. However, CSV's former monolith, alternate pipeline-runtime, provider-rejection, Tempo
 verification and native-build lanes do not currently have equivalent owner-repository workflows. Issue #929 tracks

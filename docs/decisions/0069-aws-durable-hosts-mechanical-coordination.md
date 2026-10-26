@@ -40,6 +40,14 @@ The boundary becomes invalid if callback or provider history must become the onl
 - AWS callback/history contract questions remain suitable for direct provider validation, but they do not move TPF semantic authority.
 
 - The control plane may expose a bounded observation of the execution’s current semantic Await unit/primary interaction. Completed interaction status remains observable while parent consequences are pending. Generation and callback occurrence are added only by the mechanical host and do not enter that semantic observation.
+- Itemised observation carries a store-owned, tenant/unit-bound cursor between bounded calls. TPF rechecks selected index entries against current interaction state. The host forwards progress without interpreting a store token or inferring completion from an empty page.
+- A retained mechanical admission locator is written before semantic submission. When the submit acknowledgement or provider history is lost, recovery resolves an existing admission through TPF's normalised client-key read and validates pipeline, contract and Release pins. Missing admission remains retryable and does not authorise resubmission, re-drive or adoption of another Release. Input-derived keys require a separately supported recovery contract; they cannot be reconstructed by the AWS host.
+
+- The compiler's FUNCTION REST bridge buffers finite output streams as JSON arrays
+  and its paired client restores typed stream cardinality. COMPUTE REST retains
+  SSE. This is deployment wire adaptation, with invocation, memory and payload
+  bounds; it introduces no new semantic step kind or provider-owned Await state.
+
 
 - The control plane also exposes an admitted, bounded execution observation containing tenant/execution identity, pipeline, contract, Release and current status. Native recovery and operator tooling need these same semantic facts; no provider identity, callback or DynamoDB schema enters the contract. Execution Stream images remain hints. A terminal observation may settle a disposable provider callback, but it cannot admit Await completion or authorise semantic re-drive.
-- Retained execution recovery locators relate those semantic identities to provider executions outside TPF state. Preserve them and generation authority for the supported recovery lifetime, independently of callback TTL. Reconstruction uses the original numbered coordinator and action code. The admission-to-locator crash window remains a validation gate rather than a claim of complete recovery.
+- Retained execution recovery locators relate those semantic identities to provider executions outside TPF state. Preserve them and generation authority for the supported recovery lifetime, independently of callback TTL. Reconstruction uses the original numbered coordinator and action code. The retained admission locator covers uncertain submission; full recovery conformance remains a separate validation gate.

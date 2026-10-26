@@ -6,6 +6,9 @@ connects the template to TPF's Functional Core, Imperative Shell model, start wi
 
 Version 3 describes a pipeline in domain terms. A type says what business value is moving through the pipeline; a step says how that value changes. Protobuf tags, generated bindings, and transport representations are compiler-owned infrastructure.
 
+The pipeline template defaults to version 3 when `version` is omitted. Declare `version: 3`
+when the dialect should remain clear to readers and tooling.
+
 ```mermaid
 flowchart LR
     T[Canonical types] --> P[Typed steps]
@@ -154,6 +157,11 @@ Generated Java keeps unmarked required/non-null fields as `T`. Any other singula
 Generated constructors enforce the declared state. Nullable protobuf fields use a compiler-owned
 `oneof` with a value arm and a `google.protobuf.NullValue` arm; no selected arm means absent.
 Compiler-owned tags and names are persisted in `pipeline.idl.json` and reserved when retired.
+
+Generated REST record DTOs enforce these same input states through the shared Jackson codecs:
+optional/non-null fields reject explicit JSON null, and nullable fields preserve null separately
+from absence. A required nullable field still requires its key. The generated transport DTO's Java
+representation does not override the canonical contract.
 
 Defaults are not part of this feature. In particular, an absent field is not silently materialized
 as a default value. Repeated fields retain their existing missing-to-empty-list behavior and cannot
@@ -304,7 +312,8 @@ the canonical record directly. Complete configuration and Java examples are in
 For HTTP access to an owned `payload_ref`, version 3 also accepts top-level `httpPayloads`.
 Each route names a record's singular `payload_ref` field, allowed content types, an authorisation
 scope, and a bound object target for upload or bound object source for download. Uploads require
-`maxBytes`; downloads omit it. The initial implementation supports REST on COMPUTE. See
+`maxBytes`; downloads omit it. REST/COMPUTE streams multipart bodies directly;
+REST/FUNCTION requires an S3 object provider and uses delegated transfer. See
 [Generated owned-payload boundaries](/develop/handling-file-operations#generated-owned-payload-boundaries)
 for the request shape and security contract.
 

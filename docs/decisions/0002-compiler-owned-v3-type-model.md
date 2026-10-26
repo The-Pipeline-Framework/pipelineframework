@@ -18,6 +18,9 @@ identity, semantic and wire tags, compatibility, routing, composition checks, ha
 and generated contracts. Authors declare named records, nominal wrappers, intentional
 aliases, discriminated unions, and repeated fields. Unions plus `accepts` express typed
 branch applicability; Java `instanceof` routing does not replace compiler-known flow.
+When a pipeline template omits `version`, its authored dialect is version 3. A declared
+version remains explicit input to parsing; unrelated configuration documents retain their
+own version contracts.
 Remote execution metadata selects an invocation boundary; it does not redefine the step's
 types. Remote steps therefore use the same v3 logical contracts and compiler-generated Java
 and wire representations as local pipeline execution.
