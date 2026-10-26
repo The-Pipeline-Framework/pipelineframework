@@ -664,8 +664,8 @@ admitted point read; it accepts no provider identity and exposes no DynamoDB sch
 
 Local tests cover sequential callback occurrences, late completion, completion before
 registration, wrong wake-up identity, generation fencing and provider loss before a
-later registration. Concurrent/itemised Await, loss of retained recovery authority, the admission-to-locator
-window, migration tooling and real-AWS lifecycle conformance remain support gates
+later registration. Loss of retained recovery authority, concurrent/itemised Await
+conformance, migration tooling and real-AWS lifecycle conformance remain support gates
 in the [completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
 
 ## Worker placement
