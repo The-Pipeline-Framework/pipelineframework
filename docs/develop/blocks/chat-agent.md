@@ -41,11 +41,11 @@ steps:
 
 The application constructs `ChatState.start(authorisedScope, messageId, text)` or supplies a validated state carried from a previous step. `ConversationScope` must come from an authenticated host or trusted application state. If a client returns `ChatState`, validate its owner, tenant, conversation, message identity, integrity and eligible evidence before using it. The type alone is not proof of authority.
 
-`ChatResult` has exactly one disposition. `REPLY` contains a proposed natural reply and proposed next state; the application validates and accepts both before making them durable or using `next(...)` for another message. `HANDOFF` reserves an inert `ChatProposal` for a later composition that validates a pinned operation contract before emission and leaves handling to the application. The current Blocks produce replies; they never dispatch Commands or grant business authority. Native Query or provider failures fail the execution.
+`ChatResult` has exactly one disposition. `REPLY` contains a proposed natural reply and proposed next state; the application validates and accepts both before making them durable or using `next(...)` for another message. The Query variant can also produce `HANDOFF`: a validated, inert `ChatProposal` carrying a pinned application Command identity and canonical arguments. The application checks scope and policy before admitting its own Command. Neither Block executes a Command or grants business authority. Native Query or provider failures fail the execution.
 
 `ChatState` permits at most 64 evidence entries, 16 KiB of UTF-8 text per entry and 256 KiB of carried state. Appending evidence or a proposed reply evicts oldest entries deterministically and increments `omittedEntries`. A new state with an oversized current message or invalid shape is rejected. Large immutable content should stay in an owned `PayloadReference` with a bounded excerpt; a reference is not automatic permission to disclose its bytes to the model. These limits apply independently of `ChatWindow` and `ContextAssembler`, which select the smaller model-visible context. If the current message cannot fit, inference fails before calling the provider.
 
-## Add one typed Query tool
+## Add a typed Query or business handoff
 
 Choose `org.pipelineframework.blocks:chat-agent-query` when the model may need one application-approved read before answering. This variant uses the same `ChatState` and `ChatResult` contract. Bind two LLM Query requirements and a finite catalogue of typed, one-to-one Query operations:
 
@@ -61,6 +61,17 @@ blockBindings:
         operationVersion: 1
         input: CourtGuideRequest
         config: { label: public-court-guide }
+      owner_action:
+        using: application
+        operation: owner.action.apply
+        operationVersion: 1
+        kind: command
+        input: OwnerAction
+        trustedArguments:
+          requestId: state.messageId
+          ownerId: state.scope.ownerId
+          ownerText: state.message
+        config: { label: proposed-owner-action }
 
 steps:
   - name: Reply with optional court guide
@@ -73,9 +84,11 @@ steps:
       output: org.pipelineframework.blocks.chat.ChatResult
 ```
 
-The first LLM Query either completes directly, using one inference in total, or proposes one alias from the compiled catalogue. TPF validates the typed arguments and dispatches exactly one native Query. The captured observation becomes bounded carried evidence; a second LLM Query then writes the natural answer. The tool path does not recurse or execute Commands. A failed provider call remains a native failure; an oversized observation must be shortened by the application Query or represented by a suitable `PayloadReference`, rather than being reported as a successful handoff.
+The first LLM Query completes directly, proposes one Query, or proposes a Command handoff. Direct completion and handoff use one inference. TPF validates the Query arguments and dispatches exactly one native Query; its captured observation becomes bounded carried evidence and a second LLM Query writes a natural answer. A Command handoff ends the Block immediately. It contains canonically validated arguments and trusted fields copied from the authorised input, but no Command has run. The application must check the `ChatResult` disposition, operation identity, scope, integrity and business terms before its own typed Command step. A failed provider or Query call remains a native failure; an oversized observation must be shortened by the application Query or represented by a suitable `PayloadReference`.
 
-The application owns the tool's provider binding, operation version, input type, host authorisation and what the Query may disclose. The compiler rejects missing bindings, unsupported operation versions, non-Query operations, non-one-to-one Query operations and type mismatches. Tool availability is a release-pinned allowlist, not runtime discovery. Both variants share the `chat-agent-core` library and its pure `chat-context` preparation Block, so an application may install either variant or both without duplicating canonical types.
+The first decision uses `structuredOutputSchema: OPTIONAL`: current adapters cannot enforce a native response schema while the model chooses among completion and multiple callables. TPF still rejects unknown aliases, malformed arguments and canonical type violations after the inference; it does not repair or retry a bad proposal. The synthesis Query has one direct completion and retains the default `REQUIRED` mode. Describe application-specific action codes and required terms in the authorised context, and validate them again in the consuming application.
+
+The application owns each callable's provider binding, operation version, input type, host authorisation and disclosure. The compiler rejects missing bindings, unsupported operation versions, type mismatches and non-one-to-one Query tools. It keeps Command handoff aliases out of dynamic Query dispatch. Tool availability is a release-pinned allowlist, not runtime discovery. Both variants share the `chat-agent-core` library and its pure `chat-context` preparation Block, so an application may install either variant or both without duplicating canonical types.
 
 ## Add durable continuity when needed
 
@@ -83,4 +96,4 @@ For a new execution, the application may read previously **accepted** turns thro
 
 The model sees selected text as evidence. It may miss a correction, misstate certainty or follow malicious instructions embedded in history or tool results. Preserve typed policy checks and human approval for commitments. More powerful tool, MCP, recursive research, browser and code compositions can build on the same typed Query/Command/Await boundaries; they are not part of this bounded Block.
 
-See [Conversation context](/develop/connectors/conversation-context), [LLM Query](/develop/extension/llm-query), and [ADR-0076](/decisions/0076-chat-agent-carries-bounded-conversation-state) for the underlying contracts and ownership.
+See [Conversation context](/develop/connectors/conversation-context), [LLM Query](/develop/extension/llm-query), [ADR-0076](/decisions/0076-chat-agent-carries-bounded-conversation-state) and [ADR-0078](/decisions/0078-chat-agent-command-handoffs-stay-inert) for the underlying contracts and ownership.
