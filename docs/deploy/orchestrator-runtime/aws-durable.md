@@ -520,8 +520,9 @@ exceptional repair.
 
 EventBridge delivery retries for up to one hour and then sends failed deliveries
 to `DueWorkDlq`. The tick queue has 720-second visibility, one-day retention and
-redrives after five failed receives. Partial-batch failures leave unsuccessful
-actions available for redelivery. Both failure paths use the same 14-day DLQ;
+redrives after five failed receives. Partial-batch failures leave unsuccessful ticks available for redelivery.
+Unresolved semantic work remains in persisted state for later scheduled ticks
+to rediscover. Both failure paths use the same 14-day DLQ;
 EventBridge delivery failures carry its error attributes, while consumer failures
 retain the original tick. Inspect those attributes when responding to the DLQ alarm.
 For `HARDENED`, a queue-age alarm reports sustained age above three minutes;
