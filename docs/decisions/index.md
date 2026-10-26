@@ -88,6 +88,7 @@ publication and the distinction from immutable test and release inputs.
 | [0075](./0075-application-owns-conversation-history.md) | Keep approved dialogue history with the application while Connectors supply context vocabulary and external adapters. |
 | [0076](./0076-chat-agent-carries-bounded-conversation-state.md) | Carry authorised, bounded conversation state through ChatAgent and hydrate only at an application-chosen boundary. |
 | [0077](./0077-provider-declared-application-projected-query-types.md) | Declare application-projected Query type contracts in provider metadata and keep one canonical template loader. |
+| [0078](./0078-chat-agent-command-handoffs-stay-inert.md) | Return release-pinned Command proposals from ChatAgent without granting the Block effect authority. |
 
 ## Maintenance
 

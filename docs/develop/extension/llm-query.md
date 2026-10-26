@@ -54,6 +54,14 @@ The context is inert trusted data selected from the original typed Query input f
 it is never sent to the chosen Connector. `AgentCall` has no provider identity, credentials, runtime
 handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
 
+An output union may also declare `handoff: <tpf.llm.HandoffCall>`. When present, a selected
+Command callable produces that distinct payload with the same canonical fields. The model
+supplies only the declared non-trusted arguments; TPF resolves the pinned binding and operation,
+injects trusted input fields and validates the whole input. The handoff is inert: a following
+application step must validate scope and policy and admit a native Command if appropriate.
+The dynamic invocation catalogue for this decision contains only Query aliases. Without the
+handoff variant, ordinary `AgentCall` Command dispatch retains its existing semantics.
+
 `AskUser` is an inert clarification request with two fields:
 
 - `prompt`: plain text suitable for display after the receiving boundary escapes it;
