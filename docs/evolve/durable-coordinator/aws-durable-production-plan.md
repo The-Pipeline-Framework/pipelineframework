@@ -98,7 +98,7 @@ Do not destroy valuable historical evidence while migrating. Archive its source 
 
 ## 3 Callback storage and API contract
 
-TPF completion remains the sole semantic authority. AWS registration, binding, delivery receipts and provider execution locators are disposable mechanical records in a separate table. No provider callback identifier enters `AwaitSemanticCheckpoint` or TPF Await records.
+TPF completion remains the sole semantic authority. AWS callback registration, binding and delivery receipts are disposable mechanical records in a separate table. Execution recovery locators and generation authority remain retained mechanical evidence for the recovery lifetime. No provider callback identifier enters `AwaitSemanticCheckpoint` or TPF Await records.
 
 Retain immutable conditional writes and append-only records. Do not introduce `UpdateItem` or an upsert-based head. Extend the existing repository with transactional admission of immutable generation claims: generation one claims absent predecessor; replacement generation G+1 consumes exactly one immutable successor claim for G, and all registration/binding admissions condition on the claimed generation. Keep generation-fence evidence beyond callback TTL for the supported recovery lifetime; TTL deletion cannot re-authorise a stale generation.
 
@@ -215,6 +215,65 @@ Registration Stream repair reads the pinned semantic interaction directly rather
 `CallbackOccurrenceMigrationValidation=validated` is required without a default. Operators must validate a fresh table or drain/isolate old callback executions and writers. New production registration requires a pinned interaction; legacy registration events and terminal repair fail closed. No automatic migration of rows, old serialized callback signals or Durable checkpoints is claimed. Retained host packages must remain protocol-compatible.
 
 Local Durable driver tests, Stream tests, native semantic-read tests and LocalStack transaction tests cover sequential occurrences, immutable replay/conflict, cross-binding rejection, stale generations, late first completion, completion before registration and pre-registration provider loss for a later Await. Real-AWS conformance against these exact artifacts is still required. Concurrent/itemised Await, missing mechanical locators, suspended due-work timing, migration tooling and complete retained-version validation remain outstanding.
+
+### D4: bounded due-work hosting during suspension (12 October candidate)
+
+A production `AwsDurableDueWorkHandler` consumes scheduled SQS ticks and calls the existing `PipelineControlPlane.sweepOnce` with fresh host time. It does not inspect callback rows, provider history or semantic table schemas. The existing local control plane supplies the typed item-continuation handler, so timeout admission, due execution dispatch and durable continuation recovery retain their semantic owner. Tick payloads cannot select tenants, executions or deadlines.
+
+The production SAM adds one-minute EventBridge delivery, a dedicated encrypted tick queue, Lambda with SQS maximum concurrency 2 and matching reserved capacity, bounded sweep limit, retry/DLQ delivery and queue-age/DLQ alarms. Its role grants semantic actions and SQS transition response consumption, with no callback or provider authority. Failed ticks are partial-batch retries; later scheduled ticks also re-inspect retained semantic work. This is normal liveness, not scheduled provider reconciliation.
+
+Deployment-free handler and template tests prove the hosting contract; native sweep/timeout and item-continuation recovery tests remain the semantic reference. Protected real-AWS suspended timeout/continuation evidence is still required. Prompt provider callback settlement after TPF timeout/terminal failure, concurrent/itemised Await callback selection, missing recovery locators, complete release pinning and notification wiring remain open. This slice does not close the overall suspended-Await acceptance gate or claim new deployed evidence.
+
+### D5: execution lifecycle, retained recovery and version pinning (12 October candidate)
+
+This coherent runtime batch adds prompt terminal callback settlement through the
+execution Stream and the late-registration Stream path. Both read the admitted
+execution checkpoint, fence generation authority and classify uncertain delivery
+from provider history. Failed callbacks carry only a mechanical terminal-status
+error. They never complete a semantic Await, re-drive or replace a failed TPF
+execution. Normal liveness uses Streams; exhausted records retain the existing
+bounded retry/failure-destination contract.
+
+`PipelineControlPlane.getExecutionSemanticCheckpoint` returns tenant, execution,
+pipeline, contract, Release and status through the existing admitted point-read
+owner. This provider-neutral observation supports native recovery and operator
+inspection as well as AWS. Storage-owned key decoding keeps internal execution
+DynamoDB schemas out of the host.
+
+The driver registers an immutable `RECOVERY#<padded-generation>` locator before
+polling or creating its first callback. It pins execution/Release and provider
+execution identity, conditions on generation authority and has no callback TTL.
+Targeted provider repair selects this prefix directly through the existing
+provider-registration index. It reconstructs any supported nonterminal execution
+without callback rows, and retries the same successor start after uncertain
+acknowledgement. Terminal semantic executions do not start replacements.
+
+Replacement starts use the original numbered coordinator version. The reference
+SAM contract publishes and retains a numbered action version, captures it in the
+coordinator environment and preserves invocation grants for retained versions.
+`ExecutionRecoveryMigrationValidation=validated` requires fresh-host validation or
+validated live locators/claims plus draining or isolation of old locator-free and
+unqualified-action coordinators. It is an attestation, not automatic migration.
+
+Deployment-free tests cover semantic read admission, late terminal registration,
+SDK callback failure, history classification, non-Await recovery, callback-row
+loss, start replay, stale generations and numeric target pinning. LocalStack
+exercises the immutable recovery transaction and retained authority. No new
+real-AWS evidence is claimed. The semantic-admission-to-locator window, loss of
+retained authority, concurrent/itemised Await, complete retained-version upgrade,
+COMPUTE deployment, operational wiring and protected AWS conformance remain open.
+
+### Disposition of the 12 October PRs — 26 October 2026
+
+Runtime #51/#52 were absorbed into merged runtime #58 on 14 October; the later
+hardening work retained due-work hosting, terminal settlement and execution/version
+locators, and added admission recovery. Their old branches were left open without
+Git ancestry linking them to the replacement implementation. The descriptions
+above preserve candidate-era evidence and limits; the completion audit below
+records the subsequent implementation and remaining acceptance obligations.
+Documentation #1019/#1020 recover deployment instructions omitted from merged
+#1025 while preserving the later hardening and restricted-profile guidance.
+This reconciliation adds no runtime behaviour or deployed conformance evidence.
 
 ## 10 Support acceptance criteria
 
