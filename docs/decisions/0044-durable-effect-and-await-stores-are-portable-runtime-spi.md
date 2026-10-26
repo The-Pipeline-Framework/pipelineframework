@@ -36,3 +36,48 @@ Keeping the FQCNs and method contracts stable makes this an artifact-ownership c
 - Source, binary, replay, and serialized compatibility apply to the moved records and store methods.
 - Runtime implementation tests continue to prove in-memory, Dynamo, retry, completion, timeout, and recovery behavior; pure contract validation tests live with runtime-spi.
 - Execution-state storage remains an explicit follow-up boundary defect rather than broadening runtime-spi with runtime configuration dependencies.
+
+## Bounded itemised observation
+
+The store SPI also owns `findByUnitPage`, with the provider-neutral
+`AwaitInteractionCursor` and `AwaitInteractionPage` records in runtime-core.
+Each call evaluates at most its requested page limit and returns progress even
+when filtering leaves the page empty. The cursor binds tenant and Await unit;
+its position remains opaque outside the store implementation. Providers must
+implement this operation in a coordinated contracts/runtime release. The legacy
+`findByUnit` operation does not establish bounded work because it may load every
+page.
+
+Traversal follows stable provider index order, without promising a cross-page
+snapshot or a globally smallest item. Following continuations over an unchanged
+unit must enumerate every unfiltered member; imported delimiter-bearing identities
+must not alias, and lifecycle status changes must not change positions. The runtime
+orders candidates within a page before selecting an authoritative interaction.
+
+The runtime owns current-unit selection and rechecks an indexed candidate through
+the authoritative interaction read. An empty page, exhausted cursor or completed
+interaction does not establish that the parent has applied all consequences.
+
+## Retained timeout consequences
+
+A successful interaction timeout atomically retains pending consequence work in
+its semantic store. The runtime discovers a bounded page, verifies authoritative
+interaction metadata, converges unit and admission state, applies the parent
+transition and persists required journal facts before acknowledging that work.
+Acknowledgement is scoped to the timed-out identity/version and does not change
+semantic status or version. A configured journal failure must leave recovery
+work pending; best-effort telemetry is insufficient evidence of convergence.
+Completion and timeout remain mutually exclusive semantic decisions.
+
+This protocol belongs to the shared Await store SPI and its runtime implementations,
+not to AWS mechanical coordination. Providers implement `findDueTimeoutConsequences`
+and `completeTimeoutConsequences`; `getMetadata` permits authoritative recovery
+without requiring payload decoding. Dynamo reuses its existing deadline index with
+a distinct work partition. Recovery is bounded by semantic retention; expiry may
+retire work only after the stored retention deadline. Imported timed-out records
+conservatively retain consequences for idempotent reconciliation.
+
+Already stored timed-out records from older implementations have no such projection.
+A coordinated rollout must drain old executions, isolate a fresh release, or perform
+an explicitly reviewed native repair/backfill. This change does not scan or migrate
+old semantic state automatically, and does not extend its retention horizon.

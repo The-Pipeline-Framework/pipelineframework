@@ -1,0 +1,175 @@
+{
+  "include": [
+    {
+      "shard": "applications",
+      "displayName": "Applications and ordinary HA",
+      "timeoutMinutes": 240,
+      "suites": [
+        {
+          "suite": "csv-ha",
+          "owner": "csvPayments",
+          "repository": "The-Pipeline-Framework/csv-kafka-payments",
+          "sha": "dd2c2fd5304166432306e852e56d65379590fc9a",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "ha",
+          "tier": "post-merge",
+          "versionProperties": {
+            "coordinationBom": "pipelineframework.bom.version",
+            "runtime": "tpf.release.maven-plugin.version"
+          }
+        },
+        {
+          "suite": "csv-observability",
+          "owner": "csvPayments",
+          "repository": "The-Pipeline-Framework/csv-kafka-payments",
+          "sha": "dd2c2fd5304166432306e852e56d65379590fc9a",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "observability",
+          "tier": "pr",
+          "versionProperties": {
+            "coordinationBom": "pipelineframework.bom.version",
+            "runtime": "tpf.release.maven-plugin.version"
+          }
+        },
+        {
+          "suite": "csv-smoke",
+          "owner": "csvPayments",
+          "repository": "The-Pipeline-Framework/csv-kafka-payments",
+          "sha": "dd2c2fd5304166432306e852e56d65379590fc9a",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "smoke",
+          "tier": "pr",
+          "versionProperties": {
+            "coordinationBom": "pipelineframework.bom.version",
+            "runtime": "tpf.release.maven-plugin.version"
+          }
+        },
+        {
+          "suite": "rag-system",
+          "owner": "ragTurnkey",
+          "repository": "The-Pipeline-Framework/rag-turnkey",
+          "sha": "7bf4435fac46949327db783b408a4f04349e8923",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "system",
+          "tier": "pr",
+          "versionProperties": {
+            "blocks": "pipelineframework.blocks.version",
+            "compiler": "pipelineframework.compiler.version",
+            "connectors": "pipelineframework.connectors.version",
+            "runtime": "pipelineframework.runtime.version"
+          }
+        }
+      ]
+    },
+    {
+      "shard": "ecosystem",
+      "displayName": "Connector, Block and Expansion compatibility",
+      "timeoutMinutes": 180,
+      "suites": [
+        {
+          "suite": "connectors-verify",
+          "owner": "connectors",
+          "repository": "The-Pipeline-Framework/pipelineframework-connectors",
+          "sha": "d519e39e9877e2dd42c3a1465e312d2234daca0d",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "verify",
+          "tier": "pr",
+          "versionProperties": {
+            "contracts": "pipelineframework.contracts.version",
+            "runtime": "pipelineframework.runtime.version"
+          }
+        }
+      ]
+    },
+    {
+      "shard": "examples",
+      "displayName": "Examples compatibility",
+      "timeoutMinutes": 150,
+      "suites": [
+        {
+          "suite": "examples-verify",
+          "owner": "examples",
+          "repository": "The-Pipeline-Framework/pipelineframework-examples",
+          "sha": "3179dcd0f3f8c2fa3c9fe3591df8028be723548f",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "verify",
+          "tier": "pr",
+          "versionProperties": {
+            "blocks": "pipelineframework.blocks.version",
+            "coordinationBom": "pipelineframework.bom.version",
+            "compiler": "pipelineframework.compiler.version",
+            "connectors": "pipelineframework.connectors.version",
+            "expansions": "pipelineframework.expansions.version",
+            "runtime": "pipelineframework.runtime.version"
+          }
+        }
+      ]
+    },
+    {
+      "shard": "references",
+      "displayName": "Reference-system compatibility",
+      "timeoutMinutes": 180,
+      "suites": [
+        {
+          "suite": "references-core",
+          "owner": "references",
+          "repository": "The-Pipeline-Framework/pipelineframework-reference-implementations",
+          "sha": "c134dca4362a8dc5ad48d23f09b77d91db05f6c7",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "core",
+          "tier": "pr",
+          "versionProperties": {
+            "coordinationBom": "pipelineframework.bom.version",
+            "compiler": "pipelineframework.compiler.version",
+            "connectors": "pipelineframework.connectors.version",
+            "runtime": "pipelineframework.runtime.version"
+          }
+        }
+      ]
+    },
+    {
+      "shard": "runtime",
+      "displayName": "Runtime deployment compatibility",
+      "timeoutMinutes": 180,
+      "suites": [
+        {
+          "suite": "cli-verify",
+          "owner": "cli",
+          "repository": "The-Pipeline-Framework/pipelineframework-cli",
+          "sha": "ce3796f82205d66fc3f0a54b6118788ed7bb0c3b",
+          "manifest": ".github/tpf-system-tests.json",
+          "entrypoint": "verify",
+          "tier": "pr",
+          "versionProperties": {
+            "contracts": "tpf.version"
+          }
+        }
+      ]
+    },
+    {
+      "shard": "semantic",
+      "displayName": "Compiler and semantic compatibility",
+      "timeoutMinutes": 180,
+      "suites": [
+        {
+          "suite": "coordination-compatibility",
+          "owner": "coordination",
+          "repository": "The-Pipeline-Framework/pipelineframework",
+          "sha": null,
+          "manifest": null,
+          "entrypoint": "compatibility",
+          "tier": "pr",
+          "versionProperties": {
+            "blocks": "pipelineframework.blocks.version",
+            "compiler": "pipelineframework.compiler.version",
+            "connectors": "pipelineframework.connectors.version",
+            "contracts": "pipelineframework.contracts.version",
+            "cli": "pipelineframework.cli.version",
+            "expansions": "pipelineframework.expansions.version",
+            "runtime": "pipelineframework.runtime.version"
+          }
+        }
+      ]
+    }
+  ]
+}

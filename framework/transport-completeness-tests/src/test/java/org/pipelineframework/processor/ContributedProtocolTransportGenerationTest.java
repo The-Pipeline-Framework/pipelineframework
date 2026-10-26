@@ -235,7 +235,7 @@ class ContributedProtocolTransportGenerationTest {
     }
 
     @Test
-    void commandClientRetainsCommandSupportAroundTypedTransportMapping() throws IOException {
+    void commandClientComposesWithRestBusinessStepsWithoutChangingEffectSupport() throws Exception {
         Fixture fixture = compile("REST", "COMPUTE", """
             contract:
               input: <tpf.vector.VectorUpsertRequest>
@@ -243,6 +243,14 @@ class ContributedProtocolTransportGenerationTest {
             connectors:
               vectors: { provider: proof.vector, version: 1, config: {} }
             steps:
+              - name: Prepare upsert
+                service: com.example.transport.PrepareUpsertService
+                cardinality: ONE_TO_ONE
+                input: <tpf.vector.VectorUpsertRequest>
+                output: <tpf.vector.VectorUpsertRequest>
+                java:
+                  input: org.pipelineframework.connector.vector.VectorUpsertRequest
+                  output: org.pipelineframework.connector.vector.VectorUpsertRequest
               - name: Upsert
                 kind: command
                 cardinality: ONE_TO_ONE
@@ -257,14 +265,46 @@ class ContributedProtocolTransportGenerationTest {
                 java:
                   input: org.pipelineframework.connector.vector.VectorUpsertRequest
                   output: org.pipelineframework.connector.vector.VectorUpsertResult
-            """, commandIdSource());
+              - name: Inspect upsert
+                service: com.example.transport.InspectUpsertService
+                cardinality: ONE_TO_ONE
+                input: <tpf.vector.VectorUpsertResult>
+                output: <tpf.vector.VectorUpsertResult>
+                java:
+                  input: org.pipelineframework.connector.vector.VectorUpsertResult
+                  output: org.pipelineframework.connector.vector.VectorUpsertResult
+            """, commandIdSource(),
+            identityService("PrepareUpsertService", "VectorUpsertRequest"),
+            identityService("InspectUpsertService", "VectorUpsertResult"),
+            JavaFileObjects.forSourceString("com.example.transport.PipelineMarker", """
+                package com.example.transport;
+                @org.pipelineframework.annotation.PipelineOrchestrator
+                public class PipelineMarker {}
+                """));
 
         assertEquals(Compilation.Status.SUCCESS, fixture.compilation().status(), fixture.compilation().diagnostics().toString());
         String client = generatedContaining(fixture.generated(), "CommandClientStep.java", "VectorUpsertRequest commandInput");
-        assertThat(client).contains("VectorUpsertRequest commandInput = inputMapper.fromExternal(input)");
+        String before = generatedContaining(fixture.generated(), "RestClientStep.java", "PrepareUpsert");
+        String after = generatedContaining(fixture.generated(), "RestClientStep.java", "InspectUpsert");
+        List<String> commandTypes = oneToOneTypes(client);
+        assertEquals(oneToOneTypes(before).get(1), commandTypes.get(0),
+            "REST business output must be directly assignable to the native Command input");
+        assertEquals(commandTypes.get(1), oneToOneTypes(after).get(0),
+            "native Command output must be directly assignable to the next REST business input");
         assertThat(client).contains("CommandStepSupport support");
         assertThat(client).contains("support.<VectorUpsertRequest, VectorUpsertResult>execute(");
-        assertThat(client).contains(".map(commandOutput -> outputMapper.toExternal(commandOutput))");
+        assertThat(client).contains("ConnectorBindingName.of(\"vectors\")");
+        assertThat(client).contains("ConnectorProviderId.of(\"proof.vector\"), \"upsert\", ConnectorOperationKind.COMMAND, 1");
+        assertThat(client).contains("CommandDuplicatePolicy.RETURN_RECORDED");
+        assertThat(client).contains("\"org.pipelineframework.connector.vector.VectorUpsertRequest\"");
+        assertThat(client).contains("\"org.pipelineframework.connector.vector.VectorUpsertResult\"");
+        assertThat(client).contains("\"com.example.transport.UpsertCommandId\"");
+        assertGenerated(fixture, "com/example/transport/dto/VectorUpsertRequestDto.java", "record VectorUpsertRequestDto");
+        assertGenerated(fixture, "com/example/transport/dto/VectorUpsertResultDto.java", "record VectorUpsertResultDto");
+        var result = new org.pipelineframework.connector.vector.VectorUpsertResult("item");
+        assertEquals(result, roundTrip(new Fixture(fixture.generated().resolve("orchestrator-client"), fixture.compilation()),
+            "VectorUpsertResult",
+            org.pipelineframework.connector.vector.VectorUpsertResult.class, result));
     }
 
     @Test
@@ -300,7 +340,7 @@ class ContributedProtocolTransportGenerationTest {
         assertThat(client).contains(".map(commandOutput -> outputMapper.toGrpc(commandOutput))");
     }
 
-    private Fixture compile(String transport, String platform, String body, javax.tools.JavaFileObject service)
+    private Fixture compile(String transport, String platform, String body, javax.tools.JavaFileObject... service)
         throws IOException {
         Path generated = tempDir.resolve(transport.toLowerCase() + "-" + platform.toLowerCase())
             .resolve("target/generated-sources/pipeline");
@@ -372,6 +412,32 @@ class ContributedProtocolTransportGenerationTest {
                 }
             }
             """);
+    }
+
+    private static List<String> oneToOneTypes(String source) {
+        var signature = java.util.regex.Pattern.compile("StepOneToOne<\\s*([^,>]+)\\s*,\\s*([^>]+)>").matcher(source);
+        assertTrue(signature.find(), "Generated client must implement a typed one-to-one step");
+        return java.util.stream.Stream.of(signature.group(1).trim(), signature.group(2).trim())
+            .map(type -> {
+                var imported = java.util.regex.Pattern.compile("import ([a-zA-Z0-9_.]+\\." + type + ");").matcher(source);
+                return imported.find() ? imported.group(1) : type;
+            }).toList();
+    }
+
+    private static javax.tools.JavaFileObject identityService(String name, String type) {
+        return JavaFileObjects.forSourceString("com.example.transport." + name, """
+            package com.example.transport;
+            @org.pipelineframework.annotation.PipelineStep(
+                inputType = org.pipelineframework.connector.vector.%s.class,
+                outputType = org.pipelineframework.connector.vector.%s.class)
+            public class %s implements org.pipelineframework.service.ReactiveService<
+                    org.pipelineframework.connector.vector.%s, org.pipelineframework.connector.vector.%s> {
+                public io.smallrye.mutiny.Uni<org.pipelineframework.connector.vector.%s> process(
+                        org.pipelineframework.connector.vector.%s input) {
+                    return io.smallrye.mutiny.Uni.createFrom().item(input);
+                }
+            }
+            """.formatted(type, type, name, type, type, type, type));
     }
 
     private static javax.tools.JavaFileObject markerSource() {
@@ -602,7 +668,7 @@ class ContributedProtocolTransportGenerationTest {
                 }
             }
         }
-        throw new AssertionError("No generated " + suffix + " contains " + marker);
+        throw new AssertionError("No generated " + suffix + " contains " + marker + "; files: " + generatedFiles(generated));
     }
 
     private record Fixture(Path generated, Compilation compilation) {

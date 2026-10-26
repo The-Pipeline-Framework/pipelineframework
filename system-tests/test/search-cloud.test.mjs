@@ -47,6 +47,14 @@ test('AWS cloud build pins all reference dependencies to the same resolved train
   assert.ok(capture.includes(`-Dmaven.repo.local=${join(f.root, 'm2')}`));
   assert.doesNotMatch(await readFile(join(f.root, 'pom.xml'), 'utf8'), /SNAPSHOT/);
 });
+test('AWS cloud build accepts the immutable BOM version materialized by the train', async () => {
+  const f = await fixture();
+  f.set.coordinationBom.mavenVersion = '26.10.1-system-test.a1f83ed1852f.deadbeef1234';
+  const result = await run(f);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(await readFile(f.capture, 'utf8'),
+    /-Dpipelineframework\.bom\.version=26\.10\.1-system-test\.a1f83ed1852f\.deadbeef1234/);
+});
 test('AWS cloud test invokes owner integration test, not a module-only smoke', async () => {
   const f = await fixture(); const result = await run(f, 'test', 'https://abc.lambda-url.us-east-2.on.aws/');
   assert.equal(result.status, 0, result.stderr);

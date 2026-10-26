@@ -10,6 +10,31 @@ The memory execution, await, and event-dispatch providers support this behavior 
 
 For modeling guidance, start with [Await Boundaries](/architecture/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
+## Durable completion storage
+
+With the Dynamo execution and Await providers, provision the table selected by
+`pipeline.orchestrator.dynamo.await-completion-lifecycle-table` before admitting
+completions. Its default name is `tpf_await_completion_lifecycle`, with string
+`pk` and `sk` partition/sort keys and no secondary index. It retains immutable
+completion admissions and exact parent-release acknowledgements alongside bounded
+outstanding-work projections. The interaction lookup table has a different key
+schema and cannot substitute for it. Completion and parent release require
+transaction permissions across their existing semantic tables and this table.
+
+Before upgrading an existing Dynamo-backed deployment to this completion lifecycle,
+create `tpf_await_completion_lifecycle` (or the configured name) with the schema above,
+wait until the table is active, and grant the runtime role transaction access. Complete
+these steps before rolling out hosts that admit Await completions or acknowledge parent
+release. Runtime code does not create the table; an existing interaction lookup table
+cannot replace it. For AWS Durable hosting, include its exact ARN in
+`SemanticDynamoResourceArns` as described in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable).
+
+Recovery also requires the interaction table's `await-interaction-by-execution`
+index (`query_execution_key` / `query_execution_sort`, both strings) and
+`await-interaction-continuation-work` index (`query_continuation_key` string /
+`query_continuation_due_epoch_ms` number), both with `ALL` projection.
+Provision these for ordinary queue-async hosts as well as AWS Durable hosts.
+
 ## Version 3 completion representation
 
 Version 3 generated completion modifiers keep business code on canonical domain types while their adapter
@@ -290,5 +315,32 @@ tpf.await.sqs.poller.enabled=true
 tpf.await.sqs.response-queue-url=https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-decisions
 pipeline.orchestrator.sqs.region=us-east-1
 ```
+
+When a separately configured completion host owns admission, select its response
+binding explicitly instead of naming a coordinator-side response queue:
+
+```yaml
+transport:
+  type: sqs
+  request:
+    queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-requests"
+  response:
+    mode: HOST_MANAGED
+```
+
+Keep `tpf.await.sqs.poller.enabled=false` for this binding. `HOST_MANAGED` rejects
+an authored response `queueUrl`, an enabled local response poller, and unknown
+mode values. The request still requires a standard queue. Existing configurations
+without `response.mode` continue to require `response.queueUrl` and retain their
+coordinator-side poller behavior.
+
+The provider sends the existing signed completion envelope to the actual
+completion destination supplied by the host. For AWS Durable, deployment binds
+that provider to the native `AwaitCompletionQueueUrl`; the application does not
+need to compile that generated queue URL into its descriptor. This selection
+does not create a completion receiver or change resume-token, admission, retry,
+timeout, or recovery checks. Dispatch metadata records
+`responseMode=HOST_MANAGED` and omits `responseQueueUrl`; the adapter never claims
+a coordinator-side live await window for this binding.
 
 `pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook, Kafka, and SQS interactions. If `pipeline.orchestrator.resume-token-secret` is missing, signed dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.

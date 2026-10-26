@@ -179,6 +179,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/develop/connectors/'},
                     {text: 'Author a Boundary', link: '/develop/connectors/authoring'},
                     {text: 'Catalogue', link: '/develop/connectors/catalogue'},
+                    {text: 'Conversation Context', link: '/develop/connectors/conversation-context'},
                     {text: 'Import OpenAPI Operations', link: '/develop/connectors/openapi-import'}
                 ]
             },
@@ -189,6 +190,7 @@ const mainSidebar = [
                 items: [
                     {text: 'Overview', link: '/develop/blocks/'},
                     {text: 'Use a Block', link: '/develop/blocks/use'},
+                    {text: 'ChatAgent', link: '/develop/blocks/chat-agent'},
                     {text: 'Publish a Block', link: '/develop/blocks/publish'}
                 ]
             },

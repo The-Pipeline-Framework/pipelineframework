@@ -23,6 +23,11 @@ repositories.
 Real applications and long-lived reference implementations remain outside this boundary and move under their own
 ownership separately. Runtime-integration smoke tests stay with the runtime repository that owns the behavior.
 
+[ADR-0072](./0072-generated-application-proofs-consume-released-runtime-artifacts.md)
+refines this boundary for generated application consumers: Spring application
+smoke tests and the AWS Durable application proof move to examples, while adapter,
+provider and deployment implementation tests remain with runtime.
+
 ## Consequences
 
 - Example builds provide clean-consumer compatibility evidence instead of relying on same-reactor source state.

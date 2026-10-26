@@ -10,9 +10,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  publication-policy:
+    name: Check exact incident-only bootstrap publication boundary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.policy.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Preserve ordinary publication; suppress only reviewed incident bootstrap
+        id: policy
+        env:
+          POLICY_CONTEXT: >-
+            ${{ toJson(fromJson(format('{{"repository":{0},"ref":{1},"eventName":{2},"message":{3}}}',
+              toJson(github.repository), toJson(github.ref), toJson(github.event_name), toJson(github.event.head_commit.message)))) }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$POLICY_CONTEXT" > publication-context.json
+          first_line="$(jq -r '.message // "" | split("\n")[0]' publication-context.json)"
+          if [ "${{ github.event_name }}" = push ] && \
+             { [ "$first_line" = 'ci(system-tests): replay Eclipse formatting outage [incident-20261021]' ] || \
+               [ "$first_line" = 'ci(system-tests): replay Eclipse formatting outage [incident-20261022]' ]; }; then
+            git diff --name-only "$BEFORE_SHA" "$AFTER_SHA" > publication-changed-paths.txt
+            jq -R -s 'split("\n") | map(select(length > 0))' publication-changed-paths.txt > publication-paths.json
+          else
+            printf '[]\n' > publication-paths.json
+          fi
+          node system-tests/scripts/formatting-outage-incident.mjs --context publication-context.json --paths publication-paths.json > publication-policy.json
+          echo "publish=$(jq -r .publish publication-policy.json)" >> "$GITHUB_OUTPUT"
+          cat publication-policy.json >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Verify and Publish Snapshot
-    if: github.ref == 'refs/heads/main'
+    needs: publication-policy
+    if: github.ref == 'refs/heads/main' && needs.publication-policy.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
