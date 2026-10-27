@@ -49,6 +49,10 @@
       "allowedCoordinates": [
         "org.pipelineframework:cache-plugin:jar",
         "org.pipelineframework:persistence-plugin:jar",
+        "org.pipelineframework:pipelineframework-aws-durable-coordination-deployment:jar",
+        "org.pipelineframework:pipelineframework-aws-durable-coordination-host:jar",
+        "org.pipelineframework:pipelineframework-aws-durable-coordination-model:jar",
+        "org.pipelineframework:pipelineframework-aws-durable-coordination-parent:pom",
         "org.pipelineframework:pipelineframework-deployment:jar",
         "org.pipelineframework:pipelineframework-release-maven-plugin:jar",
         "org.pipelineframework:pipelineframework-release-producer:jar",
@@ -89,6 +93,7 @@
         "org.pipelineframework:connector-maven-plugin:maven-plugin",
         "org.pipelineframework:connector-mcp-maven-plugin:maven-plugin",
         "org.pipelineframework:connector-openapi-maven-plugin:maven-plugin",
+        "org.pipelineframework:conversation-context-connector:jar",
         "org.pipelineframework:decision-query-connector:jar",
         "org.pipelineframework:decision-query-jev-connector:jar",
         "org.pipelineframework:embedding-query-connector:jar",
@@ -132,6 +137,9 @@
       "allowedCoordinates": [
         "org.pipelineframework.blocks:document-text-extraction:jar",
         "org.pipelineframework.blocks:graphql-agent:jar",
+        "org.pipelineframework.blocks:chat-agent-core:jar",
+        "org.pipelineframework.blocks:chat-agent:jar",
+        "org.pipelineframework.blocks:chat-agent-query:jar",
         "org.pipelineframework.blocks:graphql:jar",
         "org.pipelineframework.blocks:openapi-representation-mapper:jar",
         "org.pipelineframework:pipeline-blocks:pom"

@@ -72,6 +72,28 @@ test harnesses cross them as exact Git SHAs.
 The `.yml` configuration files intentionally contain JSON, which is valid YAML and can be parsed with the Node
 runtime already present on every runner. No workflow-only package installation is needed to interpret policy.
 
+## Adding a component or public artifact
+
+Register the complete owned publication in the producer's collection, metadata,
+trusted validation and upload lists, its publication regressions, this repository's
+`allowedCoordinates`, and the BOM where the artefact is consumed. Include POM-only
+parents needed to resolve the published JARs. A green reactor build alone does not
+prove that its candidate manifest contains that closure.
+
+Current candidates must contain every registered coordinate. Historical baseline
+manifests may predate an addition, but still retain strict ownership and checksum
+validation; that migration allowance does not make an incomplete new candidate
+complete.
+
+Producer publishers load their validation code from the default branch. A catalogue
+expansion therefore needs a reviewed bootstrap of that trusted contract before a
+new candidate can be accepted. Follow the repository owner's activation procedure
+and record the bootstrap validation separately from downstream acceptance. Do not
+execute PR-provided validation with publication credentials, relax ownership or
+completeness checks, or mutate an existing candidate version to get past this
+boundary. After activation, build a new exact-head candidate and require its normal
+downstream result.
+
 ## Trust boundaries
 
 The singleton candidate workflow has four security zones:
@@ -299,6 +321,37 @@ The materialised Maven repository is a portable input, not a runner cache. After
 ignore files that are physically present because their original authenticated repository is absent in the
 credential-free test job. A materialisation change is complete only when a clean job with no package settings can
 resolve the exact component set.
+
+## Temporary Eclipse formatting outage replay
+
+The candidate workflow has supervised, default-off recovery entries for the Eclipse4.34 download
+outage. Repository write authority is required to dispatch the trusted `main` workflow. Each entry
+accepts only its reviewed original run, runtime source and UTC day:
+
+| UTC day | Original run | Exact runtime source |
+| --- | --- | --- |
+| 21 October 2026 | `39623835075` | PR68 `44e412812ed1bda3eb23ab07859864d1c5c89754` |
+| 22 October 2026 | `39705054075` | main `4c0de12a53710a3599a35dd851a1dbfca7e0df1a` |
+
+Each replay expires at midnight UTC after its listed day. This CI window does not extend any cloud
+permission or deployment window. The 22 October entry reuses all nine original suites in six groups;
+it does not replay a closed PR or substitute an earlier candidate closure.
+
+The replay verifies the original run provenance, immutable GitHub artifact IDs and archive hashes,
+exact resolved closure and six-group matrix, and the current runtime PR or main head as appropriate.
+It reuses the original credential-free materialization and unchanged product runners. An explicit
+boolean enables only `-Dspotless.skip=true`; no arbitrary Maven arguments, test exclusions, replacement
+dependencies or baseline promotion are accepted. All six complete functional groups and their aggregate
+must pass. The exception and fixed outage reason appear in the run summary, retained receipt and final
+status. Ordinary automatic intake keeps formatting enabled.
+
+Activation requires a reviewed trusted-main bootstrap. Only the exact incident merge marker, matching
+UTC day and checked non-Maven file allowlist suppress that bootstrap's automatic parent/BOM publication.
+For 22 October the exact subject is
+`ci(system-tests): replay Eclipse formatting outage [incident-20261022]`.
+Verify the actual publication-policy job succeeds and publication is skipped before dispatching the
+replay. All other pushes and explicit manual publication retain the ordinary publication policy. This
+mechanism does not waive required source-review or functional CI gates.
 
 ## Reruns and failure handling
 

@@ -3,7 +3,7 @@ title: Command completion can require the dispatch acknowledgement
 status: draft
 ---
 
-# ADR-0074: Command completion can require the dispatch acknowledgement
+# ADR-0079: Command completion can require the dispatch acknowledgement
 
 ## Context
 

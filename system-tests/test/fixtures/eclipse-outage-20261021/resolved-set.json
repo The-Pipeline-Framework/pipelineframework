@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "baselineDigest": "sha256:e17a0dce09df876073dd31fec92dfb4e9e425b9a665f6ca27f0b2e50035ecf9b",
+  "baselineRevision": 29,
+  "components": {
+    "contracts": {
+      "repository": "The-Pipeline-Framework/pipelineframework-contracts",
+      "sha": "7bd043af309b757a3ac1d3189596e7edf7f36021",
+      "mavenVersion": "26.10.1-main.7bd043af309b",
+      "manifestDigest": "sha256:0fc24f8f9efa2be39f614c9c995022ea2378a47e6cad79783f2218d995da845c"
+    },
+    "compiler": {
+      "repository": "The-Pipeline-Framework/pipelineframework-compiler",
+      "sha": "381ac8235174a5f9116589a71c0b76de742a994b",
+      "mavenVersion": "26.10.1-main.381ac8235174",
+      "manifestDigest": "sha256:b392d933f44f3dc418f7ffdf9a0b3b184ed45c770cd9f8fd94fb147f7870ee92"
+    },
+    "runtime": {
+      "repository": "The-Pipeline-Framework/pipelineframework-runtime",
+      "sha": "44e412812ed1bda3eb23ab07859864d1c5c89754",
+      "mavenVersion": "26.10.1-pr.68.44e412812ed1",
+      "manifestDigest": "sha256:a9b240cf26d9fb05138eb3910923685ebd9bfd4b6c32d3cdf4a0ff0dece948e4"
+    },
+    "connectors": {
+      "repository": "The-Pipeline-Framework/pipelineframework-connectors",
+      "sha": "d519e39e9877e2dd42c3a1465e312d2234daca0d",
+      "mavenVersion": "26.10.1-main.d519e39e9877",
+      "manifestDigest": "sha256:b717dacc44d786c4fc76ef75f8bc9feaf178f19e26d215364d35d94b9834a9d3"
+    },
+    "blocks": {
+      "repository": "The-Pipeline-Framework/pipelineframework-blocks",
+      "sha": "de9269c02d073ab833c0375ce52a8e287ee2824d",
+      "mavenVersion": "26.10.1-main.de9269c02d07",
+      "manifestDigest": "sha256:30bd8554aa78d3c2ac2eba0e1b3fb741b0b88242ac0ee70d04e175f932ce151c"
+    },
+    "expansions": {
+      "repository": "The-Pipeline-Framework/pipelineframework-expansions",
+      "sha": "09018700d0699fb085c285a8537cfcd0ef306e0e",
+      "mavenVersion": "26.10.1-main.09018700d069",
+      "manifestDigest": "sha256:c7726a3426d58573646aee03f15e498df9a6b60b0f2c7dc2da73abbbf6ea86e7"
+    },
+    "cli": {
+      "repository": "The-Pipeline-Framework/pipelineframework-cli",
+      "sha": "ce3796f82205d66fc3f0a54b6118788ed7bb0c3b",
+      "mavenVersion": "26.10.1-main.ce3796f82205",
+      "manifestDigest": "sha256:074b42bd088ae7752296fad548cdba2f6e9f1472f6958a0a8a886c0348ca6505"
+    }
+  },
+  "testHarnesses": {
+    "examples": {
+      "repository": "The-Pipeline-Framework/pipelineframework-examples",
+      "sha": "3179dcd0f3f8c2fa3c9fe3591df8028be723548f"
+    },
+    "references": {
+      "repository": "The-Pipeline-Framework/pipelineframework-reference-implementations",
+      "sha": "c134dca4362a8dc5ad48d23f09b77d91db05f6c7"
+    },
+    "csvPayments": {
+      "repository": "The-Pipeline-Framework/csv-kafka-payments",
+      "sha": "dd2c2fd5304166432306e852e56d65379590fc9a"
+    },
+    "ragTurnkey": {
+      "repository": "The-Pipeline-Framework/rag-turnkey",
+      "sha": "7bf4435fac46949327db783b408a4f04349e8923"
+    }
+  },
+  "images": {},
+  "candidates": [
+    {
+      "component": "runtime",
+      "repository": "The-Pipeline-Framework/pipelineframework-runtime",
+      "sha": "44e412812ed1bda3eb23ab07859864d1c5c89754",
+      "candidateVersion": "26.10.1-pr.68.44e412812ed1",
+      "manifestDigest": "sha256:a9b240cf26d9fb05138eb3910923685ebd9bfd4b6c32d3cdf4a0ff0dece948e4",
+      "suiteHints": []
+    }
+  ]
+}

@@ -47,3 +47,7 @@ The boundary becomes invalid if callback or provider history must become the onl
   and its paired client restores typed stream cardinality. COMPUTE REST retains
   SSE. This is deployment wire adaptation, with invocation, memory and payload
   bounds; it introduces no new semantic step kind or provider-owned Await state.
+
+
+- The control plane also exposes an admitted, bounded execution observation containing tenant/execution identity, pipeline, contract, Release and current status. Native recovery and operator tooling need these same semantic facts; no provider identity, callback or DynamoDB schema enters the contract. Execution Stream images remain hints. A terminal observation may settle a disposable provider callback, but it cannot admit Await completion or authorise semantic re-drive.
+- Retained execution recovery locators relate those semantic identities to provider executions outside TPF state. Preserve them and generation authority for the supported recovery lifetime, independently of callback TTL. Reconstruction uses the original numbered coordinator and action code. The retained admission locator covers uncertain submission; full recovery conformance remains a separate validation gate.

@@ -85,7 +85,11 @@ publication and the distinction from immutable test and release inputs.
 | [0071](./0071-diskless-owned-payload-delivery.md) | Stream COMPUTE payloads directly and delegate FUNCTION payload bytes to S3 under the same owned reference contract. |
 | [0072](./0072-generated-application-proofs-consume-released-runtime-artifacts.md) | Keep generated Spring and AWS Durable application proofs in examples over released runtime artifacts. |
 | [0073](./0073-await-unit-occurrences-bind-completion-release.md) | Bind completion admission and parent release to one retained Await unit occurrence. |
-| [0074](./0074-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
+| [0075](./0075-application-owns-conversation-history.md) | Keep approved dialogue history with the application while Connectors supply context vocabulary and external adapters. |
+| [0076](./0076-chat-agent-carries-bounded-conversation-state.md) | Carry authorised, bounded conversation state through ChatAgent and hydrate only at an application-chosen boundary. |
+| [0077](./0077-provider-declared-application-projected-query-types.md) | Declare application-projected Query type contracts in provider metadata and keep one canonical template loader. |
+| [0078](./0078-chat-agent-command-handoffs-stay-inert.md) | Return release-pinned Command proposals from ChatAgent without granting the Block effect authority. |
+| [0079](./0079-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
 
 ## Maintenance
 
@@ -105,3 +109,5 @@ choice per file and name the affected repository areas concretely.
 
 GitNexus is a decision index, not architectural authority. Confirm extracted or
 historical records against current repository reality before relying on them.
+
+- [ADR-0074: Canonical field presence survives shared JSON boundaries](0074-canonical-presence-json.md)

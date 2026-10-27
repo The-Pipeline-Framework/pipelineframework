@@ -54,6 +54,14 @@ The context is inert trusted data selected from the original typed Query input f
 it is never sent to the chosen Connector. `AgentCall` has no provider identity, credentials, runtime
 handle, hidden reasoning, execution ID, or authority to invoke the selected operation.
 
+An output union may also declare `handoff: <tpf.llm.HandoffCall>`. When present, a selected
+Command callable produces that distinct payload with the same canonical fields. The model
+supplies only the declared non-trusted arguments; TPF resolves the pinned binding and operation,
+injects trusted input fields and validates the whole input. The handoff is inert: a following
+application step must validate scope and policy and admit a native Command if appropriate.
+The dynamic invocation catalogue for this decision contains only Query aliases. Without the
+handoff variant, ordinary `AgentCall` Command dispatch retains its existing semantics.
+
 `AskUser` is an inert clarification request with two fields:
 
 - `prompt`: plain text suitable for display after the receiving boundary escapes it;
@@ -98,6 +106,12 @@ of the model-state JSON and prevents excluded `payload_ref` values from being ma
 other envelope field must have an explicit mapping, and dotted paths address nested record fields.
 This projection does not perform another inference or allow model output to overwrite trusted
 application context.
+
+The same `completion` projection can target the non-call payload of a union decision. The model
+authors that payload's selected field, while the connector copies the declared trusted fields from
+the Query input and materializes the union's `complete` variant. Tool call variants retain their
+ordinary typed argument validation. ChatAgent uses this form so a first inference can either reply
+directly or request one application-bound Query.
 
 ## Configure the Query
 
@@ -196,6 +210,8 @@ The generated invocation adapter revalidates the proposed `binding + operation` 
 The application maps the generic observation into its own state in a later Mapper, service, or reducer step. Dynamic invocation never manufactures `InvoiceState`, `EngineeringState`, or another application-owned type.
 
 ## Compose multiple turns with ordinary recursion
+
+When a later turn needs earlier dialogue, carry authorised conversation state between steps and select its model-visible entries. A new execution can optionally hydrate accepted turns through an owner-scoped, captured Query. The LLM Query connector retains no transcript between invocations. See [ChatAgent](/develop/blocks/chat-agent) for a reusable Block and [Conversation context](/develop/connectors/conversation-context) for manual composition, model behaviour and limits.
 
 Agentic behavior does not require a second Agent runtime. Put the one-turn Query, dynamic native
 operation, and application-authored reducer inside a named v3 pipeline, then route the reducer's

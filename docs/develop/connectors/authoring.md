@@ -47,6 +47,12 @@ The binding selects a provider. The step selects a declared capability. Query ca
 external observation for replay; a Command instead needs stable logical effect identity and a
 duplicate policy. Neither belongs inside an authored business service.
 
+Provider metadata normally publishes exact input and output types, which the compiler checks when
+linking a Block. A Query provider that validates and projects application-authored canonical types
+may explicitly publish `APPLICATION_PROJECTED` type mode with `Object` input and output. That is a
+provider contract, not an authoring switch: the application still declares its step types, and the
+provider must validate the projected result at execution. Existing providers default to `EXACT`.
+
 Keep provider secrets out of `pipeline.yaml`. When authentication is host-managed, the binding uses
 a deployment-owned connection reference and the host resolves an initialised client at invocation
 time. See [experimental OAuth connections](/develop/oauth-connections/) for the provisional Quarkus path.

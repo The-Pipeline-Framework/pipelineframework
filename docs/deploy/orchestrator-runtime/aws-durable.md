@@ -77,9 +77,11 @@ provider history does not prove that every semantic consequence has finished.
 ## Recovery when provider history is lost
 
 TPF's execution identity and pinned Release survive replacement of the provider
-execution. Recovery reads current semantic state through `PipelineControlPlane`,
-fences the old generation and starts a deterministic new generation. It retries
-an uncertain start using the same identity.
+execution. The targeted provider-execution recovery path reads an immutable recovery locator
+and the execution identity, Release and status through `PipelineControlPlane`. It
+fences the old generation and starts a deterministic new generation against the
+original numbered coordinator version. It retries an uncertain start using the
+same identity. Callback delivery repair still reads its pinned semantic Await.
 
 The completion candidate retains a mechanical admission locator before submitting
 to TPF and an execution locator after admission. If submission commits but its
@@ -105,6 +107,9 @@ flowchart TB
     UNCERTAIN --> START
 ```
 
+Recovery does not require callback registration once the retained execution
+locator exists; it also covers nonterminal executions outside Await. Disposable
+callback expiry does not remove that locator or generation authority.
 This diagram describes targeted replacement when both the retained locator
 and semantic checkpoint are available. Loss of the retained locator, concurrent
 completion and production conformance remain support gates below. A generation
@@ -164,15 +169,48 @@ is 6 MB. Validate the generated server and matching client from the same release
 
 ## Deployment contract
 
-Deploy these resources together:
+Deploy these resources together, applying the observation requirements for the selected profile:
 
 - a versioned Lambda Durable coordinator and stable alias;
 - a generated Quarkus action/worker package containing the application pipeline and generated input decoder;
-- TPF semantic DynamoDB execution and Await stores, including execution-scoped Await lookup and an Await stream;
+- TPF semantic DynamoDB execution and Await stores, including execution-scoped Await lookup, an Await stream and an execution stream;
 - the append-only callback binding table and its provider-execution index;
 - SQS work, Await-completion and transition queues with DLQs;
-- the Await/binding Stream wake-up handler and the bounded terminal reconciliation handler;
-- alarms for worker DLQs and Stream failure destinations.
+- the Await/binding and execution Stream wake-up handlers and the bounded terminal reconciliation handler;
+- for `HARDENED`, alarms for worker DLQs and Stream failure destinations with owned response routing; for `RESTRICTED_PILOT`, supervised failure checks for those same destinations.
+
+The reference SAM template processes transforms in this order:
+
+```yaml
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+```
+
+LanguageExtensions resolves the existing `ActionArtifactUri` parameter before SAM
+parses it. The eight action/worker functions use
+`CodeUri: !Sub '${ActionArtifactUri}'`; retain this expression when the transition
+worker is conditionally omitted in COMPUTE placement. It preserves the complete S3
+object key, including nested prefixes. The 74 deployment parameters, code packages,
+explicit roles and recovery mechanisms remain unchanged.
+
+Allow `cloudformation:CreateChangeSet` on both exact AWS-owned transform ARNs for
+the deployment region: `arn:aws:cloudformation:<region>:aws:transform/LanguageExtensions`
+and `arn:aws:cloudformation:<region>:aws:transform/Serverless-2016-10-31`.
+Grant this scoped permission to the deployment principal that calls CreateChangeSet.
+When a CloudFormation execution role is supplied through RoleARN, grant that role
+the same exact transform permissions as well. These permissions grant no function
+invocation or resource lifecycle authority. Continue to provide the original
+template on updates rather than reusing the processed template, whose parameters
+may already be resolved to literals.
+
+Validate both transform stages before execution. The owner tests use the official
+local LanguageExtensions processor and SAM translator; local success does not
+prove that the AWS-hosted macros accepted the asset. `ValidateTemplate` and
+`GetTemplateSummary` also do not exercise the full SAM transform. Inspect a
+CloudFormation change-set preview without executing it before deploying a newly
+qualified asset. See AWS's [CodeUri reference](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-codeuri)
+and [transform processing guidance](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-language-extensions.html).
 
 Set `pipeline.orchestrator.process-loops-disabled=true` in event-source-hosted Lambdas. This prevents native poll and sweep loops from competing with Lambda event sources. `PipelineControlPlane` actions remain available and initialise their providers without starting resident loops.
 
@@ -225,15 +263,201 @@ replacement does not establish semantic convergence.
 
 Keep each numbered Durable function version for at least the longest supported execution lifetime. New deployments move the alias for new executions; existing executions must retain their pinned code version and release identity.
 
-The reference template retains the Durable function, numbered versions and callback binding table on stack deletion or replacement. Retained resources require explicit cleanup after all executions and their recovery windows have expired. Retain the compatible action and worker packages as well: a retained coordinator version alone does not protect an unqualified action target from a later deployment. Validate action-version and replacement-generation release compatibility before moving an alias.
+The reference template retains the Durable and action functions, their numbered
+versions and the mechanical table on stack deletion or replacement. Each
+coordinator version captures a numbered `ActionVersion`; set `ActionCodeSha256`
+to the deployed action package digest when publishing it. Set `VersionPublicationId`
+to a new release/configuration revision whenever code or configuration changes.
+The version descriptions include that revision, and the coordinator version also
+includes the action version, so configuration-only changes publish new snapshots
+instead of leaving the alias on old code/configuration
+([CloudFormation version replacement](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-lambda-version.html)). Its IAM grant permits
+numbered versions of that action function so later deployments do not revoke
+older executions' access. Retain compatible worker packages too. Replacement
+starts extract the original numbered coordinator target from the provider
+execution ARN; they never follow a moved alias.
+
+After stack deletion, the retained fixed-name Durable and action functions conflict
+with redeployment under the same names. Once all executions and recovery windows
+have expired, explicitly remove those retained functions before redeploying. Do
+not remove retained versions or recovery records while they are still needed.
 
 Each host writes through `LoggingConfig.LogGroup` to its retained, encrypted group
 under `/tpf/aws-durable/<stack-name>/<stack-instance>/<host>`. The stack-instance suffix
 comes from `AWS::StackId`, so updates preserve the destination and a newly created stack
 uses a separate name. Existing Lambda-created `/aws/lambda/...` groups remain available
-for historical logs. Authorize CloudWatch Logs to use the host KMS key for the new group
-ARNs before upgrading, and retain old groups through the recovery window before cleanup.
+for historical logs. For `HARDENED`, authorise CloudWatch Logs to use the host KMS
+key for the new group ARNs before upgrading. `RESTRICTED_PILOT` retains
+service-default log encryption and requires no host-CMK authorisation for its log groups.
+Retain old groups through the recovery window before cleanup.
 Function retention and cleanup requirements above still apply.
+
+### Experimental pinned SSM signing source
+
+::: warning Source candidate, not a supported deployment profile
+The [runtime SSM reader](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/61)
+is merged and published. Reader availability alone does not establish a verified
+AWS Durable deployment profile. The published runtime63 hardened SAM template and v1 deployment
+manifest still require Secrets Manager. Do not substitute SSM parameters into
+those inputs or treat a successful reader unit test as deployment acceptance.
+:::
+
+The reader supports an explicit `tpf.aws.durable.signing-source=SSM_STANDARD`
+selection to the existing host configuration source. Leaving that property unset,
+or selecting `SECRETS_MANAGER`, preserves the existing Secrets Manager path.
+The SSM selection requires two distinct full parameter ARNs and exact positive
+numeric versions, in addition to the other validated deployment settings:
+
+```properties
+tpf.aws.durable.signing-source=SSM_STANDARD
+tpf.aws.durable.resume-token-parameter-arn=arn:aws:ssm:eu-west-1:123456789012:parameter/example/resume-token
+tpf.aws.durable.resume-token-parameter-version=7
+tpf.aws.durable.worker-parameter-arn=arn:aws:ssm:eu-west-1:123456789012:parameter/example/worker
+tpf.aws.durable.worker-parameter-version=9
+```
+
+These values identify keys; they do not contain key material. Parameter names
+without full ARNs, labels, floating versions, mixed SSM/Secrets Manager references,
+and literal or environment-backed signing keys are rejected before a provider read.
+The reader requests each exact version with decryption and validates the returned
+ARN, name, version, `SecureString` type and value. Each nonblank value must contain
+at least 32 characters and occupy at most 4,096 UTF-8 bytes. Neither key enters
+the returned runtime configuration unless both reads succeed. Provider failures
+exclude response text and causes that could contain sensitive values.
+
+`deployment-validation=validated` remains an external preflight attestation. The
+reader does not verify Standard tier, IAM isolation, version retention or
+authenticated deployment-manifest provenance. A supported SSM profile must verify
+those properties for both exact ARN/version pairs, preserve versions required by
+recoverable executions and retained Lambda versions, and pass real AWS recovery
+and isolation checks. Keep values out of configuration, Terraform state, logs
+and manifests. The source name alone establishes neither cost nor account-specific
+free-tier availability.
+
+### Restricted pilot deployment profile
+
+::: warning Deployment qualification remains separate
+The same-host `RESTRICTED_PILOT` profile is a deployment-contract extension being
+qualified alongside Cloud integration. Its conditional template and local checks
+do not establish signed publication, actual account/IAM configuration, live event
+delivery, recovery conformance or unattended production suitability. Select an exact
+published deployment artifact that includes this profile before using it; the
+runtime63 schema1 template cannot accept these inputs. No alternative host or
+consumer implementation is required.
+:::
+
+`HARDENED` remains the default. The restricted profile changes encryption and
+observation choices for a **fresh, isolated, supervised FUNCTION deployment**;
+it retains the native handlers and mechanical recovery model.
+
+| Concern | `HARDENED` | `RESTRICTED_PILOT` |
+| --- | --- | --- |
+| Signing authority | Exact Secrets Manager ARN/VersionId and retained CMK access | Existing SSM reader; distinct Standard SecureString purpose/generation parameters, `aws/ssm`, exact version 1 |
+| Callback table, Lambda environment/Durable state and logs | Customer-managed encryption keys | Encrypted service defaults |
+| External semantic tables and release/result objects | Explicit scoped CMKs | Verified AWS-owned DynamoDB encryption and S3-managed SSE-S3; retain the same indexes, Streams, versioning and recovery data |
+| Queues other than EventBridge destinations | Host CMK | Explicit SSE-SQS |
+| EventBridge destination queues | Host CMK | Retain a compatible CMK for `DueWorkQueue`, `DueWorkDlq` and `RepairFailureDlq` |
+| Notification alarms | All 64 alarm resources and owned SNS destination | No alarm resources or unused SNS destination; supervised failure checks remain required |
+
+The existing due-work rule, terminal-reconciliation rule, all seven mappings,
+numbered versions, leases, retry/exhaustion behaviour, DLQs, Streams and retained
+state remain. Due-work delivery keeps its one-minute rate, ten retries and
+3,600-second age limit; terminal delivery keeps five retries and the same age
+limit. Notification alarms do not drive those recovery paths. Keep admission
+closed outside the supervised operating window, and retain actual failure,
+pause/restore and recovery evidence. No successful deployment replaces the
+separate fault-conformance catalogue.
+
+```mermaid
+flowchart LR
+  P[Explicit deployment profile] --> E[Encrypted resources and pinned signing references]
+  E --> H[Existing native host and consumers]
+  H --> R[Unchanged retry, Await and recovery paths]
+  H --> L[Retained raw logs and failure state]
+  P --> O[Hardened alarms or supervised failure checks]
+```
+
+Set `DeploymentProfile=RESTRICTED_PILOT`, `SigningSource=SSM_STANDARD`,
+`RestrictedPilotValidation=validated` and
+`SigningParameterLifecycleValidation=validated` only after the owner checks pass.
+Supply `ResumeTokenParameterArn`/`ResumeTokenParameterVersion`,
+`WorkerSharedParameterArn`/`WorkerSharedParameterVersion` and
+`SigningParameterAccessArns`. Each current parameter name follows
+`/tpf/durable/<scope>/<resume-token|worker>/g-<generation-hex>` and uses version `1`.
+The retained access set includes every older generation still needed by retained
+releases and executions. Rotation creates a new parameter name, not another
+version of the old parameter: Standard Parameter Store can evict older versions
+after repeated updates. Deny overwrite, deletion and recreation of held names;
+verify the actual IAM boundaries, metadata and retained obligations before
+admission. An offline owner receipt checks consistency; it does not enforce IAM.
+
+The owner verifies **Standard**, **SecureString**, the actual `aws/ssm` key and
+the account's accepted IAM-only signing boundary. The AWS-managed key does not
+provide a customer-controlled key policy that isolates these signing values from
+other authorised account principals. Restrict all applicable parameter-read,
+history and path APIs, and separate provisioning/retirement authority from runtime
+readers. Keep secret values out of Terraform state, source, ordinary environment
+configuration, manifests and logs. Direct environment signing values remain
+unsupported by this pinned deployment contract.
+
+The restricted profile uses explicit empty inputs for the unused SNS destination,
+Secrets Manager signing references and semantic/signing CMK access sets. The host
+CMK input remains real and retained for EventBridge delivery. Do not use dummy
+ARNs, disable queue encryption or remove a failure destination to reduce cost.
+EventBridge rules do not support AWS-owned encrypted SQS targets **or target
+DLQs**; changing the due-work scheduler alone would leave the terminal rule's
+failure destination unresolved. [AWS EventBridge target constraints](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-targets.html).
+
+`RuntimePermissionsBoundaryArn` optionally supplies one existing, same-account
+customer-managed IAM policy as the permissions boundary on all six native runtime
+roles. Its empty default preserves deployments that do not select a boundary.
+The policy is a maximum permission set, not a grant: each role still needs its
+existing identity policies, service policies and resource permissions. A boundary
+on the CloudFormation execution role is not inherited by the roles it creates.
+
+For every principal that can manage runtime roles, including deployment
+credentials and any CloudFormation execution role, require the exact boundary
+through `iam:PermissionsBoundary` on `iam:CreateRole`. Constrain any allowed
+`iam:PutRolePermissionsBoundary` to that same policy ARN using the same condition,
+and deny `iam:DeleteRolePermissionsBoundary`. Keep changes to the boundary policy itself
+outside those principals. The infrastructure owner must
+retain the policy and check that its maximum permits the selected release's
+checkpoint, action, Await, queue, semantic-store, signing, logging and recovery
+operations. A restricted notification profile does not relax that requirement.
+[AWS permissions-boundary behaviour](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html).
+
+Validate the parameter against the actual account before deployment, then read
+back `PermissionsBoundary.PermissionsBoundaryArn` on all six created roles and
+verify their CloudFormation membership. The optional offline preflight
+`--account-id` checks the selected ARN's account; it does not read IAM, prove the
+policy's contents or authorise deployment. The deployment manifest remains
+schema2: verify the actual selected template and parameters rather than assuming
+that the boundary appears as an additional manifest field. Retained versions
+must keep the authority needed to finish and recover their work.
+
+Both new profiles emit deployment manifest **schema2**, preserving release,
+publication, code/version, queue/mapping and owner identities. It adds explicit
+`deploymentProfile`, `observability`, `scheduleProvider`, `encryption` and ten
+actual `logGroupNames` references. `signing.source` discriminates Secrets Manager
+`{arn, versionId}` from SSM `{arn, version: 1}` with tier, type, key kind, immutable
+generation lifecycle and retained parameter references. Consumers must verify the
+actual template, parameters, numbered function configuration and CFN membership;
+do not reinterpret a schema1 manifest as the new profile. Existing schema1
+hardened publications retain their established scope.
+
+Alarm omission does not stop Embedded Metric Format extraction. An account logging
+administrator may separately qualify a policy that disables extraction for the
+exact owned log groups while keeping the raw EMF events. Never grant this
+account-administration permission to workload code or disable other applications'
+metrics. [AWS metric-extraction policies](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutAccountPolicy.html).
+
+These choices remove most fixed charges but do not promise a zero bill. A retained
+customer-managed key has a monthly charge; rotation can add retained key material
+charges. SQS empty receives, minute recovery, retained data/PITR/logs and key/API
+calls remain usage, sharing account-level free allowances. The infrastructure
+owner must verify account eligibility, actual policies, limits and costs before
+deployment. Never delete recoverable generations or disable recovery to meet an
+idle-cost target.
 
 ### Semantic table upgrade
 
@@ -282,6 +506,85 @@ or causal coverage through clock or membership backfill. Keep existing releases
 isolated until the [production gates](/evolve/durable-coordinator/aws-durable-production-plan)
 pass.
 
+## Due work while the coordinator is suspended
+
+The reference template sends an EventBridge tick to `DueWorkQueue` every minute.
+`AwsDurableDueWorkHandler` invokes the existing bounded
+`PipelineControlPlane.sweepOnce` action using fresh host time. TPF inspects its
+semantic stores for expired Await interactions, due execution dispatch and durable
+item-continuation work. No callback, tenant or execution identity in the tick body
+can choose that work.
+
+```mermaid
+flowchart TB
+    Clock["EventBridge: every minute"] --> Tick["SQS due-work tick"]
+    Tick --> Host["Due-work Lambda"]
+    Host --> CP["PipelineControlPlane.sweepOnce"]
+    CP --> State["TPF semantic state"]
+    CP --> Work["Existing SQS worker protocol"]
+    Durable["Suspended Durable coordinator"]
+    Work --> Consequences["Durable semantic consequences"]
+    Consequences --> Stream["Await Stream: admitted completion"]
+    Stream --> Durable
+```
+
+`DueWorkSweepLimit` defaults to 100 and accepts 1–1,000. It limits the existing
+semantic sweep queries, rather than establishing a new deadline or retry policy.
+The SQS event source caps delivery at two concurrent batches, and the dedicated
+Lambda reserves two executions. Each batch contains one tick, with a 30-second
+action wait inside its 120-second invocation timeout. Overlapping sweeps may
+redispatch the same stable execution identity; the existing idempotent semantic
+admission and continuation protocol handles that redelivery. Native
+resident loops remain disabled. Duplicate and delayed ticks are harmless hints:
+they re-inspect current semantic state, and future ticks rediscover unresolved work.
+This periodic dispatch is normal liveness; provider-history reconciliation remains
+exceptional repair.
+
+EventBridge delivery retries for up to one hour and then sends failed deliveries
+to `DueWorkDlq`. The tick queue has 720-second visibility, one-day retention and
+redrives after five failed receives. Partial-batch failures leave unsuccessful ticks available for redelivery.
+Unresolved semantic work remains in persisted state for later scheduled ticks
+to rediscover. Both failure paths use the same 14-day DLQ;
+EventBridge delivery failures carry its error attributes, while consumer failures
+retain the original tick. Inspect those attributes when responding to the DLQ alarm.
+For `HARDENED`, a queue-age alarm reports sustained age above three minutes;
+subscribe the alarms to the operational notification destination.
+`RESTRICTED_PILOT` preserves the same failure destinations and uses the supervised
+checks described in its deployment profile.
+
+The due-work role accesses only the declared semantic tables/indexes and the
+existing SQS work, transition-request and transition-response queues. It has no
+callback-table or Durable API authority. Item continuation uses the application's
+existing typed continuation handler and signed worker protocol; it does not invoke
+business functions through AWS Durable directly. Use the same host with FUNCTION
+or COMPUTE SQS workers where the current application protocol supports that placement.
+
+Local handler tests cover fresh time, duplicates and failed delivery; existing
+semantic tests cover timeout, dispatch and continuation convergence. Real-AWS
+suspended-execution coverage remains a support gate. Keep the configured provider
+execution timeout finite; provider suspension does not establish that the TPF
+execution is still active.
+
+### Settling callbacks after terminal failure
+
+The execution Stream invokes `AwsDurableExecutionWakeupHandler` with a storage-owned
+execution key decoder. The handler reads the current execution identity, Release
+and status through `PipelineControlPlane.getExecutionSemanticCheckpoint`; it does
+not trust the Stream image. `FAILED`, `DLQ` and `REMOTE_OUTCOME_UNKNOWN` settle the
+current generation's parked callback using
+[AWS callback failure](https://docs.aws.amazon.com/lambda/latest/api/API_SendDurableExecutionCallbackFailure.html).
+The error contains the terminal status and a fixed mechanical message, without
+application payloads. TPF remains responsible for results and authorised re-drive.
+
+Generation checks and immutable delivery evidence make duplicate settlement safe.
+If delivery is uncertain, provider history classifies a closed callback as settled
+and an open or unknown callback as retryable. A late registration Stream event
+performs the same terminal read, covering failure before callback registration.
+Neither path starts a replacement execution for a terminal TPF failure. Stream
+retries are bounded and exhausted records go to `StreamFailureDlq`; operators own
+repair of that destination. Local tests also exercise failed callbacks through the
+Durable SDK runner. These tests do not replace real-AWS conformance.
+
 ## Await callback binding
 
 TPF-first admission is mandatory:
@@ -294,15 +597,15 @@ TPF-first admission is mandatory:
 
 Callback identifiers and provider execution ARNs are disposable hosting state. They never enter TPF Await records and cannot admit completion. Callback registration runs inside a Durable checkpointed step, while the binding store conditionally admits callback authority. The deployed proof injected failures after provider callback creation but before the mechanical registration write, and after the registration write but before the submitter checkpoint. Both windows recovered a mechanical correlation binding to the TPF Await. Recovery used provider history, Stream delivery and targeted reconciliation. This evidence does not establish submitter replay alone or a hard process kill at every window; see the [callback-window evidence](/evolve/durable-coordinator/durable-workflow-adapter-spike).
 
-If provider history is unavailable or an execution closes before delivery, targeted reconciliation uses the provider-registration index and the TPF semantic checkpoint to start a replacement generation. Reconciliation is exceptional repair; Streams provide normal liveness and no broad scan is required.
+If provider history is unavailable or an execution closes before delivery, targeted reconciliation uses the retained recovery locator and the TPF execution checkpoint to start a replacement generation. Reconciliation is exceptional repair; Streams provide normal liveness and no broad scan is required.
 
-The provider index is eventually consistent. Targeted reconciliation retries when a registration or required semantic checkpoint is unavailable, or replacement admission remains unresolved. The `provider-registration-index` uses `provider_execution_arn` as its partition key and `sk` as its sort key, with `ALL` projection. Its query selects the `REGISTRATION#` sort-key prefix before applying the result limit, so binding records cannot hide the registration or exhaust a page budget.
+The provider index is eventually consistent. Targeted reconciliation retries when a registration or required semantic checkpoint is unavailable, or replacement admission remains unresolved. The `provider-registration-index` uses `provider_execution_arn` as its partition key and `sk` as its sort key, with `ALL` projection. Callback lookup selects the `REGISTRATION#` prefix, while execution recovery selects `RECOVERY#`, before applying the result limit. Binding records cannot hide either target or exhaust a page budget. Recovery locators pin the semantic execution identity and Release to the provider execution and generation; they have no callback TTL.
 
 For an existing callback binding table, add this index and wait until it reports `ACTIVE` before upgrading the repair host. Existing records already contain both index keys and need no backfill. Keep the original `provider-execution-index` while retained host versions still use it.
 
 ### Stream source configuration
 
-The wake-up handler requires the exact `TPF_AWS_DURABLE_AWAIT_STREAM_ARN` and `TPF_AWS_DURABLE_BINDING_STREAM_ARN`. The reference template sets these to the same ARNs used by its two event-source mappings. Keep the environment values and mappings aligned when a Stream is recreated; pause old mappings before replacing their source configuration. Unexpected sources and malformed interaction keys are reported as partial-batch failures.
+The Await wake-up handler requires the exact `TPF_AWS_DURABLE_AWAIT_STREAM_ARN` and `TPF_AWS_DURABLE_BINDING_STREAM_ARN`. The execution wake-up handler requires `TPF_AWS_DURABLE_EXECUTION_STREAM_ARN`, supplied by the required `ExecutionStateStreamArn` template parameter. The template aligns these values with their event-source mappings. Keep the environment values and mappings aligned when a Stream is recreated; pause old mappings before replacing their source configuration. Unexpected sources and malformed interaction keys are reported as partial-batch failures.
 
 Semantic Stream events identify an interaction through a runtime-owned DynamoDB key decoder. The host then calls the existing bounded `PipelineControlPlane.getAwaitSemanticCheckpoint(tenant, interaction)` read. The Stream image does not supply execution identity, correlation or completion authority. Missing semantic checkpoints and read failures remain retryable; `REMOVE` events do not admit completion. Mechanical registration events use their own decoder and never enter the semantic path.
 
@@ -336,9 +639,9 @@ Occurrence one retains the existing `REGISTRATION#<padded-generation>` and
 `#OCCURRENCE#<padded-occurrence>`. Delivery evidence is also scoped to occurrence.
 The provider-registration index reads descending keys to locate the latest registration.
 Registration Stream repair reads the pinned interaction directly, including after
-completion. Terminal repair reads the execution's current Await; if it has advanced,
-the old callback is used only as a replacement locator and is never bound to the new
-interaction.
+completion. Terminal provider repair reads the retained execution locator and current semantic
+execution checkpoint. It does not require a callback row or bind an old callback
+to a new interaction.
 
 The template requires `CallbackOccurrenceMigrationValidation=validated`, without a
 default. Set it only for a fresh table, or after legacy callback executions drain and
@@ -349,10 +652,21 @@ Stream or terminal repair path; no inferred backfill or automatic migration is p
 Retained old callback signals and Durable checkpoints must not be replayed with the new
 handler. The attestation does not inspect or migrate those resources.
 
+The template additionally requires `ExecutionRecoveryMigrationValidation=validated`,
+without a default. Set it for a fresh host, or after every retained live execution
+has a validated recovery locator and generation claim. Drain or isolate old
+coordinators that do not register locators, and old coordinators that invoke an
+unqualified action target. Retain compatible numbered action/coordinator packages.
+This attestation does not migrate rows or old Durable checkpoints automatically.
+
+The neutral execution read returns only tenant, execution, pipeline, contract,
+Release and current status. Native recovery and operator tooling can use the same
+admitted point read; it accepts no provider identity and exposes no DynamoDB schema.
+
 Local tests cover sequential callback occurrences, late completion, completion before
 registration, wrong wake-up identity, generation fencing and provider loss before a
-later registration. Concurrent/itemised Await, complete recovery after lost mechanical
-rows, migration tooling and real-AWS repeated-Await conformance remain support gates
+later registration. Loss of retained recovery authority, concurrent/itemised Await
+conformance, migration tooling and real-AWS lifecycle conformance remain support gates
 in the [completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
 
 ## Worker placement
@@ -369,9 +683,9 @@ Direct Durable-to-worker invocation is not supported. Worker placement remains o
 
 ## Operations and validation
 
-Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, enable point-in-time recovery, and route every DLQ/Stream alarm to an owned response path.
+Before promotion, validate the deployed region and account against the current Lambda Durable operation, duration, checkpoint-size and retention limits. Ensure SQS visibility exceeds worker timeout, set reserved/maximum concurrency deliberately, scope IAM to exact semantic resources, encrypt secrets, and enable point-in-time recovery. For `HARDENED`, route every DLQ/Stream alarm to an owned response path; for `RESTRICTED_PILOT`, validate supervised failure checks for those same destinations.
 
-For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. Customer-managed keys, secret references, alarm routing and complete semantic provider configuration remain deployment-owned requirements.
+For Lambda SQS event sources, configure visibility for at least six times the function timeout plus any batching window, following [AWS guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html). The reference queues use this retry headroom and explicit encryption at rest. The Stream consumer requires a scoped send grant to its failure destination. The selected profile's customer-managed keys, secret references and complete semantic provider configuration remain deployment-owned requirements. `HARDENED` also requires owned alarm routing; `RESTRICTED_PILOT` requires supervised failure checks.
 
 The protected real-AWS conformance lane exercises callback/binding races, duplicate delivery, provider-history loss and expiry, generation replacement, worker failure, terminal Await result passthrough and cleanup. Ordinary repository verification remains deployment-free. Promotion requires that lane to pass against the exact runtime and compiler candidates.
 

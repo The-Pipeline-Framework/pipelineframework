@@ -105,6 +105,29 @@ Start with the simplest supported deployment shape. Add runtime/deployment separ
 - Read [execution-and-replay.md](references/execution-and-replay.md) for Query/Command/Await, connectors, aspects, persistence/cache/capture/effects, resilience, retry/DLQ, or checkpoint handoff.
 - Read [deployment-and-packaging.md](references/deployment-and-packaging.md) for configuration lifetime, telemetry, runtime placement, transport/platform, generated artifacts, bootstrap, testing, or single-unit packaging.
 
+## Author conversation context deliberately
+
+For an LLM Query that needs earlier dialogue, use the
+[conversation context authoring walkthrough](/develop/connectors/conversation-context). The LLM Query has no
+cross-request memory; the conversation-context connector contributes values and a pure selector, not a
+transcript store, SQL schema, storage fallback, or automatic model input.
+
+1. Decide which admitted owner and agent turns become durable application records. Define stable event IDs,
+   tenant/owner/conversation scope, provenance, ordering, retention and erasure. Derive scope from a trusted
+   host or application value, never from model output.
+2. If durable recall is needed, map the accepted canonical value through a selected TPF persistence aspect
+   to an application-owned store. If a suitable store already exists, reuse it. Choose the provider and any
+   application schema explicitly; offload a blocking provider or choose a reactive one where available.
+3. Implement a finite, authorised application Query over earlier turns. Within that Query, supply eligible
+   candidates and explicit window, overhead, output and entry-size budgets to `ContextAssembler`; handle
+   cannot-fit and skipped entries. Put selected history in a typed input field for the next one-turn LLM Query.
+   The portable `ConversationTurn` and page types are optional contracts, not mandatory JPA entities.
+4. Tell the model how to treat current text, corrections and provenance, but keep history untrusted and
+   non-authoritative. Validate proposals and retain approval and Command authority outside the model.
+5. Check compile-time mappings, bindings and aspect targets; then test restart, duplicates, owner isolation,
+   ordering, budget limits, erasure and a later-turn correction with the actual model. Compilation cannot
+   prove runtime authorisation, retention compliance, exact token use or model recall.
+
 For current authoring journeys, prefer the [Connector](/develop/connectors/), [Block](/develop/blocks/),
 [Expansion](/develop/expansions/), and [experimental OAuth connection](/develop/oauth-connections/)
 Guides over reconstructing a contract from implementation classes.

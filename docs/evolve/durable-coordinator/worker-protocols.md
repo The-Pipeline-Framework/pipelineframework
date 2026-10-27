@@ -60,6 +60,10 @@ Configure at most one remote worker target. Multiple remote targets fail startup
 ## Protocols
 
 REST posts signed JSON command envelopes to a default-disabled worker endpoint.
+The REST response boundary captures its originating request context before executing the
+transition and restores that context when asynchronous provider work completes. Provider
+callbacks must not substitute a different or terminated CDI request context for response
+filters. Failure propagation and cancellation remain part of the same reactive subscription.
 
 gRPC sends the same envelope JSON bytes through `TransitionWorkerService.Execute`, with signatures in metadata.
 
