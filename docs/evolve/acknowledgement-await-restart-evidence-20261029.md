@@ -215,3 +215,21 @@ reported as `product shard failed: csv-smoke`. This does not invalidate the two
 recorded restart proofs, but it blocks upstream merge. The underlying cause has
 not been established by this bounded task. No rerun, unrelated repair or gate
 waiver was attempted. Runtime #76 remains unmerged and ADR-0079 remains draft.
+
+### Bounded downstream continuation
+
+The original `csv-smoke` failure was an opaque multipart upload ID parsed as a CLI
+option. CSV PR #39 binds the value with `--upload-id=value`; its complete local
+FUNCTION upload/worker/S3 proof passed. A subsequent Kafka slow-HA failure returned
+1,000 correct results but counted 1,061 Await interactions after a worker HTTP 500
+and page retry. Retained worker logs show REST response handling failed with
+`ContextNotActiveException` after pipeline completion. The unchanged HA retry
+passed, establishing an intermittent response-boundary failure rather than a
+reason to weaken the exact interaction assertion.
+
+Runtime PR #76 also restores the originating Vert.x context before applying its
+captured CDI thread state. Two regression cases using distinct real Vert.x contexts
+fail on the previous code and pass after correction; all 13 focused resource tests
+pass, including cancellation. CodeRabbit's complete two-file review found no issues.
+The normal exact-head owner and coordinated CI gates still apply. No concurrency
+limit or interaction-count assertion was changed; CSV pilot operations remain parked.

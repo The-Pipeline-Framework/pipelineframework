@@ -61,7 +61,9 @@ Configure at most one remote worker target. Multiple remote targets fail startup
 
 REST posts signed JSON command envelopes to a default-disabled worker endpoint.
 The REST response boundary captures its originating request context before executing the
-transition and restores that context when asynchronous provider work completes. Provider
+transition and restores both its Vert.x request context and captured CDI thread state
+when asynchronous provider work completes. Restoring CDI alone can leave response
+handling on an unrelated provider context. Provider
 callbacks must not substitute a different or terminated CDI request context for response
 filters. Failure propagation and cancellation remain part of the same reactive subscription.
 
