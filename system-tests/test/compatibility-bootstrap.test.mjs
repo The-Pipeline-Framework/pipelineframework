@@ -47,6 +47,9 @@ test('compatibility candidate identity is derived from the exact PR head', () =>
   const sourcePom = '<project><modelVersion>4.0.0</modelVersion><version>26.10.0-SNAPSHOT</version></project>';
   assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
   assert.equal(expectedCandidateVersion({components: {}}, {...target('runtime', null), merged: true}, sourcePom), '26.10.0-main.abcdef123456');
+  const releasePom = sourcePom.replace('26.10.0-SNAPSHOT', '26.10.0');
+  assert.equal(expectedCandidateVersion(resolvedSet, target('runtime', 7), releasePom), '26.10.0-pr.7.abcdef123456');
+  assert.equal(expectedCandidateVersion({}, target('runtime', null), releasePom), '26.10.0-main.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-pr.7.abcdef123456\n'), '26.9.4-pr.7.abcdef123456');
   assert.equal(candidateFromOutput('candidate=26.9.4-main.abcdef123456\n'), '26.9.4-main.abcdef123456');
   assert.throws(() => candidateFromOutput('candidate=26.10.1-SNAPSHOT\n'), /exactly one valid version/);
@@ -61,9 +64,9 @@ test('candidate versions use only the active root project version', () => {
       <version> 26.10.0-SNAPSHOT </version>
     </project>`;
   assert.equal(expectedCandidateVersion({}, target('runtime', 7), sourcePom), '26.10.0-pr.7.abcdef123456');
-  for (const version of ['', '<version>26.10.0</version>', '<version>26.10-SNAPSHOT</version>']) {
+  for (const version of ['', '<version>26.10.0-pr.7.abcdef123456</version>', '<version>26.10-SNAPSHOT</version>']) {
     const invalid = sourcePom.replace('<version> 26.10.0-SNAPSHOT </version>', version);
-    assert.throws(() => expectedCandidateVersion({}, target('runtime', 7), invalid), /root project version must be a semantic SNAPSHOT version/);
+    assert.throws(() => expectedCandidateVersion({}, target('runtime', 7), invalid), /root project version must be a semantic release or SNAPSHOT version/);
   }
 });
 
