@@ -51,7 +51,10 @@ test('materializes one deterministic unpublished BOM over exact component versio
   const repository = join(directory, 'repository');
   const output = join(directory, 'output.json');
   await writeFile(source, sourcePom);
-  await writeFile(resolved, JSON.stringify(resolvedSet()));
+  const selection = resolvedSet();
+  selection.components.contracts.mavenVersion = '26.11.1-main.abcdef123456';
+  selection.components.compiler.mavenVersion = '26.10.1-pr.41.abcdef123456';
+  await writeFile(resolved, JSON.stringify(selection));
 
   const run = () => execFileAsync(process.execPath, [materializer,
     '--source', source,
@@ -63,17 +66,28 @@ test('materializes one deterministic unpublished BOM over exact component versio
   await run();
   const first = JSON.parse(await readFile(output, 'utf8'));
   const version = first.coordinationBom.mavenVersion;
-  assert.match(version, /^26\.9\.4-system-test\.abcdef123456\.[0-9a-f]{12}$/);
+  assert.match(version, /^26\.10\.1-system-test\.abcdef123456\.[0-9a-f]{12}$/);
   const pomPath = join(repository, 'org', 'pipelineframework', 'pipelineframework-bom', version, `pipelineframework-bom-${version}.pom`);
   const firstPom = await readFile(pomPath, 'utf8');
   assert.match(firstPom, new RegExp(`<version>${version.replaceAll('.', '\\.')}<\\/version>`));
   assert.match(firstPom, /<pipelineframework\.runtime\.version>26\.9\.4-main\.abcdef123456<\/pipelineframework\.runtime\.version>/);
+  assert.match(firstPom, /<pipelineframework\.contracts\.version>26\.11\.1-main\.abcdef123456<\/pipelineframework\.contracts\.version>/);
+  assert.match(firstPom, /<pipelineframework\.compiler\.version>26\.10\.1-pr\.41\.abcdef123456<\/pipelineframework\.compiler\.version>/);
   assert.doesNotMatch(firstPom, /SNAPSHOT|<parent>|<build>|<relativePath>/);
 
   await run();
   const second = JSON.parse(await readFile(output, 'utf8'));
   assert.equal(second.coordinationBom.mavenVersion, version);
   assert.equal(await readFile(pomPath, 'utf8'), firstPom);
+
+  selection.components.compiler.mavenVersion = '26.10.1-pr.42.abcdef123456';
+  await writeFile(resolved, JSON.stringify(selection));
+  await run();
+  const changed = JSON.parse(await readFile(output, 'utf8'));
+  assert.notEqual(changed.coordinationBom.mavenVersion, version, 'changing a component changes the immutable BOM identity');
+  selection.components.contracts.mavenVersion = '26.11.1-SNAPSHOT';
+  await writeFile(resolved, JSON.stringify(selection));
+  await assert.rejects(run(), /resolved contracts version must be immutable/);
 });
 
 test('full train materializes its tested BOM and sanitizes resolver state before archiving', () => {
