@@ -35,9 +35,6 @@ const versions = Object.fromEntries(MAVEN_COMPONENTS.map((component) => {
   return [component, {version, baseVersion: match[1]}];
 }));
 
-const baseVersions = new Set(Object.values(versions).map(({baseVersion}) => baseVersion));
-if (baseVersions.size !== 1) throw new Error('resolved Maven components do not share one product base version');
-
 const sourcePom = await readFile(values.source, 'utf8');
 const sourcePomSha256 = createHash('sha256').update(sourcePom).digest('hex');
 const identity = canonicalJson({
@@ -46,9 +43,6 @@ const identity = canonicalJson({
   components: Object.fromEntries(MAVEN_COMPONENTS.map((component) => [component, resolvedSet.components[component]]))
 });
 const identitySha256 = createHash('sha256').update(identity).digest('hex');
-const baseVersion = [...baseVersions][0];
-const mavenVersion = `${baseVersion}-system-test.${values.coordinationSha.slice(0, 12)}.${identitySha256.slice(0, 12)}`;
-
 const parentPattern = /\n\s*<parent>[\s\S]*?<\/parent>\s*\n/;
 const buildPattern = /\n\s*<build>[\s\S]*?<\/build>\s*\n/;
 if ((sourcePom.match(new RegExp(parentPattern.source, 'g')) ?? []).length !== 1) {
@@ -57,6 +51,10 @@ if ((sourcePom.match(new RegExp(parentPattern.source, 'g')) ?? []).length !== 1)
 if ((sourcePom.match(new RegExp(buildPattern.source, 'g')) ?? []).length !== 1) {
   throw new Error('BOM source must contain exactly one build declaration');
 }
+const parent = sourcePom.match(parentPattern)[0];
+const baseVersion = parent.match(/<version>\s*(\d+\.\d+\.\d+)(?:-SNAPSHOT)?\s*<\/version>/)?.[1];
+if (baseVersion === undefined) throw new Error('BOM parent must declare a semantic release or SNAPSHOT version');
+const mavenVersion = `${baseVersion}-system-test.${values.coordinationSha.slice(0, 12)}.${identitySha256.slice(0, 12)}`;
 
 const properties = MAVEN_COMPONENTS
   .map((component) => `        <pipelineframework.${component}.version>${versions[component].version}</pipelineframework.${component}.version>`)
