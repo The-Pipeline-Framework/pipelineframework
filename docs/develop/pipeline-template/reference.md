@@ -430,6 +430,7 @@ steps:
 
   - name: Complete payment
     input: PaymentOutcome
+    accepts: [PaymentDeclined, PaymentRequiresReview]
     terminal: true
     output: PaymentResult
 ```
