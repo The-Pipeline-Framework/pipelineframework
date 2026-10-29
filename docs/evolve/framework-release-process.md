@@ -65,6 +65,21 @@ tests, the production documentation build and availability checks for all 56
 BOM-managed coordinates. Those checks used the published `26.10.1-SNAPSHOT`
 line; they do not replace verification of the final immutable releases.
 
+The frozen release-source candidate set subsequently passed all six product
+shards and exact-SHA status reporting in
+[coordinated run 40941421051](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/40941421051).
+Only the reference shard was retried, after a base-image download ended early;
+the five successful shards were retained.
+
+CLI Central publication required a metadata-only recovery: six child POMs
+needed explicit project display names. [CLI PR 14](https://github.com/The-Pipeline-Framework/pipelineframework-cli/pull/14)
+added the guard and a trusted recovery entry point.
+[The successful recovery](https://github.com/The-Pipeline-Framework/pipelineframework-cli/actions/runs/40951274591)
+checked out the original `v26.10.1` tag and logged only those POM display-name
+additions. It did not move the tag or alter Java sources, coordinates,
+dependencies or the reactor. Native distributions and the container were
+published from that same original tag.
+
 The maintainer explicitly authorised this release without waiting for the
 following failures from the [29 October full train](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/40836241920):
 
