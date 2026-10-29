@@ -32,8 +32,8 @@ export function expectedCandidateVersion(resolvedSet, target, sourcePom) {
         if (!tag[0].endsWith('/>')) depth += 1;
       }
     }
-    const sourceMatch = typeof projectVersion === 'string' ? /^(\d+\.\d+\.\d+)-SNAPSHOT$/.exec(projectVersion.trim()) : null;
-    if (sourceMatch === null) throw new Error('root project version must be a semantic SNAPSHOT version');
+    const sourceMatch = typeof projectVersion === 'string' ? /^(\d+\.\d+\.\d+)(?:-SNAPSHOT)?$/.exec(projectVersion.trim()) : null;
+    if (sourceMatch === null) throw new Error('root project version must be a semantic release or SNAPSHOT version');
     return target.pullRequestNumber === null
       ? `${sourceMatch[1]}-main.${target.sourceSha.slice(0, 12)}`
       : `${sourceMatch[1]}-pr.${target.pullRequestNumber}.${target.sourceSha.slice(0, 12)}`;

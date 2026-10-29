@@ -62,6 +62,7 @@ jobs:
           for module in crawl-source-svc parse-document-svc tokenize-content-svc embed-content-svc index-document-svc orchestrator-svc; do
             test -s "references/search/$module/target/function.zip"
           done
+          python3 coordination/system-tests/scripts/validate-search-lambda-packages.py --root references/search
           (
             cd references/search
             sha256sum {crawl-source-svc,parse-document-svc,tokenize-content-svc,embed-content-svc,index-document-svc,orchestrator-svc}/target/function.zip > cloud-SHA256SUMS
@@ -118,6 +119,8 @@ jobs:
           test "$(sha256sum cloud-SHA256SUMS | cut -d ' ' -f 1)" = "$EXPECTED_CHECKSUM"
           sha256sum --check cloud-SHA256SUMS
       - name: Assume existing coordinator OIDC role
+        # The existing role's identity policy must also permit these scoped S3
+        # actions. A session policy narrows authority; it cannot grant new rights.
         uses: aws-actions/configure-aws-credentials@4a1596c86fd706dc0521e32f0121ad1a6d1adb74 # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -127,7 +130,9 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ steps.identity.outputs.name_prefix }}-*"},
-              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-lambda-exec"}
+              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-lambda-exec"},
+              {"Effect":"Allow","Action":["s3:CreateBucket","s3:DeleteBucket","s3:ListBucket","s3:ListBucketVersions","s3:GetBucket*","s3:GetEncryptionConfiguration","s3:GetLifecycleConfiguration","s3:GetReplicationConfiguration","s3:GetAccelerateConfiguration","s3:PutBucketTagging","s3:PutBucketPublicAccessBlock","s3:PutEncryptionConfiguration"],"Resource":"arn:aws:s3:::${{ steps.identity.outputs.name_prefix }}-code-*"},
+              {"Effect":"Allow","Action":["s3:PutObject","s3:GetObject","s3:DeleteObject","s3:DeleteObjectVersion","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":"arn:aws:s3:::${{ steps.identity.outputs.name_prefix }}-code-*/*"}
             ]}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
@@ -138,6 +143,8 @@ jobs:
         working-directory: references/search/terraform/aws-modular
         run: |
           terraform init -input=false
+          terraform validate
+          terraform test -no-color
           echo "cleanup=true" >> "$GITHUB_OUTPUT"
       - name: Deploy exact build and record Function URL
         id: apply
@@ -249,7 +256,9 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ needs.deploy.outputs.name_prefix }}-*"},
-              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-lambda-exec"}
+              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-lambda-exec"},
+              {"Effect":"Allow","Action":["s3:DeleteBucket","s3:ListBucket","s3:ListBucketVersions","s3:GetBucket*","s3:GetEncryptionConfiguration","s3:GetLifecycleConfiguration","s3:GetReplicationConfiguration","s3:GetAccelerateConfiguration","s3:PutBucketPublicAccessBlock","s3:PutEncryptionConfiguration"],"Resource":"arn:aws:s3:::${{ needs.deploy.outputs.name_prefix }}-code-*"},
+              {"Effect":"Allow","Action":["s3:GetObject","s3:DeleteObject","s3:DeleteObjectVersion","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":"arn:aws:s3:::${{ needs.deploy.outputs.name_prefix }}-code-*/*"}
             ]}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
