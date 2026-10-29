@@ -1,6 +1,6 @@
 ---
 title: Command completion can require the dispatch acknowledgement
-status: draft
+status: accepted
 ---
 
 # ADR-0079: Command completion can require the dispatch acknowledgement
@@ -20,7 +20,7 @@ request-aware projector could not express that comparison because it did not rec
 the acknowledgement. An application callback table would duplicate native
 Await ownership and introduce another recovery path.
 
-## Decision proposed
+## Decision
 
 Add an explicit, typed acknowledgement-aware Command completion projector. It
 receives the canonical request, successful dispatch acknowledgement, admitted
@@ -83,9 +83,9 @@ emitting an invalid waiting-state event.
   identity, duplicates, ambiguity, terminal races and durable reconstruction.
 - Generated-code tests must reject an incompatible acknowledgement type. Durable
   tests must prove that staged callbacks cannot be mistaken for final output.
-- Implementation and published-artifact consumer evidence are available. This ADR
-  remains draft pending the nested-union correction's upstream downstream checks and merge;
-  publication and fixture success do not establish product activation.
+- Implementation and published-artifact consumer evidence are available. The bounded
+  process-restart cases and upstream compatibility gates have passed; publication
+  and fixture success do not establish product activation.
 
 ## Evidence checkpoint — 29 October 2026
 
@@ -119,7 +119,7 @@ output and a still-running execution before `SIGKILL`; native recovery then join
 the acknowledgement without redispatch. Both return readable successful browser
 results, with unchanged Command-effect histories across restart.
 
-The two local JVM restart acceptance cases are now proved. The correction's normal
-upstream downstream checks and merge remain gates for ADR promotion. Live GitHub
+The two local JVM restart acceptance cases are now proved. Runtime #76 merged as `8012fae0064132d452bd43ce0d2f59c7e2925728` after all six
+coordinated compatibility groups passed in run `40901480477`. Live GitHub
 delivery and hosted product acceptance remain separate and unproved. CSV stayed
 parked; no cloud resources or spending were used.

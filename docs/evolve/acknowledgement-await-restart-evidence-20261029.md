@@ -7,8 +7,8 @@ title: Acknowledgement-aware Await restart evidence — 29 October 2026
 This is a bounded local acceptance checkpoint for [issue #1023](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1023)
 and [ADR-0079](../decisions/0079-command-completion-can-require-dispatch-acknowledgement.md).
 Both packaged JVM restart cases now pass on the published runtime PR #76 candidate.
-Upstream downstream-CI/merge gates and the product's live GitHub/hosting obligations
-remain separate. The original stopped attempt below is retained as history. CSV remained parked; no cloud resources
+Upstream owner and coordinated compatibility gates passed and the code corrections
+are merged. The product's live GitHub/hosting obligations remain separate. The original stopped attempt below is retained as history. CSV remained parked; no cloud resources
 or spending were used.
 
 ## Frozen inputs and fixture
@@ -233,3 +233,21 @@ fail on the previous code and pass after correction; all 13 focused resource tes
 pass, including cancellation. CodeRabbit's complete two-file review found no issues.
 The normal exact-head owner and coordinated CI gates still apply. No concurrency
 limit or interaction-count assertion was changed; CSV pilot operations remain parked.
+
+
+## Final upstream gate — 29 October 2026
+
+[Coordinated run 40901480477](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/40901480477)
+passed all six groups on runtime `ef3c4ccb09ca386041d7ddde31b17288ea5dd69a`
+and CSV `6de328b411956d527ea66acde61ada8184ffb8e1`. Runtime owner verify/build
+and all CSV owner checks passed; review findings were addressed or explicitly
+withdrawn/deferred. The REST context correction remains inside the existing runtime
+adapter boundary; its architecture rule and all 14 focused regression tests pass.
+
+Runtime #76 merged as `8012fae0064132d452bd43ce0d2f59c7e2925728` and
+CSV #39 merged as `132a13a161fbee730d174331d325f673255ad9ec`.
+This supersedes the earlier stop checkpoints and satisfies the upstream merge gate
+for ADR-0079. The two restart proofs above retain their exact published candidate
+provenance; no claim is made that they were rerun against the later merge commit.
+Normal post-merge snapshot publication is separate asynchronous evidence. CSV pilot
+operations remain parked; no cloud resources or spending were used.
