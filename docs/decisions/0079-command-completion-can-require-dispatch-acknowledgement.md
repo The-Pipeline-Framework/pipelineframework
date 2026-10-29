@@ -119,7 +119,9 @@ output and a still-running execution before `SIGKILL`; native recovery then join
 the acknowledgement without redispatch. Both return readable successful browser
 results, with unchanged Command-effect histories across restart.
 
-The two local JVM restart acceptance cases are now proved. Runtime #76 merged as `8012fae0064132d452bd43ce0d2f59c7e2925728` after all six
+The two local JVM restart acceptance cases are proved on published candidate
+`26.10.1-pr.76.2480d29c98d6`; they were not rerun against the later merged commit.
+The following merge and compatibility results are separate evidence. Runtime #76 merged as `8012fae0064132d452bd43ce0d2f59c7e2925728` after all six
 coordinated compatibility groups passed in run `40901480477`. Live GitHub
 delivery and hosted product acceptance remain separate and unproved. CSV stayed
 parked; no cloud resources or spending were used.
