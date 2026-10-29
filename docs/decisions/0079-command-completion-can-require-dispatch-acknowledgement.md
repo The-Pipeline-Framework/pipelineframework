@@ -15,9 +15,9 @@ a caller-chosen correlation identity.
 
 Some providers instead assign an identity during dispatch. For example, an Actions
 dispatch returns a workflow-run ID. An application may require a later completion
-to match that returned ID, not merely a value supplied by the callback. The current
-Command decorator discards the acknowledgement, so the existing projector cannot
-express that comparison. An application callback table would duplicate native
+to match that returned ID, not merely a value supplied by the callback. The original
+request-aware projector could not express that comparison because it did not receive
+the acknowledgement. An application callback table would duplicate native
 Await ownership and introduce another recovery path.
 
 ## Decision proposed
@@ -83,6 +83,41 @@ emitting an invalid waiting-state event.
   identity, duplicates, ambiguity, terminal races and durable reconstruction.
 - Generated-code tests must reject an incompatible acknowledgement type. Durable
   tests must prove that staged callbacks cannot be mistaken for final output.
-- This is a proposed extension, not a claim that current published snapshots support
-  it. Product activation remains blocked until implementation and assembled native
-  continuation evidence are available.
+- Implementation and published-artifact consumer evidence are available. This ADR
+  remains draft pending complete isolated application-JVM restart acceptance;
+  publication and fixture success do not establish product activation.
+
+## Evidence checkpoint — 29 October 2026
+
+[Issue #1023](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1023)
+coordinates merged contracts #45, compiler #29, runtime #55 and documentation #1024.
+The runtime evidence includes 107 focused unit tests and 10 LocalStack Dynamo
+integration tests, including typed payload reconstruction and completion admission.
+
+The [product-set-verification stack through #56](https://github.com/MokapotLabs/product-set-verification/pull/56)
+merged as `784d0a3a0467116ead35b41509491914e4134572`. Its exact published input set
+includes contracts `26.10.1-main.66cf17d85540`, compiler
+`26.10.1-main.d972daa918c6` and runtime `26.10.1-main.c83c59656ecd`.
+The fresh local reactor passed 121 tests with no failures or skips. Packaged
+native-Await pass/fail journeys cover the same source tree. GitHub CI was blocked
+by account billing; local evidence was explicitly used for the stack merge.
+
+The initial preflight found process-local fixture authentication and memory-backed
+stores. The authorised fixture continuation supplied a stable test-only key,
+manual completion delivery, explicit canonical Java bindings and the existing
+Dynamo stores on local LocalStack, with a persistent native file release registry.
+No framework artifacts were modified.
+
+The [bounded process-restart evidence](../evolve/acknowledgement-await-restart-evidence-20261029.md)
+now proves acknowledgement-first recovery through signed completion admission
+and native continuation after `SIGKILL`. The duplicate was recognised and Command
+effect records did not change. However, final result materialisation failed:
+`List<ApplicationResult>` contains a nested authored `ApplicationCompletion` union
+that the published durable codec cannot reconstruct. Stored execution success
+does not make that unreadable result a successful application proof.
+
+Work stopped at this framework durability gap, without adding application Jackson
+annotations or changing the framework. Callback-first process-restart evidence,
+complete result retrieval, live GitHub delivery and hosted product acceptance
+remain unproved. The runtime owner must resolve the recursive canonical binding
+contract before this evidence can support acceptance.
