@@ -121,3 +121,42 @@ Callback-first process restart was not run after this stop condition. Complete
 typed result retrieval and both-order acceptance remain open; ADR-0079 stays
 draft and #1023 stays open. Live provider delivery and product activation remain
 separate, unproved obligations.
+
+## Bounded upstream correction
+
+The runtime correction under review makes sealed-union handling local to each
+release-bound JSON plan. Jackson still traverses records and containers, but a
+declared sealed union uses the existing `discriminator`, `case`, `value` envelope
+at nested positions as well as at the root. Generated union discriminators remain
+validated; authored marker unions use their declared case's simple name. Payloads
+cannot select an arbitrary class, and canonical type/catalog fingerprints remain
+mandatory.
+
+Existing ordinary payloads and root union envelopes remain readable. Old nested
+union JSON that omitted variant identity cannot be reconstructed safely by guessing
+from its fields. This correction does not repair such stored values or substitute
+the current release for their pinned release.
+
+Parameterised sealed-union bases and cases, including erased raw generic bases, are rejected
+explicitly. Generic records and containers containing non-generic sealed unions
+are covered. The existing canonical presence-value module remains authoritative;
+union support inside its custom wrapper is not established by this checkpoint.
+
+The acceptance rerun must use the exact published runtime candidate. For the
+callback-first case, a loopback-only JVM debugger breakpoint can stop entry to
+`AwaitCoordinator.settleCommandDispatch` after Command success is durable but
+before Await acknowledgement settlement. Before killing that JVM, evidence must
+show a staged callback, retained successful Command output and a non-terminal
+execution without a final result. Native lease recovery must then replay the
+recorded acknowledgement without dispatching again and produce a readable result.
+This is distinct from restarting an already-completed execution.
+
+No successful rerun is claimed by this correction proposal. Both complete
+restart acceptance cases remain gates until their exact candidate evidence is
+recorded.
+
+The upstream correction is [runtime PR #76](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/76),
+head `e7ca413cf4d5e4839c5842926ffad771ac722fb4`. The full runtime unit suite passed
+2,286 tests before two final review guards; all 42 focused codec, resolver and
+routing tests passed after those guards. Owner CI, immutable candidate publication
+and the two packaged restart cases remain pending.
