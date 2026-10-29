@@ -196,8 +196,8 @@ including the original `PENDING`, `DISPATCHING` and `SUCCEEDED` revisions: no
 provider redispatch or new Command revision occurred.
 
 Raw records, logs, result HTML, assertions, exact dependency lock and manifest,
-fixture delta and packaged application are retained at
-`/Users/mari/.codex/artifacts/await-restart-proof-20261029/nested-union-candidate/`.
+fixture delta and packaged application are retained outside the repository under evidence identifier
+`await-restart-proof-20261029/nested-union-candidate/`.
 The two proof JVMs and isolated LocalStack container were stopped after final
 consistent state export. CSV stayed parked; no cloud resources or spending.
 
@@ -205,3 +205,13 @@ This closes the two bounded local restart proof cases. It does not establish liv
 GitHub webhook/Actions delivery or hosted product acceptance, and does not migrate
 historical untagged union payloads. ADR promotion remains gated on the upstream
 correction's normal downstream checks and merge.
+
+
+### Stop checkpoint
+
+[Downstream run 40806936872](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/40806936872)
+finished with five successful groups and a failure in Applications and ordinary HA,
+reported as `product shard failed: csv-smoke`. This does not invalidate the two
+recorded restart proofs, but it blocks upstream merge. The underlying cause has
+not been established by this bounded task. No rerun, unrelated repair or gate
+waiver was attempted. Runtime #76 remains unmerged and ADR-0079 remains draft.

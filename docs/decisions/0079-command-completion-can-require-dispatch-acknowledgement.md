@@ -98,9 +98,10 @@ The [product-set-verification stack through #56](https://github.com/MokapotLabs/
 merged as `784d0a3a0467116ead35b41509491914e4134572`. Its exact published input set
 includes contracts `26.10.1-main.66cf17d85540`, compiler
 `26.10.1-main.d972daa918c6` and runtime `26.10.1-main.c83c59656ecd`.
-The fresh local reactor passed 121 tests with no failures or skips. Packaged
-native-Await pass/fail journeys cover the same source tree. GitHub CI was blocked
-by account billing; local evidence was explicitly used for the stack merge.
+The 121-test full run predates the local fixture delta. Six signer tests and five
+fixture-resource tests passed after that delta. Packaged native-Await pass/fail
+journeys cover the merged stack source tree. GitHub CI was blocked by account
+billing; local evidence was explicitly used for the stack merge.
 
 The initial preflight found process-local fixture authentication and memory-backed
 stores. The authorised fixture continuation supplied a stable test-only key,
