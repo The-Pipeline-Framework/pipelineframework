@@ -1,6 +1,6 @@
 ---
 title: Command completion can require the dispatch acknowledgement
-status: draft
+status: accepted
 ---
 
 # ADR-0079: Command completion can require the dispatch acknowledgement
@@ -15,12 +15,12 @@ a caller-chosen correlation identity.
 
 Some providers instead assign an identity during dispatch. For example, an Actions
 dispatch returns a workflow-run ID. An application may require a later completion
-to match that returned ID, not merely a value supplied by the callback. The current
-Command decorator discards the acknowledgement, so the existing projector cannot
-express that comparison. An application callback table would duplicate native
+to match that returned ID, not merely a value supplied by the callback. The original
+request-aware projector could not express that comparison because it did not receive
+the acknowledgement. An application callback table would duplicate native
 Await ownership and introduce another recovery path.
 
-## Decision proposed
+## Decision
 
 Add an explicit, typed acknowledgement-aware Command completion projector. It
 receives the canonical request, successful dispatch acknowledgement, admitted
@@ -83,6 +83,45 @@ emitting an invalid waiting-state event.
   identity, duplicates, ambiguity, terminal races and durable reconstruction.
 - Generated-code tests must reject an incompatible acknowledgement type. Durable
   tests must prove that staged callbacks cannot be mistaken for final output.
-- This is a proposed extension, not a claim that current published snapshots support
-  it. Product activation remains blocked until implementation and assembled native
-  continuation evidence are available.
+- Implementation and published-artifact consumer evidence are available. The bounded
+  process-restart cases and upstream compatibility gates have passed; publication
+  and fixture success do not establish product activation.
+
+## Evidence checkpoint — 29 October 2026
+
+[Issue #1023](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1023)
+coordinates merged contracts #45, compiler #29, runtime #55 and documentation #1024.
+The runtime evidence includes 107 focused unit tests and 10 LocalStack Dynamo
+integration tests, including typed payload reconstruction and completion admission.
+
+The [product-set-verification stack through #56](https://github.com/MokapotLabs/product-set-verification/pull/56)
+merged as `784d0a3a0467116ead35b41509491914e4134572`. Its exact published input set
+includes contracts `26.10.1-main.66cf17d85540`, compiler
+`26.10.1-main.d972daa918c6` and runtime `26.10.1-main.c83c59656ecd`.
+The 121-test full run predates the local fixture delta. Six signer tests and five
+fixture-resource tests passed after that delta. Packaged native-Await pass/fail
+journeys cover the merged stack source tree. GitHub CI was blocked by account
+billing; local evidence was explicitly used for the stack merge.
+
+The initial preflight found process-local fixture authentication and memory-backed
+stores. The authorised fixture continuation supplied a stable test-only key,
+manual completion delivery, explicit canonical Java bindings and the existing
+Dynamo stores on local LocalStack, with a persistent native file release registry.
+No framework artifacts were modified.
+
+The [bounded process-restart evidence](../evolve/acknowledgement-await-restart-evidence-20261029.md)
+records the original nested canonical union failure and both successful reruns on
+published runtime candidate `26.10.1-pr.76.2480d29c98d6` from
+[runtime PR #76](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/76).
+Acknowledgement-first recovery admits signed completion and recognizes its duplicate.
+Callback-first recovery starts with a staged callback, successful durable Command
+output and a still-running execution before `SIGKILL`; native recovery then joins
+the acknowledgement without redispatch. Both return readable successful browser
+results, with unchanged Command-effect histories across restart.
+
+The two local JVM restart acceptance cases are proved on published candidate
+`26.10.1-pr.76.2480d29c98d6`; they were not rerun against the later merged commit.
+The following merge and compatibility results are separate evidence. Runtime #76 merged as `8012fae0064132d452bd43ce0d2f59c7e2925728` after all six
+coordinated compatibility groups passed in run `40901480477`. Live GitHub
+delivery and hosted product acceptance remain separate and unproved. CSV stayed
+parked; no cloud resources or spending were used.
