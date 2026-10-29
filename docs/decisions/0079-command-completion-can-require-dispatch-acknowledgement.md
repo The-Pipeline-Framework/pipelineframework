@@ -84,7 +84,7 @@ emitting an invalid waiting-state event.
 - Generated-code tests must reject an incompatible acknowledgement type. Durable
   tests must prove that staged callbacks cannot be mistaken for final output.
 - Implementation and published-artifact consumer evidence are available. This ADR
-  remains draft pending complete isolated application-JVM restart acceptance;
+  remains draft pending the nested-union correction's upstream downstream checks and merge;
   publication and fixture success do not establish product activation.
 
 ## Evidence checkpoint — 29 October 2026
@@ -109,15 +109,16 @@ Dynamo stores on local LocalStack, with a persistent native file release registr
 No framework artifacts were modified.
 
 The [bounded process-restart evidence](../evolve/acknowledgement-await-restart-evidence-20261029.md)
-now proves acknowledgement-first recovery through signed completion admission
-and native continuation after `SIGKILL`. The duplicate was recognised and Command
-effect records did not change. However, final result materialisation failed:
-`List<ApplicationResult>` contains a nested authored `ApplicationCompletion` union
-that the published durable codec cannot reconstruct. Stored execution success
-does not make that unreadable result a successful application proof.
+records the original nested canonical union failure and both successful reruns on
+published runtime candidate `26.10.1-pr.76.2480d29c98d6` from
+[runtime PR #76](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/76).
+Acknowledgement-first recovery admits signed completion and recognizes its duplicate.
+Callback-first recovery starts with a staged callback, successful durable Command
+output and a still-running execution before `SIGKILL`; native recovery then joins
+the acknowledgement without redispatch. Both return readable successful browser
+results, with unchanged Command-effect histories across restart.
 
-Work stopped at this framework durability gap, without adding application Jackson
-annotations or changing the framework. Callback-first process-restart evidence,
-complete result retrieval, live GitHub delivery and hosted product acceptance
-remain unproved. The runtime owner must resolve the recursive canonical binding
-contract before this evidence can support acceptance.
+The two local JVM restart acceptance cases are now proved. The correction's normal
+upstream downstream checks and merge remain gates for ADR promotion. Live GitHub
+delivery and hosted product acceptance remain separate and unproved. CSV stayed
+parked; no cloud resources or spending were used.

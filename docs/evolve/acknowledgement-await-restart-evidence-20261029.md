@@ -6,8 +6,9 @@ title: Acknowledgement-aware Await restart evidence — 29 October 2026
 
 This is a bounded local acceptance checkpoint for [issue #1023](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1023)
 and [ADR-0079](../decisions/0079-command-completion-can-require-dispatch-acknowledgement.md).
-It is partial evidence, not closure of either the framework acceptance gate or the
-product's live GitHub/hosting obligations. CSV remained parked; no cloud resources
+Both packaged JVM restart cases now pass on the published runtime PR #76 candidate.
+Upstream downstream-CI/merge gates and the product's live GitHub/hosting obligations
+remain separate. The original stopped attempt below is retained as history. CSV remained parked; no cloud resources
 or spending were used.
 
 ## Frozen inputs and fixture
@@ -160,3 +161,47 @@ head `e7ca413cf4d5e4839c5842926ffad771ac722fb4`. The full runtime unit suite pas
 2,286 tests before two final review guards; all 42 focused codec, resolver and
 routing tests passed after those guards. Owner CI, immutable candidate publication
 and the two packaged restart cases remain pending.
+
+
+## Published-candidate rerun: both restart cases pass
+
+Runtime [PR #76](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/76)
+head `2480d29c98d683e252da6bdf8a46234a3019a945` produced immutable
+`26.10.1-pr.76.2480d29c98d6` through owner build
+[40805339866](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/actions/runs/40805339866)
+and successful publication
+[40806568596](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/actions/runs/40806568596).
+Owner verification also passed. The application input lock changed only the runtime
+candidate and its manifest/checksums; all other published components above stayed
+fixed. Both governed input preparation and verification passed, followed by Dynamo
+packaging. No source fallback or snapshot alias was used.
+
+Runtime JAR SHA-256: `5ac7e7d968e0a5500dd2974b18bc40d15d3fc116cf28b1a1217baad9f064480c`.
+Application JAR SHA-256: `aaa50f1ee7c5097c622a2b2b2edf0a139fca8f6f306346e8170343447326b698`.
+The native release was `nested-union-76`, with the same compiled contract above.
+The existing sweep interval was set to one second; the Await deadline and native
+lease behavior were not weakened.
+
+| Case | State at SIGKILL | Recovery evidence |
+| --- | --- | --- |
+| Acknowledgement first, execution `86a89086-5350-4f33-8a7f-31e5a5ecff60` | Await `DISPATCHED`, acknowledgement persisted | Signed completion HTTP 202, duplicate HTTP 200, Await `COMPLETED`, execution `SUCCEEDED`, browser result reads the passed fixture report |
+| Callback first, execution `5e5450e8-8a47-44ef-b12a-2f18ec45aca5` | Await `COMPLETION_OBSERVED`, staged callback persisted, no Await acknowledgement, Command effect `SUCCEEDED` with output; execution `RUNNING` without result | Native expired-lease recovery replays the retained acknowledgement, joins the staged callback, reaches Await `COMPLETED` and execution `SUCCEEDED`; browser result reads the passed fixture report |
+
+The callback-first JVM was suspended by the loopback JDK debugger at entry to the
+three-argument `AwaitCoordinator.settleCommandDispatch` before it was killed.
+Consistent Dynamo reads establish the cut; this was not a restart of an already
+completed execution. Both cases used identical packages before and after restart.
+Normalized complete Command-effect histories are byte-identical across each case,
+including the original `PENDING`, `DISPATCHING` and `SUCCEEDED` revisions: no
+provider redispatch or new Command revision occurred.
+
+Raw records, logs, result HTML, assertions, exact dependency lock and manifest,
+fixture delta and packaged application are retained at
+`/Users/mari/.codex/artifacts/await-restart-proof-20261029/nested-union-candidate/`.
+The two proof JVMs and isolated LocalStack container were stopped after final
+consistent state export. CSV stayed parked; no cloud resources or spending.
+
+This closes the two bounded local restart proof cases. It does not establish live
+GitHub webhook/Actions delivery or hosted product acceptance, and does not migrate
+historical untagged union payloads. ADR promotion remains gated on the upstream
+correction's normal downstream checks and merge.
