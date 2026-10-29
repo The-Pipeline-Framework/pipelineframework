@@ -28,6 +28,8 @@ test('runtime admission consumes the exact shared CLI resolver candidate', () =>
 });
 
 test('compatibility Maven candidates build in dependency order', () => {
+  assert.equal(config.components.connectors.consumerVersionProperties.compiler, 'pipelineframework.compiler.version',
+    'Connector compiler-dependent tests must use the selected compiler candidate');
   const targets = new Map([
     ['connectors', target('connectors', 17)],
     ['runtime', target('runtime', 7)],

@@ -71,8 +71,10 @@ following failures from the [29 October full train](https://github.com/The-Pipel
 - CSV HA scale: [CSV PR 28](https://github.com/The-Pipeline-Framework/csv-kafka-payments/pull/28)
   merged; a successful full-train scale retest was not established during preparation.
 - AWS Search test deployment: direct Lambda ZIP upload exceeded its upload
-  limit. S3-based upload and the separate expanded-package limit remain to be
-  checked. This failure does not establish a runtime defect.
+  limit. [Coordinator PR 1047](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1047)
+  subsequently merged deployment-permission and package-preflight changes;
+  a successful cloud retest is not established by the local release checks.
+  The original failure does not establish a runtime defect.
 
 This is a release-specific exception, not a green full-train attestation or a
 permanent reduction in the full-train policy. The ordinary compatibility,

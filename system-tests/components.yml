@@ -126,6 +126,7 @@
       ],
       "consumerVersionProperties": {
         "contracts": "pipelineframework.contracts.version",
+        "compiler": "pipelineframework.compiler.version",
         "runtime": "pipelineframework.runtime.version"
       },
       "suiteManifest": ".github/tpf-system-tests.json"

@@ -108,6 +108,40 @@ test('cleanup-only reruns retain the original deployment prefix in Terraform and
   const policy = JSON.parse(rendered.match(/inline-session-policy: >-\n\s*(\{[\s\S]*?\n\s*\]\})/)[1]);
   assert.deepEqual(policy.Statement.map((statement) => statement.Resource), [
     'arn:aws:lambda:*:*:function:search-modular-123-1-*',
-    'arn:aws:iam::*:role/search-modular-123-1-lambda-exec'
+    'arn:aws:iam::*:role/search-modular-123-1-lambda-exec',
+    'arn:aws:s3:::search-modular-123-1-code-*',
+    'arn:aws:s3:::search-modular-123-1-code-*/*'
   ]);
+});
+
+test('S3 package authority is bounded to the run and cleanup cannot upload new code', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/system-test-search-aws.yml', import.meta.url), 'utf8');
+  const build = workflow.split('\n  build:\n')[1].split('\n  deploy:\n')[0];
+  assert.match(build, /python3 coordination\/system-tests\/scripts\/validate-search-lambda-packages.py --root references\/search/);
+  assert.doesNotMatch(build, /python3 references\/search\/scripts\//);
+  const deploy = workflow.split('\n  deploy:\n')[1].split('\n  test:\n')[0];
+  assert.ok(deploy.indexOf('terraform test -no-color') > deploy.indexOf('terraform init -input=false'));
+  assert.ok(deploy.indexOf('terraform test -no-color') < deploy.indexOf('terraform apply'));
+  for (const [job, expression] of [['deploy', '${{ steps.identity.outputs.name_prefix }}'],
+                                 ['cleanup', '${{ needs.deploy.outputs.name_prefix }}']]) {
+    const body = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [a-z]+:\n/)[0];
+    const rendered = body.replaceAll(expression, 'search-modular-123-1');
+    const policyText = rendered.match(/inline-session-policy: >-\n\s*(\{[\s\S]*?\n\s*\]\})/)[1];
+    const policy = JSON.parse(policyText);
+    assert.ok(policyText.replaceAll(/\n\s*/g, ' ').length <= 2048, 'STS inline policy must fit its plaintext limit');
+    const bucket = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-123-1-code-*');
+    const objects = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-123-1-code-*/*');
+    assert.ok(bucket.Action.includes('s3:DeleteBucket'));
+    assert.ok(objects.Action.includes('s3:DeleteObject'));
+    assert.ok(objects.Action.includes('s3:GetObject'));
+    assert.equal(bucket.Action.includes('s3:CreateBucket'), job === 'deploy');
+    assert.equal(objects.Action.includes('s3:PutObject'), job === 'deploy');
+    assert.ok([...bucket.Action, ...objects.Action].every(action => action !== 's3:*'));
+  }
+});
+
+test('Search package-size preflight has offline archive and quota boundary coverage', () => {
+  const suite = new URL('./test_search_lambda_packages.py', import.meta.url).pathname;
+  const result = spawnSync('python3', [suite], {encoding: 'utf8'});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
