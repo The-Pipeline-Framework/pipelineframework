@@ -10,6 +10,7 @@ Current Spring work proves a narrow generated application path:
 
 - YAML-declared unary local steps,
 - constrained `REST + COMPUTE` unary smoke coverage,
+- a generated unary `GRPC + COMPUTE` pipeline endpoint,
 - generated Spring `@Component` local step beans,
 - Spring WebFlux `@RestController` resources for the supported smoke path,
 - `Mono<Out>` and `CompletionStage<Out>` authored service methods for YAML-declared Spring-profile unary services,
@@ -22,7 +23,7 @@ Current Spring work proves a narrow generated application path:
 
 Spring does not yet have parity for:
 
-- gRPC,
+- gRPC client steps and streaming RPCs,
 - function handlers,
 - await, checkpoint, durable coordinator, or broker paths,
 - persistence providers,
@@ -45,7 +46,9 @@ Delegated Spring beans are supported only for unary local steps declared from YA
 
 Spring REST client-step boundaries are supported only for unary `REST + COMPUTE` client-role steps. Configure each generated Spring REST client with `tpf.rest-client.<client-name>.url`; generated Spring REST resources and client steps forward the TPF version, replay, and cache-policy headers for unary REST hops.
 
-This support does not imply gRPC, function, await/checkpoint, broker, durable coordinator, streaming/non-unary, or production parity with the Quarkus runtime.
+For a unary `GRPC + COMPUTE` pipeline, invoke `PipelineProtoGenerator` with `--spring-grpc-unary` before protobuf compilation. The opt-in `pipeline-unary.proto` declares `PipelineService.Run` from the first pipeline input message to the final pipeline output message. Compile it with grpc-java and pass the descriptor set to the annotation processor with `-Aprotobuf.descriptor.file`. Set `-Apipeline.codegen.rendererProfile=spring` and use `spring-boot-starter-grpc-server` (Spring Boot 4.1.2). The generated `@Service` extends the grpc-java `PipelineServiceImplBase`; Spring Boot registers it as a gRPC service. Request and response mappers must implement the exact domain/protobuf pairs and are checked at build time. The generated service runs all local unary steps through `SpringPipelineRunner` and returns one response or a gRPC error.
+
+This gRPC endpoint is a pipeline server entry point. Spring gRPC client steps, streaming RPCs, function paths, durable orchestration, and broker paths remain unsupported. Spring support still does not imply production parity with the Quarkus runtime.
 
 ## Deeper Architecture
 
