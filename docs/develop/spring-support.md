@@ -17,7 +17,7 @@ Current Spring work proves a narrow generated application path:
 - unary delegated Spring bean steps for local pipeline execution,
 - unary `Class::method` Spring operator beans for local pipeline execution,
 - unary REST client-step boundaries for Spring WebFlux pipelines,
-- unary gRPC client steps using Spring-managed grpc-java future stubs,
+- unary gRPC client steps using Spring-managed grpc-java future stubs, pending publication of the compiler and runtime development snapshots,
 - shared runner-core sequencing through the neutral runtime seam.
 
 ## Not Yet Supported
@@ -53,7 +53,7 @@ For a unary `GRPC + COMPUTE` pipeline, invoke `PipelineProtoGenerator` with `--s
 
 For unary `GRPC + COMPUTE` client-role steps, add `spring-boot-starter-grpc-client` (Spring Boot 4.1.2). Compile the downstream per-step protobuf contract with grpc-java and supply its descriptor set to the annotation processor. The generated `@Component` implements `PipelineUnaryStep<In, Out>` and calls the downstream `Process…Service.remoteProcess` RPC asynchronously. Existing YAML discovery assigns the client role to a service declared outside the caller module; no client-specific DSL is required.
 
-Each boundary requires the exact `Mapper<DomainIn, ProtoRequest>` and `Mapper<DomainOut, ProtoResponse>` pairs, or the applicable generated canonical adapters. Requests use `toExternal`; responses use `fromExternal`. Missing or incompatible mappings and non-unary descriptors fail the build.
+Each boundary requires the exact `Mapper<DomainIn, ProtoRequest>` and `Mapper<DomainOut, ProtoResponse>` pairs, or the applicable generated canonical adapters. Explicit `Mapper` beans use `toExternal` for requests and `fromExternal` for responses. Generated canonical adapters use `toProto` for requests and `fromProto` for responses. Missing or incompatible mappings and non-unary descriptors fail the build.
 
 Configure an explicit target for every generated client. The client name follows the existing kebab-case service convention: `ProcessRemoteService` becomes `process-remote`.
 
