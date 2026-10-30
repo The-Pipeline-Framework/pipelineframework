@@ -17,7 +17,7 @@ Current Spring work proves a narrow generated application path:
 - unary delegated Spring bean steps for local pipeline execution,
 - unary `Class::method` Spring operator beans for local pipeline execution,
 - unary REST client-step boundaries for Spring WebFlux pipelines,
-- unary gRPC client steps using Spring-managed grpc-java future stubs, pending publication of the compiler and runtime development snapshots,
+- unary gRPC client steps using Spring-managed grpc-java future stubs, requiring the matching compiler development snapshot and a runtime development snapshot pending publication,
 - shared runner-core sequencing through the neutral runtime seam.
 
 ## Not Yet Supported
