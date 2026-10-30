@@ -43,7 +43,8 @@ The Spring adapter currently proves host integration only:
 - Spring application-event publishing for event and work dispatch seams.
 
 It does not yet provide production Spring parity, Reactor context propagation, persistence providers, broker integration,
-or gRPC transport parity.
+or general gRPC transport parity. The supported unary `GRPC + COMPUTE` pipeline server endpoint and its limits are
+documented in [Spring support](/develop/spring-support).
 
 Kafka await envelope records live on the runtime-core side of the seam so future Spring support can reuse the same request/completion contract. The concrete Kafka await publisher and completion consumer remain Quarkus runtime adapters backed by SmallRye Reactive Messaging.
 
@@ -82,7 +83,7 @@ The same profile also supports a constrained `pipeline.transport=REST`, `pipelin
 
 `examples/spring-blocking-smoke-tests` is the companion generated Spring Boot smoke for blocking unary authoring. It compiles a YAML-only `REST + COMPUTE` pipeline whose Spring component exposes `processBlocking(In): Out`, starts WebFlux, invokes the generated endpoint, verifies execution through `SpringPipelineRunner`, and asserts the service can execute on a virtual thread when `runOnVirtualThreads: true` is declared.
 
-Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes public Reactor service interfaces, Reactor-native core execution, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, REST client-step remote boundaries, blocking iterator services, and non-unary streaming shapes.
+Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes public Reactor service interfaces, Reactor-native core execution, function handlers, await/durable/checkpoint/broker paths, persistence, side effects, blocking iterator services, and non-unary streaming shapes. Narrow unary gRPC server, REST client-step, and delegated Spring bean support is described in [Spring support](/develop/spring-support).
 
 `Mono<Out>` is currently supported only for YAML-declared Spring-profile unary services. Generated Spring local steps adapt `Mono` to the neutral `CompletionStage` runner boundary with `toFuture()`. Reactor context propagation, `Flux`, and Reactor-native core execution remain deferred.
 
