@@ -1,121 +1,149 @@
-# Polyglot TPF applications: business-function authoring MVP
+# Polyglot TPF applications: native LOCAL and distributed execution
 
-Evidence assessed 30 October 2026; MVP scope revised 31 October 2026. **Future/backlog exploration, outside Cloud MVP; unscheduled and not an implementation commitment.**
+Evidence assessed 30 October 2026; native-runtime requirement and roadmap revised 31 October 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
 
-## Executive conclusion and selected MVP
+## Current conclusion: equivalent LOCAL workflows require native runtimes
 
-The MVP lets a developer author DSL v3 pipelines, canonical types and unary business functions in TypeScript/Node.js, Python, or Java hosted by Spring/Micronaut. Execution, transition workers, durable coordination, Connectors and plugins remain in the existing Java/Quarkus host. The compiler generates the application-specific Java engine glue internally; non-Java authors do not write application-specific Java.
+The earlier adapter-only proposal below keeps the entire execution shell in Quarkus and calls foreign business functions remotely. That can provide business-function interoperability, but it does not give a Node or Python author an equivalent in-process LOCAL pipeline. Generated gRPC stubs, registration adapters and an application facade cannot supply the missing execution semantics.
 
-Application-host interoperability is the baseline. Embedded execution is an optional integration, not a prerequisite. Spring and Micronaut are Java framework hosts, not languages; they can reuse Java models and libraries while using the same external business-function boundary. This proposal neither removes the Spring runner nor expands its parity obligations.
+Native LOCAL equivalence is a requirement: ship a language-specific TPF execution runtime alongside the generated application API and business functions. A returns to that runtime; the runtime applies the supported invocation policies and invokes B. In durable mode, the native worker returns a transition result to the Java coordinator at the transition boundary, rather than calling the JVM after every business function.
 
-The earlier OpenAPI Query baseline and portable Provider bridge are not the selected MVP. An imported HTTP service demonstrates external-service interoperability, not pure business-function authoring. Connector/plugin authoring in other languages is outside this scope. Existing Quarkus-hosted providers can later compose with foreign-language functions without being ported.
+This requirement supersedes the earlier restriction to a single execution implementation. TPF retains one compiler-owned semantic authority and the Java durable coordinator, while language-specific runtimes implement a bounded shared execution profile. This is a larger investment than adapters. The requirement is settled; the initial profile, protocol compatibility and package ownership still require design decisions. All new implementation remains unscheduled, outside current Cloud priorities.
 
-The evidence below supports feasibility, not existing complete support. Compiler discovery remains Java-coupled and language-neutral invocation/generation requires work. Source/tests were inspected rather than rerun during the architecture audit. Preserve the pinned evidence dates; successful unit tests are not deployment qualification.
+The approved roadmap below replaces the earlier adapter-only MVP and its Spring dispositions. Existing Java functionality remains intact. [Draft ADR-0080](/decisions/0080-native-runtimes-consume-compiler-owned-execution-contracts) records the proposed runtime boundary without claiming delivered native support or freezing the detailed protocol. It preserves [compiler-owned semantics](/decisions/0002-compiler-owned-v3-type-model) and [shared worker contracts](/decisions/0050-remote-worker-protocols-are-shared-runtime-contracts).
 
-## Execution and authority boundaries
+## Native execution and coordinator boundary
 
 ```mermaid
 flowchart TD
-    A[Application client] --> S[Quarkus synchronous engine]
-    A --> C[Existing durable coordinator]
-    C --> W[Quarkus transition worker]
-    S --> B[Generated typed business-function client]
-    W --> B
-    B --> F[TypeScript / Python / Spring / Micronaut function host]
-    S --> Q[Quarkus Connectors and plugins]
-    W --> Q
-    Q --> E[External systems and storage]
+    API[Generated Node or Python application API] -->|Synchronous LOCAL execution| R
+    API -->|Durable admission| C[Java durable coordinator]
+    C -->|Signed transition command| W[Native worker protocol adapter]
+    W --> R[Native TPF range executor and policy shell]
+    R --> A[Business function A]
+    A -->|Return to native runtime| R
+    R --> B[Business function B]
+    B -->|Return to native runtime| R
+    R -->|Completed or failed range| W
+    W -->|Transition result| C
 ```
 
-The coordinator hop is conditional: SYNC executes directly, while QUEUE_ASYNC admits and dispatches durable transitions. A function RPC executes one business function, not a pipeline continuation. The foreign host does not choose the next step, implement execution retries, manage capture/effects, resume Await or access coordinator internals. Functions perform domain transformations; external observations/effects remain explicit Query/Command boundaries, not hidden network I/O inside a nominally pure function.
+The compiler remains Java-hosted during the build; the proposed pure synchronous native monolith needs no JVM during execution. Durable execution still needs the Java coordinator, locally or remotely. A native function packaged for Lambda could execute a local chain only if its package includes the native TPF executor; bundling handlers alone does not establish this capability. No native Lambda deployment evidence was found or produced in this investigation.
 
-For gRPC, the function host needs server bindings and the Quarkus worker needs client bindings. An application submitting a pipeline needs separate application-API client bindings. Compiler-produced protobuf contracts are canonical; generated stubs alone do not establish TPF semantics. The invocation contract must define bounded context, callable identity, release compatibility, deadlines/cancellation and typed rejection/failure mapping. Existing REST/protobuf-over-HTTP Operators are reuse evidence, not proof that a general gRPC authoring path already exists.
+The existing command carries execution/release identity, attempt and a range (`currentStepIndex`, `stopBeforeStepIndex`). Its result distinguishes completion, failure and external suspension. This is reusable framing, not an implementation of the range executor. A lost response can cause a transition to execute again; business-function invocation is not exactly once. [TransitionCommandEnvelope, fields](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionCommandEnvelope.java#L30-L52); [TransitionWireResult, outcome invariants](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionWireResult.java#L17-L77).
 
-## MVP deliverables and ownership
+### Minimum language-specific runtime
 
-| Surface | Scope and gap | Owner |
+| Component | Proposed minimum responsibility |
+|---|---|
+| Generated application API | Typed direct invocation; separately, durable admission/status/result bindings |
+| Compiled bindings | Ordered operations, logical step identities, native handler registry, canonical types, execution policy requirements and placement bindings |
+| Native range executor | Execute the compiler-defined pipeline/range; sequence results; normalise synchronous throws and asynchronous failures |
+| Invocation policy shell | Supported retry/backoff, rejection, context, cancellation, deadline propagation and semantic telemetry; one policy owner at each boundary |
+| LOCAL adapter | Invoke a handler in the same native process through the policy shell |
+| Remote step bindings | Generated client/server mappings preserving canonical values, context and failure classification |
+| Coordinator worker adapter | Validate authentication and pinned identity, decode inputs, execute the range and return structured results |
+
+Porting the chaining loop is insufficient. `PipelineRunnerCore` leaves invocation/lifecycle responsibilities to the host. `StepOneToOne` implements retry/backoff and rejection, and deliberately bypasses generic retry/recovery for `TransportBoundaryInvocation`. Native distribution must preserve that distinction instead of multiplying retries at caller, server and coordinator. There is no universal per-handler timeout in this inspected unary implementation; preserve actual deadline/transport-budget contracts rather than inventing parity with one. [PipelineRunnerCore, host responsibilities and sequencing](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-core/src/main/java/org/pipelineframework/runtime/core/PipelineRunnerCore.java#L24-L111); [StepOneToOne.apply](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/step/StepOneToOne.java#L55-L118); [unary policy tests](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/test/java/org/pipelineframework/pipeline/step/StepOneToOneTest.java#L140-L180).
+
+Node and Python can share compiler-owned contracts and conformance vectors, but need their own async execution, task-local context, cancellation and explicit blocking-work integration. A Promise/coroutine chain is not streaming/backpressure support. Spring/Micronaut are closer because Java contracts and implementations can be reused; that does not prove complete host parity or make their runners disposable.
+
+### Equivalent workflows and placement gaps
+
+| Proposed workflow | Execution owner | JVM during execution |
 |---|---|---|
-| DSL bindings | Bind canonical unary steps to foreign implementations without authored Java service discovery; reject incompatible declarations | Compiler |
-| Canonical models and protobuf | Generate types/stubs from v3 and IDL identity; prove absent/null/value, unions, nominal identity, numeric precision and compatibility with golden vectors | Contracts + compiler |
-| Host kits | Generated service bindings and small registration/lifecycle adapters for TS, Python, Spring and Micronaut; one host implementation per application initially | Compiler + host integration |
-| Function invocation | Quarkus client adapter retains execution policy, context/lineage and failure classification; authenticate host identity without sending provider credentials | Runtime + contracts |
-| Application API | Generate thin typed bindings for the selected synchronous API; durable admission/status bindings follow the existing coordinator contract | Compiler/client tooling |
-| Build and packaging | Generate inspectable Java scaffold and package engine + host with existing immutable Release/Compiled Truth; CLI does not duplicate compilation | Compiler + runtime + CLI |
-| Connectors/plugins | Keep provider lifecycle, connections/secrets, persistence/cache, Query capture and Command effect authority in Quarkus | Existing semantic owners; no port |
-| Other SPIs / embedded executors | Excluded from MVP | Separate future decisions |
+| Native synchronous monolith | Native runtime, all business calls LOCAL | Not for the bounded pure profile |
+| Native distributed pipeline | Native executors and generated remote bindings; co-located calls stay LOCAL | Not inherently |
+| Durable native worker | Java coordinator plus native range executor | Required for coordinator |
+| Native execution using Quarkus capabilities | Native executor plus explicitly bound Quarkus endpoints | Required for those capabilities |
 
-The smallest proof uses unary ONE_TO_ONE functions, local COMPUTE and a separate local function process. A local environment does not imply pipeline.transport=LOCAL for a remote gRPC boundary. Exclude streaming, fan-out/reduction, mixed-language steps in one application, FUNCTION hosting, production hosting, polyglot providers/plugins and a universal native engine. Existing Java and Spring capabilities are preserved.
+These are target workflows, not current delivered support. LOCAL continues to mean same-process invocation. A worker reached over REST on localhost is a remote worker, even if its own business-function chain is LOCAL. Worker invocation protocol, pipeline transport and deployment platform remain distinct.
 
-## Delivery gates and acceptance
+Placement-aware lowering is new compiler work. Current target resolution uses the compilation transport and role-specific rules; runtime mapping assigns modules but does not automatically select LOCAL for every co-located edge. Native targets need generated local and remote bindings from one validated semantic graph, not per-language YAML interpreters. Existing contract metadata includes logical identity, cardinality and canonical types, but also JVM class names and is not a complete native executable plan with resolved policies. [PipelineTargetResolutionPhase](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/26deba06fbee5296c235d7957b4b47fb32708838/src/main/java/org/pipelineframework/processor/phase/PipelineTargetResolutionPhase.java#L174-L238); [PipelineContractMetadataGenerator, step descriptors](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/26deba06fbee5296c235d7957b4b47fb32708838/src/main/java/org/pipelineframework/processor/util/PipelineContractMetadataGenerator.java#L350-L375).
 
-1. **Boundary probe:** one TS pure function called by the real Quarkus engine. Compare existing typed remote-service/Operator seams with required gRPC generation; do not disguise the function as a Query. Any probe-only handwritten Java is disclosed and removed by the authoring gate.
-2. **Canonical contract:** select callable/version identity, presence/numeric representations, deadline/cancellation and rejection/failure rules. Protocol ADR and vectors precede implementation. Do not infer hash equivalence from each language's default JSON.
-3. **Generated TS authoring:** a clean checkout containing DSL v3, TS functions and ordinary package/configuration files builds without handwritten application Java. Compiler rejects unsupported cardinality, missing function bindings and type mismatches. Generated Java remains inspectable; Java compilation still occurs internally.
-4. **Equivalent host proof:** run the same fixture as separate TS, Python, Spring and Micronaut applications, comparing results, validation and error behaviour. Spring/Micronaut register function beans, not pipeline runners. Shared Java tooling can reduce effort without weakening conformance.
-5. **Local acceptance:** a real multi-step pipeline proves engine-owned order and lineage, typed outputs/rejections, cancellation/deadline handling and inaccessible privileged operations. Function invocation may repeat under failure; no exactly-once claim. No Connector or plugin is required in this minimal fixture.
-6. **Release/durable follow-up:** verify engine and host digests, callable compatibility, tamper rejection and existing Release identity. Then exercise QUEUE_ASYNC restart/interruption, remote outcome uncertainty and pinned host versions with the existing coordinator. Keep durable/replay claims gated on this evidence rather than inferring them from synchronous success.
+Separately, registered REST transition-worker targeting currently requires the coordinator's generated contract and a single whole-bundle `application-archive`; it explicitly rejects distributed placement. Ordinary remote step calls and a coordinator calling one remote whole-pipeline worker are different workflows. Native release packaging and range placement need qualification rather than assuming this gate already admits them. [RegisteredRestWorkerTargets.validateCompiledContract/wholeBundle](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/orchestrator/RegisteredRestWorkerTargets.java#L153-L199).
 
-An optional later composition fixture may add an existing Quarkus Query/Command or plugin; its provider stays in Quarkus and existing capture/effect conformance applies. It is not a portable Provider SDK gate. FUNCTION/Lambda and production qualification remain separate, unscheduled follow-ups.
+### Coordinator protocol reuse and remaining coupling
 
-## Indicative effort and unresolved decisions
+A native REST worker can in principle implement the existing signed command/result seam and protocol-v1 capability advertisement. The signature contract already has a deterministic HMAC vector. This is wire feasibility, not an existing Node/Python implementation or deployment proof. [TransitionWorkerProtocolContractTest](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/test/java/org/pipelineframework/orchestrator/TransitionWorkerProtocolContractTest.java#L16-L34).
 
-Engineering estimates, not measured delivery data: boundary/contract probe **1–2 person-weeks**; generated TS local authoring slice **3–5 additional person-weeks**; Python **2–4 additional person-weeks**; thin Spring/Micronaut host integrations **1–3 additional person-weeks combined**, contingent on shared Java generation; release/durable qualification **2–4 additional person-weeks**. Re-estimate after the probe. These ranges exclude production hosting and do not schedule work ahead of Cloud priorities.
+| Gap | Consequence and required decision |
+|---|---|
+| Java-tagged payloads | Domain payload IDs are Java class names; Java decode performs allowlisted class loading. A proof could use compiler-generated compatibility mappings, but canonical type identity/presence/numeric precision need a sustainable cross-language contract. Outer protobuf framing does not solve inner payload semantics. |
+| Java failure classification | Unknown foreign exception names do not communicate nonretryability. Define portable categories or explicit compatibility mappings; do not infer retry safety from a Node/Python exception name. |
+| Semantic capability qualification | Worker capability fields advertise protocol/encoding and pinned identity, not support for every execution feature. Reject unsupported contracts before admission or design explicit feature negotiation. |
+| Release/tooling integration | Capability matching is necessary but insufficient: generated contract, archive, digests and lifecycle registration must agree. Existing Java packaging is not evidence of native bundle publication. |
 
-Open questions are the exact gRPC callable surface and reuse of existing service contracts, bounded context/error representation, generated build-host UX, host authentication and immutable host-version selection. The Quarkus-only execution/provider placement is the selected MVP constraint, not a claim that all future hosts must use Quarkus. Native-image reachability and streaming remain outside initial acceptance.
+Evidence: [JsonTransitionPayloadCodec.encode/decode](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/orchestrator/JsonTransitionPayloadCodec.java#L61-L138); [TransitionFailureRuntimeAdapter](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/orchestrator/TransitionFailureRuntimeAdapter.java#L41-L70); [PipelineWorkerCapability](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/worker/PipelineWorkerCapability.java#L20-L31); [registered admission checks](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/orchestrator/RegisteredRestWorkerTargets.java#L184-L199).
 
-## Active Spring work remains intact
+### Bounded first increment and acceptance
 
-Issues [#474](https://github.com/The-Pipeline-Framework/pipelineframework/issues/474) and [#475](https://github.com/The-Pipeline-Framework/pipelineframework/issues/475) have independent active stacks: compiler [#43](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/43) → [#44](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/44), runtime [#79](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/79) → [#80](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/80), root [#1053](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1053) → [#1054](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1054).
+The smallest credible profile is finite linear unary pure transformations, supported canonical types, serial execution and explicitly qualified policies. Reject unsupported streaming, branching, Await, checkpoints, Query/Command, object boundaries, cache and plugin declarations at compile time. Equivalence means the same supported profile across Java, Node and Python, not full TPF feature parity.
 
-Their existing acceptance, bases, milestones and coordination remain unchanged. In particular #474 generates a whole-local-unary-pipeline endpoint using the Spring runner; it is not the function-host adapter proposed here. The MVP does not depend on finishing all Spring parity work, and no new MVP decision gates those active stacks.
+Keeping Connectors and plugins in Quarkus does not automatically make their semantics available to a native runner. Existing generated step endpoints offer a concrete interoperability path, but Query capture, Command authority, cache policy and plugin acknowledgement cannot all become generic RPC calls. A later boundary needs authenticated context, effect identity, release compatibility and outcome semantics. For this proof, reject such configured capabilities rather than silently omitting them. [RestClientStepRenderer, invocation and side-effect handling](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/26deba06fbee5296c235d7957b4b47fb32708838/src/main/java/org/pipelineframework/processor/renderer/RestClientStepRenderer.java#L170-L268).
 
-## Spring roadmap disposition under the MVP
+Qualification would proceed through the same A → B → C fixture as a native LOCAL monolith, split over two native processes, and a whole-pipeline native worker under the Java coordinator; Python repeats the same contract fixtures. Compiler/build tooling must accept DSL and native functions without handwritten application Java, even if internal compilation still uses a generated Java build host. That build-host independence is a prerequisite, not existing proof from phase-engine unit tests.
 
-The former Spring workload parity project is now the [Polyglot business-function authoring project](https://github.com/orgs/The-Pipeline-Framework/projects/3), governed by [epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055). No independent Spring epic was found in its 16 issue items; #1055 is the umbrella. Completed #468–473 remain historical evidence, not a promise to extend every capability.
+Acceptance compares canonical outputs, stable step/item identities, failure classification, retry counts, context isolation and semantic observations. Inject transient/nonretryable failure, cancellation and late response; B must not run after a terminal failure in A. Test the boundary distinction that prevents duplicate retries. The durable configuration additionally needs duplicate delivery, lost response, worker death/recovery and release mismatch fixtures; do not equate synchronous success with durable qualification. Unsupported-feature diagnostics and native type checking/import checks are part of acceptance. No implementation or conformance run was performed in this investigation.
 
-| Issues | Disposition | What to do / what to stop |
+Indicative engineering estimate, not measured delivery data: **12–20 engineer-weeks** for the bounded Node path including shared compiler/protocol work, placement and conformance; **4–8 additional engineer-weeks** for Python. These ranges exclude full feature parity, portable Connector/plugin integration, production hosting and Lambda qualification. Re-estimate after executable contract and placement decisions. They are not delivery commitments or scheduled work.
+
+The remaining decisions concern which unary policies/types form the first profile, how payload/failure compatibility evolves, and how release packaging and worker qualification admit native targets. Operators and remote application services remain useful interoperability paths, but do not satisfy the native pipeline-monolith requirement. The first unary profile is a delivery boundary, not a permanent parity ceiling.
+
+## Roadmap: native LOCAL equivalence is required
+
+Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python need no JVM executor for the pure synchronous monolith; Java remains build-time compiler infrastructure.
+
+This replaces the adapter-only Quarkus Execution MVP. One semantic authority does not require one runtime implementation: native kernels consume compiler-owned output and must pass shared conformance. The coordinator, Release authority and existing Quarkus provider implementations remain shared. No new coordinator, Provider SDK or independent YAML interpreter is planned. Unary scope is the first increment, not a permanent parity ceiling.
+
+## Dependency gates and ownership
+
+1. **Executable profile and conformance:** [contracts #52](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/issues/52), informed by the bounded [Node probe #27](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/27). Native LOCAL is settled; the open decisions are profile, wire compatibility and packaging.
+2. **Native authoring and LOCAL execution:** [compiler #46](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/46) and [Node runtime #84](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/84). Zero handwritten application Java; no JVM executor at run time for pure synchronous execution.
+3. **Placement equivalence:** [compiler #47](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/47). A/B co-located use LOCAL; C may move remotely without changing function bodies, identities or policy ownership.
+4. **Durable native workers:** [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82). Reuse coordinator contracts, pin releases and qualify failure/recovery. Whole-bundle worker qualification need not wait for arbitrary distributed worker admission; its current restrictions remain explicit.
+5. **Required Python delivery:** [runtime #85](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/85) includes Python runtime and coordinated generated bindings. Reuse settled contracts and fixtures; Node success alone does not complete the epic.
+6. **Common acceptance:** [examples #28](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28) owns shared evidence across native monolith, distributed and durable layouts. Spring execution/worker integration is [#482](https://github.com/The-Pipeline-Framework/pipelineframework/issues/482), diagnostics/conformance [#483](https://github.com/The-Pipeline-Framework/pipelineframework/issues/483). Micronaut needs explicit bindings/evidence, not inherited Spring claims.
+7. **Later profiles/hosting:** the restored Spring work below is backlog capability expansion, not an initial unary dependency or a dated milestone.
+
+Compiler owns normalisation, canonical types, executable projection and placement. Contracts owns wire/data compatibility and conformance definitions; runtime owns native kernels and Java coordinator integration; examples owns executable proofs; root system-tests qualifies released cross-artifact combinations. Runtime tracks Node/Python work initially; package/repository layout is resolved before implementation. CLI/build tooling reuses [#966](https://github.com/The-Pipeline-Framework/pipelineframework/issues/966), descriptor work [#902](https://github.com/The-Pipeline-Framework/pipelineframework/issues/902) and replay work [#456](https://github.com/The-Pipeline-Framework/pipelineframework/issues/456), without a second Release manifest.
+
+## Spring disposition
+
+| Issues | Approved disposition | Scope |
 |---|---|---|
-| #474–475 | Retain active scope | Finish the existing three two-layer gRPC stacks under their existing acceptance; do not pretend their embedded runner is the new external function host |
-| #476 | Retire as not planned | No Spring FUNCTION handler parity in this MVP; any future function hosting needs a separately justified proposal |
-| #477 | Retire as not planned | No Spring embedded streaming/non-unary engine expansion; future portable streaming must start with a shared boundary contract |
-| #478–479 | Retire as not planned | No Spring plugin/cache/persistence ecosystem port; providers and their lifecycle remain Quarkus-hosted |
-| #480–481 | Supersede as not planned | No separate Spring Await/checkpoint runtime programme; shared client APIs and Quarkus durable follow-up own applicable interoperability |
-| #482 | Repurpose, unscheduled | Spring/Micronaut function-host integration acceptance, subordinate to the shared invocation contract and compiler generation |
-| #483 | Repurpose, unscheduled | Host-boundary conformance and observability for the shared proof; no blanket embedded-runtime production parity |
+| [#474](https://github.com/The-Pipeline-Framework/pipelineframework/issues/474), [#475](https://github.com/The-Pipeline-Framework/pipelineframework/issues/475) | Completed; retain | Six companion PRs merged; reconcile original acceptance, preserve the Spring runner and generated server/client boundaries |
+| [#476](https://github.com/The-Pipeline-Framework/pipelineframework/issues/476) | Restored, rewritten, unscheduled | Later FUNCTION qualification of packaged native execution ranges; distinguish entrypoint and durable-worker roles |
+| [#477](https://github.com/The-Pipeline-Framework/pipelineframework/issues/477) | Restored, unscheduled | Later shared streaming/non-unary execution profile with Spring implementation and lineage/backpressure conformance |
+| [#478](https://github.com/The-Pipeline-Framework/pipelineframework/issues/478) | Restored, narrowed, unscheduled | Compiled hook order/acknowledgement/failure and bounded Quarkus capability invocation; no plugin ecosystem port |
+| [#479](https://github.com/The-Pipeline-Framework/pipelineframework/issues/479) | Remains not planned | Spring-hosted persistence providers are not required by native LOCAL execution |
+| [#480](https://github.com/The-Pipeline-Framework/pipelineframework/issues/480) | Restored, rewritten, unscheduled | Worker suspension/resume under existing coordinator-owned Await authority; no Spring Await store/coordinator |
+| [#481](https://github.com/The-Pipeline-Framework/pipelineframework/issues/481) | Restored, unscheduled | Typed checkpoint interoperability, retaining downstream lifecycle ownership and existing general checkpoint work |
+| [#482](https://github.com/The-Pipeline-Framework/pipelineframework/issues/482), [#483](https://github.com/The-Pipeline-Framework/pipelineframework/issues/483) | Rewritten, unscheduled | Native unary Spring execution, worker participation and actual runtime diagnostics/conformance; remove function-host-only restriction |
+| [Connectors #60](https://github.com/The-Pipeline-Framework/pipelineframework-connectors/issues/60) | Closed as not planned | Foreign-language Provider authoring is separate from invoking existing Quarkus capabilities |
 
-### Retain, eliminate and revisit
+The restored issues have no delivery milestone. Completed #474/#475 retain historical milestone association. Former milestones 9/10 are not reactivated. The [project](https://github.com/orgs/The-Pipeline-Framework/projects/3) is backlog organisation: Todo means unscheduled, never staffed or committed. Existing completed work is preserved; no code deletion follows from this revision.
 
-Retain the Spring runner, completed integrations and active #474–475 stacks. Do not delete functioning code or change their compatibility promises in this documentation change. Retain the compiler-owned canonical model, shared contracts, Quarkus executor/coordinator and existing Connectors/plugins.
+## Acceptance and exclusions
 
-Eliminate the open-ended parity roadmap and its future FUNCTION, streaming, plugin/persistence and Spring-hosted durable-execution obligations. Eliminate portable Provider SDK work from MVP dependencies. Do not introduce a Spring/Micronaut transition worker, coordinator, independent execution engine, or provider ecosystem port merely to support authoring.
+- Same canonical fixture, unchanged business functions, correct values/types/identities in native LOCAL and supported distributed layouts.
+- Retry/rejection/failure classification, cancellation and context isolation match the declared profile; remote boundaries do not multiply retries.
+- Native workers preserve coordinator admission, leases, retry/DLQ, release pinning and durable commit authority. Test duplicate delivery, lost responses, process death and incompatible releases; do not claim exactly-once function invocation.
+- Unsupported streams, branching, Await, checkpoints, connectors and plugins fail explicitly until their profile is qualified. Existing Java functionality is not narrowed to the initial native subset.
+- Pure LOCAL runtime acceptance does not prove production FUNCTION hosting, full feature parity or portable providers. External I/O remains an explicit supported boundary, not a hidden effect in a pure business function.
 
-A future cleanup may remove demonstrably unused embedded-only scaffolding, but requires owner-specific caller/impact analysis, migration and regression evidence. No source file is identified as safely deletable merely by this architecture decision. No implementation deletion or active-PR cancellation is authorised by the roadmap disposition.
+## Risks and estimates
 
-### Spring/Micronaut exit criteria
+Java payload tags/failure classification, incomplete native executable metadata, policy duplication and registered-worker whole-bundle restrictions need explicit resolution. Native runtime maintenance and cross-language conformance are real costs. Spring can reuse Java contracts but is not automatically a fully conforming reference; Micronaut requires its own evidence.
 
-A generated unary gRPC service registers business-function beans and executes one function. The Quarkus worker owns pipeline order, invocation policy and lineage. Host adapters carry bounded authenticated context, cancellation/deadlines and typed rejection/failure outcomes; they do not own Query capture, Command authority, Await, checkpoints or provider credentials. Prove the same fixture used for TS/Python without a Spring/Micronaut pipeline runner in the new host path.
+The previous thin-host estimates are withdrawn. Provisional programme estimate: 12–20 engineer-weeks for Node plus shared compiler/protocol/placement/conformance work; 4–8 additional for Python. These overlap child estimates and must not be summed again. Engineering judgement, not measurements or a schedule; re-estimate after the probe/profile decisions. Later Spring profile expansion, provider integration and production hosting are excluded. All new implementation remains unscheduled and subordinate to current Cloud priorities.
 
-#482/#483 are coordination/acceptance slices of [equivalent host proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28), not additional implementations of it. Compiler owns generated bindings, runtime owns Quarkus invocation, and examples owns host fixtures. These issues do not gate active #474/#475.
 
-Legacy milestone 8 retains only the active gRPC commitment. Milestones 9/10 are retired as parity plans; new host work has no delivery milestone. All new MVP work remains unscheduled and subordinate to current Cloud priorities.
+## Superseded adapter-only proposal
 
-## Reuse, alternatives and ownership
+The earlier Quarkus-executor/function-host proposal and retirement rationale are retained in [merged PR #1057](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1057) and its [assessment snapshot](https://github.com/The-Pipeline-Framework/pipelineframework/blob/82c28874f2fdd6dc2566ec426691ae6be859a341/docs/evolve/polyglot-applications-assessment.md). They are historical, not the current implementation plan. Thin host estimates and the prohibition on native Spring/Node/Python execution no longer govern this programme. No existing code is identified for deletion.
 
-Keep the v3 model, IDL identity, Java executor, coordinator/transition protocols, Quarkus providers and Release authority. Generate language models/adapters instead of another semantic engine. External HTTP/OpenAPI services remain a useful alternative for actual observations/effects, but do not replace pure-function authoring. An embedded Spring executor remains an existing optional path; fully native TS/Python executors and portable Provider SDKs are outside this MVP.
-
-Reuse [build/deploy #966](https://github.com/The-Pipeline-Framework/pipelineframework/issues/966), [descriptor audit #902](https://github.com/The-Pipeline-Framework/pipelineframework/issues/902) and [execution-wide replay #456](https://github.com/The-Pipeline-Framework/pipelineframework/issues/456). Provider ecosystem #581/#578 remains independently governed, not an MVP prerequisite. Compiler owns generation, contracts owns shared semantic/wire contracts, runtime owns Quarkus invocation and execution, examples owns host fixtures, and system-tests owns cross-artifact qualification. No new runtime step kind or accepted semantic protocol is introduced by this assessment; the contract decision must precede implementation.
-
-## MVP backlog
-
-[Epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055). All new work remains unscheduled.
-
-- [ ] [[Polyglot][Proof] Probe unary TypeScript business-function invocation](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/27)
-- [ ] [[Polyglot][Decision] Pin unary business-function gRPC and canonical conformance](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/issues/52)
-- [ ] [[Polyglot] Generate unary TypeScript business-function authoring with a Quarkus engine](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/46)
-- [ ] [[Polyglot][Follow-up] Qualify release integrity and durable execution with foreign function hosts](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82)
-- [ ] [[Polyglot] Prove unary authoring across TypeScript, Python, Spring and Micronaut hosts](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28)
-
-Dependency order: boundary probe → contract decision → TS generation → equivalent host proofs. Release/durable qualification follows local acceptance. [Provider bridge #60](https://github.com/The-Pipeline-Framework/pipelineframework-connectors/issues/60) remains deferred outside the MVP and is not a dependency.
+The Spring server/client groundwork is merged: compiler [#43](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/43)/[#44](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/44), runtime [#79](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/79)/[#80](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/80), and root [#1053](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1053)/[#1054](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1054). Their original acceptance and recorded validation support closing #474/#475 as completed. That administrative reconciliation is not a new test run or a claim of complete native-runtime parity.
 
 ## Runtime evidence audit (30 October 2026)
 
@@ -179,7 +207,7 @@ Existing coverage files (inspected as coverage inventory, not executed): compile
 
 ## Operators
 
-[RemoteOperatorAdapterRenderer, lines 40–93](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/57be39692e7410384a70fd29b668a617a55332f6/src/main/java/org/pipelineframework/processor/renderer/RemoteOperatorAdapterRenderer.java#L40-L93) generates Java service adapters backed by ProtobufHttpRemoteOperatorClient or EnvelopeHttpRemoteOperatorClient, requiring domain types and remote target. This is an existing seam to test for a TS pure transform before inventing a protocol. It is not Query capture or Command authority; these remain Connector/runtime responsibilities.
+[RemoteOperatorAdapterRenderer, lines 40–93](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/57be39692e7410384a70fd29b668a617a55332f6/src/main/java/org/pipelineframework/processor/renderer/RemoteOperatorAdapterRenderer.java#L40-L93) generates Java service adapters backed by ProtobufHttpRemoteOperatorClient or EnvelopeHttpRemoteOperatorClient, requiring domain types and remote target. This is an existing interoperability seam for a TS pure transform, but does not establish native LOCAL pipeline execution. It is not Query capture or Command authority; these remain Connector/runtime responsibilities.
 
 ## CLI and packaging
 
@@ -206,9 +234,9 @@ Read-only audit 2026-10-30. GitNexus query used first; source then verified. Con
 - Command recovery has now gained explicit hooks: `recoveryTarget` must derive authoritative non-secret destination/configuration identity; `reconcile` is read-only authoritative inquiry, never dispatch/retry, and defaults to unresolved. A portable adapter must preserve these distinctions. [CommandOperation](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-core/src/main/java/org/pipelineframework/connector/CommandOperation.java#L22-L41). Capability declaration alone is explicitly insufficient without inquiry/target hooks and recovery-capable effect store. [CommandCapabilities](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-core/src/main/java/org/pipelineframework/connector/CommandCapabilities.java#L7-L20).
 - Invocation metadata includes tenant, execution/pipeline/contract/release/step identities, target, correlation, trace and deadline; do not serialize host runtime services or credentials into it. [ConnectorExecutionContext](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-core/src/main/java/org/pipelineframework/connector/ConnectorExecutionContext.java#L7-L31). Host connection API requires a Java typed resolved connection. [ConnectionResolver](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-core/src/main/java/org/pipelineframework/connector/ConnectionResolver.java#L5-L9).
 
-## Connector evidence implication for this MVP
+## Connector evidence implication for the first native profile
 
-These contracts remain in the Quarkus host. Provider process discovery, foreign Query/Command authoring and provider reconciliation protocols are excluded; the existing HTTP adapter is not the pure-function MVP.
+Provider implementations remain in the Quarkus host. Native invocation of those capabilities needs separate semantic qualification; the initial pure profile rejects unsupported Connector/plugin declarations. Foreign Provider authoring is not required by native LOCAL equivalence and is outside this programme.
 
 ## Cloud evidence limits
 
@@ -222,4 +250,4 @@ Remote main `5787c765dd22348893ee47be711904d53a669f23` was inspected. [Checkout'
 
 ## Existing decisions retained
 
-This assessment proposes no accepted semantic change. It retains [ADR-0042 canonical serialization](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0042-shared-canonical-pipeline-serialization.md), [ADR-0049 wire results versus runtime outcomes](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0049-transition-results-separate-wire-data-from-runtime-outcomes.md), [ADR-0050 remote protocol ownership](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0050-remote-worker-protocols-are-shared-runtime-contracts.md), and [ADR-0051 release identity](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0051-release-identity-is-shared-runtime-model.md). Decision spikes must add ADRs before freezing new language/provider contracts.
+The native LOCAL requirement changes the roadmap, not current runtime support. Detailed native execution/protocol contracts remain subject to draft ADR-0080 and contracts #52. The design retains [ADR-0042 canonical serialization](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0042-shared-canonical-pipeline-serialization.md), [ADR-0049 wire results versus runtime outcomes](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0049-transition-results-separate-wire-data-from-runtime-outcomes.md), [ADR-0050 remote protocol ownership](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0050-remote-worker-protocols-are-shared-runtime-contracts.md), and [ADR-0051 release identity](https://github.com/The-Pipeline-Framework/pipelineframework/blob/5667ffc2702cb358ee842363c8d3c0be86b66ac2/docs/decisions/0051-release-identity-is-shared-runtime-model.md). Decision spikes must add ADRs before freezing new language/provider contracts.
