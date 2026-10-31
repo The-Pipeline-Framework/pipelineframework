@@ -4,11 +4,11 @@ The durable coordinator is the self-hostable control-plane boundary for `QUEUE_A
 
 It owns execution state, leases, retry/DLQ, await units, release activation, worker dispatch, and status/result APIs. Step code still runs in workers: local in-process workers, REST workers, gRPC workers, or SQS request/reply workers.
 
-If you are trying to understand what happened to the old "orchestrator", start with [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology). The short version is that `orchestrator-svc` and `pipeline.orchestrator.*` remain historical module/config names, while self-host HA splits runtime responsibility into a coordinator role and one or more transition worker roles.
+If you are trying to understand what happened to the old "orchestrator", start with [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology). For durable execution, self-host HA separates coordinator and transition-worker roles. The generated orchestrator still provides application entrypoints: synchronous execution can run directly, while asynchronous admission uses the control plane. Module/configuration names alone do not identify which role a process hosts.
 
 This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/deploy/orchestrator-runtime/). The first runnable reference is [`pipelineframework-examples/restaurant-approval/self-host`](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/restaurant-approval/self-host).
 
-The current self-host HA path is compute-first. PR 1 provides a control-plane contract of bounded single-shot actions, including a structured `sweepOnce` result. PR 2 makes the periodic sweeper and SQS pollers replaceable loop hosts over those actions, without starting loops on direct action invocation. PR 3 proves direct action invocation locally against LocalStack DynamoDB and SQS. The [durable workflow adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) and [deployed fault proof](/evolve/durable-coordinator/aws-durable-coordination-host) establish AWS Lambda Durable Functions as the preferred candidate AWS coordination host while TPF retains semantic authority. Those pages record the proof stage; current supported packaging and operations are documented in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable).
+The compute-first self-host references and the AWS Durable host share bounded `PipelineControlPlane` actions. Native sweep/poller loops host those actions in long-running processes; AWS Durable hosts mechanical checkpointing, suspension and wake-up while TPF retains semantic authority. [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination) adopts AWS Lambda Durable Functions as the preferred AWS coordination host. The [adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) and [deployed fault proof](/evolve/durable-coordinator/aws-durable-coordination-host) record the earlier proof stages. Current packaging and operations are in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); remaining qualification gates are in the [production completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
 
 ## Current Shape
 
@@ -19,6 +19,7 @@ The current self-host HA path is compute-first. PR 1 provides a control-plane co
 | Worker boundary | portable command/result envelopes over local, REST, gRPC, or SQS |
 | Contract/release identity | generated `META-INF/pipeline/pipeline-contract.json`, release descriptor registration, activation, execution pinning, and worker identity validation |
 | Self-host path | compute-first HA references using restaurant approval and CSV Payments |
+| AWS coordination host | AWS Durable over bounded TPF actions; SQS worker boundary; qualification limits tracked separately |
 
 ```mermaid
 sequenceDiagram
@@ -66,7 +67,7 @@ An eligible live itemized await remains in the active transition worker and foll
 9. [Contract And Release Identity](/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
 10. [Pipeline Contract And Release Model](/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
 11. [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
-12. [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) records the single-shot coordinator actions, replaceable compute-first loop hosts, AWS-shaped local proof, and remaining provider work for FUNCTION/all-serverless HA.
+12. [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator) records the historical single-shot action design, replaceable loops and AWS-shaped local proof; its proof-stage limitations are not the current AWS host support matrix.
 13. [Durable Workflow Backend Adapter Spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) maps provider identities, callbacks, retries, history, DLQ, and re-drive onto the TPF-native action model and records the production-adoption gaps.
 14. [AWS Durable Coordination Host](/evolve/durable-coordinator/aws-durable-coordination-host) records the deployed fault evidence, ownership boundary, and promotion gates.
 15. [AWS Engagement Brief](/evolve/durable-coordinator/aws-engagement-brief) captures the remaining callback, history, limits, and recovery questions for AWS engineering.

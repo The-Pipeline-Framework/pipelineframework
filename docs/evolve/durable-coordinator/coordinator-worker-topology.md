@@ -2,18 +2,20 @@
 
 This page answers the practical question behind the self-host HA work: what happened to the old "orchestrator"?
 
-The old orchestrator responsibility is now split into two runtime roles:
+In durable `QUEUE_ASYNC` execution, orchestration is split into two runtime roles:
 
 1. **Coordinator**: the durable control plane.
 2. **Transition worker**: the data-plane executor for bounded pipeline continuations.
 
-The code and config names still use `orchestrator` in places, for example `orchestrator-svc` and `pipeline.orchestrator.*`. Treat those as historical module/config names. In the self-host HA model, a process becomes a coordinator or a worker by configuration.
+The generated application-facing orchestrator still exposes entrypoints. Synchronous execution calls the pipeline execution service directly; asynchronous admission calls the control plane. A transition worker still runs the compiled pipeline through the execution service and runner. The coordinator split did not move per-step execution into the coordinator. See [the execution layers](/architecture/state-model#from-running-steps-to-durable-coordination).
+
+Names such as `orchestrator-svc` and `pipeline.orchestrator.*` remain in generated artifacts and configuration. They do not identify a durable role on their own. In the self-host HA model, configuration selects coordinator and worker responsibilities; one process can host both.
 
 ## Terms
 
 | Term | Meaning |
 | --- | --- |
-| `orchestrator` | Historical/generated runtime namespace. It still appears in module names, config keys, generated metadata, and Maven topology docs. |
+| `orchestrator` | Generated application/runtime surface and configuration namespace; its synchronous execution and durable admission paths have different responsibilities. |
 | Coordinator | Durable control-plane role. It owns execution records, await units, leases, retry/DLQ, re-drive, release activation, release pinning, worker lifecycle checks, and status/result APIs. |
 | Transition worker | Data-plane role. It receives a pinned transition command, executes from the current continuation point to a terminal result or an await requiring durable fallback, and returns `COMPLETED`, `WAITING_EXTERNAL`, or `FAILED`. |
 | Step/runtime service | Generated business-step runtime that a transition worker may call through REST, gRPC, or local transport. |
@@ -54,7 +56,8 @@ The coordinator is where durable orchestration lives. The worker is where busine
 | Execution record | yes | no | no |
 | Await unit and pending interaction | yes | no | no |
 | Lease claim and recovery | yes | no | no |
-| Retry, DLQ, and re-drive | yes | no | no |
+| Durable transition retry, DLQ, and re-drive | yes | returns classified outcome | no |
+| Per-step invocation/retry policy | no | owns the applicable execution shell | applies policy at its invocation boundary; avoid duplicate retries |
 | Release activation and execution pinning | yes | no | no |
 | Worker lifecycle admission | yes | reports identity/health | no |
 | Business step execution | no | drives transition | yes |
@@ -85,7 +88,9 @@ pipeline.orchestrator.control-plane.require-remote-worker=true
 pipeline.orchestrator.worker.rest.server-enabled=true
 ```
 
-With no remote worker target, the local in-process worker is selected. That is useful for local demos. Separated self-host HA should set `pipeline.orchestrator.control-plane.require-remote-worker=true` so a coordinator process cannot silently execute transitions locally.
+With no remote worker target, the local in-process worker is selected. This worker invocation choice is separate from `pipeline.transport`: the worker may still call step services over REST or gRPC. LOCAL step invocation means a call within the same process, not merely an endpoint on localhost. The in-process worker is useful for local demos. Separated self-host HA should set `pipeline.orchestrator.control-plane.require-remote-worker=true` so a coordinator process cannot silently execute transitions locally.
+
+A configured remote step endpoint is not a registered transition worker. The registered REST worker path currently requires the coordinator's generated contract and one whole-bundle application archive; it rejects distributed artifact placement. That restriction does not prohibit the separate generated remote step calls shown below. See [RegisteredRestWorkerTargets](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/runtime/src/main/java/org/pipelineframework/orchestrator/RegisteredRestWorkerTargets.java#L153-L199).
 
 ## One Process Versus Separated HA
 
@@ -195,6 +200,8 @@ Self-host HA depends on keeping durable orchestration in the coordinator and bus
 4. provider-portable await transports such as SQS and Kafka;
 5. a future path to managed operation of the same coordinator boundary.
 
-`FUNCTION` support remains serverless invocation/adapter support. It is not the current durable HA model. An all-serverless durable coordinator would be a separate architecture backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling.
+AWS Lambda Durable Functions is now the preferred AWS coordination host for `QUEUE_ASYNC`, under [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination). It drives bounded TPF actions while TPF retains semantic authority; SQS is the supported initial worker boundary for COMPUTE or FUNCTION workers. The merged host includes an [SQS transition-worker Lambda handler](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/b58f9ff4f3e904e49dcbe2ce420c209d36efe97a/aws-durable-coordination/host/src/main/java/org/pipelineframework/aws/durable/AwsDurableTransitionWorkerHandler.java#L15-L25). This is distinct from an ordinary generated HTTP FUNCTION step handler.
+
+Use [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable) for the deployment contract and the [production completion plan](/evolve/durable-coordinator/aws-durable-production-plan) for remaining qualification gates. Neither FUNCTION adapter support nor the local reference stacks alone prove a production deployment.
 
 Future managed operation can run the same control-plane shape, but the current self-host references are local verification stacks, not production deployment packages and not managed-service promises.
