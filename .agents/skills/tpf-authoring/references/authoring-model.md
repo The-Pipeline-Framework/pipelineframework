@@ -80,12 +80,14 @@ A named nested pipeline is an ordinary typed step with its declared input/output
 it for a meaningful subflow, not for every helper call. A local nested call continues
 inside the same execution; it is not a new workflow row or publication boundary.
 
-Direct self-recursion is structured nested invocation with a typed base case, not a
-jump to an earlier step. This makes looping possible in TPF: a union decision routes
-either to the recursive call or to the base case, and every invocation later unwinds
-through its caller's remaining steps. An agentic loop should therefore carry trusted
+Definition recurrence uses structured nested invocation with a typed base case. In a
+release supporting `recur: [Type]`, select continuing concrete outcomes on the local
+unary definition; the compiler supplies the bounded continuation after its authored
+steps. Other branch results complete against the declared output without an identity
+merge service. An explicitly authored recursive call remains an authored consumer and
+must satisfy the same one-consumer rule. An agentic loop should carry trusted
 typed state, use Query for one new model or read-only tool observation, use Command for
-a tool effect, return a continue/complete union, and recurse explicitly for the next
+a tool effect, return a continue/complete union, and declare recurrence for the next
 turn. Do not hide the loop or repair attempts inside one Query.
 Current cardinality, depth, mutual-recursion, Await, and remote-composition limits are
 release-specific. Search the template DSL plus `PipelineRecursion*` and local

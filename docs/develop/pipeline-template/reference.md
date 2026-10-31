@@ -402,7 +402,11 @@ A union value is assignable to its union contract. A concrete variant can be int
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 
-When a branch-aware step declares a union as its `input`, omitting `accepts` means it accepts every declared variant. An explicit list narrows the accepted payload contracts and must be a subset of that union. The final `terminal: true` step must cover every alternative still reachable after earlier branches; the compiler reports uncovered alternatives before generation.
+When a branch-aware step declares a union as its `input`, omitting `accepts` means it accepts every declared variant. An explicit list narrows the accepted payload contracts and must be a subset of that union.
+
+In version 3, an explicit `contract.output` (or a nested definition's `output`) can complete the surviving branches without a final identity merge service. Every reachable branch-end type must satisfy that output contract. At the end of the definition, the Quarkus runtime extracts a concrete result from a union or introduces it into the declared return union as required. A return union with several tags for the same concrete payload needs an explicit terminal operation to select the tag. Unrelated values pass through the remaining steps; the output declaration does not jump past an applicable operation.
+
+An explicitly authored final `terminal: true` step still covers every alternative reachable after earlier branches. Templates without an explicit version 3 output contract retain that requirement. See [ADR-0082](/decisions/0082-definition-output-completes-typed-branches) for the definition-boundary semantics.
 
 A step can also declare a concrete variant directly when it only handles that outcome. This is equivalent to a type-based branch from the preceding union; use `accepts` when the step keeps the union contract as its input and wants to name the accepted alternatives explicitly.
 
@@ -711,36 +715,28 @@ pipelines:
   process-attempt:
     input: AttemptState
     output: AttemptResult
+    recur: [AttemptState]
     steps:
       - name: Decide
         service: com.example.DecideService
+        cardinality: ONE_TO_ONE
         input: AttemptState
         output: Decision
-      - name: Continue
-        pipeline: process-attempt
-        input: Decision
-        output: AttemptResult
-        accepts: [ContinueDecision]
-      - name: Complete
-        service: com.example.CompleteService
-        input: Decision
-        output: AttemptResult
-        accepts: [CompleteDecision]
-      - name: Return
-        service: com.example.ReturnService
-        input: AttemptResult
-        output: AttemptResult
-        terminal: true
 
 steps:
   - name: Run attempt
     pipeline: process-attempt
+    cardinality: ONE_TO_ONE
     input: AttemptState
     output: AttemptResult
-    terminal: true
+    java:
+      input: com.example.domain.AttemptState
+      output: com.example.domain.AttemptResult
 ```
 
-Direct self-recursion is a structured nested invocation, not a jump to an earlier step. Each invocation continues forward through its own ordered steps, and ordinary union routing plus `accepts` supplies the base case. Recursive definitions currently require an aggregate `ONE_TO_ONE` contract. Mutual recursion, recursive streaming cardinalities, and Await inside a nested definition are not supported.
+Here `Decision` is a declared union whose concrete payloads are `AttemptState` and `AttemptResult`. An `AttemptState` outcome re-enters the definition after its authored steps finish; an `AttemptResult` completes it. Continuing outcomes must be concrete input alternatives and must not also be definition output alternatives. The compiler validates reachability and lowers `recur` to its existing bounded self-invocation path. It does not add an authored consumer or require an identity return service.
+
+Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Root recurrence, mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
 
 The runtime bounds recursive depth with `pipeline.max-recursive-depth` (default `64`). A value of `0` allows composition but rejects the first recursive call. Reaching the configured depth is valid; attempting the next call fails immediately with a non-retryable `PipelineRecursionLimitExceededException`.
 
