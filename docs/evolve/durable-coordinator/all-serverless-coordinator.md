@@ -1,18 +1,20 @@
 # All-Serverless Durable Coordinator
 
-This page records the original design/proof stage. For the current supported host and deployment contract, see [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); the accepted ownership decision is [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination).
+::: info Historical design and proof snapshot
+This page preserves the original design/proof stage, including its audit and proposed implementation slices. References below to missing handlers, deferred continuation scheduling and future hosting describe that stage, not current support. AWS Durable is now the preferred AWS coordination host under [ADR-0069](/decisions/0069-aws-durable-hosts-mechanical-coordination), and the host includes SQS transition-worker Lambda handlers. Use [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable) for the deployment contract and the [production completion plan](/evolve/durable-coordinator/aws-durable-production-plan) for remaining qualification gates. The historical local proof is not itself production deployment evidence.
+:::
 
-This design track asks one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
+The original design track asked one question: can TPF keep `QUEUE_ASYNC` semantics without a long-running coordinator process?
 
-The answer is **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.
+The working hypothesis was **probably yes**, but not by making a Lambda, Azure Function, or Cloud Run function "durable" by itself. The coordinator must be decomposed into single-shot actions that can be invoked by APIs, queues, event sources, and schedulers. Durable cloud services own wakeups and storage; TPF still owns execution semantics.
 
-PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. PR 3 proves those boundaries locally against AWS-shaped DynamoDB and SQS substrates without hosting the compute-first loops. The [durable workflow adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) then proves that an AWS Lambda durable execution can drive those actions without taking authority from TPF. Current `FUNCTION` support remains serverless invocation/adapter support; provider handlers and fully serverless hosting are still future work.
+PR 1 provides the action contract: `PipelineControlPlane` exposes the existing bounded coordinator operations plus an explicit `sweepOnce` action with a structured result. PR 2 separates the compute-first sweep and SQS polling loops from the bounded actions they host. PR 3 proves those boundaries locally against AWS-shaped DynamoDB and SQS substrates without hosting the compute-first loops. The [durable workflow adapter spike](/evolve/durable-coordinator/durable-workflow-adapter-spike) then proves that an AWS Lambda durable execution can drive those actions without taking authority from TPF. At this proof stage, `FUNCTION` support covered serverless invocation/adapters; provider handlers and fully serverless hosting were follow-up work.
 
-## Recommendation
+## Recommendation at the proof stage {#recommendation}
 
 Use one **TPF-native single-shot coordinator action model** with replaceable coordination hosts.
 
-AWS Lambda Durable Functions is the preferred candidate AWS host because the deployed fault proof shows it can own mechanical liveness without taking semantic authority. Other provider engines remain candidates only if they preserve TPF's control-plane invariants:
+The proof identified AWS Lambda Durable Functions as the preferred candidate AWS host because the deployed fault proof shows it can own mechanical liveness without taking semantic authority. Other provider engines remain candidates only if they preserve TPF's control-plane invariants:
 
 1. execution identity and idempotent submit,
 2. await unit identity and external completion admission,
@@ -21,7 +23,7 @@ AWS Lambda Durable Functions is the preferred candidate AWS host because the dep
 5. DLQ/re-drive evidence and operator control,
 6. at-least-once transition execution with stable business idempotency keys.
 
-Provider handlers can now invoke the bounded SQS message actions without reproducing work-item, await-completion, or transition-worker semantics. A complete process-free deployment still needs a durable replacement for itemised await-continuation retry scheduling.
+Provider handlers can now invoke the bounded SQS message actions without reproducing work-item, await-completion, or transition-worker semantics. At that stage, a complete process-free deployment still needed a durable replacement for itemised await-continuation retry scheduling.
 
 The durable workflow spike and deployed proof establish a deeper driver: AWS owns checkpoints, suspension, callback durability, and stream-triggered wake-up, while generation-fenced callback state remains mechanical. A replacement provider execution reconstructs from the TPF semantic checkpoint without redispatching work. Provider retry, DLQ, and re-drive primitives still do not replace TPF's contracts. See [AWS Durable Coordination Host](/evolve/durable-coordinator/aws-durable-coordination-host).
 
@@ -68,7 +70,7 @@ The proof covers:
 2. a synthetic scheduled wakeup that calls `sweepOnce(nowEpochMs)`, dispatches one due retry, and returns the structured sweep counts;
 3. terminal worker failure, SQS DLQ publication, process replacement, operator re-drive, and successful completion while preserving the pinned pipeline, contract, and release identity.
 
-This is deliberately an **AWS-shaped local proof**, not production AWS function support. DynamoDB and SQS behaviour is exercised through their AWS SDK contracts. The scheduled wakeup is an event-shaped call made by the test driver; it is not an EventBridge rule or handler. Lambda handlers, EventBridge integration, IAM, Terraform, and CloudFormation remain provider-hosting work.
+This is deliberately an **AWS-shaped local proof**, not production AWS function support. DynamoDB and SQS behaviour is exercised through their AWS SDK contracts. The scheduled wakeup is an event-shaped call made by the test driver; it is not an EventBridge rule or handler. Lambda handlers, EventBridge integration, IAM and deployment templates were outside this local proof; consult the current host documentation for implemented packaging and remaining deployment work.
 
 ## Single-Shot Action Sequences
 
@@ -179,6 +181,8 @@ This is already close to single-shot. It must preserve pinned pipeline, contract
 
 ## `QueueAsyncCoordinator` Decomposability Audit
 
+This is the proof-stage audit, retained as design history; it is not a fresh audit of the merged host.
+
 | Area | Current shape | Single-shot readiness | Required change |
 | --- | --- | --- | --- |
 | Submit | `executePipelineAsync` creates execution and enqueues work | Clean | Available through `PipelineControlPlane`; action invocation initializes providers without starting loops. |
@@ -193,7 +197,7 @@ This is already close to single-shot. It must preserve pinned pipeline, contract
 | Await completion poller | `SqsAwaitCompletionPoller` hosts bounded concurrent receives and acknowledgement over `SqsAwaitCompletionAction` | Clean message action | Reuse the action from a provider event-source handler. |
 | SQS transition worker poller | `SqsTransitionWorkerPoller` hosts receiving and acknowledgement over `SqsTransitionWorkerAction` | Clean message action | Reuse the action from a provider event-source worker function. |
 
-`PipelineControlPlane` is now the single-shot action contract for submit, status, typed/raw result, re-drive, work-item processing, await completion, pending-await queries, and one bounded sweep. `SqsWorkItemAction`, `SqsAwaitCompletionAction`, and `SqsTransitionWorkerAction` add receipt-independent message boundaries for provider event sources. Provider initialisation is separate from loop startup, so invoking an action does not start the periodic sweeper. The remaining process-owned semantic work is aggregate await-continuation retry scheduling; provider-specific hosting remains to be added.
+`PipelineControlPlane` is now the single-shot action contract for submit, status, typed/raw result, re-drive, work-item processing, await completion, pending-await queries, and one bounded sweep. `SqsWorkItemAction`, `SqsAwaitCompletionAction`, and `SqsTransitionWorkerAction` add receipt-independent message boundaries for provider event sources. Provider initialisation is separate from loop startup, so invoking an action does not start the periodic sweeper. The remaining work identified by this audit was aggregate await-continuation retry scheduling and provider-specific hosting.
 
 ## Provider Durable Workflow Shortcuts
 
@@ -223,8 +227,8 @@ The first implementation path should not assume either mapping. Build the TPF-na
 4. **Provider function handlers.** Add AWS-first function handlers only after the action model is explicit.
 5. **Durable workflow adapter spike — complete.** The AWS Lambda Durable Execution Java local runner proves an optional, reconstructable driver over the action model, including checkpoint loss, failed and duplicate wake-up, callback-generation fencing, provider-history replacement, Await completion, resume, and result. The subsequent deployed suite injects failure after AWS callback creation, before and after the mechanical registration write, and converges through stream/history/reconciliation repair to a binding and successful completion. That closes the experimental registration-window gate; production adoption still requires the same coverage against the supported host, provider callback/history contract validation, and operator-history integration.
 
-## Current Decision
+## Decision at the proof stage {#current-decision}
 
 The provider-neutral coordination-host seam is `PipelineControlPlane`. Native loop hosts invoke it directly; the AWS Durable proof uses a transport adapter for those actions and a separate adapter for provider callback mechanics. Its reconstructable TPF checkpoint excludes provider generation and callback state. The mapping and deployed fault tests demonstrate that a provider durable execution can own substantial mechanical durability while remaining reconstructable from TPF state; provider history, retry/DLQ evidence, and provider re-drive remain non-authoritative.
 
-The AWS proof is not current supported Lambda deployment. Provider packaging, release, security, quotas, and operations remain separate work.
+This proof did not by itself qualify a supported Lambda deployment. The subsequent host packaging and its current release, security, quota and operational requirements are documented in [AWS Durable Coordination](/deploy/orchestrator-runtime/aws-durable); outstanding support gates remain in the [production completion plan](/evolve/durable-coordinator/aws-durable-production-plan).
