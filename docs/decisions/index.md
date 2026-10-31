@@ -91,6 +91,9 @@ publication and the distinction from immutable test and release inputs.
 | [0078](./0078-chat-agent-command-handoffs-stay-inert.md) | Return release-pinned Command proposals from ChatAgent without granting the Block effect authority. |
 | [0079](./0079-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
 | [0080](./0080-native-runtimes-consume-compiler-owned-execution-contracts.md) | Draft: native LOCAL runtimes consume compiler-owned execution contracts and reuse Java durable coordination. |
+| [0081](./0081-one-authored-consumer-per-concrete-input.md) | Give each concrete canonical input one authored consumer per Pipeline definition, with structural recurrence and definition-owned observer occurrences. |
+| [0082](./0082-definition-output-completes-typed-branches.md) | Complete typed branches at their definition output boundary without an authored identity merge. |
+| [0083](./0083-definition-owned-bounded-recurrence.md) | Lower definition-owned continuing outcomes through the existing bounded recursive invocation path. |
 
 ## Maintenance
 
