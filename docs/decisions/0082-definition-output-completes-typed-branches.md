@@ -49,6 +49,6 @@ without creating a second routing language or leaking raw union payloads to call
 - Missing reachable branch results are build errors. An output union may name
   alternatives that a particular implementation does not produce.
 - Legacy metadata without completion descriptors keeps its previous behaviour.
-- This supplies one prerequisite for [ADR-0081](./0081-one-authored-consumer-per-concrete-input).
+- This supplies one prerequisite for [ADR-0081](./0081-one-authored-consumer-per-concrete-input.md).
   Structural recurrence and branch-selective deferred completion remain separate work;
   this decision does not relax the authored-consumer invariant.

@@ -45,9 +45,12 @@ not supplied by these changes.
 4. Enable authored-consumer validation before model/aspect expansion. Cover concrete
    and union collisions, disjoint variants, aliases, non-adjacent consumers, reproduced
    types, Query/Command/Await pairs, independent definitions, and generated observers.
-5. Run the owner suites and coordinated candidate compatibility set for every changed
-   released boundary. Update telemetry/replay rendering and authoring examples with
-   the resulting lifecycle contract.
+5. Run the owner suites and retain a passing `tpf/system-tests` result for the exact
+   PR head before merge. When component PRs participate, require a coordinated
+   compatibility set covering their current heads, with success recorded on every
+   participating SHA; otherwise retain this PR's singleton result. Update
+   telemetry/replay rendering and authoring examples with the resulting lifecycle
+   contract.
 
 The strict invariant includes authored recursive calls. Structural recurrence is a
 definition lifecycle boundary, not a validation exception or a second application
