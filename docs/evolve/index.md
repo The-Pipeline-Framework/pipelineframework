@@ -14,3 +14,5 @@ flowchart LR
 - [Quarkus 3.39 migration and validation](/evolve/quarkus-3.39-migration)
 - [Architecture reference](/evolve/architecture-reference)
 - [Framework release process](/evolve/framework-release-process)
+
+- [Polyglot applications assessment](/evolve/polyglot-applications-assessment)
