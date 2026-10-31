@@ -69,6 +69,36 @@ Issues [#474](https://github.com/The-Pipeline-Framework/pipelineframework/issues
 
 Their existing acceptance, bases, milestones and coordination remain unchanged. In particular #474 generates a whole-local-unary-pipeline endpoint using the Spring runner; it is not the function-host adapter proposed here. The MVP does not depend on finishing all Spring parity work, and no new MVP decision gates those active stacks.
 
+## Spring roadmap disposition under the MVP
+
+The former Spring workload parity project is now the [Polyglot business-function authoring project](https://github.com/orgs/The-Pipeline-Framework/projects/3), governed by [epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055). No independent Spring epic was found in its 16 issue items; #1055 is the umbrella. Completed #468–473 remain historical evidence, not a promise to extend every capability.
+
+| Issues | Disposition | What to do / what to stop |
+|---|---|---|
+| #474–475 | Retain active scope | Finish the existing three two-layer gRPC stacks under their existing acceptance; do not pretend their embedded runner is the new external function host |
+| #476 | Retire as not planned | No Spring FUNCTION handler parity in this MVP; any future function hosting needs a separately justified proposal |
+| #477 | Retire as not planned | No Spring embedded streaming/non-unary engine expansion; future portable streaming must start with a shared boundary contract |
+| #478–479 | Retire as not planned | No Spring plugin/cache/persistence ecosystem port; providers and their lifecycle remain Quarkus-hosted |
+| #480–481 | Supersede as not planned | No separate Spring Await/checkpoint runtime programme; shared client APIs and Quarkus durable follow-up own applicable interoperability |
+| #482 | Repurpose, unscheduled | Spring/Micronaut function-host integration acceptance, subordinate to the shared invocation contract and compiler generation |
+| #483 | Repurpose, unscheduled | Host-boundary conformance and observability for the shared proof; no blanket embedded-runtime production parity |
+
+### Retain, eliminate and revisit
+
+Retain the Spring runner, completed integrations and active #474–475 stacks. Do not delete functioning code or change their compatibility promises in this documentation change. Retain the compiler-owned canonical model, shared contracts, Quarkus executor/coordinator and existing Connectors/plugins.
+
+Eliminate the open-ended parity roadmap and its future FUNCTION, streaming, plugin/persistence and Spring-hosted durable-execution obligations. Eliminate portable Provider SDK work from MVP dependencies. Do not introduce a Spring/Micronaut transition worker, coordinator, independent execution engine, or provider ecosystem port merely to support authoring.
+
+A future cleanup may remove demonstrably unused embedded-only scaffolding, but requires owner-specific caller/impact analysis, migration and regression evidence. No source file is identified as safely deletable merely by this architecture decision. No implementation deletion or active-PR cancellation is authorised by the roadmap disposition.
+
+### Spring/Micronaut exit criteria
+
+A generated unary gRPC service registers business-function beans and executes one function. The Quarkus worker owns pipeline order, invocation policy and lineage. Host adapters carry bounded authenticated context, cancellation/deadlines and typed rejection/failure outcomes; they do not own Query capture, Command authority, Await, checkpoints or provider credentials. Prove the same fixture used for TS/Python without a Spring/Micronaut pipeline runner in the new host path.
+
+#482/#483 are coordination/acceptance slices of [equivalent host proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28), not additional implementations of it. Compiler owns generated bindings, runtime owns Quarkus invocation, and examples owns host fixtures. These issues do not gate active #474/#475.
+
+Legacy milestone 8 retains only the active gRPC commitment. Milestones 9/10 are retired as parity plans; new host work has no delivery milestone. All new MVP work remains unscheduled and subordinate to current Cloud priorities.
+
 ## Reuse, alternatives and ownership
 
 Keep the v3 model, IDL identity, Java executor, coordinator/transition protocols, Quarkus providers and Release authority. Generate language models/adapters instead of another semantic engine. External HTTP/OpenAPI services remain a useful alternative for actual observations/effects, but do not replace pure-function authoring. An embedded Spring executor remains an existing optional path; fully native TS/Python executors and portable Provider SDKs are outside this MVP.
