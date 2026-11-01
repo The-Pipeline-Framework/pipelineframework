@@ -1,6 +1,6 @@
 # Polyglot TPF applications: native LOCAL and distributed execution
 
-Evidence assessed 30 October 2026; native-runtime requirement and roadmap revised 31 October 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
+Evidence assessed 30 October 2026; native-runtime roadmap revised 31 October 2026; no-local-JVM SDLC requirement added 1 November 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
 
 ## Current conclusion: equivalent LOCAL workflows require native runtimes
 
@@ -28,7 +28,7 @@ flowchart TD
     W -->|Transition result| C
 ```
 
-The compiler remains Java-hosted during the build; the proposed pure synchronous native monolith needs no JVM during execution. Durable execution still needs the Java coordinator, locally or remotely. A native function packaged for Lambda could execute a local chain only if its package includes the native TPF executor; bundling handlers alone does not establish this capability. No native Lambda deployment evidence was found or produced in this investigation.
+The compiler implementation remains Java-based, but the required Node/Python development workflow must not require a local JVM for generation/build or execution. The compiler-authoritative build mechanism is still a tooling gap; remote build/generation is one candidate. The pure synchronous native monolith runs without a JVM executor. Durable execution still needs the Java coordinator, locally or remotely. A native function packaged for Lambda could execute a local chain only if its package includes the native TPF executor; bundling handlers alone does not establish this capability. No native Lambda deployment evidence was found or produced in this investigation.
 
 The existing command carries execution/release identity, attempt and a range (`currentStepIndex`, `stopBeforeStepIndex`). Its result distinguishes completion, failure and external suspension. This is reusable framing, not an implementation of the range executor. A lost response can cause a transition to execute again; business-function invocation is not exactly once. [TransitionCommandEnvelope, fields](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionCommandEnvelope.java#L30-L52); [TransitionWireResult, outcome invariants](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionWireResult.java#L17-L77).
 
@@ -82,7 +82,7 @@ The smallest credible profile is finite linear unary pure transformations, suppo
 
 Keeping Connectors and plugins in Quarkus does not automatically make their semantics available to a native runner. Existing generated step endpoints offer a concrete interoperability path, but Query capture, Command authority, cache policy and plugin acknowledgement cannot all become generic RPC calls. A later boundary needs authenticated context, effect identity, release compatibility and outcome semantics. For this proof, reject such configured capabilities rather than silently omitting them. [RestClientStepRenderer, invocation and side-effect handling](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/26deba06fbee5296c235d7957b4b47fb32708838/src/main/java/org/pipelineframework/processor/renderer/RestClientStepRenderer.java#L170-L268).
 
-Qualification would proceed through the same A → B → C fixture as a native LOCAL monolith, split over two native processes, and a whole-pipeline native worker under the Java coordinator; Python repeats the same contract fixtures. Compiler/build tooling must accept DSL and native functions without handwritten application Java, even if internal compilation still uses a generated Java build host. That build-host independence is a prerequisite, not existing proof from phase-engine unit tests.
+Qualification would proceed through the same A → B → C fixture as a native LOCAL monolith, split over two native processes, and a whole-pipeline native worker under the Java coordinator; Python repeats the same contract fixtures. Compiler/build tooling must accept DSL and native functions without handwritten application Java, with any internal Java build host kept off the developer workstation in the required no-local-JVM workflow. That build-host independence is a prerequisite, not existing proof from phase-engine unit tests.
 
 Acceptance compares canonical outputs, stable step/item identities, failure classification, retry counts, context isolation and semantic observations. Inject transient/nonretryable failure, cancellation and late response; B must not run after a terminal failure in A. Test the boundary distinction that prevents duplicate retries. The durable configuration additionally needs duplicate delivery, lost response, worker death/recovery and release mismatch fixtures; do not equate synchronous success with durable qualification. Unsupported-feature diagnostics and native type checking/import checks are part of acceptance. No implementation or conformance run was performed in this investigation.
 
@@ -92,9 +92,36 @@ The remaining decisions concern which unary policies/types form the first profil
 
 ## Roadmap: native LOCAL equivalence is required
 
-Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python need no JVM executor for the pure synchronous monolith; Java remains build-time compiler infrastructure.
+Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python development requires no local JVM, including build/generation and real QUEUE_ASYNC development; Java compiler/coordinator services may run remotely.
 
 This replaces the adapter-only Quarkus Execution MVP. One semantic authority does not require one runtime implementation: native kernels consume compiler-owned output and must pass shared conformance. The coordinator, Release authority and existing Quarkus provider implementations remain shared. No new coordinator, Provider SDK or independent YAML interpreter is planned. Unary scope is the first increment, not a permanent parity ceiling.
+
+## SDLC requirement: no local JVM for Node/Python development
+
+A supported Node/Python development workflow must not require installing or running a local JVM, Java coordinator or Java HA stack. This applies to authoring, building/generating artifacts, native LOCAL execution and exercising real QUEUE_ASYNC. Java remains the compiler/coordinator implementation technology, but is transparent infrastructure rather than a workstation prerequisite. A mandatory JVM hidden in a local container does not satisfy this requirement.
+
+| Workflow | Developer workstation | Coordination/build authority |
+|---|---|---|
+| Author, build and generate | Native developer tools; no local JVM | Compiler-owned build path without a local JVM, for example remote build/generation; mechanism remains a design gap |
+| Pure synchronous LOCAL | Node/Python application and native TPF runtime in one process | No durable coordinator needed |
+| Real QUEUE_ASYNC development | Native client/runtime; local worker when connectivity permits, or a remotely deployed development worker | Real external Java coordinator and durable services |
+| Optional offline async simulation | Native development harness | Explicit simulation only; not QUEUE_ASYNC durability/HA qualification |
+
+The external development coordinator may be shared with tenant isolation or dedicated. TPF Cloud is an optional host, not a prerequisite. Java can run remotely during development as well as in production; this is a no-local-JVM requirement, not a claim that Java exists only in production. Production COMPUTE/FUNCTION placement must not require rewriting business functions.
+
+### Connectivity and tooling gaps to qualify
+
+- **Runtime #82:** select and prove a supported route between an external coordinator and a development worker. Evaluate authenticated outbound queue/connection, a secured tunnel, or remote worker deployment; these are candidates, not existing supported Node/Python tooling. Preserve worker protocol semantics; do not disguise localhost RPC as LOCAL.
+- **Runtime #82 with contracts #52:** authenticate developer/worker identity, isolate tenants/environments, register worker readiness and compatible capabilities, and bind the worker to immutable Release/artifact identity. A code edit must produce/select a new compatible development release rather than silently mutate a pinned worker. Keep provider credentials and coordinator stores out of application code.
+- **Runtime #82 and examples #28:** prove disconnect/reconnect, laptop sleep, worker restart, expired authority, duplicate delivery and lost responses. Durable state survives worker unavailability; a developer laptop is not an HA deployment, and coordinator recovery does not imply exactly-once function execution.
+- **Compiler #46 with existing build/deploy tooling:** provide a compiler-authoritative generation/build path from a workstation without Java. Define authentication, source/artifact transfer, dependency/version pinning, actionable diagnostics and release provenance. A downloaded prebuilt fixture is not proof that a developer can rebuild changed DSL/functions. Offline regeneration is not promised by a remote build option.
+
+### Acceptance gate and scheduling
+
+From a clean Node/Python workstation without Java installed or running, build a changed DSL/functions project through the supported tooling, run the pure pipeline LOCAL, then submit it through the generated API to a real remote coordinator and obtain status/results. Qualify the selected worker connectivity route and the failure cases above for both languages. Keep admission/status/result APIs separate from worker dispatch; choose the environment by configuration rather than embedding a coordinator. Report LOCAL, simulated async, real durable execution and HA deployment evidence separately.
+
+These are requirements and tracked gaps, not delivered support. Reuse [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82), [compiler #46](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/46) and [examples #28](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28); no extra speculative implementation issue or new coordinator is needed. Re-estimate the remote-build/connectivity work before assigning effort; existing native-kernel estimates do not establish its cost. All implementation remains unscheduled, unassigned and outside current Cloud priorities.
+
 
 ## Dependency gates and ownership
 
