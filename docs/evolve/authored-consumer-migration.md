@@ -18,6 +18,11 @@ response operation owns first/final review policy through the trusted `reviewRou
 Model output cannot replace that trusted state. The agent still uses one Query per observation and
 the existing bounded recursive invocation path.
 
+[PadelPot PR #6](https://github.com/The-Pipeline-Framework/padelpot/pull/6) applies the migration to
+current main while retaining its reusable ChatAgent integration. Its 61 fixture tests and default
+and Ollama packages pass. The compiler's dependency-free YAML fixture preserves the original issue
+baseline; the application suite covers the newer Block integration.
+
 ## Owner evidence
 
 | Contract | Regression evidence |

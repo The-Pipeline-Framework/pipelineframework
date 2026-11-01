@@ -54,7 +54,8 @@ See the [Blocks Guide](/develop/blocks/) for the complete packaging and binding 
 For a root or nested local unary definition, use `recur: [Type]` to select continuing concrete outcomes after its
 authored steps finish. Those types must satisfy the definition input; the remaining outcomes must
 satisfy its output. TPF lowers the declaration through its existing bounded nested-invocation path.
-Runtime depth is bounded by `pipeline.max-recursive-depth`.
+Runtime depth is bounded by `pipeline.max-recursive-depth`. Each generated root continuation
+counts as one level, using the same bound as direct local self-recursion.
 
 A root definition can suspend at an operation decorated with Await, including after a completed
 native Command. TPF stores the active recurrence path with the interaction and resumes after that
