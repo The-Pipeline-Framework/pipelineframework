@@ -27,6 +27,7 @@ reachable branch end and adapts concrete or union results to the declared return
 definition's remaining steps finish. An explicit terminal merge remains useful when an operation
 must choose or transform the final result.
 
+The compiler checks authored version 3 steps before lifecycle, plugin, or aspect expansion.
 Give each concrete canonical input type one authored consumer within a definition. For a union
 input, count only the concrete variants selected by `accepts`; disjoint selections can share the
 same union declaration. Query, Command, and Await-decorated operations follow the same authoring
@@ -50,10 +51,18 @@ See the [Blocks Guide](/develop/blocks/) for the complete packaging and binding 
 
 ## Use recursion deliberately
 
-For a local unary definition, use `recur: [Type]` to select continuing concrete outcomes after its
+For a root or nested local unary definition, use `recur: [Type]` to select continuing concrete outcomes after its
 authored steps finish. Those types must satisfy the definition input; the remaining outcomes must
 satisfy its output. TPF lowers the declaration through its existing bounded nested-invocation path.
-Runtime depth is bounded by `pipeline.max-recursive-depth`.
+Runtime depth is bounded by `pipeline.max-recursive-depth`. Each generated root continuation
+counts as one level, using the same bound as direct local self-recursion.
+
+A root definition can suspend at an operation decorated with Await, including after a completed
+native Command. TPF stores the active recurrence path with the interaction and resumes after that
+Await boundary. Earlier operations retain their captured Query and Command identities. A repeated
+visit to the same Await operation has a new occurrence, so an earlier completion cannot release it.
+Invocation path fingerprints also separate repeated live waits. The current depth limit still applies after resume. Await inside a nested definition remains
+unsupported. See [durable root recurrence](/decisions/0084-root-recurrence-preserves-durable-await).
 
 An explicitly authored recursive call is also an authored consumer. The routing invariant does not
 exempt it. Definition-level recurrence supplies the continuing boundary without adding another

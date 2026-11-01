@@ -441,6 +441,69 @@ steps:
 
 TPF records the union name, declared discriminator, and payload contract in generated branching, replay, and checkpoint-handoff metadata. This makes an observed alternative identifiable without exposing protobuf field numbers. Routing remains payload-type based: if two declared variants intentionally share a payload type, they route together under `accepts`; discriminators are not accepted as routing predicates.
 
+### Native Command followed by an interaction
+
+A native unary (`ONE_TO_ONE`) Command can complete a meaningful effect and then await a separate interaction using
+`await:` with a transport adapter. The Command produces its trusted immediate result before the
+modifier registers the interaction. Recovery reuses that recorded result. Configure canonical
+record persistence through the persistence aspect.
+
+A provider whose effect itself settles through a callback uses the existing native Command
+`await.callback` contract: register completion before dispatch and join callback settlement with
+effect settlement. A callback-capable operation continues to require that callback contract.
+
+### Select which operation outcomes await
+
+For a v3 `LOCAL` unary definition with a flat union operation output, `await.accepts` selects the
+concrete canonical outcome that needs an answer. `await.output` names that outcome's completed
+type. This selector applies to the operation output; the step's own `accepts` still selects its input.
+
+For example, `TurnOutcome` contains `TurnState`, `Review`, and `Result`. The completed output
+`TurnCompletion` contains `TurnState`, `AnsweredReview`, and `Result`:
+
+```yaml
+- name: Evaluate policy
+  service: com.example.EvaluatePolicyService
+  cardinality: ONE_TO_ONE
+  input: ValidatedTurn
+  output: TurnCompletion
+  await:
+    operationOutput: { type: TurnOutcome }
+    accepts: [Review]
+    output: AnsweredReview
+    timeout: PT15M
+    correlation: { strategy: interactionId }
+    transport: { type: interaction-api }
+```
+
+The service returns `TurnOutcome`. A Review payload becomes trusted Await context, and the
+admitted answer produces `AnsweredReview`. Continuing state and terminal Result outcomes pass
+through immediately. The compiler checks that the final output contains exactly these transformed
+canonical leaves. Selected Await currently supports one selected concrete outcome and one
+concrete completion type. All steps in that definition must be ONE_TO_ONE, with scalar admission.
+Callback and streaming selection are rejected. Selected Await also rejects operation-output unions
+with multiple variants sharing one concrete payload type.
+
+A persistence aspect can observe both selected record types at their producing operations:
+
+```yaml
+aspects:
+  persistence:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    config:
+      targetTypes: [Review, Result]
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+```
+
+`targetTypes` expands canonical aliases and unions. In v3 LOCAL pipelines, the generated observer
+extracts a matching payload from a direct value or flat union, invokes the typed plugin, and preserves
+the pipeline value. A selected union payload must have one Java record case. Other
+outcomes pass through. Each producing operation retains its own observer occurrence, including
+across nested definition scopes. Configure the types' persistence mappings as usual. These output
+observations execute before the Await modifier; terminal outputs use normal definition completion.
+
 ### Deferred completion with unions
 
 An operation decorated with `await:` uses the same branch plan as every other step.
@@ -736,7 +799,26 @@ steps:
 
 Here `Decision` is a declared union whose concrete payloads are `AttemptState` and `AttemptResult`. An `AttemptState` outcome re-enters the definition after its authored steps finish; an `AttemptResult` completes it. Continuing outcomes must be concrete input alternatives and must not also be definition output alternatives. The compiler validates reachability and lowers `recur` to its existing bounded self-invocation path. It does not add an authored consumer or require an identity return service.
 
-Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Root recurrence, mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
+Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
+
+Root definitions use the same top-level declaration:
+
+```yaml
+contract: { input: AttemptState, output: AttemptResult }
+recur: [AttemptState]
+steps:
+  - name: Decide next attempt
+    service: com.example.DecideAttemptService
+    cardinality: ONE_TO_ONE
+    input: AttemptState
+    output: Decision
+```
+
+The root can include ordinary operations decorated with Await. The runtime retains its recurrence
+path in the durable interaction and worker input, resumes after the completed modifier, and applies
+the current configured depth bound. Qualified recurrent units include a bounded fingerprint of their invocation
+path; another visit to the same step receives a distinct interaction unit while retries at the same
+path retain their identity. Repeated or late completion of an earlier unit cannot release the later wait.
 
 The runtime bounds recursive depth with `pipeline.max-recursive-depth` (default `64`). A value of `0` allows composition but rejects the first recursive call. Reaching the configured depth is valid; attempting the next call fails immediately with a non-retryable `PipelineRecursionLimitExceededException`.
 

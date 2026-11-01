@@ -81,8 +81,15 @@ operation output, the untrusted submitted payload, and framework-authored comple
 metadata such as `completedAt`. It must be public, constructible, deterministic, and
 side-effect free.
 
+For a union operation output, `await.accepts` can select the canonical payload that needs an
+answer, and `await.output` names its completed outcome. Other outcomes continue immediately.
+The final step output union describes the resulting leaf set. See
+[select which operation outcomes await](/develop/pipeline-template/reference#select-which-operation-outcomes-await)
+for the supported shape and configuration. Persistence aspects can observe Review and Result
+payloads at the producing operations before the Await modifier runs.
+
 When no projector is needed, `await.completion.type` may be omitted and defaults to
-the top-level output. Idempotency paths resolve against `operationOutput`, not the
+the selected `await.output`, or the top-level output when no outcome selector is declared. Idempotency paths resolve against `operationOutput`, not the
 original step input or submitted completion.
 
 TPF persists the operation output and projected completion as canonical values.
@@ -185,8 +192,8 @@ coordination:
 6. publish terminal output before marking the execution successful.
 
 The durable identity combines the root execution, qualified semantic step, and item
-occurrence. Nested and recursive deferred completion additionally needs a stable
-invocation path and is not supported yet.
+occurrence. Root recurrence retains a stable invocation path across deferred
+completion and durable resume. Await in nested pipeline definitions remains unsupported.
 
 ```mermaid
 sequenceDiagram
@@ -223,8 +230,9 @@ participants, not pipeline operations.
 
 ## Current Support Boundary
 
-Authored internal services are supported first. Commands need completion registration
-before effect dispatch and are a separate implementation slice. Query, nested
+Authored internal services and native unary Commands accept `await:`. Ordinary
+transport Await follows completion of the Command operation; provider callbacks
+use registration before effect dispatch as described above. Query, nested
 pipeline invocation, remote/delegated operators, dynamic operation dispatch, and
 packaged Blocks do not yet accept `await:`. Object admission, publication, and
 checkpoint handoff keep their existing ownership models.
