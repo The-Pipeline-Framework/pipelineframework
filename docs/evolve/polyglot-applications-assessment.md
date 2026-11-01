@@ -1,6 +1,6 @@
 # Polyglot TPF applications: native LOCAL and distributed execution
 
-Evidence assessed 30 October 2026; native-runtime requirement and roadmap revised 31 October 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
+Evidence assessed 30 October 2026; native-runtime roadmap revised 31 October 2026; no-local-JVM SDLC requirement added 1 November 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
 
 ## Current conclusion: equivalent LOCAL workflows require native runtimes
 
@@ -28,7 +28,7 @@ flowchart TD
     W -->|Transition result| C
 ```
 
-The compiler remains Java-hosted during the build; the proposed pure synchronous native monolith needs no JVM during execution. Durable execution still needs the Java coordinator, locally or remotely. A native function packaged for Lambda could execute a local chain only if its package includes the native TPF executor; bundling handlers alone does not establish this capability. No native Lambda deployment evidence was found or produced in this investigation.
+The compiler implementation remains Java-based, but the required Node/Python development workflow must not require a local JVM for generation/build or execution. The compiler-authoritative build mechanism is still a tooling gap; remote build/generation is one candidate. The pure synchronous native monolith runs without a JVM executor. Durable execution still needs the Java coordinator; the Node/Python QUEUE_ASYNC development workflow uses a remote coordinator and deployed development workers. Native LOCAL development needs no coordinator. A native function packaged for Lambda could execute a local chain only if its package includes the native TPF executor; bundling handlers alone does not establish this capability. No native Lambda deployment evidence was found or produced in this investigation.
 
 The existing command carries execution/release identity, attempt and a range (`currentStepIndex`, `stopBeforeStepIndex`). Its result distinguishes completion, failure and external suspension. This is reusable framing, not an implementation of the range executor. A lost response can cause a transition to execute again; business-function invocation is not exactly once. [TransitionCommandEnvelope, fields](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionCommandEnvelope.java#L30-L52); [TransitionWireResult, outcome invariants](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/66f10452aec78ac79645292fa4df6cf8479a204c/runtime-protocol/src/main/java/org/pipelineframework/orchestrator/TransitionWireResult.java#L17-L77).
 
@@ -82,7 +82,7 @@ The smallest credible profile is finite linear unary pure transformations, suppo
 
 Keeping Connectors and plugins in Quarkus does not automatically make their semantics available to a native runner. Existing generated step endpoints offer a concrete interoperability path, but Query capture, Command authority, cache policy and plugin acknowledgement cannot all become generic RPC calls. A later boundary needs authenticated context, effect identity, release compatibility and outcome semantics. For this proof, reject such configured capabilities rather than silently omitting them. [RestClientStepRenderer, invocation and side-effect handling](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/blob/26deba06fbee5296c235d7957b4b47fb32708838/src/main/java/org/pipelineframework/processor/renderer/RestClientStepRenderer.java#L170-L268).
 
-Qualification would proceed through the same A → B → C fixture as a native LOCAL monolith, split over two native processes, and a whole-pipeline native worker under the Java coordinator; Python repeats the same contract fixtures. Compiler/build tooling must accept DSL and native functions without handwritten application Java, even if internal compilation still uses a generated Java build host. That build-host independence is a prerequisite, not existing proof from phase-engine unit tests.
+Qualification would proceed through the same A → B → C fixture as a native LOCAL monolith, split over two native processes, and a whole-pipeline native worker under the Java coordinator; Python repeats the same contract fixtures. Compiler/build tooling must accept DSL and native functions without handwritten application Java, with any internal Java build host kept off the developer workstation in the required no-local-JVM workflow. That build-host independence is a prerequisite, not existing proof from phase-engine unit tests.
 
 Acceptance compares canonical outputs, stable step/item identities, failure classification, retry counts, context isolation and semantic observations. Inject transient/nonretryable failure, cancellation and late response; B must not run after a terminal failure in A. Test the boundary distinction that prevents duplicate retries. The durable configuration additionally needs duplicate delivery, lost response, worker death/recovery and release mismatch fixtures; do not equate synchronous success with durable qualification. Unsupported-feature diagnostics and native type checking/import checks are part of acceptance. No implementation or conformance run was performed in this investigation.
 
@@ -90,11 +90,88 @@ Indicative engineering estimate, not measured delivery data: **12–20 engineer-
 
 The remaining decisions concern which unary policies/types form the first profile, how payload/failure compatibility evolves, and how release packaging and worker qualification admit native targets. Operators and remote application services remain useful interoperability paths, but do not satisfy the native pipeline-monolith requirement. The first unary profile is a delivery boundary, not a permanent parity ceiling.
 
+## Boundary qualification and experimental MVP decision
+
+**Boundary qualification is a prerequisite, not a claim that the portable kernel is already isolated.** The overall native LOCAL/distributed roadmap remains in place and unscheduled. The LOCAL-first scope below is a recommended experimental release candidate for decision in contracts #52; it does not cancel later QUEUE_ASYNC requirements or reopen Provider SDK implementation. Experimental status does not relax type, authority or outcome guarantees.
+
+### Required safeguards and stopping rule
+
+Before production runtime implementation, contracts #52, with compiler/runtime/connector owners, must deliver:
+
+1. A versioned, closed execution profile: supported types, cardinalities, policies, transport/platform combinations and explicit exclusions. The compiler rejects unsupported features; native loaders reject incompatible artifacts. A language does not independently interpret DSL or infer missing policy.
+2. An A-return-to-B-invocation responsibility map, covering success, rejection, failure, cancellation and every enabled hook. For each operation identify decision owner, executor, state owner, data crossing the boundary, retry owner, acknowledgement and failure behaviour. Include capture, cache/persistence, telemetry, connections and effect authority even when the answer for the first profile is “excluded”. No responsibility may be assigned vaguely to both hosts.
+3. Shared executable conformance vectors and negative tests, owned by contracts and exercised by examples #27/#28 and system-tests. Compare Java, Node and Python values, identities, attempt counts, context isolation and lifecycle outcomes; test unsupported-feature rejection and forbidden authority access.
+4. A change rule: semantic additions require a shared-contract/profile revision, affected-language impact assessment, named owner and conformance updates. Per-language adapters cannot add independent routing, retry or recovery policy. Specify compatibility/versioning and the maintenance owner before exposing a public SDK.
+
+**Stop when the accepted profile passes its declared layout tests and developer acceptance journey.** Distributed and durable tests apply only to profiles claiming them. Do not expand a LOCAL release merely to complete the whole epic. Conversely, a LOCAL-only release does not complete the distributed/durable roadmap. If the probe cannot isolate the profile without pulling in coordinator/provider internals, record a failed boundary gate and reconsider scope instead of growing the kernel silently. The bounded probe is the explicit research exception to the implementation gate.
+
+### Recommended LOCAL-first candidate
+
+| Dimension | Candidate experimental scope | Deferred or excluded |
+|---|---|---|
+| Languages | Node first for feedback; Python consumes the same profile and fixtures | Node-only success is not completion of the two-language epic |
+| Platform | COMPUTE: native developer process; ordinary native process/container packaging | FUNCTION/Lambda, hosted native production certification |
+| Pipeline transport | LOCAL between all co-located business functions | Distributed business-step GRPC/REST, mixed-language in-process execution |
+| Execution mode | Direct synchronous completion, including native async functions awaited by the shell; finite linear unary execution | QUEUE_ASYNC, HA, durable resume, Await/checkpoints, streaming/branching |
+| Developer tools | DSL plus typed functions; compiler-authoritative generation/build without local Java; native run, test and debugger | Separate native DSL compiler, mandatory local JVM/coordinator |
+| Connectors | Pure LOCAL baseline first; evaluate one existing read-only Quarkus Query through a hosted boundary as a separately gated increment | All-connector parity, Commands, object ingestion/publication, native Provider SDK |
+| Plugins | Only explicitly profiled native observations such as semantic telemetry | Porting persistence/cache/plugin ecosystems or silently ignoring configured hooks |
+
+LOCAL is a transport; QUEUE_ASYNC is an execution mode. A LOCAL pipeline can conceptually participate in durable execution, but this candidate deliberately defers that mode. An HTTPS call to a hosted capability is external I/O, not an in-process LOCAL call and not a promise of general REST business-step placement. Its wire protocol and compiler representation remain a decision. gRPC stubs for every language are not a prerequisite for the pure LOCAL candidate.
+
+### Developer journey and hosted Connector decision
+
+The acceptance journey is: create a typed DSL/functions project, regenerate after a type change, receive useful compiler/editor diagnostics, run tests, place a breakpoint in A and B, and obtain the result in one native process without Java or a coordinator. Pin compiler/runtime versions and produce inspectable artifacts. Pure execution needs no Cloud account or network at run time; a remote build option does not promise offline regeneration.
+
+For an optional hosted Query increment, bind one named capability and host URL, authenticate to a development environment, invoke it from the native shell and inspect the result/failure. TPF Cloud is a candidate initial supported host for that integration, not a requirement for pure LOCAL or evidence that a suitable public gateway already exists. Decide whether Cloud-only qualification is a product constraint before promising support. Connectivity failure must be explicit; recorded fixtures must be labelled and cannot prove live capture/replay.
+
+Separate three surfaces: a typed capability invocation client; a replaceable runtime binding used by TPF; and a public provider-authoring SPI that lets users implement external I/O. Only the first two are candidates for the hosted Query increment. Existing Java provider interfaces are not evidence of a portable SDK or network service; see the [Connector evidence](#connector-evidence).
+
+Contracts #52 must establish whether the hosted Query boundary owns authorisation, credential resolution, canonical identity, capture storage and replay retrieval, and how a local run is identified without coordinator admission. Prove capture-before-return and replay without re-contacting the provider, or exclude Query/replay claims from that increment. No tokens or provider runtime handles travel in business data. A plain HTTP service invocation must not be presented as native Query semantics.
+
+Native provider authoring is a separate possible extension, recorded in connectors #60 without reopening implementation. A future Query-only SPI decision must cover configuration/discovery/lifecycle, host connections, capture, cancellation and error mapping. A Command SPI additionally needs effect authority, idempotency, confirmation, ambiguous outcomes, reconciliation and durable recovery; synchronous pipeline mode does not remove those obligations. Community provider implementations do not remove TPF's SDK compatibility and conformance burden. Do not freeze an empty “future-proof” public SPI before that ownership decision.
+
+### Planning disposition
+
+Contracts #52 owns the profile/ownership/MVP decision; examples #27 probes boundary closure; compiler #46 and runtime #84/#85 implement only an accepted profile; examples #28 separates LOCAL, hosted Query, distributed and durable evidence. Root #478 owns hook-boundary implications. Compiler #47 and runtime #82 remain later unscheduled placement/durability work if the LOCAL-first candidate is selected. Spring work and existing Java support remain intact; no restored issue is closed by this proposal. Connectors #60 remains closed as not planned for implementation, with renewed SPI interest recorded for a separate decision.
+
+Previous programme estimates cover broader placement/durable work and are not an estimate for this candidate MVP. Re-estimate after the profile and hosted Query decision; no dates, staffing, milestone or implementation PRs are authorised.
+
+
 ## Roadmap: native LOCAL equivalence is required
 
-Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python need no JVM executor for the pure synchronous monolith; Java remains build-time compiler infrastructure.
+Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python development requires no local JVM, including build/generation and real QUEUE_ASYNC development; Java compiler/coordinator services may run remotely.
 
 This replaces the adapter-only Quarkus Execution MVP. One semantic authority does not require one runtime implementation: native kernels consume compiler-owned output and must pass shared conformance. The coordinator, Release authority and existing Quarkus provider implementations remain shared. No new coordinator, Provider SDK or independent YAML interpreter is planned. Unary scope is the first increment, not a permanent parity ceiling.
+
+## SDLC requirement: no local JVM for Node/Python development
+
+Local Node/Python authoring, run and debug workflows require no coordinator and no local JVM. A supported generation/build workflow must also require no local JVM; Java remains the compiler implementation technology behind compiler-authoritative tooling. A mandatory JVM hidden in a local container does not satisfy this requirement. Real QUEUE_ASYNC is a separate integration workflow using a remote coordinator and deployed development workers.
+
+| Workflow | Developer workstation | Coordination/build authority |
+|---|---|---|
+| Author, build and generate | Native developer tools; no coordinator or local JVM required | Compiler-owned build path without a local JVM, for example remote build/generation; mechanism remains a design gap |
+| Native LOCAL run and debug | Node/Python application and native TPF runtime in one process | No coordinator required |
+| Real QUEUE_ASYNC development | Generated admission/status/result client | Real remote Java coordinator, durable services and deployed development workers |
+| Optional offline async simulation | Native development harness | Explicit simulation only; not QUEUE_ASYNC durability/HA qualification |
+
+The development coordinator and workers may use shared tenant-isolated or dedicated infrastructure. TPF Cloud is an optional host, not a prerequisite. Java can run remotely during development as well as in production. Production COMPUTE/FUNCTION placement must not require rewriting business functions.
+
+Connecting a remote coordinator to a worker on a developer laptop is optional advanced debugging support. Tunnels, outbound laptop-worker connections and laptop reachability are not prerequisites, dependencies or acceptance gates for LOCAL development or real QUEUE_ASYNC qualification.
+
+### Deployment and tooling gaps to qualify
+
+- **Runtime #82:** package and deploy native development workers and qualify their integration with the remote coordinator through the supported worker protocols. Keep workstation admission/status/result access separate from coordinator-to-deployed-worker dispatch; no special route to a laptop is required.
+- **Runtime #82 with contracts #52:** authenticate developer/worker identity, isolate tenants/environments, register deployed-worker readiness and compatible capabilities, and bind the worker to immutable Release/artifact identity. A code edit must produce/select and deploy a new compatible development release rather than silently mutate a pinned worker. Keep provider credentials and coordinator stores out of application code.
+- **Runtime #82 and examples #28:** prove deployed-worker network loss/recovery, worker restart, expired authority, duplicate delivery and lost responses. Closing or disconnecting the developer client must not stop admitted execution on deployed workers; status/results remain retrievable after reconnecting. Coordinator recovery does not imply exactly-once function execution. Durable execution evidence alone does not establish an HA deployment.
+- **Compiler #46 with existing build/deploy tooling:** provide a compiler-authoritative generation/build path from a workstation without Java. Define authentication, source/artifact transfer, dependency/version pinning, actionable diagnostics and release provenance. A downloaded prebuilt fixture is not proof that a developer can rebuild changed DSL/functions. Offline regeneration is not promised by a remote build option.
+
+### Acceptance gate and scheduling
+
+From a clean Node/Python workstation without Java installed or running, build a changed DSL/functions project through the supported tooling and run/debug the pure pipeline LOCAL with no coordinator. Separately deploy the resulting native workers to a development environment, submit through the generated API to its real remote coordinator and obtain status/results. Qualify deployed-worker identity and the failure cases above for both languages. No coordinator-to-laptop connection is required. Choose the environment by configuration rather than embedding a coordinator. Report LOCAL, simulated async, real durable execution and HA deployment evidence separately.
+
+These are requirements and tracked gaps, not delivered support. Reuse [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82), [compiler #46](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/46) and [examples #28](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/28); no extra speculative implementation issue or new coordinator is needed. Re-estimate remote-build and development-worker deployment/integration work before assigning effort; existing native-kernel estimates do not establish its cost. Optional laptop connectivity does not gate this work. All implementation remains unscheduled, unassigned and outside current Cloud priorities.
+
 
 ## Dependency gates and ownership
 
@@ -236,7 +313,7 @@ Read-only audit 2026-10-30. GitNexus query used first; source then verified. Con
 
 ## Connector evidence implication for the first native profile
 
-Provider implementations remain in the Quarkus host. Native invocation of those capabilities needs separate semantic qualification; the initial pure profile rejects unsupported Connector/plugin declarations. Foreign Provider authoring is not required by native LOCAL equivalence and is outside this programme.
+Provider implementations remain in the Quarkus host. Native invocation of those capabilities needs separate semantic qualification; the initial pure profile rejects unsupported Connector/plugin declarations. Foreign Provider authoring is not required by native LOCAL equivalence and remains outside implementation scope. Renewed interest in a native Query-only SPI is a separate decision candidate in the boundary/MVP section above, not an approved SDK commitment.
 
 ## Cloud evidence limits
 
