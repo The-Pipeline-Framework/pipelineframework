@@ -85,3 +85,9 @@ framework-owned imperative shell.
   before that deployment is retired; they are not silently remapped.
 - ADR-0007 remains authoritative for durable suspension. This decision refines its
   authoring and compiler model and supersedes ADR-0015's standalone Await-step shape.
+
+A completed native Command can also precede a separate interaction using this post-operation
+ordering. The Command records its own publication/effect result, then the ordinary modifier
+registers Await from that trusted result. Callback-capable effects retain ADR-0037's registration
+before dispatch. [ADR-0084](./0084-root-recurrence-preserves-durable-await.md) records the durable
+root recurrence needed when that interaction repeats in the same definition.

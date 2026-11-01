@@ -1,59 +1,42 @@
-# Authored-consumer enforcement prerequisites
+# Authored-consumer migration evidence
 
 Compiler issue [36](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/36)
-requires [one authored consumer per concrete input](/decisions/0081-one-authored-consumer-per-concrete-input).
-Enforcement must follow a working PadelPot migration. The existing authoring rule alone
-does not prove that migration is expressible.
+enforces [one authored consumer per concrete canonical input](/decisions/0081-one-authored-consumer-per-concrete-input)
+after proving an executable PadelPot migration.
 
-## Source evidence
+## Migration
 
-PadelPot's root definition repeats `TurnState`, `AgentResult`, `Review`, and
-`AnsweredReview` consumers. `RequestReview` and `RequestFinalReview` are identity
-`Review → Review` services used to attach Await. The personal-agent definition also
-consumes `TurnState` in its initial Query and its recursive invocation. Moving root
-steps into nested definitions alone therefore does not resolve the complete migration.
+The earlier root repeated `TurnState`, `AgentResult`, `Review`, and `AnsweredReview` consumers.
+Its identity review services carried Await, and its explicit recursive call repeated the initial
+Query's input. The migrated root uses definition-owned `recur: [TurnState]` and checked `Result`
+completion. It removes the identity services and `AgentEnd`, `AgentResult`, and `LoopEnds` wrappers.
 
-The migration constraints have distinct owners:
+Two native Commands publish approved review and final-result history through the configured TPF
+persistence shell. Review publication has ordinary post-operation Await, so terminal results pass
+through without an identity review operation or a branch-selective Await extension. One human
+response operation owns first/final review policy through the trusted `reviewRound` state field.
+Model output cannot replace that trusted state. The agent still uses one Query per observation and
+the existing bounded recursive invocation path.
 
-| Constraint | Source authority | Required proof |
-| --- | --- | --- |
-| Identity-free branch completion needs a checked definition output boundary. | Compiler `PipelineBranchRoutingPlanner` and `PipelineBranchingMetadataGenerator`; runtime `PipelineBranchingRegistry` and `PipelineRunner`. | Implemented: independent branch results complete through the explicit output contract, with checked concrete extraction and union construction. |
-| Recurrence must preserve one authored consumer. | Contracts `PipelineTemplateDefinition`; compiler `PipelineRecurrenceLowering`, `PipelineDefinitionLinker`, `LocalPipelineInvocationRenderer`; runtime `PipelineInvocationSteps`. | Implemented for local unary definitions: `recur` lowers to the existing bounded invocation path, retaining deterministic frames and context. |
-| Nested definitions reject Await, and a pipeline invocation cannot carry Await. | Contracts `PipelineTemplateConfigLoader.readV3PipelineDefinitions`; compiler `StepDefinitionParser`. | Deferred completion resumes at the correct operation and definition boundary, without re-running effects or losing the continuation. |
-| An internal operation's Await applies to every emitted result. | Compiler `DeferredCompletionStepRenderer`; runtime `AwaitCompletionSupport`. | Only the interaction-requiring branch suspends when a meaningful operation produces both review and terminal outcomes; other results preserve their contracts. |
-| Shared observer names can collide across definition scopes. | Compiler `AspectExpansionProcessor`. | Both definition execution orders contain the observer even when its generated implementation name is shared. |
+## Owner evidence
 
-Observer preservation, definition completion, and local unary definition recurrence now have implementation and regression coverage.
-[ADR-0082](/decisions/0082-definition-output-completes-typed-branches) describes completion against
-the existing explicit output contract, including runtime union adaptation.
-[ADR-0083](/decisions/0083-definition-owned-bounded-recurrence) supplies the `recur` declaration.
-The deferred-completion migration remains a prerequisite; nested Await and root recurrence are
-not supplied by these changes.
+| Contract | Regression evidence |
+| --- | --- |
+| Concrete aliases and nested union payloads expand consistently. | Contracts `ConcreteTypeNamesTest`; compiler `AuthoredConsumerValidatorTest`. |
+| Authored consumers are checked before generated lifecycle steps. | `PipelineDiscoveryPhaseTest` rejects separated/reintroduced consumers; recurrence discovery retains `$recur` after validation. |
+| Independent definitions retain observers with shared implementations. | Existing `AspectExpansionProcessorTest` and definition-order tests cover both expansion orders and incompatible domains. |
+| Root recurrence uses existing linking and rendering. | `PipelineRootRecurrenceLoweringTest` checks the generated self-invocation and replay continuation. |
+| Native publication precedes transport Await. | `CommandCallbackParserTest` and `PostOperationCommandAwaitRenderingTest` preserve immediate/final contracts and operation/aspect/modifier order. |
+| Durable suspension preserves the recurrence bound. | `AwaitRootRecurrenceStateTest`, `RootRecurrenceInteractionStoreTest`, and `PipelineRootRecurrenceAwaitTest` cover fresh-coordinator loading, store/worker-codec round trips, exact resume position, and depth after resume. |
+| Repeated qualified waits have separate authority. | `AwaitRecurrenceOccurrenceTest`, `AwaitCycleAdvanceTest`, and execution-state store tests cover bounded stable invocation identities, duplicate/late release, and scalar/itemized Dynamo acknowledgement scope. |
+| The complete application remains executable. | PadelPot's fixture suite exercises correlated human resume, two reviews in one root, concurrency, private history, durable publication, and terminal branches. The compiler retains its migrated YAML under `compatibility/padelpot`. |
 
-## Implementation order
+The application fixture suite passed before authored-consumer rejection was enabled. Candidate
+system tests must also pass for the coordinated PR heads before merge; local cache warming is
+not candidate compatibility evidence. See [cross-repository system tests](./cross-repository-system-tests).
 
-1. Implement definition completion and structural bounded recurrence in the shared
-   model, DSL, compiler, generated contracts, and runtime. Preserve declared union
-   identity at return boundaries rather than returning an unchecked concrete payload.
-2. Implement the deferred-completion boundary needed by a meaningful PadelPot operation.
-   Prove suspension, correlated completion, duplicate admission, timeout, and exact
-   continuation, including any nested context. Do not replace identity services with
-   identity Commands or Query providers.
-3. Migrate the complete PadelPot definition and its executable fixture. Preserve its
-   negotiation policy and human-authorisation boundaries. Do not silently replace
-   bounded recurrence with an arbitrary fixed number of unrolled turns.
-4. Enable authored-consumer validation before model/aspect expansion. Cover concrete
-   and union collisions, disjoint variants, aliases, non-adjacent consumers, reproduced
-   types, Query/Command/Await pairs, independent definitions, and generated observers.
-5. Run the owner suites and retain a passing `tpf/system-tests` result for the exact
-   PR head before merge. When component PRs participate, require a coordinated
-   compatibility set covering their current heads, with success recorded on every
-   participating SHA; otherwise retain this PR's singleton result. Update
-   telemetry/replay rendering and authoring examples with the resulting lifecycle
-   contract.
-
-The strict invariant includes authored recursive calls. Structural recurrence is a
-definition lifecycle boundary, not a validation exception or a second application
-execution path. Local unary recurrence now lowers through the existing bounded
-invocation path. The Await migration and complete PadelPot fixture still require
-implementation and executable evidence before rejection can be enabled.
+[ADR-0082](/decisions/0082-definition-output-completes-typed-branches),
+[ADR-0083](/decisions/0083-definition-owned-bounded-recurrence), and
+[ADR-0084](/decisions/0084-root-recurrence-preserves-durable-await) record the semantic ownership.
+Await inside nested definitions, invocation-level Await, mutual recursion, and streaming recurrence
+remain unsupported.

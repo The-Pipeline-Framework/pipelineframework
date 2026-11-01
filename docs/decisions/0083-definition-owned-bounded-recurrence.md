@@ -53,3 +53,6 @@ and lineage behaviour.
   branch planner after lowering.
 - Compatibility fixtures must exercise the authored declaration and lowered graph,
   rather than constructing an equivalent explicit self-call by hand.
+
+[ADR-0084](./0084-root-recurrence-preserves-durable-await.md) extends this mechanism to root
+definitions and preserves recurrence through durable Await suspension.

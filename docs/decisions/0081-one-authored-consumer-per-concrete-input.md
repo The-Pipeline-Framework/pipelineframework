@@ -54,7 +54,8 @@ into an additional dispatch language. Definition-local scope preserves compositi
   recurrence migration; granting recursive calls an exception would weaken the decision.
 - Before enforcement, the compiler/runtime must support and test an honest PadelPot
   migration, including Await and terminal branches without identity services or type
-  wrappers. This decision does not assert that those capabilities already exist.
+  wrappers. [ADR-0084](./0084-root-recurrence-preserves-durable-await.md) and the migrated
+  PadelPot fixture supply those capabilities and their executable evidence.
 - [The migration prerequisites](/evolve/authored-consumer-migration) record the current
   evidence and the required implementation order. Exact supported syntax remains with
   the DSL, compiler, runtime, and their tests.

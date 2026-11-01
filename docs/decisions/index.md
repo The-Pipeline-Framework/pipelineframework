@@ -94,6 +94,7 @@ publication and the distinction from immutable test and release inputs.
 | [0081](./0081-one-authored-consumer-per-concrete-input.md) | Give each concrete canonical input one authored consumer per Pipeline definition, with structural recurrence and definition-owned observer occurrences. |
 | [0082](./0082-definition-output-completes-typed-branches.md) | Complete typed branches at their definition output boundary without an authored identity merge. |
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Lower definition-owned continuing outcomes through the existing bounded recursive invocation path. |
+| [0084](./0084-root-recurrence-preserves-durable-await.md) | Preserve root recurrence across Await with invocation-scoped wait identities. |
 
 ## Maintenance
 

@@ -38,6 +38,11 @@ worker, and transport attempt IDs do not create new effect identities.
 idempotency key or external identifier; TPF cannot manufacture exactly-once behavior
 after an ambiguous third-party failure.
 
+A native Command can publish an approved business record and then await a separate human or
+external interaction. Its immediate output is the trusted request for the ordinary transport
+Await modifier. Keep callback-capable effects on the callback initiation/settlement contract.
+Do not add an identity service to carry the modifier.
+
 Use the `await:` modifier on the initiating operation when its final answer arrives later: human
 approval, webhook callback, brokered reply, or long-running provider result. The operation first
 produces its trusted immediate output, then execution suspends until the admitted completion is

@@ -441,6 +441,20 @@ steps:
 
 TPF records the union name, declared discriminator, and payload contract in generated branching, replay, and checkpoint-handoff metadata. This makes an observed alternative identifiable without exposing protobuf field numbers. Routing remains payload-type based: if two declared variants intentionally share a payload type, they route together under `accepts`; discriminators are not accepted as routing predicates.
 
+### Native Command followed by an interaction
+
+A native Command can complete a meaningful effect and then await a separate interaction using
+`await:` with a transport adapter. For example, publishing an approved review to conversation
+history produces the trusted `Review`; its Await modifier later projects the human observation
+into `AnsweredReview`. Declare the immediate Java output and `await.operationOutput` as `Review`,
+and the step's final canonical `output` as `AnsweredReview`. Operation-scoped aspects observe the
+completed publication before the modifier registers the interaction. Recovery reuses the recorded
+Command result before entering Await, preserving the logical publication identity.
+
+A provider whose effect itself settles through a callback uses the existing native Command
+`await.callback` contract: register completion before dispatch and join callback settlement with
+effect settlement. A callback-capable operation continues to require that callback contract.
+
 ### Deferred completion with unions
 
 An operation decorated with `await:` uses the same branch plan as every other step.
@@ -736,7 +750,26 @@ steps:
 
 Here `Decision` is a declared union whose concrete payloads are `AttemptState` and `AttemptResult`. An `AttemptState` outcome re-enters the definition after its authored steps finish; an `AttemptResult` completes it. Continuing outcomes must be concrete input alternatives and must not also be definition output alternatives. The compiler validates reachability and lowers `recur` to its existing bounded self-invocation path. It does not add an authored consumer or require an identity return service.
 
-Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Root recurrence, mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
+Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
+
+Root definitions use the same top-level declaration:
+
+```yaml
+contract: { input: AttemptState, output: AttemptResult }
+recur: [AttemptState]
+steps:
+  - name: Decide next attempt
+    service: com.example.DecideAttemptService
+    cardinality: ONE_TO_ONE
+    input: AttemptState
+    output: Decision
+```
+
+The root can include ordinary operations decorated with Await. The runtime retains its recurrence
+path in the durable interaction and worker input, resumes after the completed modifier, and applies
+the current configured depth bound. Qualified recurrent units include a bounded fingerprint of their invocation
+path; another visit to the same step receives a distinct interaction unit while retries at the same
+path retain their identity. Repeated or late completion of an earlier unit cannot release the later wait.
 
 The runtime bounds recursive depth with `pipeline.max-recursive-depth` (default `64`). A value of `0` allows composition but rejects the first recursive call. Reaching the configured depth is valid; attempting the next call fails immediately with a non-retryable `PipelineRecursionLimitExceededException`.
 

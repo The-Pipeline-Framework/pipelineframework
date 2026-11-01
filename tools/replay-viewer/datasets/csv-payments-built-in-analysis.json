@@ -47,5 +47,9 @@
       "firstPublishSeconds": 19.685,
       "lastPublishSeconds": 19.685
     }
+  },
+  "contractScope": {
+    "definitionRecurrence": false,
+    "awaitIdentity": "This historical capture has no recursive invocation path; its existing unit IDs remain valid when root recurrence support is added."
   }
 }
