@@ -53,11 +53,13 @@ sequenceDiagram
     State-->>Work: Deliver resume work in a new invocation
 ```
 
-Native work delivery uses the portable transition path for this handoff. A resident
-consumer can instead use the in-process policy described above. Disabling process
-pollers alone does not change that policy. Use matching runtime and native entry
-adapters, and verify that the first invocation returns before supplying completion.
-The stores and work delivery still need durable production bindings.
+Use matching runtime and native entry adapters, and verify that the first
+invocation returns before supplying completion. A successful package or a test
+whose completion arrives early does not establish this lifecycle. The stores and
+work delivery need durable production bindings; memory providers can exercise the
+same-process lifecycle but cannot prove recovery after a restart. Brokered itemised
+streams may retain a live window as described above; do not assume every Await
+shape has the scalar Command's invocation lifetime.
 
 For step grouping, physical functions and the cost of I/O within an invocation, see
 [grouping work around deferred completion](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion).
