@@ -39,6 +39,23 @@ execution does not imply portable provider authoring. Any supported external cap
 binding must preserve authorisation, capture/effect identity and outcome semantics.
 Unsupported target capabilities are rejected explicitly rather than omitted at runtime.
 
+## Boundary qualification before implementation
+
+Contracts #52 must define a closed, versioned execution profile, a responsibility map for
+each A-return-to-B-invocation operation and enabled hook, and shared conformance/negative
+tests. Name decision, execution, state and retry owners explicitly. Unsupported capabilities
+fail compilation or artifact admission; adapters cannot silently add execution policy.
+
+The bounded research probe may inform this contract. Production runtime implementation
+depends on acceptance of it. Completion is measured against the declared profile and layouts,
+not against accidental dependencies discovered during implementation. Semantic expansion
+requires a shared-contract revision and affected-language conformance review. If the boundary
+cannot be isolated, reconsider the profile rather than importing coordinator/provider authority.
+
+The assessment tracks a LOCAL-first experimental release candidate and separate hosted Query
+and native Provider SPI decisions. Neither candidate changes existing authority or approves
+provider authoring, Cloud integration or implementation scheduling.
+
 ## Rationale
 
 One compiler-owned semantic model can support multiple conforming execution implementations.
@@ -51,7 +68,9 @@ implementation; Node and Python require native kernels with the same conformance
 - Contracts and compiler own portable data, executable projections and compatibility rules;
   runtime owns kernels and coordinator integration; examples/system-tests own executable
   cross-language and cross-artifact evidence.
-- Every claimed execution profile needs LOCAL, distributed and applicable durable conformance.
+- Every claimed execution profile needs conformance for each declared layout and execution mode.
+  A LOCAL-only experimental profile does not claim distributed or durable support; those remain
+  requirements of the broader roadmap.
   A bounded first profile does not constitute full feature parity or remove existing Java support.
 - Payload/failure compatibility, policy resolution, feature qualification and native release
   packaging must be settled before implementation claims. These are tracked by contracts #52.

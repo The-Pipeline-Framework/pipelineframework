@@ -90,6 +90,54 @@ Indicative engineering estimate, not measured delivery data: **12–20 engineer-
 
 The remaining decisions concern which unary policies/types form the first profile, how payload/failure compatibility evolves, and how release packaging and worker qualification admit native targets. Operators and remote application services remain useful interoperability paths, but do not satisfy the native pipeline-monolith requirement. The first unary profile is a delivery boundary, not a permanent parity ceiling.
 
+## Boundary qualification and experimental MVP decision
+
+**Boundary qualification is a prerequisite, not a claim that the portable kernel is already isolated.** The overall native LOCAL/distributed roadmap remains in place and unscheduled. The LOCAL-first scope below is a recommended experimental release candidate for decision in contracts #52; it does not cancel later QUEUE_ASYNC requirements or reopen Provider SDK implementation. Experimental status does not relax type, authority or outcome guarantees.
+
+### Required safeguards and stopping rule
+
+Before production runtime implementation, contracts #52, with compiler/runtime/connector owners, must deliver:
+
+1. A versioned, closed execution profile: supported types, cardinalities, policies, transport/platform combinations and explicit exclusions. The compiler rejects unsupported features; native loaders reject incompatible artifacts. A language does not independently interpret DSL or infer missing policy.
+2. An A-return-to-B-invocation responsibility map, covering success, rejection, failure, cancellation and every enabled hook. For each operation identify decision owner, executor, state owner, data crossing the boundary, retry owner, acknowledgement and failure behaviour. Include capture, cache/persistence, telemetry, connections and effect authority even when the answer for the first profile is “excluded”. No responsibility may be assigned vaguely to both hosts.
+3. Shared executable conformance vectors and negative tests, owned by contracts and exercised by examples #27/#28 and system-tests. Compare Java, Node and Python values, identities, attempt counts, context isolation and lifecycle outcomes; test unsupported-feature rejection and forbidden authority access.
+4. A change rule: semantic additions require a shared-contract/profile revision, affected-language impact assessment, named owner and conformance updates. Per-language adapters cannot add independent routing, retry or recovery policy. Specify compatibility/versioning and the maintenance owner before exposing a public SDK.
+
+**Stop when the accepted profile passes its declared layout tests and developer acceptance journey.** Distributed and durable tests apply only to profiles claiming them. Do not expand a LOCAL release merely to complete the whole epic. Conversely, a LOCAL-only release does not complete the distributed/durable roadmap. If the probe cannot isolate the profile without pulling in coordinator/provider internals, record a failed boundary gate and reconsider scope instead of growing the kernel silently. The bounded probe is the explicit research exception to the implementation gate.
+
+### Recommended LOCAL-first candidate
+
+| Dimension | Candidate experimental scope | Deferred or excluded |
+|---|---|---|
+| Languages | Node first for feedback; Python consumes the same profile and fixtures | Node-only success is not completion of the two-language epic |
+| Platform | COMPUTE: native developer process; ordinary native process/container packaging | FUNCTION/Lambda, hosted native production certification |
+| Pipeline transport | LOCAL between all co-located business functions | Distributed business-step GRPC/REST, mixed-language in-process execution |
+| Execution mode | Direct synchronous completion, including native async functions awaited by the shell; finite linear unary execution | QUEUE_ASYNC, HA, durable resume, Await/checkpoints, streaming/branching |
+| Developer tools | DSL plus typed functions; compiler-authoritative generation/build without local Java; native run, test and debugger | Separate native DSL compiler, mandatory local JVM/coordinator |
+| Connectors | Pure LOCAL baseline first; evaluate one existing read-only Quarkus Query through a hosted boundary as a separately gated increment | All-connector parity, Commands, object ingestion/publication, native Provider SDK |
+| Plugins | Only explicitly profiled native observations such as semantic telemetry | Porting persistence/cache/plugin ecosystems or silently ignoring configured hooks |
+
+LOCAL is a transport; QUEUE_ASYNC is an execution mode. A LOCAL pipeline can conceptually participate in durable execution, but this candidate deliberately defers that mode. An HTTPS call to a hosted capability is external I/O, not an in-process LOCAL call and not a promise of general REST business-step placement. Its wire protocol and compiler representation remain a decision. gRPC stubs for every language are not a prerequisite for the pure LOCAL candidate.
+
+### Developer journey and hosted Connector decision
+
+The acceptance journey is: create a typed DSL/functions project, regenerate after a type change, receive useful compiler/editor diagnostics, run tests, place a breakpoint in A and B, and obtain the result in one native process without Java or a coordinator. Pin compiler/runtime versions and produce inspectable artifacts. Pure execution needs no Cloud account or network at run time; a remote build option does not promise offline regeneration.
+
+For an optional hosted Query increment, bind one named capability and host URL, authenticate to a development environment, invoke it from the native shell and inspect the result/failure. TPF Cloud is a candidate initial supported host for that integration, not a requirement for pure LOCAL or evidence that a suitable public gateway already exists. Decide whether Cloud-only qualification is a product constraint before promising support. Connectivity failure must be explicit; recorded fixtures must be labelled and cannot prove live capture/replay.
+
+Separate three surfaces: a typed capability invocation client; a replaceable runtime binding used by TPF; and a public provider-authoring SPI that lets users implement external I/O. Only the first two are candidates for the hosted Query increment. Existing Java provider interfaces are not evidence of a portable SDK or network service; see the [Connector evidence](#connector-evidence).
+
+Contracts #52 must establish whether the hosted Query boundary owns authorisation, credential resolution, canonical identity, capture storage and replay retrieval, and how a local run is identified without coordinator admission. Prove capture-before-return and replay without re-contacting the provider, or exclude Query/replay claims from that increment. No tokens or provider runtime handles travel in business data. A plain HTTP service invocation must not be presented as native Query semantics.
+
+Native provider authoring is a separate possible extension, recorded in connectors #60 without reopening implementation. A future Query-only SPI decision must cover configuration/discovery/lifecycle, host connections, capture, cancellation and error mapping. A Command SPI additionally needs effect authority, idempotency, confirmation, ambiguous outcomes, reconciliation and durable recovery; synchronous pipeline mode does not remove those obligations. Community provider implementations do not remove TPF's SDK compatibility and conformance burden. Do not freeze an empty “future-proof” public SPI before that ownership decision.
+
+### Planning disposition
+
+Contracts #52 owns the profile/ownership/MVP decision; examples #27 probes boundary closure; compiler #46 and runtime #84/#85 implement only an accepted profile; examples #28 separates LOCAL, hosted Query, distributed and durable evidence. Root #478 owns hook-boundary implications. Compiler #47 and runtime #82 remain later unscheduled placement/durability work if the LOCAL-first candidate is selected. Spring work and existing Java support remain intact; no restored issue is closed by this proposal. Connectors #60 remains closed as not planned for implementation, with renewed SPI interest recorded for a separate decision.
+
+Previous programme estimates cover broader placement/durable work and are not an estimate for this candidate MVP. Re-estimate after the profile and hosted Query decision; no dates, staffing, milestone or implementation PRs are authorised.
+
+
 ## Roadmap: native LOCAL equivalence is required
 
 Author DSL v3 and business functions in the chosen language. Run the supported pipeline profile in one native process using LOCAL calls; distribute it through compiler-generated placement bindings without rewriting functions or changing semantics. Reuse the Java coordinator when durability is required. Node/Python development requires no local JVM, including build/generation and real QUEUE_ASYNC development; Java compiler/coordinator services may run remotely.
@@ -265,7 +313,7 @@ Read-only audit 2026-10-30. GitNexus query used first; source then verified. Con
 
 ## Connector evidence implication for the first native profile
 
-Provider implementations remain in the Quarkus host. Native invocation of those capabilities needs separate semantic qualification; the initial pure profile rejects unsupported Connector/plugin declarations. Foreign Provider authoring is not required by native LOCAL equivalence and is outside this programme.
+Provider implementations remain in the Quarkus host. Native invocation of those capabilities needs separate semantic qualification; the initial pure profile rejects unsupported Connector/plugin declarations. Foreign Provider authoring is not required by native LOCAL equivalence and remains outside implementation scope. Renewed interest in a native Query-only SPI is a separate decision candidate in the boundary/MVP section above, not an approved SDK commitment.
 
 ## Cloud evidence limits
 
