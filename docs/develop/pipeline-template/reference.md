@@ -444,16 +444,63 @@ TPF records the union name, declared discriminator, and payload contract in gene
 ### Native Command followed by an interaction
 
 A native Command can complete a meaningful effect and then await a separate interaction using
-`await:` with a transport adapter. For example, publishing an approved review to conversation
-history produces the trusted `Review`; its Await modifier later projects the human observation
-into `AnsweredReview`. Declare the immediate Java output and `await.operationOutput` as `Review`,
-and the step's final canonical `output` as `AnsweredReview`. Operation-scoped aspects observe the
-completed publication before the modifier registers the interaction. Recovery reuses the recorded
-Command result before entering Await, preserving the logical publication identity.
+`await:` with a transport adapter. The Command produces its trusted immediate result before the
+modifier registers the interaction. Recovery reuses that recorded result. Configure canonical
+record persistence through the persistence aspect.
 
 A provider whose effect itself settles through a callback uses the existing native Command
 `await.callback` contract: register completion before dispatch and join callback settlement with
 effect settlement. A callback-capable operation continues to require that callback contract.
+
+### Select which operation outcomes await
+
+For a v3 `LOCAL` unary definition with a flat union operation output, `await.accepts` selects the
+concrete canonical outcome that needs an answer. `await.output` names that outcome's completed
+type. This selector applies to the operation output; the step's own `accepts` still selects its input.
+
+For example, `TurnOutcome` contains `TurnState`, `Review`, and `Result`. The completed output
+`TurnCompletion` contains `TurnState`, `AnsweredReview`, and `Result`:
+
+```yaml
+- name: Evaluate policy
+  service: com.example.EvaluatePolicyService
+  cardinality: ONE_TO_ONE
+  input: ValidatedTurn
+  output: TurnCompletion
+  await:
+    operationOutput: { type: TurnOutcome }
+    accepts: [Review]
+    output: AnsweredReview
+    timeout: PT15M
+    correlation: { strategy: interactionId }
+    transport: { type: interaction-api }
+```
+
+The service returns `TurnOutcome`. A Review payload becomes trusted Await context, and the
+admitted answer produces `AnsweredReview`. Continuing state and terminal Result outcomes pass
+through immediately. The compiler checks that the final output contains exactly these transformed
+canonical leaves. Selected Await currently supports one selected concrete outcome and one
+concrete completion type. All steps in that definition must be ONE_TO_ONE, with scalar admission.
+Callback and streaming selection are rejected.
+
+A persistence aspect can observe both approved record types at their producing operations:
+
+```yaml
+aspects:
+  persistence:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    config:
+      targetTypes: [Review, Result]
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+```
+
+`targetTypes` expands canonical aliases and unions. In v3 LOCAL pipelines, the generated observer
+extracts a matching payload, invokes the typed plugin, and preserves the pipeline value. Other
+outcomes pass through. Each producing operation retains its own observer occurrence, including
+across nested definition scopes. Configure the types' persistence mappings as usual. These output
+observations execute before the Await modifier; terminal outputs use normal definition completion.
 
 ### Deferred completion with unions
 

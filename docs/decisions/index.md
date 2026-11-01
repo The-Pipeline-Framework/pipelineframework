@@ -95,6 +95,7 @@ publication and the distinction from immutable test and release inputs.
 | [0082](./0082-definition-output-completes-typed-branches.md) | Complete typed branches at their definition output boundary without an authored identity merge. |
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Lower definition-owned continuing outcomes through the existing bounded recursive invocation path. |
 | [0084](./0084-root-recurrence-preserves-durable-await.md) | Preserve root recurrence across Await with invocation-scoped wait identities. |
+| [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 
 ## Maintenance
 

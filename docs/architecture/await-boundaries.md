@@ -81,8 +81,15 @@ operation output, the untrusted submitted payload, and framework-authored comple
 metadata such as `completedAt`. It must be public, constructible, deterministic, and
 side-effect free.
 
+For a union operation output, `await.accepts` can select the canonical payload that needs an
+answer, and `await.output` names its completed outcome. Other outcomes continue immediately.
+The final step output union describes the resulting leaf set. See
+[select which operation outcomes await](/develop/pipeline-template/reference#select-which-operation-outcomes-await)
+for the supported shape and configuration. Persistence aspects can observe Review and Result
+payloads at the producing operations before the Await modifier runs.
+
 When no projector is needed, `await.completion.type` may be omitted and defaults to
-the top-level output. Idempotency paths resolve against `operationOutput`, not the
+the selected `await.output`, or the top-level output when no outcome selector is declared. Idempotency paths resolve against `operationOutput`, not the
 original step input or submitted completion.
 
 TPF persists the operation output and projected completion as canonical values.

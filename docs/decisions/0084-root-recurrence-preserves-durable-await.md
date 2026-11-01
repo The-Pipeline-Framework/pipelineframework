@@ -51,9 +51,11 @@ registration-before-dispatch and joined-settlement semantics of ADR-0037.
   invocation, streaming recurrence, and mutual recursion remain outside this slice.
 - Replay retains the operation's Await overlay and exposes the generated root invocation and its
   continuation edge. Canonical union expansion applies to replay routing as well as validation.
-- PadelPot publishes approved review/result history through real native Commands, attaches human
-  Await to review publication, and handles the response with one policy-owning operation. Its
-  trusted review round is business state. Identity review/return services and nominal loop wrappers
-  are removed. Its migrated YAML and executable fixture tests provide positive migration evidence.
+- PadelPot attaches human Await to the Review outcome of its policy operations, following
+  [ADR-0085](./0085-select-canonical-outcomes-for-await-and-observation.md). Persistence aspects
+  observe Review and Result at those operation outputs. One response operation owns review policy
+  through the trusted business review round. The completed output union describes the actual
+  continuing, answered, and terminal outcomes without adding concrete canonical phase types.
+  Its migrated YAML and executable fixture tests provide positive migration evidence.
 - Qualified unit readers use the shared occurrence parser, including the optional invocation
   fingerprint; existing non-recurrent identities and causal release rules remain unchanged.
