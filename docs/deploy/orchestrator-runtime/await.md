@@ -37,31 +37,30 @@ Provision these for ordinary queue-async hosts as well as AWS Durable hosts.
 
 ## Scalar completion in function hosts
 
-A bounded function invocation must hand a pending scalar completion back to durable
-coordination and return. Keeping an in-process live session open until a callback
-arrives is a different execution policy. Disabling process pollers does not select
-the portable transition policy by itself.
+When an external job takes longer than the current invocation should remain active,
+the function hands the pending scalar Await to durable storage and returns. An
+admitted completion later schedules work to resume the same execution.
 
-The native Lambda work adapter must use invocation-scoped portable processing.
-Resident event and SQS consumers retain their existing in-process policy. A
-configured remote transition worker retains its normal protocol and identity checks;
-applications do not add another scheduler or detach continuation work into an executor.
-The direct-local native handler in runtime 26.10.1 does not make this distinction;
-see [runtime issue #88](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/88).
-Use a matching corrected runtime/handler pair and verify suspension before enabling
-this shape. A non-Await smoke test does not establish it.
+```mermaid
+sequenceDiagram
+    participant Work as Work function
+    participant State as Durable execution and Await state
+    participant Provider as External provider
+    Work->>Provider: Dispatch operation
+    Work->>State: Commit WAITING_EXTERNAL and acknowledgement
+    Note over Work: Invocation returns
+    Provider->>State: Admit correlated completion through callback
+    State-->>Work: Deliver resume work in a new invocation
+```
 
-An execution segment is the work between durable handoffs. Two sequential deferred
-boundaries can produce three segments, while two boundaries on alternative branches
-do not imply that any execution crosses both. Logical segments and deployed function
-count remain separate: one worker may serve successive invocations, or placement may
-assign segments to different workers when their resources or authority justify it.
+Native work delivery uses the portable transition path for this handoff. A resident
+consumer can instead use the in-process policy described above. Disabling process
+pollers alone does not change that policy. Use matching runtime and native entry
+adapters, and verify that the first invocation returns before supplying completion.
+The stores and work delivery still need durable production bindings.
 
-Ordinary awaited network I/O within an active Lambda Event function still contributes
-to its billed duration; reactive code alone does not suspend billing. Returning at
-a durable boundary releases the invocation. Measure initialisation, network time,
-handoff/state costs and memory together before splitting short I/O into more functions.
-See [AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/).
+For step grouping, physical functions and the cost of I/O within an invocation, see
+[grouping work around deferred completion](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion).
 
 ## Version 3 completion representation
 
