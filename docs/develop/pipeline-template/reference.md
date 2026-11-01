@@ -443,7 +443,7 @@ TPF records the union name, declared discriminator, and payload contract in gene
 
 ### Native Command followed by an interaction
 
-A native Command can complete a meaningful effect and then await a separate interaction using
+A native unary (`ONE_TO_ONE`) Command can complete a meaningful effect and then await a separate interaction using
 `await:` with a transport adapter. The Command produces its trusted immediate result before the
 modifier registers the interaction. Recovery reuses that recorded result. Configure canonical
 record persistence through the persistence aspect.
@@ -481,9 +481,10 @@ admitted answer produces `AnsweredReview`. Continuing state and terminal Result 
 through immediately. The compiler checks that the final output contains exactly these transformed
 canonical leaves. Selected Await currently supports one selected concrete outcome and one
 concrete completion type. All steps in that definition must be ONE_TO_ONE, with scalar admission.
-Callback and streaming selection are rejected.
+Callback and streaming selection are rejected. Selected Await also rejects operation-output unions
+with multiple variants sharing one concrete payload type.
 
-A persistence aspect can observe both approved record types at their producing operations:
+A persistence aspect can observe both selected record types at their producing operations:
 
 ```yaml
 aspects:
@@ -497,7 +498,8 @@ aspects:
 ```
 
 `targetTypes` expands canonical aliases and unions. In v3 LOCAL pipelines, the generated observer
-extracts a matching payload, invokes the typed plugin, and preserves the pipeline value. Other
+extracts a matching payload from a direct value or flat union, invokes the typed plugin, and preserves
+the pipeline value. A selected union payload must have one Java record case. Other
 outcomes pass through. Each producing operation retains its own observer occurrence, including
 across nested definition scopes. Configure the types' persistence mappings as usual. These output
 observations execute before the Await modifier; terminal outputs use normal definition completion.

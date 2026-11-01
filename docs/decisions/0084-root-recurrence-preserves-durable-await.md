@@ -56,6 +56,6 @@ registration-before-dispatch and joined-settlement semantics of ADR-0037.
   observe Review and Result at those operation outputs. One response operation owns review policy
   through the trusted business review round. The completed output union describes the actual
   continuing, answered, and terminal outcomes without adding concrete canonical phase types.
-  Its migrated YAML and executable fixture tests provide positive migration evidence.
+  The [migration record](/evolve/authored-consumer-migration) tracks executable evidence and validation gates.
 - Qualified unit readers use the shared occurrence parser, including the optional invocation
   fingerprint; existing non-recurrent identities and causal release rules remain unchanged.

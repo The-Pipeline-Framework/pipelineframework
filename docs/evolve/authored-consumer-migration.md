@@ -2,7 +2,9 @@
 
 Compiler issue [36](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/36)
 enforces [one authored consumer per concrete canonical input](/decisions/0081-one-authored-consumer-per-concrete-input)
-after proving an executable PadelPot migration.
+after proving an executable PadelPot migration. Local fixture evidence is separate from coordinated
+candidate system tests: the exact participating PR heads must pass the shared compatibility gate
+before merge.
 
 ## Migration
 
