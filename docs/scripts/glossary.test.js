@@ -16,6 +16,7 @@ test('public glossary covers the core semantic distinctions', () => {
     'Query',
     'Command',
     'Await boundary',
+    'Execution segment',
     'Public OpenAPI contract',
     'Runtime layout',
     'Build topology'

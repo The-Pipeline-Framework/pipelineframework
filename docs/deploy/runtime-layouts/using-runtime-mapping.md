@@ -48,6 +48,83 @@ defaults:
 
 In durable self-host HA, the generated orchestrator module or monolith artifact can still be run in different roles. Coordinator versus transition worker is a runtime configuration choice, not a runtime-mapping layout value.
 
+## Group work around deferred completion
+
+A function does not need a remote call for every authored Step. Keep short, connected
+work together, return when a scalar Await hands completion to durable coordination,
+and resume after the external result arrives. The work between those handoffs is an
+execution segment.
+
+For example, a Pipeline can prepare a request, dispatch an external test job, then
+check its evidence when the job finishes:
+
+```mermaid
+flowchart LR
+    subgraph First[First worker invocation]
+        Prepare[Prepare request] --> Dispatch[Dispatch external job]
+    end
+    Dispatch --> Wait[Durable scalar Await]
+    Wait -->|Completion admitted| Check
+    subgraph Second[Later worker invocation]
+        Check[Check evidence] --> Report[Produce result]
+    end
+```
+
+These are two execution segments. They can run on the same worker function in
+separate invocations. Two sequential deferred completions can create three segments;
+two Await declarations on alternative branches do not mean an execution crosses both.
+
+For a single application module, this mapping explicitly keeps the authored Steps
+and synthetic work together:
+
+```yaml
+# config/pipeline.runtime.yaml, relative to the application module
+layout: pipeline-runtime
+validation: strict
+runtimes:
+  application: {}
+modules:
+  app:
+    runtime: application
+defaults:
+  runtime: application
+  module: app
+  synthetic:
+    module: app
+```
+
+The compiler must receive the matching module identity (`-Apipeline.module=app`)
+and module directory (`-Apipeline.moduleDir=<application-module-directory>`).
+This groups compiled code; it does not create Lambda functions or select an
+`execution-segment` layout. The supported layout names remain the three listed
+above. Native work delivery controls suspension and resume, as described in
+[Await Runtime Setup](/deploy/orchestrator-runtime/await#scalar-completion-in-function-hosts).
+Physical HTTP ingress, work and recovery functions are deployment roles; their
+number is independent of the number of execution segments. Hosting compiled
+`LOCAL` code in a native function is also distinct from generating per-Step
+`REST`/`FUNCTION` adapters.
+
+### Account for I/O and handoff costs
+
+Ordinary network I/O inside an active Lambda Event-function invocation contributes
+to its billed duration. Reactive execution avoids blocking a thread; it does not
+end that invocation. Durable suspension lets the worker return while the external
+job runs, with storage, delivery and later invocation costs of their own.
+
+Start with grouped short work and measure before splitting it further:
+
+| Observation | Placement consideration |
+| --- | --- |
+| Long external job or human response | Use durable Await rather than retaining an invocation |
+| Several short API calls | Compare their duration with extra cold starts and handoffs before separating them |
+| Large evidence download or CPU-heavy validation | Measure memory, transfer and processing separately; a different worker may be worthwhile |
+| Different credentials or scaling needs | Separate physical workers when the deployment can enforce the required boundary |
+
+Calling another function synchronously while the caller waits does not remove the
+caller's waiting time. Use traces and the selected provider's billing model rather
+than treating the number of functions as a performance target. See
+[AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/).
+
 ## Important for plugins/synthetics
 
 Runtime mapping applies to regular steps and synthetic side-effect steps. If plugin aspects are enabled, ensure synthetic placement is intentional (`defaults.synthetic.module` or explicit synthetic mappings), especially when switching from modular to grouped layouts.

@@ -24,6 +24,7 @@
   "Deployment Target": "A configured provider that deploys an already-verified Release through only the lifecycle stages that target owns.",
   "Discriminated union": "A closed canonical type with explicitly named variants whose discriminator remains stable across generated representations.",
   "Execution posture": "A Command policy constraint describing whether an effect may execute automatically or requires stronger human or machine control.",
+  "Execution segment": "Work executed between durable handoffs, such as a scalar Await suspension and its later resume; it is not a Maven module or a separately deployed function by definition.",
   "Expansion": "A versioned distribution package containing related Blocks, Connectors, types, configuration, examples, documentation, or operational assets; it is not a cardinality.",
   "External representation": "A provider-, protocol-, or application-specific shape mapped explicitly to or from a Canonical type.",
   "Fan-out": "A Step shape in which one input produces multiple output items, normally expressed with ONE_TO_MANY cardinality.",

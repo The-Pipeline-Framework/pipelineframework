@@ -35,6 +35,35 @@ index (`query_execution_key` / `query_execution_sort`, both strings) and
 `query_continuation_due_epoch_ms` number), both with `ALL` projection.
 Provision these for ordinary queue-async hosts as well as AWS Durable hosts.
 
+## Scalar completion in function hosts
+
+When an external job takes longer than the current invocation should remain active,
+the function hands the pending scalar Await to durable storage and returns. An
+admitted completion later schedules work to resume the same execution.
+
+```mermaid
+sequenceDiagram
+    participant Work as Work function
+    participant State as Durable execution and Await state
+    participant Provider as External provider
+    Work->>Provider: Dispatch operation
+    Work->>State: Commit WAITING_EXTERNAL and acknowledgement
+    Note over Work: Invocation returns
+    Provider->>State: Admit correlated completion through callback
+    State-->>Work: Deliver resume work in a new invocation
+```
+
+Use matching runtime and native entry adapters, and verify that the first
+invocation returns before supplying completion. A successful package or a test
+whose completion arrives early does not establish this lifecycle. The stores and
+work delivery need durable production bindings; memory providers can exercise the
+same-process lifecycle but cannot prove recovery after a restart. Brokered itemised
+streams may retain a live window as described above; do not assume every Await
+shape has the scalar Command's invocation lifetime.
+
+For step grouping, physical functions and the cost of I/O within an invocation, see
+[grouping work around deferred completion](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion).
+
 ## Version 3 completion representation
 
 Version 3 generated completion modifiers keep business code on canonical domain types while their adapter
