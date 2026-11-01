@@ -35,6 +35,34 @@ index (`query_execution_key` / `query_execution_sort`, both strings) and
 `query_continuation_due_epoch_ms` number), both with `ALL` projection.
 Provision these for ordinary queue-async hosts as well as AWS Durable hosts.
 
+## Scalar completion in function hosts
+
+A bounded function invocation must hand a pending scalar completion back to durable
+coordination and return. Keeping an in-process live session open until a callback
+arrives is a different execution policy. Disabling process pollers does not select
+the portable transition policy by itself.
+
+The native Lambda work adapter must use invocation-scoped portable processing.
+Resident event and SQS consumers retain their existing in-process policy. A
+configured remote transition worker retains its normal protocol and identity checks;
+applications do not add another scheduler or detach continuation work into an executor.
+The direct-local native handler in runtime 26.10.1 does not make this distinction;
+see [runtime issue #88](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/88).
+Use a matching corrected runtime/handler pair and verify suspension before enabling
+this shape. A non-Await smoke test does not establish it.
+
+An execution segment is the work between durable handoffs. Two sequential deferred
+boundaries can produce three segments, while two boundaries on alternative branches
+do not imply that any execution crosses both. Logical segments and deployed function
+count remain separate: one worker may serve successive invocations, or placement may
+assign segments to different workers when their resources or authority justify it.
+
+Ordinary awaited network I/O within an active Lambda Event function still contributes
+to its billed duration; reactive code alone does not suspend billing. Returning at
+a durable boundary releases the invocation. Measure initialisation, network time,
+handoff/state costs and memory together before splitting short I/O into more functions.
+See [AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/).
+
 ## Version 3 completion representation
 
 Version 3 generated completion modifiers keep business code on canonical domain types while their adapter
