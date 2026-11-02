@@ -24,9 +24,15 @@ def canonical(value):
 
 
 def evidence_identity(selected, bom, policy):
-    managed = ET.parse(bom).find("m:dependencyManagement", NS)
-    require(managed is not None, "BOM dependency management missing")
-    xml = ET.canonicalize(ET.tostring(managed, encoding="unicode"), strip_text=True)
+    model = ET.parse(bom).getroot()
+    require(model.find("m:dependencyManagement", NS) is not None, "BOM dependency management missing")
+    # Product version preparation may change these declarations after the train.
+    # Properties, dependency management and publication behaviour must stay frozen.
+    for path in ("m:parent/m:version", "m:version"):
+        element = model.find(path, NS)
+        if element is not None:
+            element.text = "PRODUCT_VERSION"
+    xml = ET.canonicalize(ET.tostring(model, encoding="unicode"), strip_text=True)
     identity = {"selection": selected, "bomSha256": hashlib.sha256(xml.encode()).hexdigest(), "policySha256": hashlib.sha256(Path(policy).read_bytes()).hexdigest(), "componentsSha256": hashlib.sha256(canonical(load(ROOT / "system-tests/components.yml")).encode()).hexdigest()}
     return {**identity, "selectionSha256": hashlib.sha256(canonical(identity).encode()).hexdigest()}
 
