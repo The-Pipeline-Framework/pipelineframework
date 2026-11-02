@@ -1,5 +1,9 @@
 # Publishing Reference
 
+For current product release selection, follow [Framework Release Process](/evolve/framework-release-process).
+The commands below describe repository-local Maven mechanics and include historical examples. Apply them
+only to components selected for a new release; they do not require lockstep publication across repositories.
+
 ## Public reactor verification
 
 Publish the framework reactor with `./mvnw -f framework/pom.xml`. Before a
@@ -353,10 +357,11 @@ This keeps local builds clean while producing Central-compliant POMs.
 
 ### Tag immutability
 
-Release tags are treated as immutable. If a publish fails after a tag is created, you generally **cannot** reuse the same tag:
-
-- Create a new patch tag (e.g., `v26.2.1`, `v26.2.2`) for retries.
-- If repo rules allow, tags can be created from the GitHub UI as part of a release draft.
+Release tags and published coordinates are immutable. Do not move or recreate a tag to repair publication.
+First reconcile the existing Central deployment. If publication has already succeeded, recover only the
+failed downstream step rather than uploading those coordinates again. A transport or validation recovery
+with unchanged release inputs does not itself require releasing every component again. Changed release
+contents require a new component version and tag through the owning release process.
 
 ### When to Use the Versions Plugin Approach
 

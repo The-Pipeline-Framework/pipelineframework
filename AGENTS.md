@@ -8,6 +8,10 @@
 - Maven-producing repositories publish Central snapshots on pushes to `main` and manually for recovery. Nightly full-train testing remains separate; snapshot publication is not scheduled nightly. Publication is asynchronous, not an atomic cross-repository transaction; a green merge alone does not mean publication completed. Check the publisher before retrying dependent builds.
 - Coordinated changes use compatibility sets before merge. Those runs continue to use exact immutable candidate/baseline versions, not floating snapshots. No composite source reactor or extra Maven profile is introduced.
 - Freeze compatible published coordinates for a stable release. Never alter an already published release, connector contract identity, or pipeline release pin to make development float.
+- Stable product releases select independent component versions in `releases/<product-version>.json`.
+  Read `docs/evolve/framework-release-process.md`; publish only components marked `new`, reuse existing
+  immutable releases for the others, and require the selected-release full train before publishing the BOM.
+  Product version alignment alone is never a reason to bump, tag or publish an unchanged component.
 
 The Pipeline Framework (TPF) is a Java framework for strongly typed application flows.
 Keep the core pure, connect to reality.

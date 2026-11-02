@@ -52,6 +52,12 @@ artifact manifests and publication verification; do not publish internal modules
 or republish unchanged components merely because there is additional headroom.
 CI candidates remain in GitHub Packages/GHCR rather than Maven Central.
 
+Stable components release independently. The product BOM selects the tested versions; unchanged components
+keep their existing coordinates even when the product version advances. Use the explicit selection and
+full-train publication gate in the [Framework Release Process](/evolve/framework-release-process).
+This reduces unnecessary Central publication events, files and bytes. Combining necessary publications
+into one Central bundle is a separate optimisation.
+
 ## Docs deployment
 
 Cloudflare Pages builds `main` automatically at `https://pipelineframework.pages.dev`. This is the

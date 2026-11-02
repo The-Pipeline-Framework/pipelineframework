@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - 'system-tests/**'
+      - 'releases/**'
+      - '.github/workflows/publish.yml'
       - '.github/workflows/system-test-*.yml'
   push:
     branches: [main]
     paths:
       - 'system-tests/**'
+      - 'releases/**'
+      - '.github/workflows/publish.yml'
       - '.github/workflows/system-test-*.yml'
 
 permissions:

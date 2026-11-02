@@ -4,9 +4,14 @@ on:
   schedule:
     - cron: '30 1 * * *'
   workflow_dispatch:
+    inputs:
+      release_manifest:
+        description: 'Optional committed releases/<version>.json: test that stable selection instead of current main'
+        required: false
+        type: string
 
 concurrency:
-  group: tpf-system-test-full-train
+  group: tpf-system-test-full-train-${{ inputs.release_manifest || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -45,6 +50,7 @@ jobs:
           permission-contents: read
 
       - name: Resolve baseline and current main candidates once
+        if: inputs.release_manifest == ''
         id: baseline
         env:
           GH_TOKEN: ${{ steps.source-token.outputs.token }}
@@ -136,6 +142,18 @@ jobs:
             --output resolved/suite-matrix.json
           cp resolved/baseline/baseline.json resolved/baseline.json
 
+      - name: Resolve the explicit independent stable release selection
+        if: inputs.release_manifest != ''
+        env:
+          RELEASE_MANIFEST: ${{ inputs.release_manifest }}
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
+        run: |
+          [[ "$RELEASE_MANIFEST" =~ ^releases/[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]
+          python3 system-tests/scripts/product-release.py resolve --manifest "$RELEASE_MANIFEST" --output resolved
+          node system-tests/scripts/select-full-train.mjs \
+            --components system-tests/components.yml --policy system-tests/policy.yml \
+            --resolvedSet resolved/resolved-set.json --output resolved/suite-matrix.json
+
       - name: Export suite matrix
         id: matrix
         run: |
@@ -182,6 +200,7 @@ jobs:
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       - name: Fetch component manifests
+        if: inputs.release_manifest == ''
         env:
           GHCR_TOKEN: ${{ github.token }}
         run: |
@@ -199,6 +218,10 @@ jobs:
             --components system-tests/components.yml \
             "${manifest_args[@]}" \
             --output materialization-plan.json
+
+      - name: Use attested stable release coordinates
+        if: inputs.release_manifest != ''
+        run: cp resolved/materialization-plan.json materialization-plan.json
 
       - name: Configure package repositories
         env:
@@ -322,6 +345,7 @@ jobs:
     name: Promote green current-main set
     if: >-
       always() && needs.resolve.result == 'success' &&
+      inputs.release_manifest == '' &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
       needs.run-product-shard.result == 'success' &&

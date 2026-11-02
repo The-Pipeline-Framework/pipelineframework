@@ -26,6 +26,13 @@ Each component family keeps its own version property and release lifecycle. Upda
 combination; it does not imply that every repository must release together and it is not a generic semantic-version
 resolver.
 
+Stable release preparation records that combination in `releases/<product-version>.json`. Each component is
+explicitly new or reused; reused components keep their published version and source identity. The selected-release
+mode of the full train tests those stable coordinates with pinned source harnesses. BOM publication requires the
+successful run's evidence for the same selection, BOM dependency-management model and coverage policy.
+An unchanged component does not receive a new release merely to match the product version. A changed POM,
+generated resource or publication input can still require a component release even when Java sources are unchanged.
+
 The coordinating compatibility reactor imports the BOM and declares its cross-artifact dependencies without
 individual versions. Consumer repositories should import a released BOM version once the required component
 artifacts have been published. Maven build-plugin versions remain explicit because dependency-management imports do

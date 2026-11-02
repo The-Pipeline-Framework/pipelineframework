@@ -13,6 +13,7 @@ jobs:
     outputs:
       release_commit: ${{ steps.release.outputs.commit }}
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -33,7 +34,7 @@ jobs:
       - name: Resolve immutable release identity
         id: release
         run: |
-          VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository")"
           test "${GITHUB_REF_NAME#v}" = "$VERSION"
           case "$VERSION" in *-SNAPSHOT) exit 1;; esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -45,6 +46,12 @@ jobs:
         run: |
           grep -Fqx -- "- [v${VERSION}](/) - Current released documentation" docs/versions.md
           grep -Fqx -- "- [v${VERSION}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION})" docs/versions.md
+
+      - name: Require the exact tested independent component selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: python3 system-tests/scripts/product-release.py gate --manifest "releases/$RELEASE_VERSION.json"
 
       - name: Verify publication contract
         run: node scripts/verify-framework-publication.mjs "$GITHUB_WORKSPACE/.m2/repository"
@@ -58,12 +65,18 @@ jobs:
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
+      - name: Record newly published and reused component versions
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: python3 system-tests/scripts/product-release.py notes --manifest "releases/$RELEASE_VERSION.json" > product-release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
+          body_path: product-release-notes.md
 
 
   promote-docs:
