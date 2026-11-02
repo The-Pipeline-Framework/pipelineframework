@@ -134,6 +134,7 @@ test('S3 package authority is bounded to the run and cleanup cannot upload new c
     assert.ok(bucket.Action.includes('s3:DeleteBucket'));
     assert.ok(objects.Action.includes('s3:DeleteObject'));
     assert.ok(objects.Action.includes('s3:GetObject'));
+    assert.ok(objects.Action.includes('s3:GetObjectTagging'), 'Terraform reads object tags during refresh');
     assert.equal(bucket.Action.includes('s3:CreateBucket'), job === 'deploy');
     assert.equal(objects.Action.includes('s3:PutObject'), job === 'deploy');
     assert.ok([...bucket.Action, ...objects.Action].every(action => action !== 's3:*'));
