@@ -46,6 +46,15 @@ submitting a compatibility set; singleton candidates start immediately and are n
 Each run reuses one credential-free materialisation across a small number of coarse parallel shards instead of
 starting one Actions job per suite.
 
+Jib-based application builds use a digest-pinned Eclipse Temurin Java 21 JRE image from Docker Hub.
+Application parent POMs own their image default and preserve the existing non-root UID 185. HA stacks
+pass JVM flags through `JAVA_TOOL_OPTIONS`; `JAVA_OPTS_APPEND` is specific to the old Red Hat launcher.
+Native base images are separate. Historical immutable test sets retain their original build configuration;
+changing the current default does not rewrite previously tested inputs.
+When updating the JVM image, verify Linux amd64/arm64 support, Java startup and the packaged application
+E2E paths. Registry transport failures must not be treated as passing tests or repaired by increasing
+application assertion timeouts.
+
 ## Owner-local verification
 
 Every behaviour has one repository that owns its primary tests:
