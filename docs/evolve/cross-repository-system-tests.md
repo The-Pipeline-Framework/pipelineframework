@@ -446,6 +446,22 @@ Configuration remains on **`pipelineframework`**: secret `AWS_ROLE_ARN`, variabl
 `repo:The-Pipeline-Framework/pipelineframework:ref:refs/heads/main`; copying its ARN to the reference
 repository does not transfer that trust. No new organisation App, package token or IAM trust change is required.
 
+The role's identity policy must also permit the S3 code-bucket lifecycle: a session policy can
+restrict existing permissions, but cannot grant missing permissions. The scoped supplemental policy is
+[`system-tests/aws/search-code-bucket-policy.json`](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/system-tests/aws/search-code-bucket-policy.json).
+It allows bucket creation, configuration, ZIP upload/read, and cleanup only for `search-modular-*-code-*`.
+Apply it to the existing role without replacing its Lambda/IAM policy or changing its trust:
+
+```bash
+aws iam put-role-policy \
+  --role-name GitHubActionsTPFSearchAwsModularMain \
+  --policy-name TPFSearchAwsCodeBucketLifecycle \
+  --policy-document file://system-tests/aws/search-code-bucket-policy.json
+```
+
+The workflow's narrower run-specific session policy remains in force. Verify bucket and object operations
+on a matching disposable prefix, and denial for unrelated buckets, before retrying a failed deployment.
+
 Build and test jobs cannot request OIDC tokens or access AWS, package, dispatch or status credentials.
 Only deployment and cleanup assume the existing role, with session restrictions to resources named
 `search-modular-<run-id>-<attempt>-*`. Terraform source must be a merged reference `main` commit;
