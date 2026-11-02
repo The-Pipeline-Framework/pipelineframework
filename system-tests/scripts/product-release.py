@@ -156,7 +156,7 @@ def pending_publications(publication_plan, artifacts, exists=available):
     return result
 
 
-def attest_artifacts(artifacts, download=fetch):
+def attest_artifacts(artifacts, download=fetch, repository=None):
     result = []
     for artifact in artifacts:
         files = []
@@ -167,6 +167,10 @@ def attest_artifacts(artifacts, download=fetch):
             except urllib.error.HTTPError as error:
                 error.close()
                 raise ValueError(f"selected release artifact is unavailable: {url} (HTTP {error.code})") from error
+            if repository is not None:
+                destination = repository.joinpath(*artifact["groupId"].split("."), artifact["artifactId"], artifact["version"], name)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
             files.append({"name": name, "sha256": hashlib.sha256(content).hexdigest()})
         result.append({**artifact, "coordinate": ":".join(artifact[key] for key in ("groupId", "artifactId", "version", "packaging")), "files": files})
     return {"schemaVersion": 1, "artifacts": result}
@@ -242,6 +246,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("resolved"))
     parser.add_argument("--component", default="coordination")
     parser.add_argument("--pom", type=Path)
+    parser.add_argument("--repository", type=Path, help="Save resolved public files here for the single Maven hydration")
     args = parser.parse_args()
     config = load(ROOT / "system-tests/components.yml")
     manifest = load(args.manifest)
@@ -272,7 +277,7 @@ def main():
     elif args.command == "resolve":
         verify_source_tags(selected)
         args.output.mkdir(parents=True, exist_ok=True)
-        materialized = attest_artifacts(coordinates(selected, config, ROOT / "framework/bom/pom.xml"))
+        materialized = attest_artifacts(coordinates(selected, config, ROOT / "framework/bom/pom.xml"), repository=args.repository)
         resolved = {"schemaVersion": 1, "components": {key: {k: v for k, v in pin.items() if k != "release"} for key, pin in selected["components"].items()}, "testHarnesses": selected["testHarnesses"], "images": {}, "candidates": [], "releaseSelectionSha256": identity["selectionSha256"]}
         for name, value in [("resolved-set.json", resolved), ("materialization-plan.json", materialized), ("release-selection.json", identity)]:
             (args.output / name).write_text(json.dumps(value, indent=2) + "\n")

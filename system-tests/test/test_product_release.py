@@ -106,7 +106,11 @@ class ProductReleaseTest(unittest.TestCase):
 
     def test_availability_is_mandatory_and_hashes_pin_the_downloaded_bytes(self):
         artifact = release.coordinates(self.selected, CONFIG, ROOT / "framework/bom/pom.xml")[0]
-        observed = release.attest_artifacts([artifact], lambda url: url.encode())
+        with tempfile.TemporaryDirectory() as directory:
+            observed = release.attest_artifacts([artifact], lambda url: url.encode(), Path(directory))
+            for file in observed["artifacts"][0]["files"]:
+                cached = Path(directory).joinpath(*artifact["groupId"].split("."), artifact["artifactId"], artifact["version"], file["name"])
+                self.assertEqual(release.artifact_url(artifact, file["name"]).encode(), cached.read_bytes())
         for file in observed["artifacts"][0]["files"]:
             expected = hashlib.sha256(release.artifact_url(artifact, file["name"]).encode()).hexdigest()
             self.assertEqual(expected, file["sha256"])
