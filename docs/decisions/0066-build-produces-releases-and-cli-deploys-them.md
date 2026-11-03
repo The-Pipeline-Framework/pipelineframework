@@ -5,6 +5,8 @@ status: accepted
 
 # ADR-0066: Builds Produce Releases and the TPF CLI Deploys Them
 
+[ADR-0084](./0084-runtime-owns-release-production-and-resolution.md) updates release tooling ownership and adds a CLI preparation entry point. The verification and deployment boundary still applies.
+
 ## Context
 
 Maven has established lifecycle meanings: `package` creates artefacts, `verify` checks them, `install` stores them
