@@ -192,8 +192,8 @@ coordination:
 6. publish terminal output before marking the execution successful.
 
 The durable identity combines the root execution, qualified semantic step, and item
-occurrence. Root recurrence retains a stable invocation path across deferred
-completion and durable resume. Await in nested pipeline definitions remains unsupported.
+occurrence. LOCAL unary calls retain the suspended operation and caller return positions across deferred
+completion. On resume, the child finishes, then each caller runs its remaining steps in order.
 
 ```mermaid
 sequenceDiagram

@@ -80,18 +80,9 @@ A named nested pipeline is an ordinary typed step with its declared input/output
 it for a meaningful subflow, not for every helper call. A local nested call continues
 inside the same execution; it is not a new workflow row or publication boundary.
 
-Definition recurrence uses structured nested invocation with a typed base case. In a
-release supporting `recur: [Type]`, select continuing concrete outcomes on the root or nested local
-unary definition; the compiler supplies the bounded continuation after its authored
-steps. Other branch results complete against the declared output without an identity
-merge service. An explicitly authored recursive call remains an authored consumer and
-must satisfy the same one-consumer rule. An agentic loop should carry trusted
-typed state, use Query for one new model or read-only tool observation, use Command for
-a tool effect, return a continue/complete union, and declare recurrence for the next
-turn. Do not hide the loop or repair attempts inside one Query.
-Root recurrence supports durable Await on its operations. Persisted invocation paths keep the
-current recursion bound effective after resume, and repeated waits receive distinct qualified
-occurrences. Await remains unsupported inside nested definitions or on a pipeline invocation.
+Use an explicit pipeline step with `pipeline: self` at the point where another turn is needed. The named enclosing pipeline is equivalent. Select the continuing variant with `accepts` and return the base case through the definition output. Each concrete input may have one ordinary consumer and one self-call continuation in each definition.
+
+A LOCAL unary negotiation can ask for review inside the named agent. Put selective Await on the policy operation that produces Review. Handle AnsweredReview, then call the agent again if policy returns TurnState. The runtime retains nested return positions across durable suspension.
 Current cardinality, depth, mutual-recursion, and remote-composition limits are
 release-specific. Search the template DSL plus `PipelineRecursion*` and local
 invocation/linker tests before depending on them.

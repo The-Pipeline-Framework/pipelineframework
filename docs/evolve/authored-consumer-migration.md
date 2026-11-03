@@ -10,8 +10,7 @@ before merge.
 
 The earlier root repeated `TurnState`, `AgentResult`, `Review`, and `AnsweredReview` consumers.
 Its identity review services carried Await, and its explicit recursive call repeated the initial
-Query's input. The migrated root uses definition-owned `recur: [TurnState]` and checked `Result`
-completion. It removes the identity services and `AgentEnd`, `AgentResult`, and `LoopEnds` wrappers.
+Query's input. The migrated root calls the named personal-agent definition. Its explicit self-call accepts TurnState, and the root completes Result. It removes the identity services and `AgentEnd`, `AgentResult`, and `LoopEnds` wrappers.
 
 The meaningful policy Commands can produce a continuing state, a Review, or a Result. Their
 Await modifiers select Review and complete it as AnsweredReview. The final TurnCompletion union
@@ -20,8 +19,7 @@ producing operations, preserving the pipeline carrier. One human response operat
 policy through trusted `reviewRound` state. Model output cannot replace that state.
 
 [PadelPot PR #6](https://github.com/The-Pipeline-Framework/padelpot/pull/6) retains the current
-reusable ChatAgent integration. Its 62 fixture tests pass with the application publication helper
-and both publication Commands removed. The compiler's dependency-free YAML fixture preserves the
+reusable ChatAgent integration. Its fixture suite exercises the application with aspect-owned persistence. The compiler's dependency-free YAML fixture preserves the
 original issue baseline; the application suite covers the newer Block integration.
 
 ## Owner evidence
@@ -29,7 +27,7 @@ original issue baseline; the application suite covers the newer Block integratio
 | Contract | Regression evidence |
 | --- | --- |
 | Concrete aliases and nested union payloads expand consistently. | Contracts `ConcreteTypeNamesTest`; compiler `AuthoredConsumerValidatorTest`. |
-| Authored consumers are checked before generated lifecycle steps. | `PipelineDiscoveryPhaseTest` rejects separated/reintroduced consumers; recurrence discovery retains `$recur` after validation. |
+| Authored consumers are checked before generated lifecycle steps. | `PipelineDiscoveryPhaseTest` rejects separated/reintroduced consumers; discovery resolves self-calls in both template and parsed definitions. |
 | Independent definitions retain observers with shared implementations. | Existing `AspectExpansionProcessorTest` and definition-order tests cover both expansion orders and incompatible domains. |
 | Root recurrence uses existing linking and rendering. | `PipelineRootRecurrenceLoweringTest` checks the generated self-invocation and replay continuation. |
 | Selected Review Await preserves continuing and terminal outcomes. | `AwaitBranchSelectionResolverTest`, `DeferredCompletionStepRendererTest`, and metadata tests cover selected payloads, transformed leaf sets, observer occurrences, and carrier contracts. |
@@ -41,9 +39,4 @@ The application fixture suite passed before authored-consumer rejection was enab
 system tests must also pass for the coordinated PR heads before merge; local cache warming is
 not candidate compatibility evidence. See [cross-repository system tests](./cross-repository-system-tests).
 
-[ADR-0082](/decisions/0082-definition-output-completes-typed-branches),
-[ADR-0083](/decisions/0083-definition-owned-bounded-recurrence), and
-[ADR-0084](/decisions/0084-root-recurrence-preserves-durable-await), and
-[ADR-0085](/decisions/0085-select-canonical-outcomes-for-await-and-observation) record the semantic ownership.
-Await inside nested definitions, invocation-level Await, mutual recursion, and streaming recurrence
-remain unsupported.
+[ADR-0086](/decisions/0086-explicit-self-invocation-and-nested-await) records explicit self-invocation and nested suspension. LOCAL unary child completion returns through every caller. The selected-outcome and persistence rules are described by [ADR-0085](/decisions/0085-select-canonical-outcomes-for-await-and-observation).

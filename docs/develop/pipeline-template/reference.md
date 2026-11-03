@@ -778,13 +778,20 @@ pipelines:
   process-attempt:
     input: AttemptState
     output: AttemptResult
-    recur: [AttemptState]
     steps:
       - name: Decide
         service: com.example.DecideService
         cardinality: ONE_TO_ONE
         input: AttemptState
         output: Decision
+      - name: Try again
+        pipeline: self
+        cardinality: ONE_TO_ONE
+        input: Decision
+        accepts: [AttemptState]
+        output: AttemptResult
+        java: { input: com.example.domain.AttemptState, output: com.example.domain.AttemptResult }
+
 
 steps:
   - name: Run attempt
@@ -797,28 +804,11 @@ steps:
       output: com.example.domain.AttemptResult
 ```
 
-Here `Decision` is a declared union whose concrete payloads are `AttemptState` and `AttemptResult`. An `AttemptState` outcome re-enters the definition after its authored steps finish; an `AttemptResult` completes it. Continuing outcomes must be concrete input alternatives and must not also be definition output alternatives. The compiler validates reachability and lowers `recur` to its existing bounded self-invocation path. It does not add an authored consumer or require an identity return service.
+The `Decision` union carries either `AttemptState` or `AttemptResult`. The **Try again** step passes an `AttemptState` into a fresh invocation of `process-attempt`. An `AttemptResult` bypasses the call and completes the definition. Steps following a recursive call process the returned value in the caller.
 
-Definition-level recurrence currently requires `LOCAL` transport and `ONE_TO_ONE` steps. Do not combine it with an explicit authored self-call or terminal merge. The older explicit self-call syntax remains subject to the one-authored-consumer rule. Mutual recursion, streaming recurrence, and Await inside a nested definition are not supported.
+`pipeline: self` refers to the enclosing definition. The explicit name `pipeline: process-attempt` has the same meaning inside that definition. At the top level, `self` calls the root. Each concrete type can select one ordinary operation or call to another definition, and one call back into the enclosing definition. Two self-calls must select disjoint concrete types.
 
-Root definitions use the same top-level declaration:
-
-```yaml
-contract: { input: AttemptState, output: AttemptResult }
-recur: [AttemptState]
-steps:
-  - name: Decide next attempt
-    service: com.example.DecideAttemptService
-    cardinality: ONE_TO_ONE
-    input: AttemptState
-    output: Decision
-```
-
-The root can include ordinary operations decorated with Await. The runtime retains its recurrence
-path in the durable interaction and worker input, resumes after the completed modifier, and applies
-the current configured depth bound. Qualified recurrent units include a bounded fingerprint of their invocation
-path; another visit to the same step receives a distinct interaction unit while retries at the same
-path retain their identity. Repeated or late completion of an earlier unit cannot release the later wait.
+Operations in a LOCAL unary call chain can suspend for Await. In PadelPot the root calls the personal agent. The policy Command can produce a Review and wait for its owner. Completion resumes the agent with AnsweredReview. Its answer policy can emit TurnState for another bounded turn or finish and return to the root. A later visit to the same review operation has its own interaction identity.
 
 The runtime bounds recursive depth with `pipeline.max-recursive-depth` (default `64`). A value of `0` allows composition but rejects the first recursive call. Reaching the configured depth is valid; attempting the next call fails immediately with a non-retryable `PipelineRecursionLimitExceededException`.
 

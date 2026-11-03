@@ -1,9 +1,11 @@
 ---
 title: Definition-owned bounded recurrence
-status: accepted
+status: deprecated
 ---
 
 # ADR-0083: Definition-owned bounded recurrence
+
+Superseded by [ADR-0086](./0086-explicit-self-invocation-and-nested-await).
 
 ## Context
 

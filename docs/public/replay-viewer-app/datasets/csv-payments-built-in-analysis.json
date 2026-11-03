@@ -49,7 +49,7 @@
     }
   },
   "contractScope": {
-    "definitionRecurrence": false,
-    "awaitIdentity": "This historical capture has no recursive invocation path; its existing unit IDs remain valid when root recurrence support is added."
+    "selfInvocation": false,
+    "awaitIdentity": "This historical capture has no recursive invocation path; its existing unit IDs remain valid for root waits."
   }
 }

@@ -96,6 +96,7 @@ publication and the distinction from immutable test and release inputs.
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Lower definition-owned continuing outcomes through the existing bounded recursive invocation path. |
 | [0084](./0084-root-recurrence-preserves-durable-await.md) | Preserve root recurrence across Await with invocation-scoped wait identities. |
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
+| [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
 
 ## Maintenance
 

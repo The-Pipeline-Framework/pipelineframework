@@ -51,24 +51,8 @@ See the [Blocks Guide](/develop/blocks/) for the complete packaging and binding 
 
 ## Use recursion deliberately
 
-For a root or nested local unary definition, use `recur: [Type]` to select continuing concrete outcomes after its
-authored steps finish. Those types must satisfy the definition input; the remaining outcomes must
-satisfy its output. TPF lowers the declaration through its existing bounded nested-invocation path.
-Runtime depth is bounded by `pipeline.max-recursive-depth`. Each generated root continuation
-counts as one level, using the same bound as direct local self-recursion.
+Declare a pipeline step with `pipeline: self` and select the continuing branch with `accepts`. In a nested definition its explicit name is equivalent. In the root, `self` re-enters the root within the owning execution. When that invocation returns, the caller executes its remaining steps.
 
-A root definition can suspend at an operation decorated with Await, including after a completed
-native Command. TPF stores the active recurrence path with the interaction and resumes after that
-Await boundary. Earlier operations retain their captured Query and Command identities. A repeated
-visit to the same Await operation has a new occurrence, so an earlier completion cannot release it.
-Invocation path fingerprints also separate repeated live waits. The current depth limit still applies after resume. Await inside a nested definition remains
-unsupported. See [durable root recurrence](/decisions/0084-root-recurrence-preserves-durable-await).
+Within each definition a concrete type can select one ordinary consumer and one self-call continuation. Calls to other definitions count as ordinary consumers. The recursion bound counts direct self-calls. Ordinary nesting does not consume that allowance.
 
-An explicitly authored recursive call is also an authored consumer. The routing invariant does not
-exempt it. Definition-level recurrence supplies the continuing boundary without adding another
-authored consumer of the initial type. See [ADR-0083](/decisions/0083-definition-owned-bounded-recurrence).
-
-See the [complete reference](./reference#pipeline-contracts) for syntax, capability manifests,
-`blockBindings`, current restrictions, and bounded recursion.
-
-Continue with [Declare Boundaries](./boundaries).
+Await on an operation in a LOCAL ONE_TO_ONE call chain retains the suspended position and caller return positions. The completed value resumes the child and returns through each caller. See the [bounded recursion example](./reference#bounded-recursion).

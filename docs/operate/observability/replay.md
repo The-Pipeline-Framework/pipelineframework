@@ -49,8 +49,8 @@ Await-unit events describe durable fallback. A healthy live itemized handoff is 
 On a recurrent root, later visits to an operation use distinct qualified Await units while
 retaining the same semantic step and overlay. Invocation-path fingerprints keep those visits
 separate in both live completion and durable resume. Correlate by unit and interaction ID when
-examining repeated questions; a prior completion cannot release a later wait. The generated
-`$recur` invocation and its continuation edge appear in the topology.
+examining repeated questions; a prior completion cannot release a later wait. The authored
+self-invocation and its continuation edge appear in the topology.
 
 For callback-deferred Commands, `await_completion_observed` records a callback that
 arrived before dispatch settled. Its amber pulse remains on the Command node; it
