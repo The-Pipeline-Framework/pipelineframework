@@ -504,6 +504,11 @@ outcomes pass through. Each producing operation retains its own observer occurre
 across nested definition scopes. Configure the types' persistence mappings as usual. These output
 observations execute before the Await modifier; terminal outputs use normal definition completion.
 
+For selective Await, a custom `AwaitCompletionProjector<I, C, O>` receives the selected
+request payload as `I`. Its `O` is the selected completed type named by `await.output`.
+The generated adapter wraps that value in the step's final union. For example, selecting Review
+and completing AnsweredReview uses a projector whose output is AnsweredReview.
+
 ### Deferred completion with unions
 
 An operation decorated with `await:` uses the same branch plan as every other step.
