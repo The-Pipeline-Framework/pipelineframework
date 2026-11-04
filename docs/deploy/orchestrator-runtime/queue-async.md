@@ -66,6 +66,16 @@ lease. If that ownership check fails, the worker cancels the transition path and
 its stale version. This lets legitimate long-running transitions exceed one lease interval without
 preventing takeover after a worker actually stops.
 
+To diagnose SQS work delivery, enable the following Quarkus log category on the coordinator:
+
+```properties
+quarkus.log.category."org.pipelineframework.diagnostics.queue".level=DEBUG
+```
+
+Correlate receives, visibility extensions and acknowledgements by message ID. The work action
+links the message to the execution ID used by lease and page-advance events. SQS message
+visibility and the execution lease have separate timers and ownership checks.
+
 The in-memory execution, await, and event providers are also supported for a single-process,
 attended `QUEUE_ASYNC` application. They preserve the queue-async and await lifecycle while that
 process remains alive, but they are not durable execution providers: a restart loses execution,
