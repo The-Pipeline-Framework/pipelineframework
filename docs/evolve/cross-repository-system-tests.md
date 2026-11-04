@@ -462,6 +462,22 @@ aws iam put-role-policy \
 The workflow's narrower run-specific session policy remains in force. Verify bucket and object operations
 on a matching disposable prefix, and denial for unrelated buckets, before retrying a failed deployment.
 
+The queue-backed Search topology also needs the supplemental
+[`search-queue-policy.json`](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/system-tests/aws/search-queue-policy.json)
+identity policy. Apply it before rolling out the queue-backed reference:
+
+```bash
+aws iam put-role-policy \
+  --role-name GitHubActionsTPFSearchAwsModularMain \
+  --policy-name TPFSearchAwsQueueLifecycle \
+  --policy-document file://system-tests/aws/search-queue-policy.json
+```
+
+This grants the deploy role lifecycle access to disposable SQS queues, DynamoDB tables,
+and the worker role's inline policy. The workflow scopes mapping operations to the current
+run's queue-worker function using `lambda:FunctionArn`. Terraform grants the Lambda role
+access to its own queue and tables.
+
 Build and test jobs cannot request OIDC tokens or access AWS, package, dispatch or status credentials.
 Only deployment and cleanup assume the existing role, with session restrictions to resources named
 `search-modular-<run-id>-<attempt>-*`. Terraform source must be a merged reference `main` commit;

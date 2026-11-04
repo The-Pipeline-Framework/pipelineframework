@@ -106,12 +106,21 @@ test('cleanup-only reruns retain the original deployment prefix in Terraform and
   assert.match(cleanup, /TF_VAR_name_prefix: \$\{\{ needs.deploy.outputs.name_prefix \}\}/);
   const rendered = cleanup.replaceAll('${{ needs.deploy.outputs.name_prefix }}', 'search-modular-123-1');
   const policy = JSON.parse(rendered.match(/inline-session-policy: >-\n\s*(\{[\s\S]*?\n\s*\]\})/)[1]);
-  assert.deepEqual(policy.Statement.map((statement) => statement.Resource), [
+  assert.deepEqual([...new Set(policy.Statement.flatMap((statement) => statement.Resource))], [
     'arn:aws:lambda:*:*:function:search-modular-123-1-*',
     'arn:aws:iam::*:role/search-modular-123-1-lambda-exec',
+    'arn:aws:iam::*:role/search-modular-123-1-queue-exec',
+    'arn:aws:sqs:*:*:search-modular-123-1-*',
+    'arn:aws:dynamodb:*:*:table/search-modular-123-1-*',
+    '*',
+    'arn:aws:lambda:*:*:event-source-mapping:*',
     'arn:aws:s3:::search-modular-123-1-code-*',
     'arn:aws:s3:::search-modular-123-1-code-*/*'
   ]);
+  const mapping = policy.Statement.find((statement) => statement.Resource === '*');
+  assert.deepEqual(mapping.Action, ['lambda:GetEventSourceMapping', 'lambda:DeleteEventSourceMapping']);
+  assert.equal(mapping.Condition.ArnLike['lambda:FunctionArn'],
+    'arn:aws:lambda:*:*:function:search-modular-123-1-queue-worker');
 });
 
 test('S3 package authority is bounded to the run and cleanup cannot upload new code', async () => {
@@ -125,12 +134,12 @@ test('S3 package authority is bounded to the run and cleanup cannot upload new c
   for (const [job, expression] of [['deploy', '${{ steps.identity.outputs.name_prefix }}'],
                                  ['cleanup', '${{ needs.deploy.outputs.name_prefix }}']]) {
     const body = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [a-z]+:\n/)[0];
-    const rendered = body.replaceAll(expression, 'search-modular-123-1');
+    const rendered = body.replaceAll(expression, 'search-modular-12345678901-100');
     const policyText = rendered.match(/inline-session-policy: >-\n\s*(\{[\s\S]*?\n\s*\]\})/)[1];
     const policy = JSON.parse(policyText);
     assert.ok(policyText.replaceAll(/\n\s*/g, ' ').length <= 2048, 'STS inline policy must fit its plaintext limit');
-    const bucket = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-123-1-code-*');
-    const objects = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-123-1-code-*/*');
+    const bucket = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-12345678901-100-code-*');
+    const objects = policy.Statement.find(statement => statement.Resource === 'arn:aws:s3:::search-modular-12345678901-100-code-*/*');
     assert.ok(bucket.Action.includes('s3:DeleteBucket'));
     assert.ok(objects.Action.includes('s3:DeleteObject'));
     assert.ok(objects.Action.includes('s3:GetObject'));

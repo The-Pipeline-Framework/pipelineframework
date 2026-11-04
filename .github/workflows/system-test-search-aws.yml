@@ -130,7 +130,12 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ steps.identity.outputs.name_prefix }}-*"},
-              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":"arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-lambda-exec"},
+              {"Effect":"Allow","Action":["iam:CreateRole","iam:DeleteRole","iam:GetRole","iam:AttachRolePolicy","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole","iam:PassRole","iam:TagRole","iam:UntagRole"],"Resource":["arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-lambda-exec","arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-queue-exec"]},
+              {"Effect":"Allow","Action":["iam:PutRolePolicy","iam:DeleteRolePolicy"],"Resource":"arn:aws:iam::*:role/${{ steps.identity.outputs.name_prefix }}-queue-exec"},
+              {"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:*:*:${{ steps.identity.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":"dynamodb:*","Resource":"arn:aws:dynamodb:*:*:table/${{ steps.identity.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":["lambda:CreateEventSourceMapping","lambda:GetEventSourceMapping","lambda:DeleteEventSourceMapping","lambda:UpdateEventSourceMapping"],"Resource":"*","Condition":{"ArnLike":{"lambda:FunctionArn":"arn:aws:lambda:*:*:function:${{ steps.identity.outputs.name_prefix }}-queue-worker"}}},
+              {"Effect":"Allow","Action":"lambda:ListTags","Resource":"arn:aws:lambda:*:*:event-source-mapping:*"},
               {"Effect":"Allow","Action":["s3:CreateBucket","s3:DeleteBucket","s3:ListBucket","s3:ListBucketVersions","s3:GetBucket*","s3:GetEncryptionConfiguration","s3:GetLifecycleConfiguration","s3:GetReplicationConfiguration","s3:GetAccelerateConfiguration","s3:PutBucketTagging","s3:PutBucketPublicAccessBlock","s3:PutEncryptionConfiguration"],"Resource":"arn:aws:s3:::${{ steps.identity.outputs.name_prefix }}-code-*"},
               {"Effect":"Allow","Action":["s3:PutObject","s3:GetObject","s3:GetObjectTagging","s3:DeleteObject","s3:DeleteObjectVersion","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":"arn:aws:s3:::${{ steps.identity.outputs.name_prefix }}-code-*/*"}
             ]}
@@ -256,7 +261,12 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":"lambda:*","Resource":"arn:aws:lambda:*:*:function:${{ needs.deploy.outputs.name_prefix }}-*"},
-              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":"arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-lambda-exec"},
+              {"Effect":"Allow","Action":["iam:DeleteRole","iam:GetRole","iam:DetachRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListRoleTags","iam:ListInstanceProfilesForRole"],"Resource":["arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-lambda-exec","arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-queue-exec"]},
+              {"Effect":"Allow","Action":["iam:DeleteRolePolicy"],"Resource":"arn:aws:iam::*:role/${{ needs.deploy.outputs.name_prefix }}-queue-exec"},
+              {"Effect":"Allow","Action":["sqs:GetQueue*","sqs:ListQueueTags","sqs:DeleteQueue"],"Resource":"arn:aws:sqs:*:*:${{ needs.deploy.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":["dynamodb:Describe*","dynamodb:ListTagsOfResource","dynamodb:DeleteTable"],"Resource":"arn:aws:dynamodb:*:*:table/${{ needs.deploy.outputs.name_prefix }}-*"},
+              {"Effect":"Allow","Action":["lambda:GetEventSourceMapping","lambda:DeleteEventSourceMapping"],"Resource":"*","Condition":{"ArnLike":{"lambda:FunctionArn":"arn:aws:lambda:*:*:function:${{ needs.deploy.outputs.name_prefix }}-queue-worker"}}},
+              {"Effect":"Allow","Action":"lambda:ListTags","Resource":"arn:aws:lambda:*:*:event-source-mapping:*"},
               {"Effect":"Allow","Action":["s3:DeleteBucket","s3:ListBucket","s3:ListBucketVersions","s3:GetBucket*","s3:GetEncryptionConfiguration","s3:GetLifecycleConfiguration","s3:GetReplicationConfiguration","s3:GetAccelerateConfiguration","s3:PutBucketPublicAccessBlock","s3:PutEncryptionConfiguration"],"Resource":"arn:aws:s3:::${{ needs.deploy.outputs.name_prefix }}-code-*"},
               {"Effect":"Allow","Action":["s3:GetObject","s3:GetObjectTagging","s3:DeleteObject","s3:DeleteObjectVersion","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":"arn:aws:s3:::${{ needs.deploy.outputs.name_prefix }}-code-*/*"}
             ]}
