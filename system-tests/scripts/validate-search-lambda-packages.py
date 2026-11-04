@@ -6,10 +6,7 @@ from pathlib import Path
 import zipfile
 
 MAX_EXPANDED_BYTES = 250 * 1024 * 1024
-MODULES = (
-    "crawl-source-svc", "parse-document-svc", "tokenize-content-svc",
-    "embed-content-svc", "index-document-svc", "orchestrator-svc",
-)
+
 
 
 def inspect_package(path):
@@ -28,8 +25,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
-    modules = MODULES + (("function-worker",) if (args.root / "function-worker/pom.xml").is_file() else ())
-    results = [inspect_package(args.root / module / "target/function.zip") for module in modules]
+    packages = sorted(args.root.glob("*/target/function.zip"))
+    if not packages:
+        parser.error("the build produced no Lambda ZIPs")
+    results = [inspect_package(package) for package in packages]
     print(json.dumps(results, indent=2))
 
 

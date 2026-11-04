@@ -59,19 +59,10 @@ jobs:
             --source "$GITHUB_WORKSPACE/references" --sourceSha "$SOURCE_SHA" \
             --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
             --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
-          modules=(crawl-source-svc parse-document-svc tokenize-content-svc embed-content-svc index-document-svc orchestrator-svc)
-          if test -f references/search/function-worker/pom.xml; then
-            modules+=(function-worker)
-          fi
-          packages=()
-          for module in "${modules[@]}"; do
-            packages+=("$module/target/function.zip")
-            test -s "references/search/$module/target/function.zip"
-          done
           python3 coordination/system-tests/scripts/validate-search-lambda-packages.py --root references/search
           (
             cd references/search
-            sha256sum "${packages[@]}" > cloud-SHA256SUMS
+            sha256sum */target/function.zip > cloud-SHA256SUMS
             echo "manifest_checksum=$(sha256sum cloud-SHA256SUMS | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
           )
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -124,8 +115,7 @@ jobs:
           [[ "$EXPECTED_CHECKSUM" =~ ^[a-f0-9]{64}$ ]]
           test "$(sha256sum cloud-SHA256SUMS | cut -d ' ' -f 1)" = "$EXPECTED_CHECKSUM"
           sha256sum --check cloud-SHA256SUMS
-      - name: Set up Java for pinned release registration
-        if: hashFiles('references/search/terraform/aws-modular/register-release.sh') != ''
+      - name: Set up Java for the owner deployment
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
@@ -170,9 +160,11 @@ jobs:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-2' }}
           TF_VAR_name_prefix: ${{ steps.identity.outputs.name_prefix }}
         run: |
-          terraform apply -input=false -auto-approve
-          if test -f register-release.sh; then
-            bash register-release.sh
+          if test -f deploy.sh; then
+            bash deploy.sh
+          else
+            # Historical pinned sources predate the owner deployment entry point.
+            terraform apply -input=false -auto-approve
           fi
           echo "url=$(terraform output -raw orchestrator_function_url)" >> "$GITHUB_OUTPUT"
       - name: Retain state for independent cleanup, including partial apply failure

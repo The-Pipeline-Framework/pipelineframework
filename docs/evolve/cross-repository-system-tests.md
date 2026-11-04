@@ -482,8 +482,8 @@ access to its own queue and tables.
 Build and test jobs cannot request OIDC tokens or access AWS, package, dispatch or status credentials.
 Only deployment and cleanup assume the existing role, with session restrictions to resources named
 `search-modular-<run-id>-<attempt>-*`. Terraform source must be a merged reference `main` commit;
-the exact SHA, not the validation branch ref, is executed. The checksummed HTTP and native-worker ZIPs deploy separately alongside the step ZIPs. The deploy job
-registers and activates their shared release before running the Search tests.
+the exact SHA, not the validation branch ref, is executed. The checksummed HTTP and native-worker ZIPs deploy separately alongside the step ZIPs. The deploy job calls the reference repository’s deployment entry point, which
+registers and activates the shared release before the Search tests.
 All Maven inputs come from the already-materialised train set; snapshots are rejected. Cloud evidence
 requires at least three passing, unskipped owner E2E tests. Both tests and cleanup must succeed before promotion.
 
