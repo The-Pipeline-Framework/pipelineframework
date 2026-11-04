@@ -398,6 +398,7 @@ jobs:
           owner: The-Pipeline-Framework
           repositories: ${{ steps.repositories.outputs.names }}
           permission-contents: read
+          permission-actions: read
 
       - name: Resolve baseline and current main candidates
         id: resolve
@@ -464,8 +465,7 @@ jobs:
                 '.components[$component].sha // .testHarnesses[$component].sha' \
                 resolved/baseline/baseline.json)"
               if [ "$current_sha" != "$baseline_sha" ]; then
-                echo "No attested current-main candidate exists for $component at $current_sha." >&2
-                exit 1
+                bash system-tests/scripts/report-missing-main-candidate.sh "$component" "$repository" "$current_sha"
               fi
             fi
           done < <(jq -r '.components | to_entries[] | [.key, .value.repository] | @tsv' system-tests/components.yml)
