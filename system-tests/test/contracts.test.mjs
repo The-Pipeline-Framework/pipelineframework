@@ -197,7 +197,8 @@ test('configuration covers exactly the eleven extracted repositories', () => {
     'org.pipelineframework:pipelineframework-runtime-parent:pom',
     'org.pipelineframework:pipelineframework-runtime-spring:jar',
     'org.pipelineframework:pipelineframework:jar',
-    'org.pipelineframework:repository-plugin:jar'
+    'org.pipelineframework:repository-plugin:jar',
+    'org.pipelineframework:tpf-release-resolver:jar'
   ]);
   assert.deepEqual(
     config.components.connectors.allowedCoordinates.filter((coordinate) => coordinate.includes(':decision-query-')),
@@ -259,6 +260,22 @@ test('candidate manifest contains only owned immutable Maven coordinates', () =>
   assert.throws(() => validateCandidateManifest(floating, config), /must equal candidateVersion/);
 });
 
+test('historical CLI manifests retain the resolver without allowing new CLI ownership', () => {
+  const cli = manifest({
+    repository: config.components.cli.repository,
+    component: 'cli',
+    mavenArtifacts: [{
+      groupId: 'org.pipelineframework', artifactId: 'tpf-release-resolver', packaging: 'jar',
+      version: '26.9.4-pr.42.abcdef123456',
+      files: [{name: 'tpf-release-resolver-26.9.4-pr.42.abcdef123456.jar', sha256: 'a'.repeat(64)}]
+    }]
+  });
+  cli.provenance.build.repository = cli.repository;
+  cli.provenance.publication.repository = cli.repository;
+  assert.throws(() => validateCandidateManifest(cli, config), /coordinate is not owned by cli/);
+  assert.equal(validateCandidateManifest(cli, config, {requireAllOwnedCoordinates: false}).component, 'cli');
+});
+
 test('runtime candidates require the complete AWS Durable closure', () => {
   const runtime = manifest({
     repository: config.components.runtime.repository,
@@ -273,7 +290,7 @@ test('runtime candidates require the complete AWS Durable closure', () => {
   });
   runtime.provenance.build.repository = runtime.repository;
   runtime.provenance.publication.repository = runtime.repository;
-  assert.equal(validateCandidateManifest(runtime, config).mavenArtifacts.length, 13);
+  assert.equal(validateCandidateManifest(runtime, config).mavenArtifacts.length, 14);
   const aws = runtime.mavenArtifacts.filter(a => a.artifactId.startsWith('pipelineframework-aws-durable-'));
   assert.equal(aws.length, 4);
   for (const missing of aws) {

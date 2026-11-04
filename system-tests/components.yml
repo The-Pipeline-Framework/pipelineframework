@@ -59,12 +59,12 @@
         "org.pipelineframework:pipelineframework-runtime-parent:pom",
         "org.pipelineframework:pipelineframework-runtime-spring:jar",
         "org.pipelineframework:pipelineframework:jar",
-        "org.pipelineframework:repository-plugin:jar"
+        "org.pipelineframework:repository-plugin:jar",
+        "org.pipelineframework:tpf-release-resolver:jar"
       ],
       "consumerVersionProperties": {
         "compiler": "tpf.compiler.version",
-        "contracts": "tpf.contracts.version",
-        "cli": "tpf.release-resolver.version"
+        "contracts": "tpf.contracts.version"
       },
       "suiteManifest": ".github/tpf-system-tests.json"
     },
@@ -78,10 +78,9 @@
         "org.pipelineframework:tpf-deployment-api:jar",
         "org.pipelineframework:tpf-deployment-core:jar",
         "org.pipelineframework:tpf-deployment-target-cloud:jar",
-        "org.pipelineframework:tpf-deployment-target-local:jar",
-        "org.pipelineframework:tpf-release-resolver:jar"
+        "org.pipelineframework:tpf-deployment-target-local:jar"
       ],
-      "consumerVersionProperties": {"contracts": "tpf.version"},
+      "consumerVersionProperties": {"runtime": "tpf.runtime.version"},
       "suiteManifest": ".github/tpf-system-tests.json"
     },
     "connectors": {

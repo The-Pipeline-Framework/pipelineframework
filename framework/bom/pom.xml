@@ -144,7 +144,7 @@
             <dependency>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>tpf-release-resolver</artifactId>
-                <version>${pipelineframework.cli.version}</version>
+                <version>${pipelineframework.runtime.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.pipelineframework</groupId>
