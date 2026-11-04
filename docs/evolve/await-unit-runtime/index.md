@@ -136,7 +136,7 @@ classDiagram
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
     QueueAsyncCoordinator --> QueueAsyncSegmentPipeline : process work item
     QueueAsyncSegmentPipeline --> QueueAsyncExecutionLease : claim and renew
-    QueueAsyncExecutionLease --> ExecutionStateStore : conditional ownership
+    QueueAsyncExecutionLease --> ExecutionStateStore : conditional claim and renewal
     QueueAsyncSegmentPipeline --> SegmentCommitPlan : plan completed/suspended/failed
     QueueAsyncSegmentPipeline --> SegmentCommitEffects : interpret plan
     SegmentCommitEffects --> TerminalPublicationBoundary : publish before success
