@@ -315,13 +315,13 @@ jobs:
   cloud-deployments:
     name: Search AWS modular cloud coverage
     needs: [resolve, materialize]
-    uses: The-Pipeline-Framework/pipelineframework-reference-implementations/.github/workflows/system-test-search-aws.yml@2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4
+    uses: The-Pipeline-Framework/pipelineframework-reference-implementations/.github/workflows/system-test-search-aws.yml@c2e0d76cef5cf397a6dc6720f8375f026281d485
     permissions:
       contents: read
       id-token: write
     with:
       references_sha: ${{ needs.resolve.outputs.references_sha }}
-      tooling_sha: 2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4
+      tooling_sha: c2e0d76cef5cf397a6dc6720f8375f026281d485
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 

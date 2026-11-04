@@ -428,7 +428,7 @@ the same pull request.
 ### Search AWS cloud coverage
 
 The full train calls the pinned
-[Search owner workflow](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4/.github/workflows/system-test-search-aws.yml)
+[Search owner workflow](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/c2e0d76cef5cf397a6dc6720f8375f026281d485/.github/workflows/system-test-search-aws.yml)
 with the resolved reference source and hydrated Maven artifact. That workflow owns
 deployment, release registration, testing, and cleanup. Full-train promotion requires
 the lane to pass. The caller supplies the existing `AWS_ROLE_ARN` secret and `AWS_REGION`
