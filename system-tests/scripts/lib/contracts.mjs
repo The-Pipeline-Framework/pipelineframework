@@ -242,8 +242,8 @@ export function validateCandidateManifest(manifest, config, {requireAllOwnedCoor
     if (artifact.version !== manifest.candidateVersion) fail(`mavenArtifacts[${index}].version must equal candidateVersion`);
     if (!['jar', 'pom', 'maven-plugin'].includes(artifact.packaging)) fail(`mavenArtifacts[${index}].packaging is unsupported`);
     const ownedCoordinate = `${artifact.groupId}:${artifact.artifactId}:${artifact.packaging}`;
-    // Historical CLI manifests predate the resolver's transfer to Runtime.
-    const historicalResolver = !requireAllOwnedCoordinates && component === 'cli'
+    // Historical manifests can reference the resolver's previous Maven coordinate.
+    const historicalResolver = !requireAllOwnedCoordinates && (component === 'cli' || component === 'runtime')
       && ownedCoordinate === 'org.pipelineframework:tpf-release-resolver:jar';
     if (!componentConfig.allowedCoordinates.includes(ownedCoordinate) && !historicalResolver) {
       fail(`mavenArtifacts[${index}] coordinate is not owned by ${component}: ${ownedCoordinate}`);

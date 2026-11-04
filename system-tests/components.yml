@@ -56,11 +56,11 @@
         "org.pipelineframework:pipelineframework-deployment:jar",
         "org.pipelineframework:pipelineframework-release-maven-plugin:jar",
         "org.pipelineframework:pipelineframework-release-producer:jar",
+        "org.pipelineframework:pipelineframework-release-resolver:jar",
         "org.pipelineframework:pipelineframework-runtime-parent:pom",
         "org.pipelineframework:pipelineframework-runtime-spring:jar",
         "org.pipelineframework:pipelineframework:jar",
-        "org.pipelineframework:repository-plugin:jar",
-        "org.pipelineframework:tpf-release-resolver:jar"
+        "org.pipelineframework:repository-plugin:jar"
       ],
       "consumerVersionProperties": {
         "compiler": "tpf.compiler.version",
