@@ -243,7 +243,7 @@ The private, default-disabled Coordinator admin API accepts an absolute descript
 Coordinator process; this is not a file-upload endpoint. Enable and protect the admin API through deployment-owned
 configuration, not through Release fields.
 
-For a closure containing canonical `maven:` locations, native admission uses the shared `tpf-release-resolver`
+For a closure containing canonical `maven:` locations, native admission uses the shared `pipelineframework-release-resolver`
 verifier. It resolves every artefact, verifies every pinned digest and the embedded Pipeline Contract before storing
 the verified closure. It preserves the descriptor unchanged. Existing local file/JAR admission remains available.
 Registering identical immutable content is idempotent; conflicting content for an existing Release identity is rejected.

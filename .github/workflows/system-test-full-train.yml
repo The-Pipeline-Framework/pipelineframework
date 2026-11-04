@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '30 1 * * *'
   workflow_dispatch:
+    inputs:
+      search_aws_only:
+        description: Run hosted Search AWS only with the resolved current-main set
+        type: boolean
+        default: false
 
 concurrency:
   group: tpf-system-test-full-train
@@ -243,6 +248,7 @@ jobs:
           if-no-files-found: error
 
   run-product-shard:
+    if: inputs.search_aws_only != true
     name: ${{ matrix.displayName }}
     needs: [resolve, materialize]
     strategy:
@@ -309,20 +315,20 @@ jobs:
   cloud-deployments:
     name: Search AWS modular cloud coverage
     needs: [resolve, materialize]
-    uses: The-Pipeline-Framework/pipelineframework-reference-implementations/.github/workflows/system-test-search-aws.yml@f005212406cb2fd55261c0b2ea00de4fae1ce5d2
+    uses: The-Pipeline-Framework/pipelineframework-reference-implementations/.github/workflows/system-test-search-aws.yml@2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4
     permissions:
       contents: read
       id-token: write
     with:
       references_sha: ${{ needs.resolve.outputs.references_sha }}
-      tooling_sha: f005212406cb2fd55261c0b2ea00de4fae1ce5d2
+      tooling_sha: 2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
   promote:
     name: Promote green current-main set
     if: >-
-      always() && needs.resolve.result == 'success' &&
+      always() && inputs.search_aws_only != true && needs.resolve.result == 'success' &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
       needs.run-product-shard.result == 'success' &&

@@ -14,9 +14,13 @@ a single artefact, while multi-artefact callers had to repeat compiler metadata.
 
 ## Decision
 
-Runtime owns the shared release producer and resolver. The resolver retains
-`org.pipelineframework:tpf-release-resolver`. The Maven plugin and CLI use
+Runtime owns the shared release producer and resolver. The Maven plugin and CLI use
 the same producer, and the CLI consumes the resolver from Runtime.
+
+The initial transfer kept `org.pipelineframework:tpf-release-resolver`. GitHub Packages
+binds that Maven package to CLI, so Runtime publishes subsequent versions under
+`org.pipelineframework:pipelineframework-release-resolver`. Historical versions remain
+resolvable at their original coordinates.
 
 For whole-pipeline Lambda placement, the caller identifies the ingress and
 worker packages. The producer derives worker step and capability associations
