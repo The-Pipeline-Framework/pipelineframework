@@ -28,7 +28,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
-    results = [inspect_package(args.root / module / "target/function.zip") for module in MODULES]
+    modules = MODULES + (("function-worker",) if (args.root / "function-worker/pom.xml").is_file() else ())
+    results = [inspect_package(args.root / module / "target/function.zip") for module in modules]
     print(json.dumps(results, indent=2))
 
 

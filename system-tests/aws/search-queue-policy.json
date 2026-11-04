@@ -15,6 +15,11 @@
       "Effect": "Allow",
       "Action": ["dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable", "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource", "dynamodb:TagResource", "dynamodb:UntagResource", "dynamodb:UpdateTable", "dynamodb:UpdateTimeToLive", "dynamodb:UpdateContinuousBackups"],
       "Resource": "arn:aws:dynamodb:*:*:table/search-modular-*-*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"],
+      "Resource": "arn:aws:dynamodb:*:*:table/search-modular-*-release"
     }
   ]
 }

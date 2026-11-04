@@ -474,14 +474,16 @@ aws iam put-role-policy \
 ```
 
 This grants the deploy role lifecycle access to disposable SQS queues, DynamoDB tables,
-and the worker role's inline policy. The workflow scopes mapping operations to the current
+and the worker role's inline policy, plus release registration writes on the disposable release table.
+The workflow scopes mapping operations to the current
 run's queue-worker function using `lambda:FunctionArn`. Terraform grants the Lambda role
 access to its own queue and tables.
 
 Build and test jobs cannot request OIDC tokens or access AWS, package, dispatch or status credentials.
 Only deployment and cleanup assume the existing role, with session restrictions to resources named
 `search-modular-<run-id>-<attempt>-*`. Terraform source must be a merged reference `main` commit;
-the exact SHA, not the validation branch ref, is executed. Six checksummed Lambda ZIPs are deployed.
+the exact SHA, not the validation branch ref, is executed. The checksummed HTTP and native-worker ZIPs deploy separately alongside the step ZIPs. The deploy job
+registers and activates their shared release before running the Search tests.
 All Maven inputs come from the already-materialised train set; snapshots are rejected. Cloud evidence
 requires at least three passing, unskipped owner E2E tests. Both tests and cleanup must succeed before promotion.
 
