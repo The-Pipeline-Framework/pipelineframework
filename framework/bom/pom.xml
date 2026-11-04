@@ -143,7 +143,7 @@
             <!-- Build-tool-neutral Release resolution and deployment tooling. -->
             <dependency>
                 <groupId>org.pipelineframework</groupId>
-                <artifactId>tpf-release-resolver</artifactId>
+                <artifactId>pipelineframework-release-resolver</artifactId>
                 <version>${pipelineframework.runtime.version}</version>
             </dependency>
             <dependency>

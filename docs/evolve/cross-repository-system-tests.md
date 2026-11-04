@@ -428,11 +428,16 @@ the same pull request.
 ### Search AWS cloud coverage
 
 The full train calls the pinned
-[Search owner workflow](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/f005212406cb2fd55261c0b2ea00de4fae1ce5d2/.github/workflows/system-test-search-aws.yml)
+[Search owner workflow](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/2552af9c0c3bd3fd33bd4df0958080bd1be6e2c4/.github/workflows/system-test-search-aws.yml)
 with the resolved reference source and hydrated Maven artifact. That workflow owns
 deployment, release registration, testing, and cleanup. Full-train promotion requires
 the lane to pass. The caller supplies the existing `AWS_ROLE_ARN` secret and `AWS_REGION`
 setting.
+
+To run only hosted Search AWS from coordinator `main`, manually dispatch the full-train
+workflow with `search_aws_only` enabled. It resolves and hydrates the same exact
+current-main set as the regular train and skips the product shards and baseline
+promotion.
 
 ## Promotion and rollback
 
