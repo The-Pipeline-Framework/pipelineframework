@@ -144,16 +144,21 @@ class ProductReleaseTest(unittest.TestCase):
         manifest_with_run = {**self.selected, "validationRunId": 123}
         run = {"status": "completed", "conclusion": "success", "event": "workflow_dispatch", "head_branch": "main", "path": ".github/workflows/system-test-full-train.yml"}
         tested = copy.deepcopy(expected)
+        evidence_name = "release-selection.json"
         def api(path):
             if path.endswith("/zip"):
                 buffer = io.BytesIO()
                 with zipfile.ZipFile(buffer, "w") as archive:
-                    archive.writestr("release-selection.json", json.dumps(tested))
+                    archive.writestr(evidence_name, json.dumps(tested))
                 return buffer.getvalue()
             if "/artifacts?" in path:
                 return json.dumps({"artifacts": [{"name": "tpf-full-train-resolved-set", "expired": False, "id": 5}]}).encode()
             return json.dumps(run).encode()
         release.verify_validation_run(manifest_with_run, expected, api)
+        evidence_name = "rehearsal-selection.json"
+        with self.assertRaisesRegex(ValueError, "rehearsal cannot approve publication"):
+            release.verify_validation_run(manifest_with_run, expected, api)
+        evidence_name = "release-selection.json"
         run["conclusion"] = "failure"
         with self.assertRaisesRegex(ValueError, "did not pass"):
             release.verify_validation_run(manifest_with_run, expected, api)

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "sourceRunId": 42011219310,
+  "sourceArtifacts": {
+    "resolution": {
+      "id": 13408141923,
+      "digest": "sha256:86f23664fb3ebe081a849b29c6c295734152f5bb5dab722e5008417968042e8d"
+    },
+    "inputs": {
+      "id": 13408617130,
+      "digest": "sha256:9f758f644a253811b3f18a376e26e70cdc39415f30edabe80ceb88ae31762283"
+    }
+  },
+  "stableOverrides": {
+    "expansions": {
+      "repository": "The-Pipeline-Framework/pipelineframework-expansions",
+      "sha": "e602a6a5519fba4b1e1efa325966a57297d9d49c",
+      "mavenVersion": "26.9.4"
+    }
+  }
+}

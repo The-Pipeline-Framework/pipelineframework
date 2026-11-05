@@ -229,6 +229,7 @@ def verify_validation_run(manifest, expected, api=github):
     require(len(matches) == 1, "release validation evidence artifact missing or expired")
     archive = api("repos/The-Pipeline-Framework/pipelineframework/actions/artifacts/" + str(matches[0]["id"]) + "/zip")
     with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+        require(bundle.namelist().count("release-selection.json") == 1, "release approval requires selected stable release evidence; a rehearsal cannot approve publication")
         tested = json.loads(bundle.read("release-selection.json"))
     require(tested == expected, "successful train tested a different release selection, BOM or coverage policy")
 

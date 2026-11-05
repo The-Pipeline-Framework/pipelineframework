@@ -9,13 +9,17 @@ on:
         description: 'Optional committed releases/<version>.json: test that stable selection instead of current main'
         required: false
         type: string
+      rehearsal_manifest:
+        description: 'Optional committed rehearsals/<name>.json: frozen candidate/stable mix; no publication or promotion'
+        required: false
+        type: string
       search_aws_only:
         description: Run hosted Search AWS only with the resolved current-main set
         type: boolean
         default: false
 
 concurrency:
-  group: tpf-system-test-full-train-${{ inputs.release_manifest || 'main' }}
+  group: tpf-system-test-full-train-${{ inputs.release_manifest || inputs.rehearsal_manifest || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -25,6 +29,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       baseline_digest: ${{ steps.baseline.outputs.digest }}
@@ -32,9 +37,9 @@ jobs:
       references_sha: ${{ steps.matrix.outputs.references_sha }}
     steps:
       - name: Reject conflicting dispatch modes
-        if: inputs.release_manifest != '' && inputs.search_aws_only == true
+        if: (inputs.release_manifest != '' && inputs.rehearsal_manifest != '') || ((inputs.release_manifest != '' || inputs.rehearsal_manifest != '') && inputs.search_aws_only == true)
         run: |
-          echo "::error::Select either release_manifest or search_aws_only. Release evidence requires the complete Full Train."
+          echo "::error::Select only one dispatch mode. Release and rehearsal evidence require the complete Full Train."
           exit 1
 
       - name: Checkout
@@ -61,7 +66,7 @@ jobs:
           permission-actions: read
 
       - name: Resolve baseline and current main candidates once
-        if: inputs.release_manifest == ''
+        if: inputs.release_manifest == '' && inputs.rehearsal_manifest == ''
         id: baseline
         env:
           GH_TOKEN: ${{ steps.source-token.outputs.token }}
@@ -165,8 +170,22 @@ jobs:
             --components system-tests/components.yml --policy system-tests/policy.yml \
             --resolvedSet resolved/resolved-set.json --output resolved/suite-matrix.json
 
+      - name: Resolve a frozen candidate and stable-component rehearsal
+        if: inputs.rehearsal_manifest != ''
+        env:
+          REHEARSAL_MANIFEST: ${{ inputs.rehearsal_manifest }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TOKEN: ${{ steps.source-token.outputs.token }}
+        run: |
+          [[ "$REHEARSAL_MANIFEST" =~ ^rehearsals/[a-zA-Z0-9_-]+\.json$ ]]
+          python3 system-tests/scripts/rehearsal-inputs.py prepare --manifest "$REHEARSAL_MANIFEST" \
+            --output resolved --repository "$RUNNER_TEMP/tpf-stable-seed"
+          node system-tests/scripts/select-full-train.mjs \
+            --components system-tests/components.yml --policy system-tests/policy.yml \
+            --resolvedSet resolved/resolved-set.json --output resolved/suite-matrix.json
+
       - name: Preserve already attested stable files for one hydration
-        if: inputs.release_manifest != ''
+        if: inputs.release_manifest != '' || inputs.rehearsal_manifest != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tpf-full-train-stable-seed
@@ -198,6 +217,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -219,6 +239,16 @@ jobs:
       - name: Install ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
+      - name: Restore the checksummed source hydration for a rehearsal
+        if: inputs.rehearsal_manifest != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 system-tests/scripts/rehearsal-inputs.py restore \
+            --manifest resolved/rehearsal-input.json --output "$RUNNER_TEMP/tpf-source-inputs"
+          mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
+          tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf "$RUNNER_TEMP/tpf-source-inputs/tpf-system-test-m2.tar.gz"
+
       - name: Fetch component manifests
         if: inputs.release_manifest == ''
         env:
@@ -231,7 +261,7 @@ jobs:
             mkdir -p "component-manifests/$component"
             oras pull "$image@$digest" --output "component-manifests/$component"
             test -f "component-manifests/$component/candidate-manifest.json"
-          done < <(jq -r '.components | to_entries[] | [.key, .value.manifestDigest] | @tsv' resolved/resolved-set.json)
+          done < <(jq -r '.components | to_entries[] | select(.value.manifestDigest != null) | [.key, .value.manifestDigest] | @tsv' resolved/resolved-set.json)
           manifest_args=()
           while IFS= read -r manifest; do manifest_args+=(--manifests "$manifest"); done < <(find component-manifests -name candidate-manifest.json -type f | sort)
           node system-tests/scripts/materialization-plan.mjs \
@@ -243,8 +273,15 @@ jobs:
         if: inputs.release_manifest != ''
         run: cp resolved/materialization-plan.json materialization-plan.json
 
+      - name: Add attested stable overrides to the rehearsal plan
+        if: inputs.rehearsal_manifest != ''
+        run: |
+          python3 system-tests/scripts/rehearsal-inputs.py merge \
+            --manifest resolved/stable-materialization-plan.json \
+            --candidate-plan materialization-plan.json --output materialization-plan.json
+
       - name: Reuse attested stable files without downloading them from Central again
-        if: inputs.release_manifest != ''
+        if: inputs.release_manifest != '' || inputs.rehearsal_manifest != ''
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: tpf-full-train-stable-seed
@@ -261,15 +298,19 @@ jobs:
             --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
 
       - name: Hydrate and attest local Maven repository
+        env:
+          REHEARSAL_MANIFEST: ${{ inputs.rehearsal_manifest }}
         run: |
           local_repo="$RUNNER_TEMP/tpf-system-test-m2"
-          while IFS= read -r coordinate; do
-            ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
-              org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
-              -Dartifact="$coordinate" -Dtransitive=true \
-              -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
-              -Dmaven.repo.local="$local_repo" --no-transfer-progress
-          done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          if [ -z "$REHEARSAL_MANIFEST" ]; then
+            while IFS= read -r coordinate; do
+              ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
+                org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
+                -Dartifact="$coordinate" -Dtransitive=true \
+                -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
+                -Dmaven.repo.local="$local_repo" --no-transfer-progress
+            done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          fi
           node system-tests/scripts/verify-materialized.mjs \
             --plan materialization-plan.json --repository "$local_repo"
           mkdir -p "$RUNNER_TEMP/tpf-test-inputs"
@@ -387,7 +428,7 @@ jobs:
     name: Promote green current-main set
     if: >-
       always() && needs.resolve.result == 'success' &&
-      inputs.release_manifest == '' && inputs.search_aws_only != true &&
+      inputs.release_manifest == '' && inputs.rehearsal_manifest == '' && inputs.search_aws_only != true &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
       needs.run-product-shard.result == 'success' &&
