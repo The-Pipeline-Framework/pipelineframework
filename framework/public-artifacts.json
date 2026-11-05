@@ -165,10 +165,10 @@
       "note": "Published from the standalone pipelineframework-cli repository"
     },
     {
-      "artifactId": "tpf-release-resolver",
+      "artifactId": "pipelineframework-release-resolver",
       "packaging": "jar",
       "ownership": "external",
-      "note": "Published from the standalone pipelineframework-cli repository"
+      "note": "Published from the standalone pipelineframework-runtime repository"
     },
     {
       "artifactId": "tpf-deployment-api",

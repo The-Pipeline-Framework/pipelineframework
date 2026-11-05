@@ -427,38 +427,17 @@ the same pull request.
 
 ### Search AWS cloud coverage
 
-The full train runs AWS modular Search through `system-test-search-aws.yml`, separately from the
-credential-free shards. The reference repository owns the application, Terraform and
-`AwsLambdaModularEndToEndIT`; the coordinator owns the relay and its existing GitHub OIDC identity.
+The full train calls the pinned
+[Search owner workflow](https://github.com/The-Pipeline-Framework/pipelineframework-reference-implementations/blob/c2e0d76cef5cf397a6dc6720f8375f026281d485/.github/workflows/system-test-search-aws.yml)
+with the resolved reference source and hydrated Maven artifact. That workflow owns
+deployment, release registration, testing, and cleanup. Full-train promotion requires
+the lane to pass. The caller supplies the existing `AWS_ROLE_ARN` secret and `AWS_REGION`
+setting.
 
-```mermaid
-flowchart LR
-    Inputs[Exact resolved set and hydrated Maven archive] --> Build[Credential-free Lambda build]
-    Build --> Deploy[Scoped AWS deployment]
-    Deploy --> Test[Credential-free owner E2E tests]
-    Deploy --> Cleanup[Always-run Terraform cleanup]
-    Test --> Cleanup
-    Cleanup --> Gate[Full-train promotion gate]
-```
-
-Configuration remains on **`pipelineframework`**: secret `AWS_ROLE_ARN`, variable `AWS_REGION`
-(currently `us-east-2`). The existing role `GitHubActionsTPFSearchAwsModularMain` trusts
-`repo:The-Pipeline-Framework/pipelineframework:ref:refs/heads/main`; copying its ARN to the reference
-repository does not transfer that trust. No new organisation App, package token or IAM trust change is required.
-
-Build and test jobs cannot request OIDC tokens or access AWS, package, dispatch or status credentials.
-Only deployment and cleanup assume the existing role, with session restrictions to resources named
-`search-modular-<run-id>-<attempt>-*`. Terraform source must be a merged reference `main` commit;
-the exact SHA, not the validation branch ref, is executed. Six checksummed Lambda ZIPs are deployed.
-All Maven inputs come from the already-materialised train set; snapshots are rejected. Cloud evidence
-requires at least three passing, unskipped owner E2E tests. Both tests and cleanup must succeed before promotion.
-
-Terraform state is retained as `search-aws-terraform-state` for one day, including partial apply failures.
-The cleanup job runs after failed tests and cancellation when GitHub can schedule it. If the runner is lost
-before state upload, or cleanup fails, inspect the AWS resources with this run/attempt prefix and recover using
-the retained state where available; do not retry under a different prefix and leave the previous resources behind.
-Function URLs are public, as in the existing disposable Search fixture. Do not use production data in this lane.
-Azure coverage and live-provider coverage are separate capabilities; this AWS relay does not claim them.
+To run only hosted Search AWS from coordinator `main`, manually dispatch the full-train
+workflow with `search_aws_only` enabled. It resolves and hydrates the same exact
+current-main set as the regular train and skips the product shards and baseline
+promotion.
 
 ## Promotion and rollback
 

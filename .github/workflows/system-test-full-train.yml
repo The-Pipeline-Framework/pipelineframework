@@ -9,6 +9,10 @@ on:
         description: 'Optional committed releases/<version>.json: test that stable selection instead of current main'
         required: false
         type: string
+      search_aws_only:
+        description: Run hosted Search AWS only with the resolved current-main set
+        type: boolean
+        default: false
 
 concurrency:
   group: tpf-system-test-full-train-${{ inputs.release_manifest || 'main' }}
@@ -27,6 +31,12 @@ jobs:
       has_candidates: ${{ steps.baseline.outputs.has_candidates }}
       references_sha: ${{ steps.matrix.outputs.references_sha }}
     steps:
+      - name: Reject conflicting dispatch modes
+        if: inputs.release_manifest != '' && inputs.search_aws_only == true
+        run: |
+          echo "::error::Select either release_manifest or search_aws_only. Release evidence requires the complete Full Train."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,6 +58,7 @@ jobs:
           owner: The-Pipeline-Framework
           repositories: ${{ steps.repositories.outputs.names }}
           permission-contents: read
+          permission-actions: read
 
       - name: Resolve baseline and current main candidates once
         if: inputs.release_manifest == ''
@@ -114,8 +125,7 @@ jobs:
                 '.components[$component].sha // .testHarnesses[$component].sha' \
                 resolved/baseline/baseline.json)"
               if [ "$current_sha" != "$baseline_sha" ]; then
-                echo "No attested current-main candidate exists for $component at $current_sha." >&2
-                exit 1
+                bash system-tests/scripts/report-missing-main-candidate.sh "$component" "$repository" "$current_sha"
               fi
             fi
           done < <(jq -r '.components | to_entries[] | [.key, .value.repository] | @tsv' system-tests/components.yml)
@@ -283,6 +293,7 @@ jobs:
           if-no-files-found: error
 
   run-product-shard:
+    if: inputs.search_aws_only != true
     name: ${{ matrix.displayName }}
     needs: [resolve, materialize]
     strategy:
@@ -349,12 +360,13 @@ jobs:
   cloud-deployments:
     name: Search AWS modular cloud coverage
     needs: [resolve, materialize]
-    uses: ./.github/workflows/system-test-search-aws.yml
+    uses: The-Pipeline-Framework/pipelineframework-reference-implementations/.github/workflows/system-test-search-aws.yml@c2e0d76cef5cf397a6dc6720f8375f026281d485
     permissions:
       contents: read
       id-token: write
     with:
       references_sha: ${{ needs.resolve.outputs.references_sha }}
+      tooling_sha: c2e0d76cef5cf397a6dc6720f8375f026281d485
     secrets:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
@@ -362,7 +374,7 @@ jobs:
     name: Promote green current-main set
     if: >-
       always() && needs.resolve.result == 'success' &&
-      inputs.release_manifest == '' &&
+      inputs.release_manifest == '' && inputs.search_aws_only != true &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
       needs.run-product-shard.result == 'success' &&

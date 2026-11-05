@@ -57,7 +57,7 @@ test('singleton candidates overlay the current attested main set', () => {
   assert.ok(effectiveBaseline > reconcile, 'PR overlay must consume the reconciled current-main baseline');
   assert.ok(overlay > reconcile, 'current-main reconciliation must precede the PR overlay');
   assert.match(workflow, /candidate_image:main-\$component/);
-  assert.match(workflow, /No attested current-main candidate exists for \$component at \$current_sha/);
+  assert.match(workflow, /report-missing-main-candidate\.sh "\$component" "\$repository" "\$current_sha"/);
 });
 
 test('candidate status reporting survives a failed coalescing dispatch', () => {

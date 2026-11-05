@@ -36,8 +36,8 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
    ```
 
 2. **Record downstream version targets**: identify the compiler, contracts, runtime, connector, Block, and Expansion versions that the examples, reference implementations, CSV Kafka Payments, and RAG Turnkey repositories must consume after publication.
-3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, and the docs build before pushing.
-4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
+3. **Complete the selected release checks.** Follow the [Framework Release Process](/evolve/framework-release-process) to commit the selection manifest, pass the selected-release Full Train, record its `validationRunId`, freeze the BOM pins, and complete the required local checks.
+4. **Push the release tag after the release process succeeds.** Push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
 
 The GitHub Actions workflow automatically:

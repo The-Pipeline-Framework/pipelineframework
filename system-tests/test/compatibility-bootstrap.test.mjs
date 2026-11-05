@@ -10,8 +10,9 @@ const sha = 'abcdef1234567890abcdef1234567890abcdef12';
 const target = (component, pullRequestNumber) => ({component, pullRequestNumber, sourceSha: sha, baseSha: sha, baseRef: 'main', merged: false});
 const currentHead = (value) => ({baseRef: 'main', sha: value});
 
-test('runtime admission consumes the exact shared CLI resolver candidate', () => {
-  assert.equal(config.components.runtime.consumerVersionProperties.cli, 'tpf.release-resolver.version');
+test('CLI consumes the exact Runtime release tooling candidate', () => {
+  assert.equal(config.components.cli.consumerVersionProperties.runtime, 'tpf.runtime.version');
+  assert.equal(config.components.runtime.consumerVersionProperties.cli, undefined);
   const baselineSha = '1'.repeat(40);
   const heads = Object.fromEntries(Object.keys(config.components).map((component) => [component, currentHead(baselineSha)]));
   const baseline = {
@@ -20,11 +21,11 @@ test('runtime admission consumes the exact shared CLI resolver candidate', () =>
     testHarnesses: Object.fromEntries(Object.entries(config.components).filter(([, value]) => value.kind === 'source')
       .map(([component, value]) => [component, {repository: value.repository, sha: baselineSha}]))
   };
-  const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('cli', 9)]}, heads);
-  assert.ok(augmented.targets.some(({component}) => component === 'runtime'), 'resolver changes must rebuild runtime admission');
+  const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('runtime', 9)]}, heads);
+  assert.ok(augmented.targets.some(({component}) => component === 'cli'), 'Runtime release tooling changes must rebuild CLI');
   const ordered = orderedMavenTargets(config, new Map(augmented.targets.map((value) => [value.component, value])))
     .map(({component}) => component);
-  assert.ok(ordered.indexOf('cli') < ordered.indexOf('runtime'));
+  assert.ok(ordered.indexOf('runtime') < ordered.indexOf('cli'));
 });
 
 test('compatibility Maven candidates build in dependency order', () => {
@@ -40,7 +41,7 @@ test('compatibility Maven candidates build in dependency order', () => {
   ]);
   assert.deepEqual(
     orderedMavenTargets(config, targets).map(({component}) => component),
-    ['contracts', 'cli', 'compiler', 'runtime', 'connectors']
+    ['contracts', 'compiler', 'runtime', 'cli', 'connectors']
   );
 });
 
@@ -133,7 +134,7 @@ test('compatibility targets include changed main and the complete downstream Mav
   const augmented = augmentCompatibilityTargets(config, baseline, {schemaVersion: 1, targets: [target('runtime', 7)]}, heads);
   assert.deepEqual(
     augmented.targets.filter(({component}) => config.components[component].kind === 'maven').map(({component}) => component),
-    ['blocks', 'connectors', 'expansions', 'runtime']
+    ['blocks', 'cli', 'connectors', 'expansions', 'runtime']
   );
   assert.equal(augmented.targets.find(({component}) => component === 'connectors').sourceSha, connectorSha);
   assert.equal(augmented.targets.find(({component}) => component === 'blocks').pullRequestNumber, null);
