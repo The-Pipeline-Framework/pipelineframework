@@ -28,7 +28,8 @@ definition's remaining steps finish. An explicit terminal merge remains useful w
 must choose or transform the final result.
 
 The compiler checks authored version 3 steps before lifecycle, plugin, or aspect expansion.
-Give each concrete canonical input type one authored consumer within a definition. For a union
+Each concrete canonical input type may select one ordinary consumer and one self-call continuation
+within a definition. Ordinary consumers include operations and calls to other definitions. For a union
 input, count only the concrete variants selected by `accepts`; disjoint selections can share the
 same union declaration. Query, Command, and Await-decorated operations follow the same authoring
 rule. A later phase requiring different authority or behaviour needs a meaningful canonical type
@@ -37,7 +38,8 @@ positions. Generated plugin observers do not count as authored consumers.
 
 This rule applies independently to every nested definition. Shared observer implementations still
 have a separate occurrence in each definition's execution order. See
-[ADR-0081](/decisions/0081-one-authored-consumer-per-concrete-input) for the routing decision.
+[ADR-0086](/decisions/0086-explicit-self-invocation-and-nested-await) for the current routing rule
+and its refinement of [ADR-0081](/decisions/0081-one-authored-consumer-per-concrete-input).
 
 ## Reuse a definition
 

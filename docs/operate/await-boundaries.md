@@ -4,6 +4,60 @@ Deferred completion is operationally different from an ordinary remote call. An 
 
 Use this page with [Await Boundaries](/architecture/await-boundaries) for application design, [Await runtime setup](/deploy/orchestrator-runtime/await) for adapter configuration, and [Replay & Live Topology](/operate/observability/replay) for replay inspection.
 
+## Resuming nested Await
+
+For a LOCAL `ONE_TO_ONE` call chain, a pending interaction retains the suspended
+definition and execution position, each caller's callsite and return position, and
+the invocation occurrences. These positions refer to the compiled steps of the
+execution's pinned release, including generated observers.
+
+When PadelPot waits for owner review inside `personal-agent`, an admitted answer
+resumes after the Await operation in that invocation. The child executes its
+remaining policy and observers, completes its declared output, and returns through
+the caller's remaining steps. A self-call can repeat negotiation before returning.
+Another operation may suspend during child execution or caller return. The owning
+root publishes its terminal output only when the complete execution finishes.
+
+```mermaid
+flowchart TD
+    W[Stored interaction and invocation continuation] --> A[Admit correlated completion]
+    A --> C[Resume suspended child after Await]
+    C --> D[Complete child output contract]
+    D --> P[Execute remaining caller steps and observers]
+    P --> M{More callers?}
+    M -->|Yes| D
+    M -->|No| R[Complete owning root and publish terminal output]
+    C -->|Another Await| W
+    P -->|Another Await| W
+```
+
+When diagnosing a failed or unexpected resume:
+
+1. Identify the execution, its pinned release, and the pending interaction. Repeated
+   reviews at the same authored operation can belong to different invocation occurrences.
+   Submit the answer for the interaction that requested it.
+2. Keep that release's compiled definition orders and invocation bindings available.
+   A saved position must resolve against the same release when the process restarts.
+3. Inspect the retained definition identity, callsite, occurrence and suspended
+   position together. A root range with no remaining steps can still have unfinished
+   child work.
+4. Check `pipeline.max-recursive-depth` when a self-call fails. Self-calls consume
+   the recursion allowance; ordinary nested composition does not.
+5. Treat a rejected continuation version or mismatched callsite as a release or
+   metadata compatibility failure. Restore the pinned release and investigate the
+   stored record before retrying. Editing positions to fit a newer topology risks
+   resuming a different operation.
+
+Legacy records without an invocation continuation resume as root executions.
+Incompatible retained continuation metadata is rejected explicitly. Existing
+correlation, duplicate admission, timeout and cancellation rules also apply to
+nested waits. Keep external dispatch and effects idempotent across recovery.
+
+Await belongs on the operation inside the definition. Attaching `await:` directly
+to a pipeline invocation is unsupported. The compiler rejects nested suspension
+paths crossing streaming or remote invocation boundaries. Existing non-nested
+streaming Await has its own live-session and durable-fallback behaviour below.
+
 ## Runtime Requirements
 
 For a native Command using `await.callback`, completion is registered before effect dispatch. The

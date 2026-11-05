@@ -577,7 +577,10 @@ Unmarked required/non-null record components use `T` and reject Java null. Every
 
 Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
 
-For unary local services whose Java signature uses those exact generated domain records, wrappers, or unions, TPF uses the generated adapters directly. Application-owned Java types remain representation boundaries and continue to need the normal explicit mapper path. Branch-aware v3 templates keep the existing `accepts` and `terminal` model; a union remains a closed contract rather than a predicate or graph language. Remote/framework-owned steps and non-unary v3 execution remain pending.
+For unary local services whose Java signature uses those exact generated domain records, wrappers, or unions, TPF uses the generated adapters directly. Application-owned Java types remain representation boundaries and continue to need the normal explicit mapper path. Branch-aware v3 templates keep the existing `accepts` and `terminal` model; a union remains a closed contract rather than a predicate or graph language. Native Query and Command steps and streaming cardinalities have their own supported bindings.
+Nested Await requires a LOCAL `ONE_TO_ONE` invocation chain. Selective Await additionally requires
+a flat union operation output and one selected concrete outcome, as described above.
+See [Await runtime setup](/deploy/orchestrator-runtime/await) for ordinary streaming Await.
 
 ## Pipeline contracts
 

@@ -1,6 +1,8 @@
 ---
 title: Explicit self-invocation and nested Await
 status: accepted
+supersedes: [ADR-0083, ADR-0087]
+refines: [ADR-0004, ADR-0081]
 ---
 
 # ADR-0086. Explicit self-invocation and nested Await

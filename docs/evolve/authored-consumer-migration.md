@@ -2,9 +2,8 @@
 
 Compiler issue [36](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/36)
 enforces [one authored consumer per concrete canonical input](/decisions/0081-one-authored-consumer-per-concrete-input)
-after proving an executable PadelPot migration. Local fixture evidence is separate from coordinated
-candidate system tests: the exact participating PR heads must pass the shared compatibility gate
-before merge.
+after proving an executable PadelPot migration. The coordinated component PRs and the PadelPot
+application migration merged on 5 November 2026.
 
 ## Migration
 
@@ -35,8 +34,11 @@ original issue baseline; the application suite covers the newer Block integratio
 | Repeated qualified waits have separate authority. | `AwaitRecurrenceOccurrenceTest`, `AwaitCycleAdvanceTest`, and execution-state store tests cover bounded stable invocation identities, duplicate/late release, and scalar/itemized Dynamo acknowledgement scope. |
 | The complete application remains executable. | PadelPot's fixture suite exercises correlated human resume, two reviews in one root, concurrency, private history, aspect-owned persistence, and terminal branches. The compiler retains its migrated YAML under `compatibility/padelpot`. |
 
-The application fixture suite passed before authored-consumer rejection was enabled. Candidate
-system tests must also pass for the coordinated PR heads before merge; local cache warming is
-not candidate compatibility evidence. See [cross-repository system tests](./cross-repository-system-tests).
+The [coordinated compatibility run](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/41940174786)
+passed for the exact contracts, compiler, runtime, Blocks and examples heads that merged.
+PadelPot was outside that set. Its 63 fixture tests passed separately, and its default and
+Ollama configurations packaged successfully before merge. These application checks used
+the worktree's local dependency cache; they do not extend the coordinated gate to PadelPot.
+See [cross-repository system tests](./cross-repository-system-tests) for the gate's scope.
 
 [ADR-0086](/decisions/0086-explicit-self-invocation-and-nested-await) records explicit self-invocation and nested suspension. LOCAL unary child completion returns through every caller. The selected-outcome and persistence rules are described by [ADR-0085](/decisions/0085-select-canonical-outcomes-for-await-and-observation).

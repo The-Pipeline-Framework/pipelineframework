@@ -1,9 +1,18 @@
 ---
 title: One authored consumer per concrete input
 status: accepted
+refined_by: ADR-0086
 ---
 
 # ADR-0081: One authored consumer per concrete input
+
+::: warning Partially superseded by ADR-0086
+The current rule permits one ordinary consumer and one authored self-call continuation
+per concrete canonical input type, independently within each definition. The recurrence
+restriction below records the earlier decision and was superseded by
+[ADR-0086](./0086-explicit-self-invocation-and-nested-await). Ordinary-consumer uniqueness
+and definition-local observer occurrences remain in force.
+:::
 
 ## Context
 
