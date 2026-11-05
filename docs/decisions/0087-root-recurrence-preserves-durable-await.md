@@ -3,7 +3,7 @@ title: Root recurrence preserves durable Await
 status: deprecated
 ---
 
-# ADR-0084: Root recurrence preserves durable Await
+# ADR-0087: Root recurrence preserves durable Await
 
 Superseded by [ADR-0086](./0086-explicit-self-invocation-and-nested-await).
 

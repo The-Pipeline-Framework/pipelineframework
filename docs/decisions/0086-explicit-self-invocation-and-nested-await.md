@@ -13,4 +13,4 @@ Durable Await can suspend an operation in a LOCAL unary invocation chain. The ex
 
 In PadelPot, negotiation policy produces Review when owner authority is needed. The persistence aspect records the prompt, selective Await admits the correlated answer, and the answer policy produces a result or an updated TurnState. An explicit self-call takes that state into the next turn. The root can call negotiation like any other named pipeline.
 
-This decision supersedes the definition declaration from [ADR-0083](./0083-definition-owned-bounded-recurrence) and the root-only suspension model from [ADR-0084](./0084-root-recurrence-preserves-durable-await). Existing declarations migrate to a pipeline step whose selector names the continuing concrete types.
+This decision supersedes the definition declaration from [ADR-0083](./0083-definition-owned-bounded-recurrence) and the root-only suspension model from [ADR-0087](./0087-root-recurrence-preserves-durable-await). Existing declarations migrate to a pipeline step whose selector names the continuing concrete types.

@@ -89,5 +89,5 @@ framework-owned imperative shell.
 A completed native Command can also precede a separate interaction using this post-operation
 ordering. The Command records its own publication/effect result, then the ordinary modifier
 registers Await from that trusted result. Callback-capable effects retain ADR-0037's registration
-before dispatch. [ADR-0084](./0084-root-recurrence-preserves-durable-await.md) records the durable
+before dispatch. [ADR-0087](./0087-root-recurrence-preserves-durable-await.md) records the durable
 root recurrence needed when that interaction repeats in the same definition.
