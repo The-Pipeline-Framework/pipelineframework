@@ -12,6 +12,47 @@ This requirement supersedes the earlier restriction to a single execution implem
 
 The approved roadmap below replaces the earlier adapter-only MVP and its Spring dispositions. Existing Java functionality remains intact. [Draft ADR-0080](/decisions/0080-native-runtimes-consume-compiler-owned-execution-contracts) records the proposed runtime boundary without claiming delivered native support or freezing the detailed protocol. It preserves [compiler-owned semantics](/decisions/0002-compiler-owned-v3-type-model) and [shared worker contracts](/decisions/0050-remote-worker-protocols-are-shared-runtime-contracts).
 
+The Detroit alternative assessed on 5 November 2026 below explores an embedded-language host that could retain the Java executor. The native-runtime conclusion above describes the current roadmap and its standalone language-process requirement; it does not establish that every form of polyglot authoring requires a new executor. Detroit remains an unselected architectural alternative, with no roadmap or scheduling change.
+
+## Detroit alternative: embedded languages with the Java executor
+
+Read-only assessment of Detroit JS at [`3187c795`](https://github.com/openjdk/detroit-js/tree/3187c795c976852b3a36c03e47ad66c7981ddd48) and Detroit Python at [`1f7b2fe5`](https://github.com/openjdk/detroit-python/tree/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42), inspected on 5 November 2026. Source, examples and tests were inspected; neither engine was built and no TPF integration or deployment was executed. Test presence is evidence of intended coverage, not a passing result from this investigation.
+
+Detroit embeds V8 or CPython behind Java scripting APIs. The TPF hypothesis is to generate language bridges around business functions while retaining the existing Java executor, Connectors, plugins and durable coordinator. This could avoid maintaining separate TPF execution kernels, but still requires compiler integration, canonical conversions, asynchronous/stream adapters and language packaging. It is not established Node.js compatibility or delivered TPF support.
+
+```mermaid
+flowchart LR
+    E[Java TPF executor and policy shell] --> G[Generated language bridge]
+    G --> F[Embedded V8 or CPython business function]
+    F -->|Canonical result or adapted stream| G
+    G --> E
+    E --> H[Existing Java capability and durable services]
+```
+
+The proposed embedded path keeps calls in one OS process. It is a different developer/runtime arrangement from an independently running Node/Python application connected to a TPF service. Selecting it would require an explicit decision about that distinction and the no-local-JVM requirement.
+
+### Evidence and developer-experience trade-offs
+
+| Area | Evidence | TPF implication / remaining work |
+|---|---|---|
+| JavaScript async | The [module tests](https://github.com/openjdk/detroit-js/blob/3187c795c976852b3a36c03e47ad66c7981ddd48/test/jsimport/JSImportTest.java#L165-L182) invoke an async function, convert its Promise to a CompletableFuture and pump microtasks. | A concrete result-bridging starting point, not stream conformance. Rejections must reach TPF; [runMicrotasks](https://github.com/openjdk/detroit-js/blob/3187c795c976852b3a36c03e47ad66c7981ddd48/src/java/org/openjdk/engine/javascript/V8ExecutionControl.java) documents swallowed microtask callback exceptions. |
+| Python streams/concurrency | [PyObject](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/src/main/java/org/openjdk/engine/python/PyObject.java#L820-L837) exposes iter/aiter; [engine calls](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/src/main/java/org/openjdk/engine/python/PythonScriptEngine.java#L812-L835) use synchronisation and GIL management. | Demand-driven iteration, async event-loop ownership, cancellation, cleanup and bounded buffering need explicit adapters. A shared engine must not be assumed to execute Python calls in parallel. |
+| JS/TypeScript ecosystem | Imports require a host [module resolver](https://github.com/openjdk/detroit-js/blob/3187c795c976852b3a36c03e47ad66c7981ddd48/src/java/org/openjdk/engine/javascript/V8ModuleResolver.java). | TypeScript compilation/bundling is additional tooling. Node built-ins, npm resolution and native addons are unqualified. Describe this candidate as Java-hosted JS/TypeScript authoring until stronger compatibility is proved. |
+| Debugging | JS has an [inspector test](https://github.com/openjdk/detroit-js/blob/3187c795c976852b3a36c03e47ad66c7981ddd48/test/InspectorTest.java); Python includes a [pdb breakpoint example](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/samples/pdbexample.py). | These do not establish an integrated IDE, TypeScript source-map or hot-reload workflow. |
+| Packaging | The [JS build](https://github.com/openjdk/detroit-js/blob/3187c795c976852b3a36c03e47ad66c7981ddd48/README.md) requires JDK 25 and a native toolchain; [Python setup](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/README.md) uses JDK 25 and Python 3.14 environments. Its [launcher](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/run.sh#L68-L70) enables native access and internal JDK exports. | Engine/JDK/platform compatibility and application dependencies need qualification. Local embedded execution requires a JVM, even if bundled. Quarkus native-image and FUNCTION hosting are not established. |
+
+A streaming TPF pipeline can retain Java stream orchestration while invoking foreign per-item transformations. Functions that produce or consume streams additionally need language iterator/async adapters. Neither case justifies excluding streaming from the intended TPF experience. Canonical field presence, nullability, numerical precision and identity also require generated conversions; generic Java/language coercion is not a substitute.
+
+Detroit Python also contains a [subprocess transport](https://github.com/openjdk/detroit-python/blob/1f7b2fe5fba00bd2abf2ba7cffbd7d63c8631f42/src/main/resources/org/openjdk/engine/python/remote_script_engine.py). That arrangement is not same-process LOCAL; its fallback conversion of some unpicklable values to None cannot be adopted unchanged as a canonical TPF wire contract.
+
+### Three proof gates before selecting Detroit
+
+1. **Streaming and asynchronous execution.** Exercise per-item transforms and language-authored producers/consumers, slow downstream demand, cancellation, cleanup, async failure and bounded memory. Compare ordering, values, identities and attempt counts with Java TPF. Demonstrate that the adapter neither eagerly materialises a stream nor loses rejection/failure signals; qualify engine scheduling and context isolation.
+2. **Durable Await and restart.** Reach a TPF Await boundary, terminate the application worker, admit completion while it is offline through the durable host, and restart a compatible worker with the pinned language code. Resume from canonical persisted data in a fresh interpreter. Cover duplicate completion, lost acknowledgement and itemized continuation. Never persist a JS Promise, Python coroutine/generator, closure or interpreter handle. Language-level async/await is not durable TPF Await. Current [Await execution](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/50a695fdbe13a30e7ed24015df5afac14d0025fe/runtime/src/main/java/org/pipelineframework/awaitable/AwaitCompletionSupport.java#L136-L165) requires QUEUE_ASYNC; reuse that Java authority rather than attributing recovery to Detroit. Existing [Java restart tests](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/50a695fdbe13a30e7ed24015df5afac14d0025fe/runtime/src/test/java/org/pipelineframework/AwaitRestartRecoveryIT.java#L764-L850) provide a reference, not Detroit evidence. If the whole durable host is stopped, separately prove persisted-state recovery and completion retry after it returns.
+3. **Real developer project.** Build and regenerate DSL/types with no handwritten application Java, use representative dependencies, run tests, debug source with useful cross-language errors, and reload changed code under explicit release rules. Qualify TypeScript module/source-map handling and Python environments/packages separately. Record package incompatibilities, setup effort and JVM requirements. Do not claim ordinary Node/Python workflow equivalence from an embedded scripting example.
+
+These are proposed acceptance gates, not permission to implement the probes or restrictions on the eventual pipeline language. Keep existing Connector/plugin implementations and authority with Java in this candidate; native Provider SPI authoring is not implied. A failed gate must be reported before selecting this alternative. The roadmap, issue dispositions, Spring work and implementation scheduling remain unchanged. Previous native-runtime effort estimates do not estimate Detroit integration; re-estimate only after evidence from these gates.
+
 ## Native execution and coordinator boundary
 
 ```mermaid
