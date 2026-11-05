@@ -34,7 +34,7 @@ one input to many outputs          -> ONE_TO_MANY
 local composition                  -> pipeline step / nested pipeline
 reusable packaged composition      -> Block
 capability distribution            -> Expansion package
-typed iteration / agentic looping  -> bounded recursive nested pipeline
+typed iteration / agentic looping  -> bounded pipeline self-call (root or nested)
 ```
 
 Do not introduce repositories/services/providers as architectural seams merely because implementation APIs exist. In TPF applications, first express persistence, Queries, Commands, nested pipelines and other execution semantics in pipeline.yaml. Application code should implement domain transformations and adapters behind those compiler-owned boundaries.
@@ -69,8 +69,10 @@ Do not inject repositories, connector clients, object stores, materializers, wor
 - A Block is a compile-time dependency containing reusable pipeline definitions. The application still owns connector bindings and Command authority.
 - An Expansion is a versioned distribution package of related Blocks, Connectors, and supporting assets. It does not introduce a runtime step kind or transfer application-owned bindings and authority into the package.
 - Repeated fields are value shape, not stream/cardinality semantics. Use unions and `accepts` for compiler-known branch applicability, not Java `instanceof` or switch dispatch.
-- Within one pipeline definition, give each concrete canonical input type one ordinary consumer. Calls to other definitions count as ordinary consumers; self-calls have a separate continuation check. Expand union `accepts` to its concrete variants when checking this: steps may share a union input only when they accept disjoint variants. A later phase that needs different authority or behavior should carry a distinct canonical type, rather than routing the same type again by step position. The same type may be consumed in a separate nested pipeline definition.
-- Express bounded recursion as a LOCAL unary pipeline step with `pipeline: self`, or the enclosing nested definition’s name. Each concrete input may select one ordinary consumer and one self-call continuation. Verify support in the pinned release.
+- Within each pipeline definition, resolve aliases, unions and `accepts` to concrete canonical types. Each type may have at most one ordinary consumer and one self-call continuation. Operations and calls to other definitions share the ordinary-consumer namespace; calls to the enclosing definition share the continuation namespace. Overlap is forbidden within either namespace, but permitted between them. Reuse in separate definitions is independent.
+- Express bounded recursion as a LOCAL unary pipeline step with `pipeline: self`, including at the root. The enclosing nested definition’s name is equivalent. Self-calls return through remaining caller steps; they still require compatible boundaries and valid ordered routing. Do not use the removed definition-level `recur` declaration. Verify support in the pinned release.
+- A later ordinary operation needing different authority or behaviour should consume a distinct canonical type. Do not introduce a nominal wrapper merely to distinguish a self-call from the ordinary consumer of the same type.
+- Put nested Await on the meaningful initiating operation inside a LOCAL unary invocation chain, not on the pipeline invocation. The runtime resumes the child and returns through caller steps; the owning root retains terminal publication.
 - Do not add an identity service merely to attach `await:` or a plugin. An authored operation should produce a meaningful new value; a plugin observes a value without changing it, while `await:` decorates the operation that initiates deferred completion. If current compiler support leaves no honest operation to decorate, record the missing authoring capability instead of inventing a pass-through business step.
 
 Read [authoring-model.md](references/authoring-model.md) for types, operators, cardinality, backpressure, unions, nested pipelines, recursion, failure channels, or tests.

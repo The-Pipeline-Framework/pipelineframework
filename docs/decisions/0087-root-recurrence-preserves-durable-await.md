@@ -1,11 +1,16 @@
 ---
 title: Root recurrence preserves durable Await
 status: deprecated
+superseded_by: ADR-0086
 ---
 
 # ADR-0087: Root recurrence preserves durable Await
 
-Superseded by [ADR-0086](./0086-explicit-self-invocation-and-nested-await).
+::: warning Historical decision
+Superseded by [ADR-0086](./0086-explicit-self-invocation-and-nested-await). The `recur`
+declaration described below has been removed. Current authoring uses
+[`pipeline: self`](/develop/pipeline-template/reference#bounded-recursion).
+:::
 
 ## Context
 

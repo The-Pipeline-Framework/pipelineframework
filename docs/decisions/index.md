@@ -5,6 +5,10 @@ coherent ownership question. Detailed design and authoring pages explain how to 
 the resulting model; current source, compiler behaviour, tests, and current docs remain
 authoritative for exact syntax and release support.
 
+Follow a record's status and successor links before using it as an authoring rule.
+Partially superseded decisions identify the clauses that still apply. Historical
+records retain their published URLs and rationale so source references remain useful.
+
 ## Catalogue
 
 [ADR-0068](./0068-main-consumes-active-snapshots.md) defines development snapshot defaults, merge-triggered
@@ -26,7 +30,6 @@ publication and the distinction from immutable test and release inputs.
 | [0012](./0012-failure-recovery-and-handoff.md) | Keep business outcomes, item rejection, runtime recovery, effects, and handoff ownership distinct. |
 | [0013](./0013-change-the-semantic-owner-boldly.md) | Change the owning abstraction coherently; impact determines rigor, not semantic placement. |
 | [0014](./0014-remote-transition-outcome-uncertainty.md) | Keep remote caller timeout ambiguity under durable coordinator authority. |
-| [0015](./0015-branch-routing-owns-await-projector-input.md) | Deprecated: standalone Await-step routing; superseded by ADR-0036. |
 | [0016](./0016-field-presence-nullability-and-compatibility.md) | Keep field presence and value nullability independent and classify evolution per compatibility surface. |
 | [0017](./0017-structural-connector-execution-and-binding-serialization.md) | Declare blocking and serialized connector execution structurally and enforce serialization per binding and operation. |
 | [0018](./0018-command-effects-use-immutable-durable-revisions.md) | Persist Command effect authority as immutable conditional revisions with lossless typed replay. |
@@ -35,7 +38,6 @@ publication and the distinction from immutable test and release inputs.
 | [0021](./0021-host-owned-connector-authentication.md) | Expose connector invocation semantics while leaving external authentication and credential resolution with the host. |
 | [0022](./0022-hibernate-find-many-provider-strategy.md) | Preserve finite row streaming and declared total order in both Hibernate `find.many` providers. |
 | [0023](./0023-hosted-llm-query-defaults-to-reactive-client.md) | Default hosted LLM Query to non-blocking provider I/O while retaining an explicit blocking implementation. |
-| [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Link packaged functional-core blocks as ordinary version 3 composition imports. |
 | [0025](./0025-command-reissue-uses-occurrence-identity.md) | Give intentional Command reissue a new provider occurrence identity without weakening replay safety. |
 | [0026](./0026-llm-clarification-is-inert-protocol-data.md) | Treat an LLM request for human information as inert typed protocol data. |
 | [0027](./0027-mcp-imports-pinned-connector-operations.md) | Import selected MCP tools as pinned Connector operations without making MCP an Agent authority or runtime. |
@@ -91,13 +93,24 @@ publication and the distinction from immutable test and release inputs.
 | [0078](./0078-chat-agent-command-handoffs-stay-inert.md) | Return release-pinned Command proposals from ChatAgent without granting the Block effect authority. |
 | [0079](./0079-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
 | [0080](./0080-native-runtimes-consume-compiler-owned-execution-contracts.md) | Draft: native LOCAL runtimes consume compiler-owned execution contracts and reuse Java durable coordination. |
-| [0081](./0081-one-authored-consumer-per-concrete-input.md) | Give each concrete canonical input one authored consumer per Pipeline definition, with structural recurrence and definition-owned observer occurrences. |
+| [0081](./0081-one-authored-consumer-per-concrete-input.md) | Give each concrete canonical input one authored consumer per Pipeline definition, with definition-owned observer occurrences; the self-call clause is refined by [0086](./0086-explicit-self-invocation-and-nested-await.md). |
 | [0082](./0082-definition-output-completes-typed-branches.md) | Complete typed branches at their definition output boundary without an authored identity merge. |
-| [0083](./0083-definition-owned-bounded-recurrence.md) | Lower definition-owned continuing outcomes through the existing bounded recursive invocation path. |
 | [0084](./0084-runtime-owns-release-production-and-resolution.md) | Share release preparation and resolution across the CLI and Maven. |
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
-| [0087](./0087-root-recurrence-preserves-durable-await.md) | Preserve root recurrence across Await with invocation-scoped wait identities. |
+
+## Superseded decisions
+
+These records explain earlier designs. Use their successor for current semantics.
+They remain at their original canonical locations, with `status: deprecated` and
+explicit successor metadata for retrieval tools and agents.
+
+| ADR | Earlier decision | Successor |
+| --- | --- | --- |
+| [0015](./0015-branch-routing-owns-await-projector-input.md) | Standalone Await-step routing. | [0036](./0036-await-is-orthogonal-deferred-completion.md) |
+| [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Functional-core-only packaged Blocks. | [0028](./0028-block-connector-capabilities-are-application-bound.md) |
+| [0083](./0083-definition-owned-bounded-recurrence.md) | Definition-level `recur` declarations. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
+| [0087](./0087-root-recurrence-preserves-durable-await.md) | Root-only durable recurrence. Formerly published under the root-recurrence ADR-0084 URL. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 
 ## Maintenance
 

@@ -1,6 +1,7 @@
 ---
 title: Packaged blocks are static composition imports
 status: deprecated
+superseded_by: ADR-0028
 ---
 
 # ADR-0024: Packaged blocks are static composition imports

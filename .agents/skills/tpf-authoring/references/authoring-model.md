@@ -80,9 +80,31 @@ A named nested pipeline is an ordinary typed step with its declared input/output
 it for a meaningful subflow, not for every helper call. A local nested call continues
 inside the same execution; it is not a new workflow row or publication boundary.
 
-Use an explicit pipeline step with `pipeline: self` at the point where another turn is needed. The named enclosing pipeline is equivalent. Select the continuing variant with `accepts` and return the base case through the definition output. Each concrete input may have one ordinary consumer and one self-call continuation in each definition.
+Use an explicit pipeline step with `pipeline: self` at the point where another turn is
+needed, at the root or inside a nested definition. Naming the enclosing nested definition
+is equivalent. `self` is reserved; do not name a definition `self` or author the internal
+`$root` identifier. Migrate definition-level `recur` to an explicit self-call step.
+Select continuing variants with `accepts` and return base cases through the checked
+definition output; do not add identity terminal services. A self-call may precede other
+steps: its result returns through the caller's remaining steps.
 
-A LOCAL unary negotiation can ask for review inside the named agent. Put selective Await on the policy operation that produces Review. Handle AnsweredReview, then call the agent again if policy returns TurnState. The runtime retains nested return positions across durable suspension.
+Resolve aliases, unions and selectors before checking consumers independently in each
+definition. Operations and calls to other definitions share one ordinary-consumer
+namespace. Self-calls, whether named or spelled `self`, share a separate continuation
+namespace. Each concrete type may have one consumer in each namespace. Multiple
+self-calls must accept disjoint concrete types. For example, a Query consuming
+`TurnState` and a later self-call accepting `TurnState` are allowed; two Queries or two
+self-calls accepting it are not. The exemption preserves boundary compatibility,
+cardinality, ordered routing and reachability checks; it does not guarantee termination.
+
+[ADR-0086](/decisions/0086-explicit-self-invocation-and-nested-await) refines ADR-0081's
+consumer rule and ADR-0004's root restriction. Do not apply their superseded restrictions
+to a release that supports this model.
+
+A LOCAL unary negotiation can ask for review inside the named agent. Put selective Await on the policy operation that produces Review. Handle AnsweredReview, then call the agent again if policy returns TurnState. The runtime retains nested return positions across durable suspension. On completion,
+the child finishes its remaining work and returns its typed result through the caller.
+Ordinary nesting does not consume the self-call depth allowance. Mutual recursion and
+suspension across remote or streaming invocation boundaries remain unsupported.
 Current cardinality, depth, mutual-recursion, and remote-composition limits are
 release-specific. Search the template DSL plus `PipelineRecursion*` and local
 invocation/linker tests before depending on them.

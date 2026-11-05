@@ -5,6 +5,10 @@ status: accepted
 
 # ADR-0004: Nested composition and bounded recursion
 
+[ADR-0086](./0086-explicit-self-invocation-and-nested-await) extends this model with
+root `pipeline: self`, continuation-aware consumer validation and durable nested
+Await, preserving caller-return semantics.
+
 ## Context
 
 Applications need reusable subflows and repeated decision-making without introducing an
@@ -26,8 +30,10 @@ model or read-only tool observation, Command for a tool effect; return a typed
 continue/complete decision; recurse explicitly for the next turn. One Query/provider
 call does not hide a recursive tool, memory, or repair loop.
 
-This decision governs `framework/deployment/src/main/java/org/pipelineframework/processor/composition`,
-`framework/runtime/src/main/java/org/pipelineframework/invocation`, and the v3 DSL.
+This decision governs composition in the standalone
+[pipelineframework-compiler](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/tree/main/src/main/java/org/pipelineframework/processor/composition),
+invocation in [pipelineframework-runtime](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/tree/main/runtime/src/main/java/org/pipelineframework/invocation),
+and the contracts-owned v3 DSL.
 
 ## Rationale
 

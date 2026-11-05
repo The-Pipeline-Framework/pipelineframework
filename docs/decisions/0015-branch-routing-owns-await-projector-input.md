@@ -1,6 +1,7 @@
 ---
 title: Branch routing owns Await projector input
 status: deprecated
+superseded_by: ADR-0036
 ---
 
 # ADR-0015: Branch routing owns Await projector input

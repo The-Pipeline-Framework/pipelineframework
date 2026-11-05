@@ -228,6 +228,39 @@ participants, not pipeline operations.
 | Retry and DLQ | owning execution remains responsible | downstream orchestrator owns them after admission |
 | Use when | the final result belongs to this operation | another flow should own the next lifecycle |
 
+## Await inside a nested definition
+
+An operation inside a LOCAL `ONE_TO_ONE` definition can await an external answer. The
+caller and every intermediate definition must also be unary. In PadelPot, the root
+calls the named `personal-agent` definition. Its policy operation produces `Review`,
+the persistence aspect records it, and selective Await admits an `AnsweredReview`.
+The answer policy can produce `TurnState` for `pipeline: self` or complete the
+negotiation and return through the root's remaining steps.
+
+```mermaid
+sequenceDiagram
+    participant Root as Root pipeline
+    participant Agent as personal-agent
+    participant Store as Persistence aspect
+    participant Owner as Owner completion
+    Root->>Agent: Invoke with owner action or continuing state
+    Agent->>Store: Persist Review
+    Agent-->>Owner: Await correlated answer
+    Note over Root,Agent: Retain child position and caller return positions
+    Owner->>Agent: AnsweredReview
+    Agent->>Agent: Apply answer policy
+    opt Another turn is authorised
+        Agent->>Agent: pipeline self
+    end
+    Agent-->>Root: Completed negotiation
+    Root->>Root: Remaining steps and root completion
+```
+
+Repeated visits to the review operation have distinct invocation occurrences. A
+retry of the same occurrence retains its identity. The root owns the execution and
+terminal publication throughout suspension and return. See [nested Await recovery](/operate/await-boundaries#resuming-nested-await)
+for the release and continuation information needed during recovery.
+
 ## Current Support Boundary
 
 Authored internal services and native unary Commands accept `await:`. Ordinary
