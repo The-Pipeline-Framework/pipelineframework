@@ -4,12 +4,13 @@ Use the current documentation for the latest release, or open a frozen snapshot 
 
 ## Current Release
 
-- [v26.10.1](/) - Current released documentation
+- [v26.11.1](/) - Current released documentation
 
 ## Recent Release Notes
 
 These releases do not have frozen documentation snapshots. Their release notes remain available:
 
+- [v26.11.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.11.1)
 - [v26.10.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.10.1)
 
 - [v26.9.4](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.9.4)
@@ -32,7 +33,9 @@ These releases do not have frozen documentation snapshots. Their release notes r
 
 ## About Versioning
 
-Pin the exact TPF release across framework, compiler, Connector, Block, and plugin dependencies.
+Select an exact product BOM release. It records the tested framework, compiler, Connector, Block and
+Expansion versions, which can differ. Maven build plugins need an explicit version from that release's
+component table because a dependency BOM cannot manage build-plugin versions.
 Do not infer compatibility guarantees from a version-number segment alone; use the release notes and
 matching version snapshot for the contract shipped by that release.
 

@@ -63,6 +63,12 @@ its own new version, retain the canonical reactor, commit the prepared source, a
 release commit SHA in the selection manifest. Publish only the new components, in planned dependency
 order. Never move a published tag or overwrite an existing coordinate.
 
+CLI native publication additionally requires owner verification and `tpf/system-tests` on the exact
+stable release commit. Keep that prepared commit at the pull-request head until those checks pass,
+then append the next-development commit and merge while preserving the release commit. Verification
+of the later development head does not establish evidence for its earlier release commit. The tagged
+native build still performs its own conformance, archive-identity and installation checks.
+
 Unchanged components need no release or version-bump PR. In particular, do not advance Blocks simply
 because Runtime advances. Keep the active snapshot development policy on `main` after preparation;
 stable selection must not leave development depending on obsolete stable versions.

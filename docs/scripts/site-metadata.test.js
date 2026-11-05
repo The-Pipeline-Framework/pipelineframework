@@ -18,7 +18,8 @@ test('the documentation audit remains an unlisted internal record', () => {
 })
 
 test('the versions page identifies the current and recent releases', () => {
-  assert.match(versions, /- \[v26\.10\.1]\(\/\) - Current released documentation/)
+  assert.match(versions, /- \[v26\.11\.1]\(\/\) - Current released documentation/)
+  assert.match(versions, /releases\/tag\/v26\.11\.1/)
   assert.match(versions, /releases\/tag\/v26\.10\.1/)
   assert.match(versions, /releases\/tag\/v26\.9\.4/)
   assert.match(versions, /releases\/tag\/v26\.9\.3/)

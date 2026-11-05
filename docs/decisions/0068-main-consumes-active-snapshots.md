@@ -13,9 +13,11 @@ after the current upstream snapshots had been published. Maven resolves coordina
 
 ## Decision
 
-Development branches consume the active TPF snapshot line, currently `26.10.1-SNAPSHOT`. This applies to the
-coordination BOM, framework components, ecosystem packages, examples, reference systems and applications.
-Applications select a product BOM rather than independently choosing every framework component version.
+Development branches consume each dependency's active snapshot coordinate. This applies to the coordination
+BOM, framework components, ecosystem packages, examples, reference systems and applications. The product BOM
+and independently owned components can have different active version lines; a product release does not require
+a version bump in an unchanged component. Applications select the active product BOM rather than independently
+choosing every framework component version.
 Existing component properties remain available for explicit compatibility-test overrides.
 
 Maven producers publish snapshots after pushes to `main`, retaining manual publication for recovery.

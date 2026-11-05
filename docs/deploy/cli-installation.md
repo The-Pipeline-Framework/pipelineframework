@@ -8,10 +8,11 @@ Choose a stable release for regular use or a nightly snapshot to try changes on 
 
 | Channel | Download | Updates | Installation |
 | --- | --- | --- | --- |
-| Stable | A version release, such as `v26.10.1` | When a stable version is released; published version assets stay fixed | Homebrew or checksummed ZIP |
-| Nightly snapshot | The [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest), with a version such as `26.10.1-SNAPSHOT` | Each successful nightly build of main; manual publication is also possible | Checksummed ZIP |
+| Stable | A version release, such as `v26.11.1` | When a stable version is released; published version assets stay fixed | Homebrew or checksummed ZIP |
+| Nightly snapshot | The [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest), with a version such as `26.11.2-SNAPSHOT` | Each successful nightly build of main; manual publication is also possible | Checksummed ZIP |
 
-The nightly build starts daily at **20:47 UTC**, alongside the separate Maven snapshot publication. Downloads update
+The native nightly build starts daily at **20:47 UTC**. Maven snapshots use a separate publication workflow after
+pushes to main. Native downloads update
 only after build, compatibility and candidate installation checks pass. If those checks fail, the previous snapshot
 remains available.
 Merging a CLI PR validates its changes but does not immediately publish a native snapshot. The next successful nightly
