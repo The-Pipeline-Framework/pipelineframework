@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "26.11.1",
+  "previousVersion": "26.10.1",
+  "components": {
+    "contracts": {
+      "repository": "The-Pipeline-Framework/pipelineframework-contracts",
+      "sha": "607f3ccbee0a759e098b703a0316708ee65e0de3",
+      "mavenVersion": "26.11.1",
+      "release": "new"
+    },
+    "compiler": {
+      "repository": "The-Pipeline-Framework/pipelineframework-compiler",
+      "sha": "1352347b702d407d532c06fd1fb4ad9042b7a92c",
+      "mavenVersion": "26.11.1",
+      "release": "new"
+    },
+    "cli": {
+      "repository": "The-Pipeline-Framework/pipelineframework-cli",
+      "sha": "6c99865d8585138dc7a2ca6b59badbbf5e0e95bf",
+      "mavenVersion": "26.11.1",
+      "release": "new"
+    },
+    "runtime": {
+      "repository": "The-Pipeline-Framework/pipelineframework-runtime",
+      "sha": "ede444bb243191317aa2c76b3df8f23dbe74f454",
+      "mavenVersion": "26.11.1",
+      "release": "new"
+    },
+    "connectors": {
+      "repository": "The-Pipeline-Framework/pipelineframework-connectors",
+      "sha": "3efca2d51bb6ad0dfe8ade4d9c4efed7b177d8ef",
+      "mavenVersion": "26.10.1",
+      "release": "reuse"
+    },
+    "blocks": {
+      "repository": "The-Pipeline-Framework/pipelineframework-blocks",
+      "sha": "13006afa41a07146b0738bda544a75c83b88a7c2",
+      "mavenVersion": "26.11.1",
+      "release": "new"
+    },
+    "expansions": {
+      "repository": "The-Pipeline-Framework/pipelineframework-expansions",
+      "sha": "fa18aa035916052e12bbd4ed75db6a26ca4b54a8",
+      "mavenVersion": "26.10.1",
+      "release": "reuse"
+    }
+  },
+  "testHarnesses": {
+    "examples": {
+      "repository": "The-Pipeline-Framework/pipelineframework-examples",
+      "sha": "0b64b8d3ec7ca823e7c6aeec6ee8b98b0744b5c2"
+    },
+    "references": {
+      "repository": "The-Pipeline-Framework/pipelineframework-reference-implementations",
+      "sha": "c2e0d76cef5cf397a6dc6720f8375f026281d485"
+    },
+    "csvPayments": {
+      "repository": "The-Pipeline-Framework/csv-kafka-payments",
+      "sha": "e65bbfc495db8cbccbf80d9085212f3bd5937816"
+    },
+    "ragTurnkey": {
+      "repository": "The-Pipeline-Framework/rag-turnkey",
+      "sha": "81b6d255c791f78f604e2de76f2097a5b8f85f07"
+    }
+  }
+}
