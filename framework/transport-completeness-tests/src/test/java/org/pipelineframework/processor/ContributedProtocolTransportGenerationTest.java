@@ -238,7 +238,7 @@ class ContributedProtocolTransportGenerationTest {
     void commandClientComposesWithRestBusinessStepsWithoutChangingEffectSupport() throws Exception {
         Fixture fixture = compile("REST", "COMPUTE", """
             contract:
-              input: <tpf.vector.VectorUpsertRequest>
+              input: <tpf.embedding.EmbeddingResult>
               output: <tpf.vector.VectorUpsertResult>
             connectors:
               vectors: { provider: proof.vector, version: 1, config: {} }
@@ -246,10 +246,10 @@ class ContributedProtocolTransportGenerationTest {
               - name: Prepare upsert
                 service: com.example.transport.PrepareUpsertService
                 cardinality: ONE_TO_ONE
-                input: <tpf.vector.VectorUpsertRequest>
+                input: <tpf.embedding.EmbeddingResult>
                 output: <tpf.vector.VectorUpsertRequest>
                 java:
-                  input: org.pipelineframework.connector.vector.VectorUpsertRequest
+                  input: org.pipelineframework.connector.embedding.EmbeddingResult
                   output: org.pipelineframework.connector.vector.VectorUpsertRequest
               - name: Upsert
                 kind: command
@@ -274,7 +274,7 @@ class ContributedProtocolTransportGenerationTest {
                   input: org.pipelineframework.connector.vector.VectorUpsertResult
                   output: org.pipelineframework.connector.vector.VectorUpsertResult
             """, commandIdSource(),
-            identityService("PrepareUpsertService", "VectorUpsertRequest"),
+            prepareUpsertService(),
             identityService("InspectUpsertService", "VectorUpsertResult"),
             JavaFileObjects.forSourceString("com.example.transport.PipelineMarker", """
                 package com.example.transport;
@@ -444,6 +444,22 @@ class ContributedProtocolTransportGenerationTest {
         return JavaFileObjects.forSourceString(
             "com.example.transport.MarkerSource",
             "package com.example.transport; public final class MarkerSource { }");
+    }
+
+    private static javax.tools.JavaFileObject prepareUpsertService() {
+        return JavaFileObjects.forSourceString("com.example.transport.PrepareUpsertService", """
+            package com.example.transport;
+            public class PrepareUpsertService implements org.pipelineframework.service.ReactiveService<
+                    org.pipelineframework.connector.embedding.EmbeddingResult,
+                    org.pipelineframework.connector.vector.VectorUpsertRequest> {
+                public io.smallrye.mutiny.Uni<org.pipelineframework.connector.vector.VectorUpsertRequest> process(
+                        org.pipelineframework.connector.embedding.EmbeddingResult input) {
+                    return io.smallrye.mutiny.Uni.createFrom().item(
+                        new org.pipelineframework.connector.vector.VectorUpsertRequest(
+                            input.itemId(), input.text(), input.values()));
+                }
+            }
+            """);
     }
 
     private static javax.tools.JavaFileObject commandIdSource() {
