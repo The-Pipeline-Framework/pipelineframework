@@ -2,42 +2,111 @@
 
 This page captures the framework artifact release flow.
 
-## Prepare Locally
+## Select component versions
 
-Run Maven release preparation without pushing:
+A product release publishes a tested BOM selection, not a new version of every repository.
+Runtime `26.12.3` may work with Compiler `26.12.1`, Contracts `26.11.2` and Blocks `26.10.1`.
+These are illustrative versions. Consumers normally choose one product BOM version; Maven plugins
+still need explicit plugin versions because an imported BOM cannot manage them.
 
-```bash
-./mvnw release:prepare \
-  -DpushChanges=false \
-  -DreleaseVersion=26.5.2 \
-  -DdevelopmentVersion=26.6.1-SNAPSHOT \
-  -Dtag=v26.5.2 \
-  -Darguments="-DskipTests"
+```mermaid
+flowchart LR
+    A[New Runtime release] --> T[Test exact selected set]
+    B[Existing Compiler and Contracts releases] --> T
+    C[Existing Blocks and Connector releases] --> T
+    T --> G{Full train passes}
+    G -->|Yes| P[Publish product BOM and component table]
+    G -->|No| F[Fix or change the selection]
 ```
 
-## Validate Before Pushing
+Create `releases/<product-version>.json`, following
+`system-tests/schemas/product-release.schema.json`. Start from the previous release manifest;
+set `previousVersion` to that product version and identify each component as `new` or `reuse`.
+Record stable Maven versions and full source SHAs for every component, plus exact source SHAs
+for all four test-owning repositories. Repository ownership is checked against `system-tests/components.yml`.
+`releases/26.10.1.json` bootstraps the historical component selection; its harness pins are the main revisions
+recorded during this automation change, not a claim of a historical full-train attestation.
 
-Run the release gate appropriate to the slice. At minimum:
+Inspect implementation, API, dependency POM, generated resource and publication changes before choosing
+`new`. A dependency update may require a new consumer artifact, but a newer compatible dependency alone
+does not automatically require republishing every downstream component. The BOM's mediation and tests
+decide whether reuse works. A reused component must preserve its previous version and source SHA.
 
-- version drift checks,
-- framework verification,
-- CSV topology checks,
-- docs build.
+Print the publication plan:
 
-After publishing the snapshot, verify the downstream consumer repositories against it: examples (including
-`ai-sdk`), reference implementations, CSV Kafka Payments, and RAG Turnkey.
+```sh
+python3 system-tests/scripts/product-release.py plan --manifest releases/<product-version>.json
+```
 
-## Publish
+Only the `publishComponents` list needs preparation, tags and component publication. The list is in
+dependency order; reused components are absent. A runtime-only change normally needs two Central
+operations: Runtime and the coordinator's parent/BOM bundle. The product version need not match
+either Runtime's version or the other components' versions.
+The planner checks Central availability: components already independently published are listed under
+`alreadyPublishedComponents` and need no second publication. Partial availability blocks preparation
+until the original deployment or repository propagation has been reconciled.
 
-After validation:
+## Prepare only new components
 
-1. push the prepared release and next-development commits,
-2. push the immutable release tag,
-3. let GitHub Actions publish signed artifacts to Maven Central,
-4. verify the artifacts on Sonatype Central,
-5. create or verify the GitHub release,
-6. verify that the workflow promoted the release commit to `release-docs` and that
-   `https://pipelineframework.org` serves that deployment.
+Before a coordinated change merges, use the existing immutable candidate compatibility-set gate.
+Then, for each planned new component, freeze its dependencies to the selected stable releases:
+
+```sh
+python3 system-tests/scripts/product-release.py freeze \
+  --manifest releases/<product-version>.json --component runtime --pom /absolute/runtime-checkout/pom.xml
+```
+
+This edits only that named POM's dependency-version properties, preserves comments and rejects missing
+or duplicate declarations. It refuses a reused component. It does not change reactor versions, create
+commits, or publish anything. Use the owning repository's release preparation and validation to set
+its own new version, retain the canonical reactor, commit the prepared source, and record the final
+release commit SHA in the selection manifest. Publish only the new components, in planned dependency
+order. Never move a published tag or overwrite an existing coordinate.
+
+Unchanged components need no release or version-bump PR. In particular, do not advance Blocks simply
+because Runtime advances. Keep the active snapshot development policy on `main` after preparation;
+stable selection must not leave development depending on obsolete stable versions.
+
+## Test the exact stable selection
+
+After new component coordinates are available, commit the selection manifest to coordinator `main`.
+In Actions, run **TPF System Tests — Full Train** from `main` with `release_manifest` set to
+`releases/<product-version>.json`. Leaving that input empty retains the nightly current-main train.
+
+Selected-release mode verifies source SHAs against component release tags, fetches the selected stable
+POMs/JARs from Central, records their SHA-256 hashes, hydrates the isolated Maven repository once and
+runs the existing complete suite policy. Source harnesses, annotation processors, tool dependencies
+and the temporary test BOM receive the independent selected versions through existing override mappings.
+Cloud build jobs receive the same credential-free exact inputs. No candidate publication, source reactor,
+extra Maven profile or floating snapshot is substituted for these stable coordinates.
+
+The run records `release-selection.json`, containing the selection and hashes of the BOM dependency model,
+component configuration and coverage policy. Selected-release runs never promote the mutable development
+baseline. Missing artifacts or an incompatible set must fail; resolve the cause or select another version.
+Do not fabricate success, silently drop a suite, or reuse the 26.10.1 release-specific exceptions below.
+
+## Publish the tested BOM
+
+After that full train succeeds:
+
+1. Set `validationRunId` in the manifest to the successful run ID. The run ID is a pointer to evidence,
+   not part of the tested selection identity, so adding it does not invalidate the evidence.
+2. Freeze the coordinator dependency properties with `freeze --component coordination --pom /absolute/coordinator-checkout/pom.xml`.
+3. Prepare the coordinator's product release version and docs, then validate the framework and docs.
+   Include `-Dmaven.repo.local="$PWD/.m2/repository"` in every Maven invocation.
+4. Push the prepared commits and immutable product tag through the normal maintainer process.
+5. The tag publisher rejects a root-POM/manifest mismatch, missing or unsuccessful evidence, or a train that
+   tested a different selection, BOM model or coverage policy. It also resolves every BOM-managed coordinate
+   through the existing publication verifier before deploying the parent/BOM bundle.
+6. Verify Central availability, the GitHub release's new/reused component table and public docs promotion.
+
+Changes to component selection, harness SHAs, BOM dependencies, component mappings or coverage policy after
+validation require another selected-release train. Evidence artifacts must still be retained and downloadable;
+expired evidence blocks publication. Retry only the failing layer when the tested inputs are unchanged.
+Rollback means selecting a previously tested product BOM, never rewriting a published component.
+
+This flow does not implement the separate combined-Central-bundle proposal in issue #1051. Individual new
+components retain their owning publishers. It removes unnecessary component publications first.
 
 For detailed Central plugin, GPG, and troubleshooting notes, see [Publishing Reference](/evolve/publishing-reference).
 

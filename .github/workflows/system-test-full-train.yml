@@ -5,13 +5,17 @@ on:
     - cron: '30 1 * * *'
   workflow_dispatch:
     inputs:
+      release_manifest:
+        description: 'Optional committed releases/<version>.json: test that stable selection instead of current main'
+        required: false
+        type: string
       search_aws_only:
         description: Run hosted Search AWS only with the resolved current-main set
         type: boolean
         default: false
 
 concurrency:
-  group: tpf-system-test-full-train
+  group: tpf-system-test-full-train-${{ inputs.release_manifest || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -27,6 +31,12 @@ jobs:
       has_candidates: ${{ steps.baseline.outputs.has_candidates }}
       references_sha: ${{ steps.matrix.outputs.references_sha }}
     steps:
+      - name: Reject conflicting dispatch modes
+        if: inputs.release_manifest != '' && inputs.search_aws_only == true
+        run: |
+          echo "::error::Select either release_manifest or search_aws_only. Release evidence requires the complete Full Train."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,6 +61,7 @@ jobs:
           permission-actions: read
 
       - name: Resolve baseline and current main candidates once
+        if: inputs.release_manifest == ''
         id: baseline
         env:
           GH_TOKEN: ${{ steps.source-token.outputs.token }}
@@ -141,6 +152,28 @@ jobs:
             --output resolved/suite-matrix.json
           cp resolved/baseline/baseline.json resolved/baseline.json
 
+      - name: Resolve the explicit independent stable release selection
+        if: inputs.release_manifest != ''
+        env:
+          RELEASE_MANIFEST: ${{ inputs.release_manifest }}
+          GH_TOKEN: ${{ steps.source-token.outputs.token }}
+        run: |
+          [[ "$RELEASE_MANIFEST" =~ ^releases/[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]
+          python3 system-tests/scripts/product-release.py resolve --manifest "$RELEASE_MANIFEST" \
+            --output resolved --repository "$RUNNER_TEMP/tpf-stable-seed"
+          node system-tests/scripts/select-full-train.mjs \
+            --components system-tests/components.yml --policy system-tests/policy.yml \
+            --resolvedSet resolved/resolved-set.json --output resolved/suite-matrix.json
+
+      - name: Preserve already attested stable files for one hydration
+        if: inputs.release_manifest != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tpf-full-train-stable-seed
+          path: ${{ runner.temp }}/tpf-stable-seed/
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Export suite matrix
         id: matrix
         run: |
@@ -187,6 +220,7 @@ jobs:
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       - name: Fetch component manifests
+        if: inputs.release_manifest == ''
         env:
           GHCR_TOKEN: ${{ github.token }}
         run: |
@@ -204,6 +238,17 @@ jobs:
             --components system-tests/components.yml \
             "${manifest_args[@]}" \
             --output materialization-plan.json
+
+      - name: Use attested stable release coordinates
+        if: inputs.release_manifest != ''
+        run: cp resolved/materialization-plan.json materialization-plan.json
+
+      - name: Reuse attested stable files without downloading them from Central again
+        if: inputs.release_manifest != ''
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tpf-full-train-stable-seed
+          path: ${{ runner.temp }}/tpf-system-test-m2
 
       - name: Configure package repositories
         env:
@@ -328,7 +373,8 @@ jobs:
   promote:
     name: Promote green current-main set
     if: >-
-      always() && inputs.search_aws_only != true && needs.resolve.result == 'success' &&
+      always() && needs.resolve.result == 'success' &&
+      inputs.release_manifest == '' && inputs.search_aws_only != true &&
       needs.resolve.outputs.has_candidates == 'true' &&
       needs.materialize.result == 'success' &&
       needs.run-product-shard.result == 'success' &&

@@ -1,5 +1,9 @@
 # Publishing Reference
 
+For current product release selection, follow [Framework Release Process](/evolve/framework-release-process).
+The commands below describe repository-local Maven mechanics and include historical examples. Apply them
+only to components selected for a new release; they do not require lockstep publication across repositories.
+
 ## Public reactor verification
 
 Publish the framework reactor with `./mvnw -f framework/pom.xml`. Before a
@@ -20,21 +24,11 @@ This document explains how to publish immutable The Pipeline Framework releases 
 
 The release process uses the Maven Release Plugin for the root reactor, then GitHub Actions publishes framework artifacts from the release tag. Keep Maven's push step disabled so the generated release and next-development commits can be inspected before they reach `main`.
 
-1. **Prepare locally without pushing**:
-
-   ```bash
-   ./mvnw release:prepare \
-     -DpushChanges=false \
-     -DreleaseVersion=26.5.2 \
-     -DdevelopmentVersion=26.6.1-SNAPSHOT \
-     -Dtag=v26.5.2 \
-     -Darguments="-DskipTests"
-   ```
-
-2. **Record downstream version targets**: identify the compiler, contracts, runtime, connector, Block, and Expansion versions that the examples, reference implementations, CSV Kafka Payments, and RAG Turnkey repositories must consume after publication.
-3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, and the docs build before pushing.
-4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
-5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
+1. **Select component versions.** Follow the [Framework Release Process](/evolve/framework-release-process) to publish the planned new components and commit the selection manifest.
+2. **Validate the selection.** Run the selected-release Full Train and record its `validationRunId` after it succeeds.
+3. **Prepare the product release locally.** Freeze the BOM pins, prepare the release commits and tag with Maven pushing disabled, and complete the required local checks.
+4. **Push after the release checks pass.** Push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
+5. **Verify publication.** Check the artifacts on [Maven Central](https://central.sonatype.com/).
 
 The GitHub Actions workflow automatically:
 - Runs the workflows selected by the pushed paths on `main`
@@ -353,10 +347,11 @@ This keeps local builds clean while producing Central-compliant POMs.
 
 ### Tag immutability
 
-Release tags are treated as immutable. If a publish fails after a tag is created, you generally **cannot** reuse the same tag:
-
-- Create a new patch tag (e.g., `v26.2.1`, `v26.2.2`) for retries.
-- If repo rules allow, tags can be created from the GitHub UI as part of a release draft.
+Release tags and published coordinates are immutable. Do not move or recreate a tag to repair publication.
+First reconcile the existing Central deployment. If publication has already succeeded, recover only the
+failed downstream step rather than uploading those coordinates again. A transport or validation recovery
+with unchanged release inputs does not itself require releasing every component again. Changed release
+contents require a new component version and tag through the owning release process.
 
 ### When to Use the Versions Plugin Approach
 
