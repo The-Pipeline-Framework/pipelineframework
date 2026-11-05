@@ -2,6 +2,27 @@
 
 Evidence assessed 30 October 2026; native-runtime roadmap revised 31 October 2026; no-local-JVM SDLC requirement added 1 November 2026. **Future/backlog exploration, outside Cloud MVP; implementation remains unscheduled.**
 
+## Contracts #52 qualification increment (6 November 2026)
+
+[ADR-0088](../decisions/0088-polyglot-contract-qualification-precedes-runtime-selection.md)
+records the proposed closed profile, A-return-to-B ownership map, compatibility rules and
+remaining gates. This bounded increment adds shared reference vectors and Java/Node/Python
+consumer checks in contracts. It does not implement a production native runtime, choose
+Detroit or a Java daemon, or schedule the rest of [epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055).
+
+**The finite unary profile is a contract probe, not the product MVP.** Streaming, Connectors
+and durable Await remain requirements. The earlier LOCAL/unary-only experimental release
+recommendation below is retained as historical reasoning and is superseded as an MVP proposal.
+A passing probe does not establish native compiler generation, remote Connector guarantees,
+streaming, Await recovery, distributed execution or production qualification.
+
+The source refresh is limited to changed evidence: contracts `acf6bd2` and runtime `60dce3e`.
+Java payload/failure coupling remains; versioned invocation-path data has been added to durable
+Await and must not be silently dropped by future native consumers. See the decision's pinned
+source references and the contracts corpus's evidence report for exactly what was exercised.
+The next bounded gate is compiler-projected artifact consumption in an examples-owned LOCAL
+proof, after review of this contract. Spring and other implementation priorities are unchanged.
+
 ## Current conclusion: equivalent LOCAL workflows require native runtimes
 
 The earlier adapter-only proposal below keeps the entire execution shell in Quarkus and calls foreign business functions remotely. That can provide business-function interoperability, but it does not give a Node or Python author an equivalent in-process LOCAL pipeline. Generated gRPC stubs, registration adapters and an application facade cannot supply the missing execution semantics.
@@ -146,7 +167,10 @@ Before production runtime implementation, contracts #52, with compiler/runtime/c
 
 **Stop when the accepted profile passes its declared layout tests and developer acceptance journey.** Distributed and durable tests apply only to profiles claiming them. Do not expand a LOCAL release merely to complete the whole epic. Conversely, a LOCAL-only release does not complete the distributed/durable roadmap. If the probe cannot isolate the profile without pulling in coordinator/provider internals, record a failed boundary gate and reconsider scope instead of growing the kernel silently. The bounded probe is the explicit research exception to the implementation gate.
 
-### Recommended LOCAL-first candidate
+### Historical LOCAL-first candidate (not an accepted MVP)
+
+The following candidate predates the requirement clarification above. Its unary/no-Connector
+limits can bound a research fixture, but cannot define the intended developer product.
 
 | Dimension | Candidate experimental scope | Deferred or excluded |
 |---|---|---|
@@ -174,7 +198,13 @@ Native provider authoring is a separate possible extension, recorded in connecto
 
 ### Planning disposition
 
-Contracts #52 owns the profile/ownership/MVP decision; examples #27 probes boundary closure; compiler #46 and runtime #84/#85 implement only an accepted profile; examples #28 separates LOCAL, hosted Query, distributed and durable evidence. Root #478 owns hook-boundary implications. Compiler #47 and runtime #82 remain later unscheduled placement/durability work if the LOCAL-first candidate is selected. Spring work and existing Java support remain intact; no restored issue is closed by this proposal. Connectors #60 remains closed as not planned for implementation, with renewed SPI interest recorded for a separate decision.
+Contracts #52 owns the profile/ownership decision; its bounded contract/probe work is now authorised.
+Examples #27 supplies the next boundary proof; compiler #46 and runtime #84/#85 production work
+requires an accepted profile and separate authorisation. Examples #28 separates LOCAL, hosted
+Query, distributed and durable evidence. Root #478 owns hook-boundary implications. Compiler
+#47 and runtime #82 remain unscheduled placement/durability work. Spring work and existing Java
+support remain intact; no issue is closed by this proposal. Connectors #60 remains closed as
+not planned for implementation, with renewed SPI interest recorded for a separate decision.
 
 Previous programme estimates cover broader placement/durable work and are not an estimate for this candidate MVP. Re-estimate after the profile and hosted Query decision; no dates, staffing, milestone or implementation PRs are authorised.
 
