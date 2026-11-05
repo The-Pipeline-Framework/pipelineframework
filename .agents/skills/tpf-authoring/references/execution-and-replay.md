@@ -54,6 +54,21 @@ vary, but Await owns correlation, completion admission, deadline/timeout, duplic
 durable request/completion snapshots, and resume. Do not build a polling table or workflow registry
 beside it.
 
+Inside a LOCAL `ONE_TO_ONE` invocation chain, ordinary or selective Await belongs on
+the initiating operation inside the child; `await:` directly on a pipeline invocation
+is unsupported. Resume continues after that operation, completes the child's typed
+output and runs the remaining caller steps and observers. Another Await may suspend
+during that work. The runtime retains invocation occurrences and return positions
+against the pinned release; do not reconstruct them in application state or publish
+root completion from a child.
+
+In PadelPot, the root calls the named negotiation definition. Policy produces `Review`,
+the persistence aspect records it before suspension, and Await supplies `AnsweredReview`.
+Answer policy can produce `TurnState` for a self-call or a result for completion.
+Configure Result persistence through the aspect as well. Reusing a type in another
+definition retains that definition's observer occurrence even if the generated
+implementation is shared; do not add a publication helper to compensate for reuse.
+
 For an imported OpenAPI callback, select the callback during release-time import and reference that
 identity from the Command's `await.callback`. The host owns the public endpoint and callback
 authentication; the framework owns trusted endpoint injection, signed correlation, admission, and
