@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 import urllib.error
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -179,7 +180,9 @@ class ProductReleaseTest(unittest.TestCase):
             policy.write_bytes((ROOT / "system-tests/policy.yml").read_bytes())
             selection_with_run = release.selection({**self.selected, "validationRunId": 123}, CONFIG)
             self.assertEqual(original, release.evidence_identity(selection_with_run, bom, policy))
-            bom.write_text(bom.read_text().replace('<version>26.11.1-SNAPSHOT</version>', '<version>26.12.3</version>', 1))
+            current_version = ET.parse(bom).getroot().findtext("m:parent/m:version", namespaces=release.NS)
+            self.assertIsNotNone(current_version)
+            bom.write_text(bom.read_text().replace(f'<version>{current_version}</version>', '<version>26.12.3</version>', 1))
             self.assertEqual(original, release.evidence_identity(self.selected, bom, policy))
             frozen_source = bom.read_text()
             bom.write_text(frozen_source.replace('<dependencyManagement>', '<properties><pipelineframework.blocks.version>unexpected</pipelineframework.blocks.version></properties><dependencyManagement>', 1))
@@ -195,11 +198,17 @@ class ProductReleaseTest(unittest.TestCase):
         source = (ROOT / "pom.xml").read_text()
         pins = {prop: self.selected["components"][name]["mavenVersion"] for name, prop in CONFIG["coordinationConsumerVersionProperties"].items()}
         frozen = release.freeze_pom(source, pins)
-        frozen = frozen.replace('<version>26.11.1-SNAPSHOT</version>', '<version>26.12.3</version>', 1)
+        current_version = ET.fromstring(source).findtext("m:version", namespaces=release.NS)
+        self.assertIsNotNone(current_version)
+        product_version = self.selected["productVersion"]
+        frozen = frozen.replace(f'<version>{current_version}</version>', f'<version>{product_version}</version>', 1)
         with tempfile.TemporaryDirectory() as directory:
             pom = Path(directory) / "pom.xml"
             pom.write_text(frozen)
             release.verify_bom_pins(self.selected, CONFIG, pom)
+            pom.write_text(frozen.replace(f'<version>{product_version}</version>', '<version>0.0.0</version>', 1))
+            with self.assertRaisesRegex(ValueError, "coordinator version"):
+                release.verify_bom_pins(self.selected, CONFIG, pom)
             pom.write_text(frozen.replace('<pipelineframework.blocks.version>26.10.1</pipelineframework.blocks.version>', '<pipelineframework.blocks.version>26.12.3</pipelineframework.blocks.version>'))
             with self.assertRaisesRegex(ValueError, "blocks.version"):
                 release.verify_bom_pins(self.selected, CONFIG, pom)
