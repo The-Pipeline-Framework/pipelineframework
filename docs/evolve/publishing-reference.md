@@ -24,21 +24,11 @@ This document explains how to publish immutable The Pipeline Framework releases 
 
 The release process uses the Maven Release Plugin for the root reactor, then GitHub Actions publishes framework artifacts from the release tag. Keep Maven's push step disabled so the generated release and next-development commits can be inspected before they reach `main`.
 
-1. **Prepare locally without pushing**:
-
-   ```bash
-   ./mvnw release:prepare \
-     -DpushChanges=false \
-     -DreleaseVersion=26.5.2 \
-     -DdevelopmentVersion=26.6.1-SNAPSHOT \
-     -Dtag=v26.5.2 \
-     -Darguments="-DskipTests"
-   ```
-
-2. **Record downstream version targets**: identify the compiler, contracts, runtime, connector, Block, and Expansion versions that the examples, reference implementations, CSV Kafka Payments, and RAG Turnkey repositories must consume after publication.
-3. **Complete the selected release checks.** Follow the [Framework Release Process](/evolve/framework-release-process) to commit the selection manifest, pass the selected-release Full Train, record its `validationRunId`, freeze the BOM pins, and complete the required local checks.
-4. **Push the release tag after the release process succeeds.** Push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
-5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
+1. **Select component versions.** Follow the [Framework Release Process](/evolve/framework-release-process) to publish the planned new components and commit the selection manifest.
+2. **Validate the selection.** Run the selected-release Full Train and record its `validationRunId` after it succeeds.
+3. **Prepare the product release locally.** Freeze the BOM pins, prepare the release commits and tag with Maven pushing disabled, and complete the required local checks.
+4. **Push after the release checks pass.** Push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
+5. **Verify publication.** Check the artifacts on [Maven Central](https://central.sonatype.com/).
 
 The GitHub Actions workflow automatically:
 - Runs the workflows selected by the pushed paths on `main`
