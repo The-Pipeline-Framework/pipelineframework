@@ -108,6 +108,7 @@ classDiagram
     class PipelineRunner
     class QueueAsyncCoordinator
     class QueueAsyncSegmentPipeline
+    class QueueAsyncExecutionLease
     class SegmentCommitPlan
     class SegmentCommitEffects
     class TerminalPublicationBoundary
@@ -134,6 +135,8 @@ classDiagram
     AwaitCompletionSupport --> AwaitCoordinator : create / dispatch unit
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
     QueueAsyncCoordinator --> QueueAsyncSegmentPipeline : process work item
+    QueueAsyncSegmentPipeline --> QueueAsyncExecutionLease : claim and renew
+    QueueAsyncExecutionLease --> ExecutionStateStore : conditional claim and renewal
     QueueAsyncSegmentPipeline --> SegmentCommitPlan : plan completed/suspended/failed
     QueueAsyncSegmentPipeline --> SegmentCommitEffects : interpret plan
     SegmentCommitEffects --> TerminalPublicationBoundary : publish before success

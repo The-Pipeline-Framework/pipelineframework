@@ -95,7 +95,7 @@ Duplicate completions and terminal publications are handled by fact keys. Retryi
 
 Queue-async segment execution is modeled as a small reactive flow over immutable decisions:
 
-1. `QueueAsyncSegmentPipeline` claims one due `ExecutionRecord` and wraps it as a `ClaimedSegment`.
+1. `QueueAsyncSegmentPipeline` delegates the claim to `QueueAsyncExecutionLease`, which wraps the due `ExecutionRecord` as a `ClaimedSegment` and maintains the lease through execution, planning, and commit while the segment still owns the transition.
 2. The claimed segment builds the transition command from its pinned pipeline, contract, release, step index, attempt, input payload, and optional page context.
 3. The transition worker returns a `TransitionResultEnvelope`, including page completion metadata when it opened a paged source.
 4. `SegmentCommitPlan` converts that envelope into one immutable decision: `CompletedSegment`, `SuspendedSegment`, or `FailedSegment`.
@@ -110,6 +110,7 @@ Terminal publication is a prepare/complete barrier before page advancement or ru
 sequenceDiagram
     participant Queue as "QueueAsyncCoordinator"
     participant Pipeline as "QueueAsyncSegmentPipeline"
+    participant Lease as "QueueAsyncExecutionLease"
     participant Segment as "ClaimedSegment"
     participant Worker as "Transition worker"
     participant Plan as "SegmentCommitPlan"
@@ -120,9 +121,12 @@ sequenceDiagram
     participant Ledger as "SegmentBoundaryLedger"
 
     Queue->>Pipeline: "process work item"
-    Pipeline->>Store: "claim due execution"
-    Store-->>Pipeline: "ExecutionRecord"
-    Pipeline->>Segment: "wrap as ClaimedSegment"
+    Pipeline->>Lease: "run with execution ownership"
+    Lease->>Store: "claim due execution"
+    Store-->>Lease: "ExecutionRecord"
+    Lease->>Segment: "wrap as ClaimedSegment"
+    Lease->>Pipeline: "run claimed segment"
+    Note over Lease,Store: "Renew while the segment owns the transition"
     Pipeline->>Ledger: "append SegmentAttemptStarted"
     Segment-->>Pipeline: "TransitionCommandEnvelope"
     Pipeline->>Worker: "execute segment"
