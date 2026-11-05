@@ -27,6 +27,7 @@ reachable branch end and adapts concrete or union results to the declared return
 definition's remaining steps finish. An explicit terminal merge remains useful when an operation
 must choose or transform the final result.
 
+The compiler checks authored version 3 steps before lifecycle, plugin, or aspect expansion.
 Give each concrete canonical input type one authored consumer within a definition. For a union
 input, count only the concrete variants selected by `accepts`; disjoint selections can share the
 same union declaration. Query, Command, and Await-decorated operations follow the same authoring
@@ -50,16 +51,8 @@ See the [Blocks Guide](/develop/blocks/) for the complete packaging and binding 
 
 ## Use recursion deliberately
 
-For a local unary definition, use `recur: [Type]` to select continuing concrete outcomes after its
-authored steps finish. Those types must satisfy the definition input; the remaining outcomes must
-satisfy its output. TPF lowers the declaration through its existing bounded nested-invocation path.
-Runtime depth is bounded by `pipeline.max-recursive-depth`.
+Declare a pipeline step with `pipeline: self` and select the continuing branch with `accepts`. In a nested definition its explicit name is equivalent. In the root, `self` re-enters the root within the owning execution. When that invocation returns, the caller executes its remaining steps.
 
-An explicitly authored recursive call is also an authored consumer. The routing invariant does not
-exempt it. Definition-level recurrence supplies the continuing boundary without adding another
-authored consumer of the initial type. See [ADR-0083](/decisions/0083-definition-owned-bounded-recurrence).
+Within each definition a concrete type can select one ordinary consumer and one self-call continuation. Calls to other definitions count as ordinary consumers. The recursion bound counts direct self-calls. Ordinary nesting does not consume that allowance.
 
-See the [complete reference](./reference#pipeline-contracts) for syntax, capability manifests,
-`blockBindings`, current restrictions, and bounded recursion.
-
-Continue with [Declare Boundaries](./boundaries).
+Await on an operation in a LOCAL ONE_TO_ONE call chain retains the suspended position and caller return positions. The completed value resumes the child and returns through each caller. See the [bounded recursion example](./reference#bounded-recursion).

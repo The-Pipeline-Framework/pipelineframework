@@ -38,6 +38,14 @@ worker, and transport attempt IDs do not create new effect identities.
 idempotency key or external identifier; TPF cannot manufacture exactly-once behavior
 after an ambiguous third-party failure.
 
+Attach transport Await to the meaningful operation that produces the trusted request. For a
+supported LOCAL unary union output, use `await.accepts` and `await.output` to select the review
+outcome and its completed canonical type; retain the other outcomes in the final output union.
+Configure approved record persistence through aspects. An AFTER_STEP persistence aspect with
+`config.targetTypes` observes selected canonical payloads before the Await modifier while keeping
+the pipeline carrier intact. Keep callback-capable effects on the callback initiation/settlement
+contract. Do not add identity services or application persistence Commands to carry Await.
+
 Use the `await:` modifier on the initiating operation when its final answer arrives later: human
 approval, webhook callback, brokered reply, or long-running provider result. The operation first
 produces its trusted immediate output, then execution suspends until the admitted completion is
