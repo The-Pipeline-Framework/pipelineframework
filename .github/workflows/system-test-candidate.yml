@@ -694,6 +694,19 @@ jobs:
             --resolvedSet "$GITHUB_WORKSPACE/inputs/resolved-set.json" \
             --mavenRepository "$RUNNER_TEMP/tpf-system-test-m2"
 
+      - name: Make CSV HA scale failure evidence readable
+        if: failure() && matrix.shard == 'scale-native'
+        run: sudo chmod -R a+rX owners/csvPayments/self-host/container/target/ha-scale-failures || true
+
+      - name: Preserve CSV HA scale failure evidence
+        if: failure() && matrix.shard == 'scale-native'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: csv-ha-scale-failure-evidence
+          path: owners/csvPayments/self-host/container/target/ha-scale-failures/
+          retention-days: 14
+          if-no-files-found: warn
+
   promote:
     name: Promote green main candidate
     if: >-
