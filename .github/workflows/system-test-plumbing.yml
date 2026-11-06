@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'system-tests/**'
+      - 'framework/bom/pom.xml'
+      - 'scripts/verify-framework-publication.mjs'
       - 'releases/**'
       - '.github/workflows/publish.yml'
       - '.github/workflows/system-test-*.yml'
@@ -11,6 +13,8 @@ on:
     branches: [main]
     paths:
       - 'system-tests/**'
+      - 'framework/bom/pom.xml'
+      - 'scripts/verify-framework-publication.mjs'
       - 'releases/**'
       - '.github/workflows/publish.yml'
       - '.github/workflows/system-test-*.yml'
@@ -32,5 +36,12 @@ jobs:
           persist-credentials: false
       - name: Validate coordination regressions without cloud credentials
         run: node --test system-tests/test/*.test.mjs
+      - name: Setup JDK for BOM consumer resolution
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Compile versionless BOM consumer and annotation processor paths
+        run: python3 system-tests/scripts/test-bom-consumer.py
       - name: Validate changed cloud and full-train workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= .github/workflows/system-test-full-train.yml .github/workflows/system-test-plumbing.yml .github/workflows/system-test-candidate.yml .github/workflows/publish-snapshots.yml

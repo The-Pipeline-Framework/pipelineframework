@@ -175,6 +175,32 @@
             <!-- Connector contracts, providers, and host integrations. -->
             <dependency>
                 <groupId>org.pipelineframework</groupId>
+                <artifactId>conversation-context-connector</artifactId>
+                <version>${pipelineframework.connectors.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>decision-query-connector</artifactId>
+                <version>${pipelineframework.connectors.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>decision-query-jev-connector</artifactId>
+                <version>${pipelineframework.connectors.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>representation-provider-file</artifactId>
+                <version>${pipelineframework.connectors.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>host-quickbooks-mcp</artifactId>
+                <version>${pipelineframework.connectors.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
                 <artifactId>connector-import-tooling</artifactId>
                 <version>${pipelineframework.connectors.version}</version>
             </dependency>
