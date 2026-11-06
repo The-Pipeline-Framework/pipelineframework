@@ -10,11 +10,17 @@ ROOT = release.ROOT
 
 
 def key(coordinate):
+    """Return an ownership identity, treating Maven-plugin artifacts as physical JARs."""
     group, artifact, packaging = coordinate.split(":")
     return group, artifact, "jar" if packaging == "maven-plugin" else packaging
 
 
 def verify(config, bom, exclusions):
+    """Validate BOM ownership and coverage, returning managed and excluded counts.
+
+    Raise ValueError for missing coverage, invalid owner-family version properties,
+    or exclusions that lack a reason, are stale, or also appear in the BOM.
+    """
     # Also validates ownership, duplicates and each dependency's owner-family version property.
     pins = {"components": {name: {"repository": component["repository"], "mavenVersion": "test"}
                            for name, component in config["components"].items() if component["kind"] == "maven"}}
