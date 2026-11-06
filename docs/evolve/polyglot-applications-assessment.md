@@ -91,10 +91,10 @@ projection and scenarios. It does not execute `PipelineRunnerCore`, Quarkus or
 `StepOneToOne`, so matching Java/native results establish agreement within the research
 profile rather than production Java-runtime equivalence. Its fixed scenario oracle
 covers the baseline A → B → C; changed-order execution is a separate native check.
-Independent local verification passed the 12 producer tests, six Node and six Python
-boundary tests, five expected TypeScript diagnostics, exact three-language comparison
-of seven scenarios and two overlapping contexts, and producer-artifact drift checks.
-These identify the executed checks; they are not a feature-parity or coverage score.
+Independent local verification passed producer/regeneration tests, Node/Python boundary
+tests, expected TypeScript diagnostics, exact three-language comparison of seven scenarios
+and two overlapping contexts, and producer-artifact drift checks. Component evidence records
+the detailed results and review regressions; test counts are not a feature-parity score.
 
 The examples consumer must not source-build an unmerged compiler into its canonical Maven
 reactor. [ADR-0059](../decisions/0059-learning-examples-consume-released-artifacts.md) remains
