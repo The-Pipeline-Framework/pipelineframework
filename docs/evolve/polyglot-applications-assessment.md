@@ -21,7 +21,93 @@ Java payload/failure coupling remains; versioned invocation-path data has been a
 Await and must not be silently dropped by future native consumers. See the decision's pinned
 source references and the contracts corpus's evidence report for exactly what was exercised.
 The next bounded gate is compiler-projected artifact consumption in an examples-owned LOCAL
-proof, after review of this contract. Spring and other implementation priorities are unchanged.
+proof. The continuation below is authorised research on top of the open contract proposal;
+it does not accept that proposal as a production contract. Spring and other implementation
+priorities are unchanged.
+
+### From a shared test kit to a generated pipeline proof
+
+The continuation is reviewable in [compiler PR #52](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/52)
+and [examples PR #35](https://github.com/The-Pipeline-Framework/pipelineframework-examples/pull/35).
+The [native walkthrough and evidence](https://github.com/The-Pipeline-Framework/pipelineframework-examples/blob/codex/polyglot-projection-probe/research/native-local-projection/README.md)
+explain the authored functions, generated files, test shell and reproduction commands.
+
+The contract consumers answer whether three languages agree on supplied examples. They do
+not yet answer whether TPF can derive those instructions from an application's actual DSL.
+The next proof joins those two boundaries: existing Java semantic machinery reads a v3
+pipeline, a compiler-owned research tool produces an inspectable projection, and a native
+test shell uses that projection to call the application's A, B and C functions.
+
+```mermaid
+flowchart LR
+    D[Authored v3 DSL] --> C[Java semantic validation]
+    C --> P[Experimental projection and types]
+    P --> N[Native test shell]
+    N --> A[Function A]
+    A --> N
+    N --> B[Function B]
+    B --> N
+    N --> F[Function C]
+```
+
+The return arrows matter: application functions do not select the next step or own retry
+policy. The shell validates each result before advancing according to the projection.
+There is no inter-step RPC or JVM executor in the native run. This remains a finite unary
+research fixture, not a usable TPF runtime or the product MVP.
+
+The following obligations were established independently before implementation, from
+[contracts #52](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/issues/52),
+[examples #27](https://github.com/The-Pipeline-Framework/pipelineframework-examples/issues/27)
+and [compiler #46](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/issues/46).
+They define this proof's stopping point, without weakening those issues' wider acceptance.
+
+| Gate | Required evidence |
+|---|---|
+| Compiler authority | Actual v3 semantic loading/validation; changed authored order or types change generated output, rather than hand-editing a JSON fixture |
+| Generated contracts | Supported canonical types and typed handler bindings; missing or incompatible handlers fail before execution |
+| Closed projection | Explicit profile, capabilities, ordered logical steps, type links and policies; incompatible or unknown requirements fail before A |
+| Native execution | Real asynchronous A → B → C in one native process; independently specified values, order and attempt counts |
+| Policy and context | Java/native comparison for success, transient/terminal failure, rejection and cancellation; overlapping invocations retain their own context |
+| Return boundary | Invalid A output cannot invoke B; malformed or unknown failures cannot silently acquire retry permission |
+| Authority | Business context rejects credentials, provider clients and coordinator-store handles; this is not a sandbox claim |
+| Reproducibility | Pinned source/input/output identities and commands; changed-DSL regeneration and type diagnostics, with substituted boundaries disclosed |
+
+The producer uses the released `pipelineframework-dsl:26.11.1` loader and semantic
+model. Its raw-document check only rejects unsupported declarations; canonical
+normalisation and compatibility come from those released APIs. This is a compiler-owned
+research tool, not a production compiler target or the full JSR-269 generation pipeline.
+Native handler names and candidate retry limits are supplied in a separate research
+binding file; they cannot override the DSL's logical types or order.
+
+The worked pipeline calculates `3 → 4 → 8 → 5`. A second authored DSL changes its
+order from A → B → C to B → A → C; regeneration produces an artifact that the same
+TypeScript functions execute to obtain `4`. Generated TypeScript declarations are
+checked with the actual TypeScript compiler, including wrong/missing handlers and
+required/optional/non-null field failures. Python consumes generated annotations and
+performs runtime checks; Python static-editor conformance is not established.
+
+The Java comparison is a handwritten asynchronous reference shell over the same
+projection and scenarios. It does not execute `PipelineRunnerCore`, Quarkus or
+`StepOneToOne`, so matching Java/native results establish agreement within the research
+profile rather than production Java-runtime equivalence. Its fixed scenario oracle
+covers the baseline A → B → C; changed-order execution is a separate native check.
+Independent local verification passed producer/regeneration tests, Node/Python boundary
+tests, expected TypeScript diagnostics, exact three-language comparison of seven scenarios
+and two overlapping contexts, and producer-artifact drift checks. Component evidence records
+the detailed results and review regressions; test counts are not a feature-parity score.
+
+The examples consumer must not source-build an unmerged compiler into its canonical Maven
+reactor. [ADR-0059](../decisions/0059-learning-examples-consume-released-artifacts.md) remains
+in force. A standalone research consumer can inspect a supplied experimental projection
+with recorded provenance; that establishes candidate interoperability, not released-artifact
+compatibility. Experimental file digests are not a second Release Descriptor or a replacement
+for the compiler's existing contract identity.
+
+Contributor-side Java generation is temporary proof tooling. It does **not** fulfil the
+required changed-project generation workflow on a workstation without Java. Remote generation,
+production native kernels, deployed worker integration, streaming, Connector guarantees and
+durable Await recovery remain separate gates. No additional production implementation or
+deployment is scheduled by this continuation.
 
 ## Current conclusion: equivalent LOCAL workflows require native runtimes
 
