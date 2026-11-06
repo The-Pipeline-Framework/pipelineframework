@@ -112,6 +112,13 @@ Several framework entries can use the same package while authored steps retain
 one owning artefact. The shared verifier checks the selected entry and compares
 the complete packaged Compiled Truth with the carrier.
 
+A Lambda ZIP can carry Compiled Truth in a declared nested JAR such as
+`lib/application.jar`. Extraction uses that exact location. Nested JARs must
+be complete archives, and selected entry classes must be readable. Verification
+also rejects a declared handler location when an earlier classpath entry would
+shadow it. Lambda orders its `lib` JARs by Unicode filename order; see
+[AWS Java packaging](https://docs.aws.amazon.com/lambda/latest/dg/java-package.html).
+
 Command and Query requirements come from compiler metadata. Runtime build
 metadata records the actual selected effect and capture stores. A deployment
 consumer must check those requirements against the target's grants and durable

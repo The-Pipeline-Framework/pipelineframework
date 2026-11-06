@@ -24,6 +24,9 @@ its input and expected result.
 The shared contracts validate entries and compare each selected package's
 complete Compiled Truth with the release carrier. Runtime's shared producer and
 Maven adapter emit the same model; the native CLI verifies its closure.
+The declared carrier location governs extraction. For Lambda ZIPs, a handler
+association must also agree with classpath precedence; a shadowed copy in the
+declared JAR does not establish the association.
 Schema-1 constructors and JSON remain supported, and remain the default when
 deployment facts are absent.
 
