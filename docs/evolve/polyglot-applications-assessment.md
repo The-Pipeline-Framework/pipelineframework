@@ -154,7 +154,13 @@ The remaining decisions concern which unary policies/types form the first profil
 
 ## Boundary qualification and experimental MVP decision
 
-**Boundary qualification is a prerequisite, not a claim that the portable kernel is already isolated.** The overall native LOCAL/distributed roadmap remains in place and unscheduled. The LOCAL-first scope below is a recommended experimental release candidate for decision in contracts #52; it does not cancel later QUEUE_ASYNC requirements or reopen Provider SDK implementation. Experimental status does not relax type, authority or outcome guarantees.
+**Boundary qualification is a prerequisite, not a claim that the portable kernel is already isolated.**
+Contracts #52 now supplies a bounded contract proposal and executable research checks under
+[ADR-0088](../decisions/0088-polyglot-contract-qualification-precedes-runtime-selection.md).
+The LOCAL-first release scope below is historical, not a current recommendation. The overall
+native LOCAL/distributed requirements remain in place and unscheduled, including streaming,
+Connectors and durable Await. Experimental status does not relax those guarantees or reopen
+Provider SDK implementation.
 
 ### Required safeguards and stopping rule
 
@@ -165,7 +171,12 @@ Before production runtime implementation, contracts #52, with compiler/runtime/c
 3. Shared executable conformance vectors and negative tests, owned by contracts and exercised by examples #27/#28 and system-tests. Compare Java, Node and Python values, identities, attempt counts, context isolation and lifecycle outcomes; test unsupported-feature rejection and forbidden authority access.
 4. A change rule: semantic additions require a shared-contract/profile revision, affected-language impact assessment, named owner and conformance updates. Per-language adapters cannot add independent routing, retry or recovery policy. Specify compatibility/versioning and the maintenance owner before exposing a public SDK.
 
-**Stop when the accepted profile passes its declared layout tests and developer acceptance journey.** Distributed and durable tests apply only to profiles claiming them. Do not expand a LOCAL release merely to complete the whole epic. Conversely, a LOCAL-only release does not complete the distributed/durable roadmap. If the probe cannot isolate the profile without pulling in coordinator/provider internals, record a failed boundary gate and reconsider scope instead of growing the kernel silently. The bounded probe is the explicit research exception to the implementation gate.
+**The present increment stops at a reviewable contract proposal and passing bounded probes.**
+It does not produce a release or pass the developer acceptance journey. Production qualification
+still needs compiler-generated artifacts and evidence for every promised layout and lifecycle,
+including streaming, Connector guarantees and durable Await. If a probe cannot isolate its
+boundary without importing coordinator/provider internals, record the failed gate instead of
+growing the kernel silently. A successful unary probe authorises no further implementation.
 
 ### Historical LOCAL-first candidate (not an accepted MVP)
 
@@ -206,7 +217,10 @@ Query, distributed and durable evidence. Root #478 owns hook-boundary implicatio
 support remain intact; no issue is closed by this proposal. Connectors #60 remains closed as
 not planned for implementation, with renewed SPI interest recorded for a separate decision.
 
-Previous programme estimates cover broader placement/durable work and are not an estimate for this candidate MVP. Re-estimate after the profile and hosted Query decision; no dates, staffing, milestone or implementation PRs are authorised.
+Previous programme estimates cover broader placement/durable work; they do not estimate a
+currently selected MVP. Re-estimate after contract and product-scope decisions. Only the
+bounded #52 contract/probe increment is authorised; no further dates, staffing, milestones
+or implementation PRs are authorised.
 
 
 ## Roadmap: native LOCAL equivalence is required
