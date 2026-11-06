@@ -99,6 +99,29 @@ If no stable repository URI is configured, opt into a local-only descriptor expl
   -Dtpf.release.allowLocalUris=true
 ```
 
+## Physical package associations
+
+Schema 2 adds an optional `deployment` section to the same immutable Release
+Descriptor. The Maven plugin accepts it as a `<deployment>` configuration
+element. Omitting it preserves the schema-1 output.
+
+A deployment section identifies a provider profile, entries and logical
+bindings. Each entry selects an existing artefact, compiled module, exact
+application and handler package locations, Java entry class and trigger.
+Several framework entries can use the same package while authored steps retain
+one owning artefact. The shared verifier checks the selected entry and compares
+the complete packaged Compiled Truth with the carrier.
+
+Command and Query requirements come from compiler metadata. Runtime build
+metadata records the actual selected effect and capture stores. A deployment
+consumer must check those requirements against the target's grants and durable
+bindings. Tenant IDs, resource ARNs, endpoints, credentials and secret values
+are supplied through that target binding.
+
+A profile name and bounded declared check describe requirements. Physical
+delivery and successful execution of the check remain deployment acceptance
+steps. See [ADR-0088](../decisions/0088-release-packaging-facts-share-the-immutable-descriptor).
+
 ## Canonical artefact locations
 
 Release locations describe immutable artefact identity; resolver configuration supplies environment-specific access.
