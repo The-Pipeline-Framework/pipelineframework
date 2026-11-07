@@ -16,6 +16,13 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const localRepository = path.resolve(repository);
 const failures = [];
 
+// Reverse coverage complements the availability check: omitted artifacts cannot
+// pass merely because every coordinate that happened to be listed resolves.
+const coverage = spawnSync('python3', [path.join(root, 'system-tests/scripts/verify-bom-coverage.py')], {
+  cwd: root, encoding: 'utf8'
+});
+if (coverage.status !== 0) throw new Error(`BOM coverage failed:\n${coverage.stderr || coverage.stdout}`);
+
 const expectedPublic = manifest.publicArtifacts ?? [];
 const expectedInternal = manifest.internalArtifacts ?? [];
 const expectedExternal = manifest.externalArtifacts ?? [];

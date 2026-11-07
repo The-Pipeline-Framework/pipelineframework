@@ -1,0 +1,17 @@
+{
+  "org.pipelineframework:pipelineframework-contracts-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:pipelineframework-aws-durable-coordination-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:pipelineframework-runtime-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:pipelineframework-cli-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:connector-maven-plugin:maven-plugin": "Maven build plugin; applications manage plugin versions explicitly.",
+  "org.pipelineframework:connector-mcp-maven-plugin:maven-plugin": "Maven build plugin; applications manage plugin versions explicitly.",
+  "org.pipelineframework:connector-openapi-maven-plugin:maven-plugin": "Maven build plugin; applications manage plugin versions explicitly.",
+  "org.pipelineframework:framework-connectors:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:host-gmail:jar": "Internal host integration or test fixture; not published as a supported application dependency.",
+  "org.pipelineframework:host-microsoft-graph:jar": "Internal host integration or test fixture; not published as a supported application dependency.",
+  "org.pipelineframework:host-oidc-quarkus:jar": "Internal host integration or test fixture; not published as a supported application dependency.",
+  "org.pipelineframework:pipelineframework-connectors-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:representation-provider-fixture:jar": "Internal host integration or test fixture; not published as a supported application dependency.",
+  "org.pipelineframework:pipeline-blocks:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:pipeline-expansions:pom": "Parent/aggregator POM, not an imported application dependency."
+}

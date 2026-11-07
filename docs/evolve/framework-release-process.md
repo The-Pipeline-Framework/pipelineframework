@@ -46,6 +46,26 @@ The planner checks Central availability: components already independently publis
 `alreadyPublishedComponents` and need no second publication. Partial availability blocks preparation
 until the original deployment or repository propagation has been reconciled.
 
+## Keep the consumer BOM complete
+
+Application dependencies, including connector implementations and representation providers, obtain their
+versions from the imported product BOM. Applications should not need a second list of per-artifact
+dependency versions to compensate for omissions. Maven build-plugin versions remain explicit.
+
+When onboarding a published artifact, update its owner's `allowedCoordinates` in
+`system-tests/components.yml` and add its dependency-management entry to `framework/bom/pom.xml`, using
+the owner's existing version property. Candidate validation rejects unregistered coordinates. The offline
+`python3 system-tests/scripts/verify-bom-coverage.py` guard then requires every registered coordinate to
+be managed or explicitly excluded with a reason in `system-tests/bom-exclusions.json`. Exclusions cover
+parent/aggregator POMs, unsupported internal hosts/test fixtures, and build plugins; they are not a second
+artifact inventory. A managed artifact cannot also be excluded.
+
+The guard runs in PR plumbing tests and before publication verification. The existing availability check
+still resolves every managed coordinate; reverse coverage and artifact availability prove different things.
+The PR consumer fixture compiles versionless dependencies and annotation-processor paths against a local
+test BOM with independently selected family versions. It does not publish or execute connector code.
+Adding existing coordinates to the BOM does not require republishing unchanged component artifacts.
+
 ## Prepare only new components
 
 Before a coordinated change merges, use the existing immutable candidate compatibility-set gate.
