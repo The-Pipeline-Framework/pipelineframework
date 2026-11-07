@@ -99,6 +99,8 @@ publication and the distinction from immutable test and release inputs.
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
 
+| [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. |
+
 ## Superseded decisions
 
 These records explain earlier designs. Use their successor for current semantics.
@@ -111,7 +113,6 @@ explicit successor metadata for retrieval tools and agents.
 | [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Functional-core-only packaged Blocks. | [0028](./0028-block-connector-capabilities-are-application-bound.md) |
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Definition-level `recur` declarations. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 | [0087](./0087-root-recurrence-preserves-durable-await.md) | Root-only durable recurrence. Formerly published under the root-recurrence ADR-0084 URL. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
-| [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. | [0011](./0011-runtime-deployment-configuration-and-telemetry.md) |
 
 ## Maintenance
 
