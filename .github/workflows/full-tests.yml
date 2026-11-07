@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  TPF_TELEMETRY_DISABLED: "true"
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
 

@@ -9,6 +9,9 @@ concurrency:
   group: central-snapshot-publishing
   cancel-in-progress: false
 
+env:
+  TPF_TELEMETRY_DISABLED: "true"
+
 jobs:
   publication-policy:
     name: Check exact incident-only bootstrap publication boundary

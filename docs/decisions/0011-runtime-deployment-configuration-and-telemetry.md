@@ -30,6 +30,10 @@ Framework-owned Query observation metadata is the source for Query telemetry. Pu
 selects bounded values, while separate metric and tracing adapters emit them: live reported input
 and output counts are usage metrics, and live or replayed historical metadata is trace context.
 Replay never represents new token consumption.
+Build census is a separate compiler-owned ecosystem observation governed by
+[ADR-0088](./0088-build-census-is-compiler-owned.md). It never consumes runtime observations
+or uses application exporters.
+
 This decision governs `framework/deployment`, runtime mapping, runtime configuration,
 telemetry in `framework/runtime*`, packaging, and `docs/deploy`.
 

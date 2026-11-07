@@ -18,6 +18,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  TPF_TELEMETRY_DISABLED: "true"
+
 jobs:
   docs-build:
     name: Docs Build and Links

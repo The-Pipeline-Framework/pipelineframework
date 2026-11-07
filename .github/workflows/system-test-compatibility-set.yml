@@ -36,6 +36,9 @@ concurrency:
   group: tpf-system-test-set-${{ inputs.set_id }}
   cancel-in-progress: true
 
+env:
+  TPF_TELEMETRY_DISABLED: "true"
+
 jobs:
   parse:
     name: Validate compatibility-set request

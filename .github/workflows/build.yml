@@ -16,6 +16,7 @@ on:
       - '.github/workflows/build.yml'
 
 env:
+  TPF_TELEMETRY_DISABLED: "true"
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BOOTSTRAP: -B -U -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   MAVEN_ARGS_PR: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none

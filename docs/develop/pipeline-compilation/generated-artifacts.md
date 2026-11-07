@@ -154,3 +154,127 @@ Enable verbose logging to debug generation issues:
 # application.properties
 quarkus.log.category."org.pipelineframework.processor".level=DEBUG
 ```
+
+
+## Build Census
+
+TPF ecosystem telemetry observes what developers build, never what their applications
+process. The compiler can produce a small census candidate after an error-free TPF
+application compilation. It adds no code to generated execution paths and does not
+observe startup, execution counts, payloads, latency, or failures.
+
+**The initial implementation supports local preview only. Public reporting is disabled.**
+The client and collector source implement delivery, but enabling the public service
+requires the privacy and operational release approvals. When reporting is released it
+will be default-on, with the opt-out below.
+
+```mermaid
+flowchart LR
+    A[Linked logical application] --> B[Approved coarse projection]
+    B --> C[Compiler daemon worker]
+    C --> D[Local preview]
+    C --> E[HTTPS census collector]
+    E --> F[Private bounded retention]
+    F --> G[Suppressed public aggregates]
+```
+
+### Disable or inspect
+
+Disable census with any one of:
+
+```sh
+export TPF_TELEMETRY_DISABLED=true
+```
+
+```text
+-Dtpf.telemetry.disabled=true
+-Atpf.telemetry.disabled=true
+```
+
+The `-D` option must reach the JVM running the compiler; the `-A` option is a javac
+annotation-processor option. A disabling value in any source wins. Invalid disabling
+values also disable collection without failing the build. Disabled census creates no
+identity, worker, state file, or network request.
+
+To inspect an application compilation, pass these javac processor options:
+
+```text
+-Atpf.telemetry.mode=preview
+-Atpf.telemetry.preview=/absolute/private/path/census-preview.json
+```
+
+Alternatively use `TPF_TELEMETRY_MODE=preview` and `TPF_TELEMETRY_PREVIEW` with that
+absolute output path. The parent directory must already exist. Choose a private path
+outside source, generated and packaged output directories. The compiler refuses paths
+in those directories, including its selected class output, and protects the original
+configuration and census identity files. Preview never sends a request;
+it writes an envelope containing the exact candidate event, local deduplication digest,
+and eligibility explanation. If identity state is locked or unavailable, it can write
+a suppression reason without inventing an event or identity. It uses retained identities, so it creates local census
+state. A failed or non-application compilation produces no candidate. An opt-out also disables preview. Preview is asynchronous and may be lost if a
+short-lived compiler JVM exits immediately; a missing output is not a compilation error.
+Only the module generating the application orchestrator produces an application candidate.
+
+### Collected values
+
+Schema v1 contains random installation/application-instance IDs, UTC date, packaged
+compiler/contracts versions, compiler JVM Java major, coarse size/feature counts, and
+transport, platform, and runtime layout. Sizes cover reachable pipeline definitions,
+authored logical steps, canonical type declarations, and reachable contributing Block
+packages. Features cover nested invocations, ONE_TO_MANY, MANY_TO_ONE, Query, Command,
+and Await. Await counts its owning operation independently of Query/Command.
+
+Count bands are `0`, `1`, `2–5`, `6–10`, `11–25`, `26–50`, `51–100`, `101+`, and
+`unknown`. Unavailable information remains unknown. Component versions come from
+packaged TPF metadata; unrecognized values become `unknown` and development versions
+use `-dev`. No names, code, packages/classes, Maven coordinates, URLs, schemas,
+payloads, credentials, infrastructure identifiers, or fingerprints enter the event.
+`telemetry.json` and `pipeline-contract.json` are never uploaded.
+
+Repeated invocations count a definition's internal steps once. Generated adapters,
+aspect steps, and deployment copies do not increase logical counts. Dependencies found
+on the classpath alone do not count as adoption. Persistence, caching, compensation,
+providers, connector catalogue tokens, and runtime-selected modes are outside v1.
+
+The [v1 protocol schema](https://github.com/The-Pipeline-Framework/pipelineframework-census/blob/a4b1d0bac3443d6c79e5bb4de87576d77248afbe/protocol/v1.schema.json)
+lives in the independently owned [census collector repository](https://github.com/The-Pipeline-Framework/pipelineframework-census); the compiler includes the same schema at
+`META-INF/tpf/census-v1.schema.json`. Its strict fields are a privacy contract.
+
+### Retained identity and delivery
+
+The state directory is independent of Maven, authentication, and release descriptors:
+
+| Host | Default directory |
+| --- | --- |
+| Linux | `$XDG_STATE_HOME/tpf/census`, otherwise `~/.local/state/tpf/census` |
+| macOS | `~/Library/Application Support/TPF/census` |
+| Windows | `%LOCALAPPDATA%\TPF\census` |
+
+Use `TPF_TELEMETRY_STATE_DIR` for managed retained storage. Known CI/container hosts
+must also set `TPF_TELEMETRY_STATE_PERSISTENT=true`; do so only with a retained mount
+or cache. Writable disposable storage is insufficient. Not every disposable environment
+can be detected automatically.
+
+One application instance means one original configuration path in one installation.
+Its locally HMAC-keyed path never leaves the machine. Configuration/version changes keep
+the same random identity. Moving a configuration, another checkout, or state loss can
+create a new instance. Similar projects on different developer installations remain
+separate reporting instances. These statistics do not measure globally unique projects.
+
+Reporting sends a first observation, changed values at most once daily, or unchanged
+values on the first build in a new UTC ISO week. Attempts are recorded before sending;
+only `204` acknowledges acceptance. There is no offline backlog, retry, shutdown flush,
+or heartbeat. Networking runs on a bounded daemon worker with a 500 ms connect timeout
+and 1 second request deadline. Failure or locked/corrupt state skips census and cannot
+change compilation success. JVM exit can drop queued observations.
+
+Persistent random IDs are pseudonymous, not guaranteed anonymous. The proposed service
+retains private rows for 90 days, with separately disclosed [D1 recovery-history retention](https://developers.cloudflare.com/d1/reference/time-travel/);
+public statistics contain no IDs. The network edge necessarily sees IP addresses for
+transient abuse control; those addresses are excluded from census storage. Provider
+security processing must be disclosed before public reporting starts.
+
+Inspect `state.json` locally to find your installation ID for the documented privacy
+request process. Do not publish that file or preview output. Resetting local state creates
+new counting identities and does not erase previously received observations. Runtime
+observability is described separately under [Operate](/operate/).
