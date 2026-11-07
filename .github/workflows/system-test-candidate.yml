@@ -27,6 +27,9 @@ concurrency:
       (github.event_name == 'workflow_dispatch' && '68') }}
   cancel-in-progress: true
 
+env:
+  TPF_TELEMETRY_DISABLED: "true"
+
 jobs:
   intake:
     if: github.event_name == 'repository_dispatch'

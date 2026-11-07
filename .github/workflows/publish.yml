@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  TPF_TELEMETRY_DISABLED: "true"
+
 jobs:
   publish:
     name: Publish Release

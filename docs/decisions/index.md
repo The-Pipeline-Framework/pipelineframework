@@ -99,6 +99,8 @@ publication and the distinction from immutable test and release inputs.
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
 
+| [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. |
+
 ## Superseded decisions
 
 These records explain earlier designs. Use their successor for current semantics.
