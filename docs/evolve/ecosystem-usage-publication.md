@@ -27,15 +27,15 @@ Use Pages' existing revalidation for HTML. Content-addressed JSON and Vite asset
 
 ## Dashboard previews
 
-These screenshots use synthetic figures to illustrate the desktop and mobile layouts. They do not measure TPF adoption.
+These screenshots show the desktop and mobile layouts before an approved snapshot has been published.
 
 ### Desktop
 
-![Desktop dashboard preview with a synthetic data notice, weekly totals and a 12-week trend](/evidence/ecosystem-usage/desktop.webp)
+![Desktop dashboard aligned with the top navigation and an On this page outline on the right](/evidence/ecosystem-usage/desktop.webp)
 
 ### Mobile
 
-![Mobile dashboard preview with a synthetic data notice and reporting totals stacked above the weekly trend](/evidence/ecosystem-usage/mobile.webp)
+![Mobile dashboard preview with the unpublished snapshot notice and stacked reporting totals](/evidence/ecosystem-usage/mobile.webp)
 
 ## Publication runbook
 

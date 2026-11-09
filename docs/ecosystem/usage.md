@@ -1,8 +1,6 @@
 ---
 title: TPF Ecosystem Usage
 description: Build-derived adoption statistics from reporting TPF installations, with weekly trends, versions, features and application structure.
-sidebar: false
-aside: false
 ---
 
 <script setup>

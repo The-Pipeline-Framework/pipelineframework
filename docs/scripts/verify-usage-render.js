@@ -95,16 +95,61 @@ import snapshot from './${name}.json'
     await readFile(join(publicDist, href + '.html'))
   }
   await navigationPage.close()
+  const desktopWidth = 1920
+  const layoutPage = await browser.newPage({ viewport: { width: desktopWidth, height: 960 } })
+  await layoutPage.route('**/*', route => {
+    const url = new URL(route.request().url())
+    if (url.origin !== base) return route.abort()
+    url.pathname = '/public' + url.pathname
+    return route.continue({ url: url.href })
+  })
+  const layouts = []
+  for (const path of ['/ecosystem/usage', '/evolve/publishing-reference']) {
+    await layoutPage.goto(base + path)
+    const outline = layoutPage.locator('.VPDocAsideOutline')
+    await outline.getByText('On this page', { exact: true }).waitFor()
+    layouts.push(await layoutPage.evaluate(() => {
+      const bounds = selector => document.querySelector(selector).getBoundingClientRect()
+      return {
+        brandLeft: bounds('.VPNavBarTitle .title').left,
+        mainLeft: bounds('.VPDoc main').left,
+        mainRight: bounds('.VPDoc main').right,
+        outlineLeft: bounds('.VPDocAsideOutline').left,
+        outlineRight: bounds('.VPDocAsideOutline').right
+      }
+    }))
+    if (path === '/ecosystem/usage') {
+      for (const section of ['Overview', 'Adoption over time', 'Framework versions', 'Feature adoption',
+        'Application complexity', 'Execution architecture', 'Methodology and privacy']) {
+        assert.equal(await outline.getByRole('link', { name: section, exact: true }).count(), 1)
+      }
+      if (process.env.TPF_USAGE_SCREENSHOTS) {
+        await layoutPage.screenshot({ path: join(process.env.TPF_USAGE_SCREENSHOTS, 'tpf-usage-desktop.png') })
+      }
+    }
+  }
+  assert.deepEqual(layouts[0], layouts[1])
+  const { brandLeft, mainLeft, mainRight, outlineLeft, outlineRight } = layouts[0]
+  assert.ok(Math.abs(mainLeft - brandLeft) <= 1, 'docs should start under the navigation brand')
+  assert.ok(mainRight < outlineLeft, 'the outline should sit to the right of the article')
+  assert.ok(Math.abs(outlineRight - (desktopWidth - brandLeft)) <= 1, 'the outline should end at the opposite navigation gutter')
+  await layoutPage.setViewportSize({ width: 360, height: 840 })
+  await layoutPage.goto(base + '/ecosystem/usage')
+  assert.equal(await layoutPage.locator('.VPDocAsideOutline').isVisible(), false)
+  assert.ok(await layoutPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+  if (process.env.TPF_USAGE_SCREENSHOTS) {
+    await layoutPage.setViewportSize({ width: 360, height: 1160 })
+    await layoutPage.screenshot({ path: join(process.env.TPF_USAGE_SCREENSHOTS, 'tpf-usage-mobile.png') })
+  }
+  await layoutPage.getByRole('button', { name: 'On this page' }).click()
+  await layoutPage.locator('.VPLocalNav').getByRole('link', { name: 'Methodology and privacy' }).waitFor()
+  await layoutPage.close()
   for (const width of [1280, 360]) {
     const page = await browser.newPage({ viewport: { width, height: 840 }, javaScriptEnabled: false })
     await page.goto(base + '/ecosystem/usage')
     assert.equal(await page.getByText('Synthetic preview', { exact: false }).count(), 1)
     assert.equal(await page.getByText('≈50%').count(), 1)
     assert.equal(await page.getByText('Withheld to protect small cohorts.').count(), 1)
-    if (process.env.TPF_USAGE_SCREENSHOTS) {
-      await page.setViewportSize({ width, height: width === 360 ? 1160 : 960 })
-      await page.screenshot({ path: join(process.env.TPF_USAGE_SCREENSHOTS, `tpf-usage-${width}.png`) })
-    }
     const summary = page.getByText('Weekly reporting totals (table)')
     await summary.focus()
     await page.keyboard.press('Enter')
@@ -128,7 +173,7 @@ import snapshot from './${name}.json'
   assert.equal(await page.getByText('No published result for the latest complete week.').count(), 1)
   assert.deepEqual(outside, [])
   assert.equal(attemptedBackend, 0)
-  console.log('Usage SSR, release navigation, stale and unavailable states, mobile/desktop, keyboard table, and 100 static crawler requests passed.')
+  console.log('Usage SSR, release navigation, desktop outline and alignment, stale and unavailable states, mobile layout, keyboard table, and 100 static crawler requests passed.')
 } finally {
   await browser?.close()
   if (server) await new Promise(resolve => server.close(resolve))
