@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TPF_TELEMETRY_DISABLED: "true"
+  TPF_CENSUS_ENABLED: "false"
 
 jobs:
   test:

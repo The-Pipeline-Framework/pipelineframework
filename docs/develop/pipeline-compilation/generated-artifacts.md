@@ -183,12 +183,12 @@ flowchart LR
 Disable census with any one of:
 
 ```sh
-export TPF_TELEMETRY_DISABLED=true
+export TPF_CENSUS_ENABLED=false
 ```
 
 ```text
--Dtpf.telemetry.disabled=true
--Atpf.telemetry.disabled=true
+-Dtpf.census.enabled=false
+-Atpf.census.enabled=false
 ```
 
 The `-D` option must reach the JVM running the compiler; the `-A` option is a javac
@@ -199,11 +199,11 @@ identity, worker, state file, or network request.
 To inspect an application compilation, pass these javac processor options:
 
 ```text
--Atpf.telemetry.mode=preview
--Atpf.telemetry.preview=/absolute/private/path/census-preview.json
+-Atpf.census.mode=preview
+-Atpf.census.preview=/absolute/private/path/census-preview.json
 ```
 
-Alternatively use `TPF_TELEMETRY_MODE=preview` and `TPF_TELEMETRY_PREVIEW` with that
+Alternatively use `TPF_CENSUS_MODE=preview` and `TPF_CENSUS_PREVIEW` with that
 absolute output path. The parent directory must already exist. Choose a private path
 outside source, generated and packaged output directories. The compiler refuses paths
 in those directories, including its selected class output, and protects the original
@@ -250,8 +250,8 @@ The state directory is independent of Maven, authentication, and release descrip
 | macOS | `~/Library/Application Support/TPF/census` |
 | Windows | `%LOCALAPPDATA%\TPF\census` |
 
-Use `TPF_TELEMETRY_STATE_DIR` for managed retained storage. Known CI/container hosts
-must also set `TPF_TELEMETRY_STATE_PERSISTENT=true`; do so only with a retained mount
+Use `TPF_CENSUS_STATE_DIR` for managed retained storage. Known CI/container hosts
+must also set `TPF_CENSUS_STATE_PERSISTENT=true`; do so only with a retained mount
 or cache. Writable disposable storage is insufficient. Not every disposable environment
 can be detected automatically.
 

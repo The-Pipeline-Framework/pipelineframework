@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  TPF_TELEMETRY_DISABLED: "true"
+  TPF_CENSUS_ENABLED: "false"
 
 jobs:
   publish:
