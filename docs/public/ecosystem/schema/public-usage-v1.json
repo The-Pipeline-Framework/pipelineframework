@@ -1,0 +1,900 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pipelineframework.org/ecosystem/schema/public-usage-v1.json",
+  "title": "TPF public weekly usage snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "observation_schema_version",
+    "generated_at",
+    "latest_complete_week",
+    "method",
+    "weeks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "observation_schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "latest_complete_week": {
+      "$ref": "#/definitions/date"
+    },
+    "method": {
+      "const": "latest-per-instance-utc-iso-week-rounded-10-min-20-installations"
+    },
+    "weeks": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/definitions/week"
+      }
+    }
+  },
+  "definitions": {
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 20,
+      "maximum": 9007199254740990,
+      "multipleOf": 10
+    },
+    "distributions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compiler_version",
+        "contracts_version",
+        "transport",
+        "platform",
+        "runtime_layout",
+        "java_major",
+        "sizes",
+        "feature_counts"
+      ],
+      "properties": {
+        "compiler_version": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "maxLength": 32,
+                    "pattern": "^(unknown|[0-9]{1,4}([.][0-9]{1,4}){1,3}(-dev)?)$"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "contracts_version": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "maxLength": 32,
+                    "pattern": "^(unknown|[0-9]{1,4}([.][0-9]{1,4}){1,3}(-dev)?)$"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "transport": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "enum": [
+                      "LOCAL",
+                      "REST",
+                      "GRPC"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "platform": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "enum": [
+                      "COMPUTE",
+                      "FUNCTION"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "runtime_layout": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "enum": [
+                      "MODULAR",
+                      "PIPELINE_RUNTIME",
+                      "MONOLITH",
+                      "UNSPECIFIED"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "java_major": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "suppressed"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "counts"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "counts": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 1000,
+                  "propertyNames": {
+                    "pattern": "^[1-9][0-9]{0,2}$"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/definitions/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "sizes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pipelines",
+            "steps",
+            "types",
+            "blocks"
+          ],
+          "properties": {
+            "pipelines": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "steps": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "types": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "feature_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nested_invocation",
+            "one_to_many",
+            "many_to_one",
+            "query",
+            "command",
+            "await"
+          ],
+          "properties": {
+            "nested_invocation": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "one_to_many": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "many_to_one": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "query": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "command": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "await": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "suppressed"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "counts"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "published"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 1000,
+                      "propertyNames": {
+                        "enum": [
+                          "0",
+                          "1",
+                          "2–5",
+                          "6–10",
+                          "11–25",
+                          "26–50",
+                          "51–100",
+                          "101+",
+                          "unknown"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/count"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "week": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "week_start",
+            "status"
+          ],
+          "properties": {
+            "week_start": {
+              "$ref": "#/definitions/date"
+            },
+            "status": {
+              "enum": [
+                "missing",
+                "insufficient_contributors"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "week_start",
+            "status",
+            "reporting_installations",
+            "reporting_application_instances",
+            "distributions"
+          ],
+          "properties": {
+            "week_start": {
+              "$ref": "#/definitions/date"
+            },
+            "status": {
+              "const": "published"
+            },
+            "reporting_installations": {
+              "$ref": "#/definitions/count"
+            },
+            "reporting_application_instances": {
+              "$ref": "#/definitions/count"
+            },
+            "distributions": {
+              "$ref": "#/definitions/distributions"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

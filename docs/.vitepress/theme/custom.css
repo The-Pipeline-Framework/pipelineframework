@@ -393,20 +393,24 @@ kbd {
     display: none !important;
   }
 
-  .VPContent.has-sidebar,
-  .VPDoc.has-sidebar .content-container,
-  .VPDoc.has-sidebar .container {
-    padding-left: 0 !important;
-    margin-left: auto !important;
-    width: 100% !important;
+  .VPContent.has-sidebar {
+    padding-inline: 0 !important;
   }
 
   /*
-   * The sidebar data still marks every documentation page as `has-sidebar`.
-   * Once the visual sidebar is hidden, remove VitePress's 688px inner cap as
-   * well so prose, tables, code samples, and diagrams use the available column.
+   * Match the navigation's desktop width and gutters. The right outline
+   * reserves its own space within this container.
    */
-  .VPDoc.has-sidebar .content,
+  .VPDoc.has-sidebar > .container {
+    max-width: calc(var(--vp-layout-max-width) - 64px);
+  }
+
+  .VPDoc.has-sidebar > .container > .content {
+    padding-inline: 0;
+  }
+
+  /* Let docs use the column left after reserving space for the outline. */
+  .VPDoc.has-sidebar > .container > .content,
   .VPDoc.has-sidebar.has-aside .content-container {
     max-width: none !important;
   }
