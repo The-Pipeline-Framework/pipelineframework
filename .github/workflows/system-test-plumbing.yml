@@ -26,6 +26,9 @@ concurrency:
   group: system-test-plumbing-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TPF_CENSUS_ENABLED: "false"
+
 jobs:
   test:
     runs-on: ubuntu-latest

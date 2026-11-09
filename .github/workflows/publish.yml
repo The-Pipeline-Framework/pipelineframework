@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  TPF_CENSUS_ENABLED: "false"
+
 jobs:
   publish:
     name: Publish Release

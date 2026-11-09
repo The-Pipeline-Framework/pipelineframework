@@ -22,6 +22,9 @@ concurrency:
   group: tpf-system-test-full-train-${{ inputs.release_manifest || inputs.rehearsal_manifest || 'main' }}
   cancel-in-progress: false
 
+env:
+  TPF_CENSUS_ENABLED: "false"
+
 jobs:
   resolve:
     name: Resolve current main candidates against immutable baseline

@@ -18,6 +18,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  TPF_CENSUS_ENABLED: "false"
+
 jobs:
   docs-build:
     name: Docs Build and Links

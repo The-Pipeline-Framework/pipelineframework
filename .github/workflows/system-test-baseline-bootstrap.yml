@@ -12,6 +12,9 @@ concurrency:
   group: tpf-system-test-baseline-promotion
   cancel-in-progress: false
 
+env:
+  TPF_CENSUS_ENABLED: "false"
+
 jobs:
   publish:
     runs-on: ubuntu-latest
