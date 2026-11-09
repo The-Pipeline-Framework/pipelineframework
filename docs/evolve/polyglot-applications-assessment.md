@@ -4,6 +4,39 @@ Evidence assessed 30 October 2026; native-runtime roadmap revised 31 October 202
 
 ## Contracts #52 qualification increment (6 November 2026)
 
+### Progress checkpoint (9 November 2026)
+
+The open PRs are reviewable evidence, not delivered product support. Contracts
+[PR #55](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/pull/55)
+and docs [PR #1082](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1082)
+propose the shared profile and decision. Compiler
+[PR #52](https://github.com/The-Pipeline-Framework/pipelineframework-compiler/pull/52),
+examples [PR #35](https://github.com/The-Pipeline-Framework/pipelineframework-examples/pull/35)
+and docs [PR #1086](https://github.com/The-Pipeline-Framework/pipelineframework/pull/1086)
+add compiler-produced inputs and native execution. All five remain open; none of
+these research artifacts is a production native runtime.
+
+| Workstream | Evidence now | Remaining acceptance |
+|---|---|---|
+| Contracts #52 | Draft ownership/profile decision; shared Java/Node/Python checks | Accept the contract against actual runtime policy and lifecycle evidence |
+| Examples #27 | Compiler-produced unary pipeline runs in Node/Python; the follow-up below compares actual released Java execution classes | Review the measured policy differences; do not promote a passing subset into general parity |
+| Compiler #46 | Research projection and generated type bindings | Production generation, complete supported semantics and changed-project builds without local Java |
+| Runtime #84/#85 | Research native shells only | Supported Node/Python runtimes and shared conformance |
+| Compiler #47, runtime #82, examples #28 | Existing Java boundaries provide architectural inputs | Native placement, deployed workers, release integrity and durable recovery |
+| Spring #474/#475 | Previously completed Java server/client work | Retain it; the later Spring lifecycle/profile issues remain unscheduled |
+
+The compiler/examples pair passed all six suites in the
+[exact-candidate compatibility run](https://github.com/The-Pipeline-Framework/pipelineframework/actions/runs/42289604654).
+This establishes compatibility of those research changes with the tested repository set;
+it does not establish native feature parity. Progress should be reported separately for
+research evidence, accepted contracts and delivered capability, rather than counting every
+open issue as equal work or treating successful fixtures as a percentage of runtime parity.
+
+Streaming, Connectors and durable Await remain requirements for a credible experimental
+product. The historical unary-only release candidate below is superseded as an MVP
+recommendation. Pure unary execution remains useful as a bounded research gate. No issue
+is complete merely because that gate passes, and no production implementation is scheduled.
+
 [ADR-0088](../decisions/0088-polyglot-contract-qualification-precedes-runtime-selection.md)
 records the proposed closed profile, A-return-to-B ownership map, compatibility rules and
 remaining gates. This bounded increment adds shared reference vectors and Java/Node/Python
@@ -20,9 +53,9 @@ The source refresh is limited to changed evidence: contracts `acf6bd2` and runti
 Java payload/failure coupling remains; versioned invocation-path data has been added to durable
 Await and must not be silently dropped by future native consumers. See the decision's pinned
 source references and the contracts corpus's evidence report for exactly what was exercised.
-The next bounded gate is compiler-projected artifact consumption in an examples-owned LOCAL
-proof. The continuation below is authorised research on top of the open contract proposal;
-it does not accept that proposal as a production contract. Spring and other implementation
+The first continuation adds compiler-projected artifact consumption in an examples-owned LOCAL
+proof. The continuations below are authorised research on top of the open contract proposal;
+they do not accept that proposal as a production contract. Spring and other implementation
 priorities are unchanged.
 
 ### From a shared test kit to a generated pipeline proof
@@ -34,7 +67,7 @@ explain the authored functions, generated files, test shell and reproduction com
 
 The contract consumers answer whether three languages agree on supplied examples. They do
 not yet answer whether TPF can derive those instructions from an application's actual DSL.
-The next proof joins those two boundaries: existing Java semantic machinery reads a v3
+The generated-pipeline proof joins those two boundaries: existing Java semantic machinery reads a v3
 pipeline, a compiler-owned research tool produces an inspectable projection, and a native
 test shell uses that projection to call the application's A, B and C functions.
 
@@ -86,7 +119,7 @@ checked with the actual TypeScript compiler, including wrong/missing handlers an
 required/optional/non-null field failures. Python consumes generated annotations and
 performs runtime checks; Python static-editor conformance is not established.
 
-The Java comparison is a handwritten asynchronous reference shell over the same
+The earlier Java comparison is a handwritten asynchronous reference shell over the same
 projection and scenarios. It does not execute `PipelineRunnerCore`, Quarkus or
 `StepOneToOne`, so matching Java/native results establish agreement within the research
 profile rather than production Java-runtime equivalence. Its fixed scenario oracle
@@ -108,6 +141,58 @@ required changed-project generation workflow on a workstation without Java. Remo
 production native kernels, deployed worker integration, streaming, Connector guarantees and
 durable Await recovery remain separate gates. No additional production implementation or
 deployment is scheduled by this continuation.
+
+### Comparing the probe with released Java execution
+
+The follow-up is reviewable in
+[examples PR #36](https://github.com/The-Pipeline-Framework/pipelineframework-examples/pull/36),
+stacked on #35. The executable comparison and reproduction commands live in the
+[examples runtime-policy walkthrough](https://github.com/The-Pipeline-Framework/pipelineframework-examples/blob/codex/polyglot-runtime-policy-probe/research/native-local-projection/README.md#compare-the-released-java-unary-executor).
+`python3 -B runtime-policy/check_runtime_policy.py` runs seven existing scenarios,
+two overlapping invocations and five policy-edge comparisons in Java, Node and Python.
+The contributor command requires Java; the existing native `npm test` and run commands
+remain JVM-free. Pinned artifact and fixture digests guard the observations against drift.
+
+This bounded comparison uses the released `26.11.1` Java implementation rather
+than another handwritten retry loop. A contributor-only Java harness calls
+[`PipelineRunnerCore.runSync`](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/blob/607f3ccbee0a759e098b703a0316708ee65e0de3/runtime-core/src/main/java/org/pipelineframework/runtime/core/PipelineRunnerCore.java#L64-L85)
+and the real [`PipelineStepExecutor` unary handoff](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/ede444bb243191317aa2c76b3df8f23dbe74f454/runtime/src/main/java/org/pipelineframework/PipelineStepExecutor.java#L393-L403),
+which invokes `StepOneToOne.apply`. Test-package access reaches the package-private executor;
+this is not a new public runtime API or a fully booted Quarkus application. Cache,
+Await and configured telemetry are disabled for this comparison.
+
+The important downstream-retry challenge is A → B → C with one transient B failure.
+The extra fixture is genuinely produced by the existing compiler probe with B's retry
+budget set to one. The real Java handoff produces A = 1, B = 2, C = 1 and result 5:
+retrying B does not re-run A. Simply nesting independently retrying reactive chains
+would not be an adequate substitute for that executor boundary.
+The released executor supplies each step with a
+[fresh input item](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/ede444bb243191317aa2c76b3df8f23dbe74f454/runtime/src/main/java/org/pipelineframework/PipelineStepExecutor.java#L672-L677)
+inside its per-item handoff.
+
+The comparison also exposes decisions that the portable profile has not settled:
+
+| Boundary | Released Java observation | Consequence for the portable contract |
+|---|---|---|
+| Unclassified failure | An ordinary `IllegalStateException` can exhaust A's three attempts | The research native shell rejects unknown failure variants; an explicit mapping or compatibility decision is still needed |
+| Recovery after rejection | With recovery enabled and no reject router configured, the tested Java flow emits a null completion and invokes neither B nor C | The probe excludes recovery; failed, rejected and empty completion must not be conflated |
+| Null final result | A null result from C can complete the Java flow | The native probe's required, non-null canonical output is stricter; runtime return validation is not automatically equivalent |
+| Cancellation | Cancelling the subscriber while A's produced value is held before emission terminates the producer and prevents B; no terminal result is delivered | `CANCELLED` is the harness's observation of that signal, not a Java result envelope; the native barrier is after validated return, while pre-cancellation skips subscription |
+| Context | Downstream Mutiny subscription context is visible in a direct control but absent inside the tested executor path | Portable execution/trace fields need an explicit binding to Java's context mechanism; the overlapping fixture runs use an explicit immutable carrier |
+
+These observations do not establish production context parity, general rejection/recovery
+parity or a defect in Java's existing context contract. The harness exposes particular
+behaviour under its declared configuration. The profile's selected success/failure values
+can agree while the surrounding lifecycle rules still differ.
+The released [`Configurable.shouldRetry`](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/ede444bb243191317aa2c76b3df8f23dbe74f454/runtime/src/main/java/org/pipelineframework/step/Configurable.java#L87-L112)
+and [`StepOneToOne` retry/recovery path](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/ede444bb243191317aa2c76b3df8f23dbe74f454/runtime/src/main/java/org/pipelineframework/step/StepOneToOne.java#L73-L118)
+are the source authority for those Java policies; the research profile does not replace them.
+
+The next contract gate is to decide those mappings with the runtime owner and add the
+corresponding shared conformance cases. No native shell should silently adopt Java's
+unclassified retry policy, and no Java behaviour should be changed merely to make this
+research fixture agree. Streaming, Connector capture/effect guarantees and durable Await
+still need their own lifecycle qualification before a product MVP can be accepted.
 
 ## Current conclusion: equivalent LOCAL workflows require native runtimes
 
