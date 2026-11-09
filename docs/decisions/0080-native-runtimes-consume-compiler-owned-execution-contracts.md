@@ -52,9 +52,17 @@ not against accidental dependencies discovered during implementation. Semantic e
 requires a shared-contract revision and affected-language conformance review. If the boundary
 cannot be isolated, reconsider the profile rather than importing coordinator/provider authority.
 
-The assessment tracks a LOCAL-first experimental release candidate and separate hosted Query
-and native Provider SPI decisions. Neither candidate changes existing authority or approves
-provider authoring, Cloud integration or implementation scheduling.
+The assessment retains the earlier LOCAL-first release candidate as historical reasoning,
+not current release guidance. Hosted Query and native Provider SPI remain separate unselected
+options; none changes existing authority or approves provider authoring, Cloud integration
+or implementation scheduling.
+
+[ADR-0088](./0088-polyglot-contract-qualification-precedes-runtime-selection.md) refines this
+qualification gate with the provisional contracts #52 profile and ownership map. Its unary
+fixture is a research probe, not an accepted product MVP: streaming, Connectors and durable
+Await remain requirements. Native kernels, the Java-daemon boundary and Detroit have not been
+selected by that probe. Only bounded contract, conformance and probe work is authorised;
+production implementation remains unscheduled.
 
 ## Rationale
 

@@ -39,6 +39,6 @@ test('glossary tooltips wrap and remain viewport bounded', () => {
 })
 
 test('desktop documentation pages remove the hidden-sidebar content cap', () => {
-  assert.match(customStyles, /\.VPDoc\.has-sidebar \.content,[\s\S]*?max-width: none !important/)
+  assert.match(customStyles, /\.VPDoc\.has-sidebar > \.container > \.content,[^{}]*\{[^}]*max-width: none !important/)
   assert.match(customStyles, /\.VPDoc\.has-sidebar\.has-aside \.content-container/)
 })

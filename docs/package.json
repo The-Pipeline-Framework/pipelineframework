@@ -11,7 +11,7 @@
     "check-replay-datasets": "node ./scripts/check-replay-datasets.js",
     "build:homepage-video": "NODE_MODULES_DIR=\"$PWD/node_modules\" bash ../tools/homepage-replay-video/build_homepage_replay_video.sh",
     "dev": "npm run sync-replay-viewer && vitepress dev",
-    "build": "npm run check-replay-datasets && npm run sync-replay-viewer && vitepress build && npm run check:coffee-public",
+    "build": "npm run check-replay-datasets && npm run sync-replay-viewer && node scripts/prepare-public-usage.js && vitepress build && npm run check:coffee-public",
     "preview": "npm run sync-replay-viewer && vitepress preview",
     "snapshot": "node ./scripts/snapshot-docs.js"
   },
@@ -21,6 +21,8 @@
   "type": "module",
   "devDependencies": {
     "@mermaid-js/mermaid-mindmap": "^9.3.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "mermaid": "^11.12.0",
     "playwright": "^1.60.0",
     "vitepress": "^1.6.4",

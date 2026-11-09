@@ -1,0 +1,4 @@
+/ecosystem/usage
+  Cache-Control: public, max-age=0, must-revalidate
+/ecosystem/snapshots/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -16,3 +16,5 @@ flowchart LR
 - [Framework release process](/evolve/framework-release-process)
 
 - [Polyglot applications assessment](/evolve/polyglot-applications-assessment)
+
+- [Publishing ecosystem usage](/evolve/ecosystem-usage-publication)

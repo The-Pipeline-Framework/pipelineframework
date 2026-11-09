@@ -18,6 +18,7 @@ import {defineConfig} from 'vitepress'
 import {withMermaid} from "vitepress-plugin-mermaid"
 import {markdownGlossaryPlugin} from 'vitepress-plugin-glossary'
 import glossary from './glossary.json'
+import {emitPublicUsage} from '../scripts/public-usage.js'
 import {isCoffeeMachinePage, stripAuthorOnlyFrontmatter} from './coffee-machine/visibility-policy.js'
 
 // Use withMermaid to wrap the entire configuration - this enables GitHub-style mermaid code blocks
@@ -481,7 +482,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/evolve/publishing'},
                     {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
                     {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
-                    {text: 'Author Knowledge Operations', link: '/evolve/author-mcp-operations'},
+                    {text: 'Ecosystem Usage', link: '/ecosystem/usage'},
                     {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
                 ]
             },
@@ -710,6 +711,7 @@ export default withMermaid(
     },
 
     cleanUrls: true,
+    buildEnd: ({outDir}) => emitPublicUsage(outDir),
     // Keep historical version snapshots immutable even if they contain stale links.
     // This suppresses dead-link failures for `/versions/**` pages and known
     // relative links that only appear within version snapshots.
