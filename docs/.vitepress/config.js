@@ -482,7 +482,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/evolve/publishing'},
                     {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
                     {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
-                    {text: 'Author Knowledge Operations', link: '/evolve/author-mcp-operations'},
+                    {text: 'Ecosystem Usage', link: '/ecosystem/usage'},
                     {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
                 ]
             },
@@ -633,7 +633,6 @@ export default withMermaid(
     themeConfig: {
         nav: [
             ...topNavSections,
-            {text: 'Ecosystem Usage', link: '/ecosystem/usage'},
             {text: 'Glossary', link: '/glossary'},
             {text: 'Versions', link: '/versions/', activeMatch: '^/versions(?:/|$)'}
         ],

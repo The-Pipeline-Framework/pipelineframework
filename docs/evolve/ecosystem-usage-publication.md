@@ -25,6 +25,18 @@ A weekly approved export is small enough for the existing Pages project. No R2, 
 
 Use Pages' existing revalidation for HTML. Content-addressed JSON and Vite assets may be cached as immutable; the current HTML is the pointer, so clients do not need a separate manifest request. A failed export or validation must leave the last good Pages deployment in place. See [Pages cache behaviour](https://developers.cloudflare.com/pages/configuration/serving-pages/#caching-and-performance) and [Pages Functions pricing](https://developers.cloudflare.com/pages/functions/pricing/). Ordinary static Pages asset requests are not billed as Functions under the standard model; verify account terms, route coverage and any other services before launch. Builds, deployment quotas and scheduled D1 work still apply. Public traffic increases static requests and bytes only.
 
+## Dashboard previews
+
+These screenshots use synthetic figures to illustrate the desktop and mobile layouts. They do not measure TPF adoption.
+
+### Desktop
+
+![Desktop dashboard preview with a synthetic data notice, weekly totals and a 12-week trend](/evidence/ecosystem-usage/desktop.webp)
+
+### Mobile
+
+![Mobile dashboard preview with a synthetic data notice and reporting totals stacked above the weekly trend](/evidence/ecosystem-usage/mobile.webp)
+
 ## Publication runbook
 
 1. Complete the existing compiler/collector privacy, ownership and pilot gates. Confirm the collector operator and site operator. Keep ingestion and aggregate publication disabled until approved. Apply the weekly table migration to the dedicated census database, and select the first fully covered UTC Monday with `PUBLIC_WEEKLY_FIRST_MONDAY`.

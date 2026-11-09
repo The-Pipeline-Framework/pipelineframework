@@ -19,7 +19,7 @@ let server
 try {
   await symlink(join(docs, 'node_modules'), join(tmp, 'node_modules'), 'dir')
   await mkdir(join(tmp, '.vitepress'))
-  await writeFile(join(tmp, '.vitepress/config.js'), 'export default { cleanUrls: true }\n')
+  await writeFile(join(tmp, '.vitepress/config.js'), "export default { cleanUrls: true, title: 'The Pipeline Framework' }\n")
   await mkdir(join(tmp, 'ecosystem'))
   for (const name of ['UsageDashboard.vue', 'UsageDistribution.vue', 'usage-display.js']) {
     await cp(join(docs, 'ecosystem', name), join(tmp, 'ecosystem', name))
@@ -78,21 +78,39 @@ import snapshot from './${name}.json'
   assert.ok(responses.every(r => r.ok))
   assert.ok((await Promise.all(responses.map(r => r.text()))).every(text => text === publicHtml))
   browser = await chromium.launch()
+  const navigationPage = await browser.newPage()
+  const publishingHtml = await readFile(join(publicDist, 'evolve/publishing.html'), 'utf8')
+  const navigation = await navigationPage.evaluate(html => {
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    const heading = document.querySelector('#VPSidebarNav .level-1 > .item > a[href="/evolve/publishing"]')
+    const group = heading?.closest('.VPSidebarItem')
+    return {
+      releaseLinks: Array.from(group?.querySelectorAll('a[href]') ?? [], link => link.getAttribute('href')),
+      topLevelUsage: Boolean(document.querySelector('.VPNavBarMenu > a[href="/ecosystem/usage"]'))
+    }
+  }, publishingHtml)
+  assert.ok(navigation.releaseLinks.includes('/ecosystem/usage'))
+  assert.equal(navigation.topLevelUsage, false)
+  for (const href of new Set(navigation.releaseLinks)) {
+    await readFile(join(publicDist, href + '.html'))
+  }
+  await navigationPage.close()
   for (const width of [1280, 360]) {
     const page = await browser.newPage({ viewport: { width, height: 840 }, javaScriptEnabled: false })
     await page.goto(base + '/ecosystem/usage')
     assert.equal(await page.getByText('Synthetic preview', { exact: false }).count(), 1)
     assert.equal(await page.getByText('≈50%').count(), 1)
     assert.equal(await page.getByText('Withheld to protect small cohorts.').count(), 1)
+    if (process.env.TPF_USAGE_SCREENSHOTS) {
+      await page.setViewportSize({ width, height: width === 360 ? 1160 : 960 })
+      await page.screenshot({ path: join(process.env.TPF_USAGE_SCREENSHOTS, `tpf-usage-${width}.png`) })
+    }
     const summary = page.getByText('Weekly reporting totals (table)')
     await summary.focus()
     await page.keyboard.press('Enter')
     assert.equal(await page.getByRole('row', { name: /Too few reporting installations/ }).count(), 1)
     assert.equal(await page.getByRole('row', { name: /No published result/ }).count(), 8)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-    if (process.env.TPF_USAGE_SCREENSHOTS) {
-      await page.screenshot({ path: join(process.env.TPF_USAGE_SCREENSHOTS, `tpf-usage-${width}.png`), fullPage: true })
-    }
     await page.close()
   }
   const page = await browser.newPage()
@@ -110,7 +128,7 @@ import snapshot from './${name}.json'
   assert.equal(await page.getByText('No published result for the latest complete week.').count(), 1)
   assert.deepEqual(outside, [])
   assert.equal(attemptedBackend, 0)
-  console.log('Usage SSR, stale and unavailable states, mobile/desktop, keyboard table, and 100 static crawler requests passed.')
+  console.log('Usage SSR, release navigation, stale and unavailable states, mobile/desktop, keyboard table, and 100 static crawler requests passed.')
 } finally {
   await browser?.close()
   if (server) await new Promise(resolve => server.close(resolve))
