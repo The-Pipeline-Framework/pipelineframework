@@ -142,10 +142,16 @@ stream ordering and backpressure. Empty completion and failure must remain disti
 Canonical identities must not depend on Java class names or a language's incidental JSON
 formatting.
 
-The unresolved policy mappings and their qualification belong to
-[contracts #52](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/issues/52).
 [ADR-0088](../decisions/0088-polyglot-contract-qualification-precedes-runtime-selection.md)
-explains why those contracts precede production runtime selection.
+defines the candidate unary policy mappings: explicit retry classification, distinct
+value/empty/failure outcomes, cancellation ordered at the execution boundary, and an
+explicit invocation context. Existing Java behaviour is not automatically equivalent;
+a binding must reject incompatible policy ownership before running business code.
+
+Qualification of these mappings and the remaining bindings belongs to
+[contracts #52](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/issues/52).
+These bounded decisions do not select a production runtime or reduce the streaming,
+Connector and durable Await requirements.
 
 ## Alternatives and trade-offs
 

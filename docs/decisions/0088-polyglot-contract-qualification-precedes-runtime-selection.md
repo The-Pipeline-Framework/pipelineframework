@@ -104,10 +104,64 @@ business-function invocation promise. Cancellation is not rollback, and a late r
 must not start the next operation after cancellation has won. Only explicitly supported
 deadlines and budgets may be propagated; this decision introduces no universal timeout.
 
-Empty completion, business rejection and failure require distinct agreed representations.
-Language exceptions alone do not establish retry safety. Context fields need an explicit
-binding to the host's context mechanism. These mappings must be settled rather than
-made to appear equivalent through test-only translations.
+### Map host behaviour explicitly
+
+The unary research contract uses a separately versioned policy profile. It does not
+reinterpret an older probe or change existing Java defaults. A future binding can claim
+that profile only when it implements the following mappings and rejects incompatible
+configuration before invoking a function.
+
+**Failures and attempts.** Only a validated `TRANSIENT` failure is eligible for logical
+step retries, under the admitted owner's remaining budget. `BUSINESS_REJECTION` is a
+terminal, explicitly classified outcome; a Java non-retryable exception marker alone
+does not establish business rejection. An unrecognised host exception becomes terminal
+`UNCLASSIFIED`, with a fixed, sanitised message. Exception class names, stacks and arbitrary
+messages do not cross that portable boundary.
+
+A structured failure is different from a host exception. Unknown codes, malformed fields
+and conflicts with the admitted step or owner are protocol errors. A claimed `retryable`
+flag cannot grant retry authority: it must agree with the known code. Exhausting a budget
+preserves the last validated failure; it does not invent a successful zero or null result.
+Retrying B reuses B's accepted input and does not rerun A.
+
+There is one logical retry owner. A Java binding with independently active legacy retries
+or failure recovery that can alter settlement cannot claim this profile. The binding must reject that
+combination before A starts. This restriction does not disable those behaviours in
+unprofiled Java applications.
+
+**Results.** A returned value, empty completion and failure have distinct discriminants.
+An explicit `VALUE(null)` requires an explicitly nullable result declaration. Raw Java
+null, JavaScript undefined or Python None without that carrier is invalid: it cannot
+identify the intended outcome. Nullable canonical fields do not themselves establish
+support for nullable whole results in the compiler. The latter is a boundary experiment
+until separately projected and qualified. `EMPTY` is recognisable but unsupported by this
+finite ONE_TO_ONE profile; it must not silently invoke B or become successful null.
+
+**Cancellation.** The first terminal event accepted by the execution shell determines the
+recorded outcome. Cancellation accepted before invocation prevents A from starting.
+A's intermediate return and a failure with a retry still available are not terminal.
+Cancellation accepted after A returns but before B dispatches therefore prevents B.
+Cancellation before a pending retry prevents that attempt; a later result or failure
+cannot revive execution. Conversely, a final completion or failure accepted first remains
+recorded when cancellation arrives later. Cancellation cannot undo an invocation already
+started, and promises no rollback.
+
+A recorded outcome, a cancellation observation and delivery to an application subscriber
+are separate facts. A cancelled subscription need not receive a terminal value. Absence
+of delivery alone is not evidence that cancellation won.
+
+**Context.** The profile requires an explicit per-invocation snapshot containing only
+`executionId` and `traceId`. Both are strings containing at least one character other than
+ASCII space, tab, carriage return or line feed. They are otherwise preserved exactly;
+this is no new canonical identifier format. Missing, malformed or additional fields
+reject admission, even if ambient context contains apparently usable values. Retries
+retain the snapshot. Handler mutation cannot alter the snapshot seen by later steps or
+retries; concurrent invocations use separate snapshots. A production binding must deliberately connect this carrier to its host
+context mechanism.
+
+These rules select the candidate contract. Independent consumers can check its examples,
+but a model of ordered events does not qualify production concurrency, a wire adapter or
+an existing Java executor. Those bindings still need their own checks.
 
 ### Preserve authority across process boundaries
 
