@@ -153,6 +153,20 @@ Qualification of these mappings and the remaining bindings belongs to
 These bounded decisions do not select a production runtime or reduce the streaming,
 Connector and durable Await requirements.
 
+A remote worker also needs qualification for the exact release artefact it runs. Reuse
+TPF's trusted Release Descriptor and verify both the runnable artefact and its named
+Compiled Truth carrier before binding the projection and execution profile to an
+authorised deployment target. Those artefacts may be separate. A worker's capability
+advertisement is a compatibility claim, not proof of that qualification. The outer
+worker envelope and the application payload have separate encoding identities.
+
+Portable failures need an explicitly selected result representation. Java exception
+class names cannot stand in for shared failure classifications. The worker reports its
+classified outcome; the coordinator validates the associated attempt and retains retry,
+DLQ and recovery authority. An invalid response does not prove that the worker stopped.
+The precise wire schema, negotiation and deployed trust integration remain open under
+the contract decision; existing Java failure handling is unchanged.
+
 ## Alternatives and trade-offs
 
 | Approach | Benefit | Trade-off |
