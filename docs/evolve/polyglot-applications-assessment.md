@@ -143,7 +143,7 @@ Canonical identities must not depend on Java class names or a language's inciden
 formatting.
 
 [ADR-0088](../decisions/0088-polyglot-contract-qualification-precedes-runtime-selection.md)
-defines the candidate unary policy mappings: explicit retry classification, distinct
+defines the adopted unary qualification mappings: explicit retry classification, distinct
 value/empty/failure outcomes, cancellation ordered at the execution boundary, and an
 explicit invocation context. Existing Java behaviour is not automatically equivalent;
 a binding must reject incompatible policy ownership before running business code.
@@ -164,8 +164,19 @@ Portable failures need an explicitly selected result representation. Java except
 class names cannot stand in for shared failure classifications. The worker reports its
 classified outcome; the coordinator validates the associated attempt and retains retry,
 DLQ and recovery authority. An invalid response does not prove that the worker stopped.
-The precise wire schema, negotiation and deployed trust integration remain open under
-the contract decision; existing Java failure handling is unchanged.
+The first qualification binding uses a closed, failure-only result profile selected by
+trusted deployment configuration and pinned to the dispatch attempt. It deliberately
+reuses the released success representation. There is no response-driven negotiation or
+legacy fallback. A future deployed binding must use authenticated HTTPS to its configured,
+verified worker endpoint and retain the original dispatch context when accepting a result.
+It must not silently redirect, retry or fail over after an uncertain response.
+
+These are contract choices, not evidence of a deployed native receiver. Existing Java
+failure handling is unchanged; both peers need an explicitly profile-aware binding before
+using the new failed-result representation. The selected finite unary/LOCAL research
+baseline is not a product MVP. Streaming, Connector guarantees and durable Await remain
+required, while changed-project generation without local Java and deployed recovery still
+need implementation and qualification.
 
 ## Alternatives and trade-offs
 
