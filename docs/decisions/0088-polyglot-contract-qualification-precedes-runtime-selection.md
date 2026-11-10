@@ -170,6 +170,60 @@ authorisation and compatible pinned identity before execution. Signature rules b
 shared contracts; secrets, replay protection and authorisation state belong to the host.
 A package version alone does not establish release or capability compatibility.
 
+#### Bind the profile to verified release artefacts
+
+Reuse the existing Release Descriptor and its pipeline, contract, release, artefact
+and digest identities. Do not introduce a parallel native-language release manifest.
+Starting from a deployment-trusted descriptor or admitted Release, the runtime-owned
+release resolver verifies the selected runnable artefact and the descriptor-named
+Compiled Truth carrier against their pinned digests. Those may be separate artefacts.
+The host qualifies the execution binding and the compiler projection from that carrier
+as a combination under the same Release and profile. A matching projection hash alone
+does not verify the executable, its dependencies or the release's provenance.
+
+The deployment host owns the binding between an authorised tenant, target and verified
+release. A configuration-backed binding is sufficient for a bounded, managed-endpoint
+experiment. It is not authority supplied by a business function or an untrusted worker.
+A worker advertisement must agree with that binding; advertising a profile name or
+listing a capability does not prove its implementation. A new artefact or profile
+requires qualification of that exact combination before dispatch.
+
+Keep the worker envelope encoding, application payload encoding, execution profile and
+result profile distinct. Support for the outer envelope does not select a decoder for
+application values or establish execution-policy compatibility. Each selection must be
+explicit and release-bound, with no fallback to a similarly named encoding.
+
+#### Select portable failure results explicitly
+
+Portable transition failures require an explicitly selected, versioned result
+representation. Do not encode portable classifications in a legacy Java class name or
+message, or reconstruct arbitrary native exceptions at the coordinator. A Java
+non-retryable marker cannot distinguish business rejection from an unclassified failure.
+Existing Java failure envelopes and unprofiled execution retain their current meaning.
+
+The worker normalises host exceptions under the selected policy before serialisation.
+The portable result needs a closed failure classification, compiler-owned logical step
+identity and a safe diagnostic. It must distinguish an exhausted local transient failure,
+business rejection and an unclassified failure without transmitting native class names,
+stacks or arbitrary exception messages. Command effect identity belongs to its separately
+qualified effect protocol; it cannot be invented to make a unary business failure fit a
+legacy envelope.
+
+Exhaustion ends the worker's local attempts. It neither authorises another physical
+request nor gives the worker a coordinator retry budget. The coordinator validates the
+result against its dispatch attempt and applies its own admitted recovery policy. A stale,
+malformed, unknown or incompatible result cannot settle the execution or create retry
+authority. Rejecting a response does not prove that its remote invocation stopped;
+uncertain outcomes retain the protection defined by
+[ADR-0014](./0014-remote-transition-outcome-uncertainty.md).
+
+The result representation and its negotiation must be specified together before a
+production binding claims support. Whether that requires a new outer worker protocol
+version depends on how both peers select the representation and isolate legacy peers;
+this draft does not allocate that version or choose a wire schema. A trusted research
+binding can select a candidate profile explicitly, but does not prove deployed
+negotiation, response protection or durable recovery.
+
 Business context must not contain provider credentials, resolved clients or coordinator
 stores. An allowlisted context is not a sandbox; deployment isolation remains separate.
 
