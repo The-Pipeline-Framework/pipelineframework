@@ -61,8 +61,10 @@ or implementation scheduling.
 qualification gate with the adopted contracts #52 research profile and ownership map. Its unary
 fixture is a research probe, not an accepted product MVP: streaming, Connectors and durable
 Await remain requirements. Native kernels, the Java-daemon boundary and Detroit have not been
-selected by that probe. Only bounded contract, conformance and probe work is authorised;
-production implementation remains unscheduled.
+selected for production by that probe. The subsequent bounded Node evaluation applies
+the qualified contract through compiler-generated bindings and an opt-in native package.
+This experimental selection does not authorise broader production support. Delivery
+scope and continue/redesign/retire gates remain with the epic.
 
 ## Rationale
 
