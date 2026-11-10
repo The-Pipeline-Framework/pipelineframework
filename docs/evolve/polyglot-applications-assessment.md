@@ -86,8 +86,11 @@ language architecture.
 
 ### The bounded Node experiment
 
-The selected increment pairs compiler-generated bindings with an explicitly imported
-experimental Node package. It exercises three pure unary functions in one process,
+The selected increment evaluates compiler-generated bindings with an explicitly imported
+experimental Node package. This section describes the candidate execution model; the
+[epic](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055) tracks
+candidate availability and qualification. It is not a released runtime or a completed
+product acceptance gate. The candidate exercises three pure unary functions in one process,
 using distinct canonical boundary records with a required, non-null `int32` value.
 The runtime validates the generated requirements before invoking any function, then
 owns local sequencing, admitted retries, cancellation and immutable invocation context.
