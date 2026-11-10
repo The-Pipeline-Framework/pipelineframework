@@ -58,7 +58,7 @@ options; none changes existing authority or approves provider authoring, Cloud i
 or implementation scheduling.
 
 [ADR-0088](./0088-polyglot-contract-qualification-precedes-runtime-selection.md) refines this
-qualification gate with the provisional contracts #52 profile and ownership map. Its unary
+qualification gate with the adopted contracts #52 research profile and ownership map. Its unary
 fixture is a research probe, not an accepted product MVP: streaming, Connectors and durable
 Await remain requirements. Native kernels, the Java-daemon boundary and Detroit have not been
 selected by that probe. Only bounded contract, conformance and probe work is authorised;

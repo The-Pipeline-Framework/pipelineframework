@@ -1,6 +1,6 @@
 ---
 title: Polyglot contract qualification precedes runtime selection
-status: draft
+status: accepted
 ---
 
 # ADR-0088: Polyglot contract qualification precedes runtime selection
@@ -12,12 +12,12 @@ experience. Streaming, Connectors and durable Await also remain requirements. A 
 experiment can clarify the execution boundary, but cannot define that product's MVP.
 
 [ADR-0080](./0080-native-runtimes-consume-compiler-owned-execution-contracts.md) proposes
-language-specific execution runtimes that consume compiler-owned contracts. The precise
-execution profile and compatibility rules remain open. Native kernels, an embedded-language
+language-specific execution runtimes that consume compiler-owned contracts. The first research profile and compatibility choices are settled below;
+production runtime selection and deployment qualification remain separate. Native kernels, an embedded-language
 host such as Detroit and a Java daemon also have different developer-workflow consequences.
 A small successful example is not enough to select between them.
 
-## Proposed decision
+## Decision
 
 Qualify a shared execution contract before selecting or implementing production language
 runtimes. Keep the Java compiler as semantic authority and the Java coordinator as durable
@@ -85,7 +85,7 @@ A returns to its execution shell. That shell validates the supported result and 
 the compiler-defined flow before invoking B. Every enabled operation at that boundary
 needs a named policy owner, executor, state owner, retry owner and acknowledgement rule.
 
-| Operation | Proposed ownership |
+| Operation | Contract ownership |
 |---|---|
 | Sequencing, result validation and local attempts | Language execution shell, following the compiler projection and shared runtime policy |
 | Remote step binding | Generated caller/callee bindings; the callee owns logical step retries, without an additional caller retry budget |
@@ -159,7 +159,7 @@ retain the snapshot. Handler mutation cannot alter the snapshot seen by later st
 retries; concurrent invocations use separate snapshots. A production binding must deliberately connect this carrier to its host
 context mechanism.
 
-These rules select the candidate contract. Independent consumers can check its examples,
+These rules define the adopted unary research contract. Independent consumers can check its examples,
 but a model of ordered events does not qualify production concurrency, a wire adapter or
 an existing Java executor. Those bindings still need their own checks.
 
@@ -217,12 +217,64 @@ authority. Rejecting a response does not prove that its remote invocation stoppe
 uncertain outcomes retain the protection defined by
 [ADR-0014](./0014-remote-transition-outcome-uncertainty.md).
 
-The result representation and its negotiation must be specified together before a
-production binding claims support. Whether that requires a new outer worker protocol
-version depends on how both peers select the representation and isolate legacy peers;
-this draft does not allocate that version or choose a wire schema. A trusted research
-binding can select a candidate profile explicitly, but does not prove deployed
-negotiation, response protection or durable recovery.
+Select `tpf-polyglot-failed-result/1` for the first failure-result research binding.
+Its closed shape is `{resultProfile, outcome: "FAILED", failure}`; the failure fields are
+`code`, `stepId` and `diagnostic`. The logical step must belong to the admitted range.
+The fixed mappings are:
+
+| Code | Diagnostic | Meaning |
+|---|---|---|
+| `TRANSIENT_EXHAUSTED` | `Local retry budget exhausted` | The worker exhausted the local `TRANSIENT` budget; no new retry authority is granted |
+| `BUSINESS_REJECTION` | `Business function rejected input` | Explicit terminal business classification |
+| `UNCLASSIFIED` | `Unclassified business function failure` | A host failure without an admitted classification |
+
+The released `COMPLETED` envelope shape is deliberately shared by both configurations;
+its inner application encoding remains independently pinned.
+A failure-only profile does not reinterpret successful payloads. Legacy failures under
+this selection, portable failures without it, unknown versions, mixed outcome fields and
+unsafe diagnostics reject. The response tag confirms a selection; it never chooses a
+decoder or triggers a fallback.
+
+### Select compatibility at deployment, not from a response
+
+For the first remote qualification, use a dedicated, explicitly paired profile-aware
+coordinator binding and worker endpoint. Deployment-owned configuration binds the
+verified Release, runnable, Compiled Truth carrier, tenant, target, execution profile and
+failure-result profile. Record that selection with the dispatch attempt. A configuration
+change cannot alter an in-flight attempt's decoder. New configurations apply to newly
+admitted attempts only.
+
+Do not add dynamic negotiation or a second release manifest for this binding. A generic
+worker protocol version or capability advertisement cannot authorise the new failure
+shape. Both peers must explicitly implement the selected binding before deployment;
+unmodified Java peers are not compatible merely because they accept the same success
+representation. Keep legacy and profile-aware deployments isolated by their trusted
+configuration and endpoint association. This research contract does not allocate a new
+production outer-protocol version or change the meaning of an existing one.
+
+### Authenticate the response channel and retain attempt authority
+
+Select direct HTTPS to the configured worker endpoint for the first deployed
+qualification. Validate the certificate chain and hostname normally. Deployment trust
+must associate that endpoint with the verified worker; a valid certificate alone does
+not prove an artefact's identity. Keep request HMAC, timestamp and nonce checks. Do not
+follow redirects or hide retries, failover or decoder negotiation in the client binding.
+An intermediary outside that trusted deployment boundary is unsupported by this choice.
+
+Accept a response only on the original authenticated request-response channel and under
+its retained dispatch context: tenant, target, Release and artefact identity, execution,
+version, attempt, transition key and admitted range. Response fields cannot replace those
+pins. This direct-channel binding does not introduce a separate response HMAC and cannot
+be reused as an asynchronous callback or message-delivery contract without another
+explicit trust decision.
+
+Pre-dispatch rejection starts no work. A malformed or untrusted active response leaves
+the attempt unresolved. If dispatch may have run and the channel ends without a validated
+result, preserve `REMOTE_OUTCOME_UNKNOWN` under ADR-0014; do not infer no execution or
+permit automatic re-drive. Operator re-drive still requires independent disposition
+evidence. A stale or unsolicited reply cannot settle or change the uncertainty state of
+a newer attempt. A valid failure settles a worker-result observation, while the Java coordinator
+retains its separate durable recovery authority.
 
 Business context must not contain provider credentials, resolved clients or coordinator
 stores. An allowlisted context is not a sandbox; deployment isolation remains separate.
@@ -232,6 +284,37 @@ from canonical continuation data, correlation and the pinned release, including 
 item or nested-invocation identity. Promises, coroutines, closures and interpreter handles
 are not durable continuations. Lost acknowledgements and duplicate completions must not
 change ownership or silently repeat an external effect.
+
+## First qualification profile
+
+Adopt the following bounded contract baseline, not a supported production runtime or a
+product MVP. Keep `tpf-polyglot-unary-policy/1`, `tpf-polyglot-transition-admission/1`
+and `tpf-polyglot-failed-result/1` separately versioned. Earlier value/identity probes
+remain evidence for their declared representations; they do not admit every canonical
+value into this execution binding.
+
+| Dimension | Selected baseline | Outside this baseline |
+|---|---|---|
+| Languages | Java reference, Node and Python consumers of the same contract | Claiming one language proves another; selecting a production kernel or Detroit |
+| Platform and execution | COMPUTE, direct finite linear ONE_TO_ONE execution | FUNCTION hosting, branches, nested flows and durable execution qualification |
+| Business-step transport | Same-process native LOCAL | General REST/gRPC step placement or mixed-language in-process calls |
+| Values | The declared generated unary fixture and its non-null int32 record; explicit type/policy rejection | Treating wider value vectors as a qualified executable codec; nullable whole results or empty completion |
+| Worker invocation | One whole-bundle REST worker binding, with admission and settlement modelled separately | Claiming deployed QUEUE_ASYNC, HA or an application-facing REST API from those models |
+| Policies | One local retry owner, explicit outcome/context/cancellation rules and pinned failed-result selection | Ambient authority, fallback decoders or independent legacy retries/recovery |
+| External I/O and hooks | Explicit rejection when unsupported requirements are declared | Query/Command execution, plugins, provider authoring, checkpoints and durable Await |
+
+This baseline is useful for contract qualification and is deliberately **not an MVP**.
+No product MVP is selected by this decision: streaming, Connector guarantees and durable
+Await remain requirements for a credible experimental product. Do not substitute a
+single read-only hosted Query for that scope. Hosted capability invocation and a native
+Provider SPI remain separate, unselected extensions; they require their own host
+identity, authorisation, capture/replay and effect-authority qualification.
+
+Remote step invocation is not claimed by this baseline. Its ownership rule remains:
+the callee execution shell owns logical retries, the caller has no additional logical
+retry budget, and coordinator deliveries are counted separately. That rule must be
+qualified by a later placement binding before it can claim support. Application-facing
+admission/status/completion APIs remain separate from both step RPC and worker dispatch.
 
 ## Qualification and extension
 
@@ -253,7 +336,7 @@ credible product MVP.
 
 ## Consequences
 
-This draft does not select a production runtime, create a Provider SDK or change existing
+Acceptance of this qualification contract does not select a production runtime, create a Provider SDK or change existing
 Java execution. Existing Spring work remains intact. Production implementation is
 unscheduled and depends on acceptance of the relevant contracts.
 
