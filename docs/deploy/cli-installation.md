@@ -8,7 +8,7 @@ Choose a stable release for regular use or a nightly snapshot to try changes on 
 
 | Channel | Download | Updates | Installation |
 | --- | --- | --- | --- |
-| Stable | A version release, such as `v26.11.1` | When a stable version is released; published version assets stay fixed | Homebrew or checksummed ZIP |
+| Stable | A version release, such as `v26.11.2` | When a stable version is released; published version assets stay fixed | Homebrew or checksummed ZIP |
 | Nightly snapshot | The [`latest` prerelease](https://github.com/The-Pipeline-Framework/pipelineframework-cli/releases/tag/latest), with a version such as `26.11.2-SNAPSHOT` | Each successful nightly build of main; manual publication is also possible | Checksummed ZIP |
 
 The native nightly build starts daily at **20:47 UTC**. Maven snapshots use a separate publication workflow after

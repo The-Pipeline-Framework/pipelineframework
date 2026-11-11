@@ -4,12 +4,13 @@ Use the current documentation for the latest release, or open a frozen snapshot 
 
 ## Current Release
 
-- [v26.11.1](/) - Current released documentation
+- [v26.11.2](/) - Current released documentation
 
 ## Recent Release Notes
 
 These releases do not have frozen documentation snapshots. Their release notes remain available:
 
+- [v26.11.2](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.11.2)
 - [v26.11.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.11.1)
 - [v26.10.1](https://github.com/The-Pipeline-Framework/pipelineframework/releases/tag/v26.10.1)
 
