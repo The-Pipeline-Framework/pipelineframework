@@ -159,6 +159,9 @@ Compiled Truth carrier before binding the projection and execution profile to an
 authorised deployment target. Those artefacts may be separate. A worker's capability
 advertisement is a compatibility claim, not proof of that qualification. The outer
 worker envelope and the application payload have separate encoding identities.
+The [bounded native worker binding decision](../decisions/0089-native-worker-payload-and-contract-binding.md)
+proposes explicit logical-type checks for payloads and compiler-owned Contract metadata.
+Neither decoding a value nor matching metadata authorises execution on its own.
 
 Portable failures need an explicitly selected result representation. Java exception
 class names cannot stand in for shared failure classifications. The worker reports its
