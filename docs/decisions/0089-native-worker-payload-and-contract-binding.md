@@ -195,10 +195,69 @@ Ordinary `allowFailed` redrive is insufficient for unresolved paired work; a fut
 reconciliation policy needs its own explicit authority and evidence. Unmarked Java
 executions retain their existing recovery policy.
 
-This dispatch boundary remains separate from automatic worker registration, hosted
-payload admission and native worker endpoints. Qualifying coordinator storage and
-recovery does not establish deployed Node or Python execution. The existing pure LOCAL
-developer workflow is unaffected.
+### Admit portable input through a trusted deployment binding
+
+A request's encoding or type name cannot opt an execution into a native runtime.
+The deployment explicitly supplies a prepared Release binding. Hosted admission
+checks that binding against the registered Release and its compiler Contract, then
+validates the declared input shape, type, encoding and value before durable admission.
+Admission must also establish that the escaped worker envelope fits the host's
+request bound, including coordinator-generated attempt metadata. Valid application
+JSON alone does not establish that it can be dispatched.
+The response to the authenticated capability request must match the selected
+runnable's identity and the exact projection from its verified Compiled Truth.
+The same logical Contract can have different language bindings or compiler provenance.
+Matching the Contract, Release label and runnable digest alone does not establish
+which projection a separately prepared host loaded.
+
+For the paired HTTPS boundary, the worker reports its startup-validated projection
+in the `X-TPF-Worker-Projection-Digest` capability response header. The client requires
+exactly one matching SHA-256 value before admission or dispatch-intent reservation.
+Ordinary capability JSON and Java worker behaviour remain unchanged. TLS authenticates
+the response channel; this claim is not remote attestation or an HMAC-signed response.
+
+Paired admission derives execution identity from the exact tenant, pipeline and client
+key, independently of the ordinary submission idempotency policy. Two distinct keys
+must not collapse because their payloads match or because whitespace is trimmed.
+The same admission key still conflicts with a different immutable intent; changing
+Release does not create another admission namespace. Retained receipts remain the
+lookup and replay authority for executions admitted before a configuration change.
+
+Retain the original validated payload and descriptor pin in coordinator-owned execution
+state. Reconstruct the worker command from that state and the claimed execution's
+identity. Application payload fields cannot supply coordinator authority or choose the
+worker. A replacement binding must still match the admitted descriptor; an absent or
+incompatible binding rejects rather than falling back to a Java payload decoder.
+
+Use the existing queue, lease, dispatch-intent and settlement paths for this explicit
+selection. Do not introduce a separate dispatcher for native executions. Existing Java
+admission and routing retain their behaviour when no native binding is supplied, and
+existing admission receipts remain retrievable independently of worker availability.
+
+### Host the existing native executor behind the worker protocol
+
+The native worker host wraps the same application and LOCAL executor used by the
+developer. It does not interpret DSL, add retries or reproduce coordinator recovery.
+The deployment supplies the verified runnable, exact compiler projection, expected
+Release identity and transport credentials before the listener starts. Requests cannot
+replace those choices. Prepared-file verification remains a deployment responsibility;
+a configured digest is not remote attestation or a sandbox for authored code.
+
+The host exposes the existing authenticated capability and execute routes over HTTPS.
+Authenticate the exact request bytes before decoding application data, and validate
+scoped identities, the admitted range and payload binding before entering a business
+function. Preserve integer command identities exactly across languages. Unknown or
+malformed fields must not silently select another execution policy.
+
+Only the accepted completed payload and closed portable failure codes cross the result
+boundary. Transport failure or an invalid response remains an uncertain outcome at the
+coordinator. A host's bounded nonce cache rejects replays during its process lifetime
+and fails closed at capacity; it is not durable deduplication across worker restarts or
+replicas. Durable resend authority remains with the coordinator's recorded intent.
+
+The explicit host and admission binding do not enable automatic worker registration
+or establish production hosting or HA support. The existing pure LOCAL developer
+workflow remains independent of the coordinator, TLS listener and transport credentials.
 
 ## Rationale
 
@@ -219,8 +278,8 @@ executable projections. Runtime owns the explicit bindings and eventual deployme
 attempt selection. Examples owns shared cross-language conformance over the actual
 packaged consumers.
 
-The explicit paired binding adds no network listener or automatic coordinator dispatch
-and does not by itself establish deployed native-worker recovery.
+Native listeners and coordinator routing require explicit deployment bindings. They
+do not by themselves establish production hosting or deployed native-worker recovery.
 Streaming, Connectors and durable Await remain requirements of the broader product.
 Evidence, remaining integration gates and scheduling belong to
 [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82)
