@@ -146,6 +146,12 @@ decision or enqueue another execution. Once sending may have started, a lost cha
 invalid response cannot prove that the worker did nothing: preserve
 `REMOTE_OUTCOME_UNKNOWN` rather than silently retrying.
 
+The bounded binding excludes terminal checkpoint and object-output publication.
+If either is configured, the coordinator must reject paired completion under the
+same current-lease fence; it must not record success while silently omitting the
+publication. Supporting that combination requires a separate recoverable publication
+design. Existing Java publication behaviour is unchanged.
+
 ### Separate response qualification from recovery activation
 
 An explicit client call and a successful state commit do not establish crash-safe
