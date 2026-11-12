@@ -226,7 +226,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.source-token.outputs.token }}
           GHCR_TOKEN: ${{ github.token }}
-          PACKAGE_TOKEN: ${{ github.token }}
         run: |
           baseline_image="$(jq -r '.baselineImage' system-tests/components.yml)"
           manifest_image="$(jq -r '.candidateManifestImage' system-tests/components.yml)"
@@ -235,7 +234,7 @@ jobs:
           case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1;; esac
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "cache_key=${digest#sha256:}" >> "$GITHUB_OUTPUT"
-          mkdir -p baseline/raw baseline/manifests "$RUNNER_TEMP/tpf-maven"
+          mkdir -p baseline/raw baseline/manifests
           oras pull "$baseline_image@$digest" --output baseline/raw
           jq -n '{}' > baseline/current-heads.json
           while IFS=$'\t' read -r component repository; do
@@ -269,20 +268,13 @@ jobs:
             "${manifest_args[@]}" \
             "${incomplete_args[@]}" \
             --output baseline/materialization-plan.json
-          node system-tests/scripts/write-maven-settings.mjs \
-            --components system-tests/components.yml \
-            --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
-            --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
 
       - name: Restore immutable baseline Maven repository
         id: baseline-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/tpf-system-test-m2
-          key: tpf-system-test-baseline-v3-${{ steps.baseline.outputs.cache_key }}
-          restore-keys: |
-            tpf-system-test-baseline-v2-
-            tpf-system-test-baseline-
+          key: tpf-system-test-baseline-v4-${{ steps.baseline.outputs.cache_key }}
 
       - name: Hydrate baseline Maven repository on cache miss
         if: steps.baseline-cache.outputs.cache-hit != 'true'
@@ -290,15 +282,9 @@ jobs:
           PACKAGE_TOKEN: ${{ github.token }}
         run: |
           local_repo="$RUNNER_TEMP/tpf-system-test-m2"
-          while IFS= read -r coordinate; do
-            ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
-              org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
-              -Dartifact="$coordinate" \
-              -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
-              -Dtransitive=true \
-              -Dmaven.repo.local="$local_repo" \
-              --no-transfer-progress
-          done < <(jq -r '.artifacts[].coordinate' baseline/materialization-plan.json)
+          node system-tests/scripts/hydrate-maven-inputs.mjs \
+            --plan baseline/materialization-plan.json \
+            --repository "$local_repo"
 
       - name: Verify and package credential-free baseline
         run: |

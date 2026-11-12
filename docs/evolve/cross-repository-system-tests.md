@@ -101,8 +101,9 @@ The singleton candidate workflow has four security zones:
 1. event intake accepts no credentials and rejects repositories, components, versions and SHAs outside the
    checked-in contract;
 2. trusted retrieval uses a repository-scoped GitHub App token to read the publication run and post status;
-3. trusted materialisation reads GitHub Packages into a run-isolated Maven repository, verifies every recorded
-   checksum, removes Maven resolver-origin and negative-cache metadata, then uploads a credential-free archive;
+3. trusted materialisation fetches the exact POMs and JARs named in each attested manifest from its owning GitHub
+   Packages repository, verifies every checksum, then uploads a credential-free Maven repository. It does not
+   invoke Maven or resolve dependencies declared by those POMs during hydration;
 4. untrusted owner tests execute with contents-read only and cannot read package, dispatch or status credentials.
 
 Compatibility sets preserve the same separation with a different middle stage. A trusted job resolves and hydrates

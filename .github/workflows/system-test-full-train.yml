@@ -290,29 +290,16 @@ jobs:
           name: tpf-full-train-stable-seed
           path: ${{ runner.temp }}/tpf-system-test-m2
 
-      - name: Configure package repositories
-        env:
-          PACKAGE_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/tpf-maven"
-          node system-tests/scripts/write-maven-settings.mjs \
-            --components system-tests/components.yml \
-            --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
-            --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
-
       - name: Hydrate and attest local Maven repository
         env:
+          PACKAGE_TOKEN: ${{ github.token }}
+          RELEASE_MANIFEST: ${{ inputs.release_manifest }}
           REHEARSAL_MANIFEST: ${{ inputs.rehearsal_manifest }}
         run: |
           local_repo="$RUNNER_TEMP/tpf-system-test-m2"
-          if [ -z "$REHEARSAL_MANIFEST" ]; then
-            while IFS= read -r coordinate; do
-              ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
-                org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
-                -Dartifact="$coordinate" -Dtransitive=true \
-                -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
-                -Dmaven.repo.local="$local_repo" --no-transfer-progress
-            done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          if [ -z "$RELEASE_MANIFEST" ] && [ -z "$REHEARSAL_MANIFEST" ]; then
+            node system-tests/scripts/hydrate-maven-inputs.mjs \
+              --plan materialization-plan.json --repository "$local_repo"
           fi
           node system-tests/scripts/verify-materialized.mjs \
             --plan materialization-plan.json --repository "$local_repo"

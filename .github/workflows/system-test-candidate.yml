@@ -583,28 +583,14 @@ jobs:
             "${manifest_args[@]}" \
             --output materialization-plan.json
 
-      - name: Configure read-only package repositories
+      - name: Hydrate isolated Maven repository
         env:
           PACKAGE_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/tpf-maven"
-          node system-tests/scripts/write-maven-settings.mjs \
-            --components system-tests/components.yml \
-            --output "$RUNNER_TEMP/tpf-maven/settings.xml" \
-            --repositoriesOutput "$RUNNER_TEMP/tpf-maven/repositories.txt"
-
-      - name: Hydrate isolated Maven repository
-        run: |
           local_repo="$RUNNER_TEMP/tpf-system-test-m2"
-          while IFS= read -r coordinate; do
-            ./mvnw -B -s "$RUNNER_TEMP/tpf-maven/settings.xml" \
-              org.apache.maven.plugins:maven-dependency-plugin:3.9.0:get \
-              -Dartifact="$coordinate" \
-              -DremoteRepositories="$(cat "$RUNNER_TEMP/tpf-maven/repositories.txt")" \
-              -Dtransitive=true \
-              -Dmaven.repo.local="$local_repo" \
-              --no-transfer-progress
-          done < <(jq -r '.artifacts[].coordinate' materialization-plan.json)
+          node system-tests/scripts/hydrate-maven-inputs.mjs \
+            --plan materialization-plan.json \
+            --repository "$local_repo"
           node system-tests/scripts/verify-materialized.mjs \
             --plan materialization-plan.json \
             --repository "$local_repo"
