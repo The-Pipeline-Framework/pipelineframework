@@ -74,6 +74,52 @@ The Contract advertises `local` and `rest` worker capabilities that the selected
 must cover. This does not prove that a worker is deployed, authenticated or ready. Legacy Java Contract
 production, payload decoding and worker selection keep their existing meaning.
 
+### Prepare the code that will actually run
+
+The deployment host pins the exact Release Descriptor bytes before resolving its
+artefacts. Reusing a Release version with a different descriptor cannot change an
+existing trusted selection. The existing producer and resolver remain responsible for
+the descriptor, artefact digests, closure and recovered Compiled Truth.
+
+For the bounded native binding, the runnable archive contains the generated application,
+authored functions and packaged native runtime dependencies. Preparation materialises
+that verified archive into a fresh deployment-owned tree and retains its complete file
+inventory. Validate that inventory before use, and load the application and its runtime
+from that tree. Installing dependencies afterwards or importing an ambient runtime would
+break the association being verified.
+
+The native runtime accepts an optional host-owned expectation for the exact projection
+bytes. At its existing load boundary, the generated application's projection must match
+that expectation before handler admission or invocation. The expectation comes from
+verified Compiled Truth; an application-supplied digest is not a substitute. Ordinary
+LOCAL execution keeps its existing load behaviour and needs no local Java process.
+
+The interpreter, standard library and isolation of the prepared tree remain deployment
+responsibilities. File verification is not a sandbox, remote attestation or protection
+against a privileged actor changing the tree during execution. Authored module
+initialisation also executes code: the host must trust and verify the runnable before
+importing it, not merely check a projection after import.
+
+### Retain the trusted selection with the attempt
+
+A prepared binding snapshots the deployment-owned tenant, worker, HTTPS endpoint,
+credential reference, Release and artefact identities, and explicit profile selections.
+An admitted command supplies execution identity, version, attempt, transition key, range
+and context. Validate the supported whole-bundle shape and scoped identities before
+parsing the application payload, then retain those values together as an immutable
+attempt selection. Credential values do not enter business context.
+
+A later configuration replacement affects new selections. It cannot change an existing
+attempt's decoder, endpoint or Release. Comparing a presented command with its retained
+attempt rejects a different execution, version, key or range; it does not independently
+establish that the coordinator's lease is still current. The coordinator retains that
+authority and the separate responsibility for durable attempt storage and settlement.
+
+This preparation and selection boundary does not authenticate a network request or
+implement a worker endpoint. Network authentication, response-channel association and
+uncertain-outcome handling must still satisfy ADR-0088 before transport integration can
+claim support.
+
 ## Rationale
 
 Separate bindings avoid three accidental authorities: a payload choosing its decoder,
