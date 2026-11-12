@@ -205,7 +205,23 @@ Admission must also establish that the escaped worker envelope fits the host's
 request bound, including coordinator-generated attempt metadata. Valid application
 JSON alone does not establish that it can be dispatched.
 The response to the authenticated capability request must match the selected
-runnable's identity, not merely another artefact in the same Release.
+runnable's identity and the exact projection from its verified Compiled Truth.
+The same logical Contract can have different language bindings or compiler provenance.
+Matching the Contract, Release label and runnable digest alone does not establish
+which projection a separately prepared host loaded.
+
+For the paired HTTPS boundary, the worker reports its startup-validated projection
+in the `X-TPF-Worker-Projection-Digest` capability response header. The client requires
+exactly one matching SHA-256 value before admission or dispatch-intent reservation.
+Ordinary capability JSON and Java worker behaviour remain unchanged. TLS authenticates
+the response channel; this claim is not remote attestation or an HMAC-signed response.
+
+Paired admission derives execution identity from the exact tenant, pipeline and client
+key, independently of the ordinary submission idempotency policy. Two distinct keys
+must not collapse because their payloads match or because whitespace is trimmed.
+The same admission key still conflicts with a different immutable intent; changing
+Release does not create another admission namespace. Retained receipts remain the
+lookup and replay authority for executions admitted before a configuration change.
 
 Retain the original validated payload and descriptor pin in coordinator-owned execution
 state. Reconstruct the worker command from that state and the claimed execution's

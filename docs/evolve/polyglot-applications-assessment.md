@@ -157,8 +157,11 @@ A remote worker also needs qualification for the exact release artefact it runs.
 TPF's trusted Release Descriptor and verify both the runnable artefact and its named
 Compiled Truth carrier before binding the projection and execution profile to an
 authorised deployment target. Those artefacts may be separate. A worker's capability
-advertisement is a compatibility claim, not proof of that qualification. The outer
-worker envelope and the application payload have separate encoding identities.
+advertisement is a compatibility claim, not proof of that qualification. The paired
+HTTPS check also compares the host's loaded projection digest with the coordinator's
+verified Compiled Truth. This prevents separately prepared components from silently
+using different bindings under the same logical Contract. The outer worker envelope
+and the application payload have separate encoding identities.
 The [bounded native worker binding decision](../decisions/0089-native-worker-payload-and-contract-binding.md)
 proposes explicit logical-type checks for payloads and compiler-owned Contract metadata.
 Neither decoding a value nor matching metadata authorises execution on its own.
