@@ -152,19 +152,52 @@ same current-lease fence; it must not record success while silently omitting the
 publication. Supporting that combination requires a separate recoverable publication
 design. Existing Java publication behaviour is unchanged.
 
-### Separate response qualification from recovery activation
+### Persist dispatch intent before sending
 
-An explicit client call and a successful state commit do not establish crash-safe
-dispatch. Before automatic native worker selection can be enabled, the durable owner
-must retain that an attempt may have been dispatched. Recovery must use that fact when
-a lease expires, rather than treating the absence of a result as permission to invoke
-the worker again. Persisted dispatch intent and settlement must be conditional on the
-same active attempt; an in-memory selection or a check followed by an unrelated write
-cannot provide that fence.
+The coordinator must durably record that an attempt may be dispatched before it sends
+the request. Record the selected worker, endpoint, credential reference, Release and
+artefact identities, profiles, and exact command digest. Store credential references,
+never credential values. A later configuration change cannot rewrite this evidence.
 
-The paired client therefore remains separate from automatic registration, hosted
-admission and recovery activation until those boundaries are qualified together.
-The existing pure LOCAL developer workflow is unaffected.
+The execution state owner atomically records this immutable fact and associates it with
+the current execution lease. That association requires the admitted pipeline, Contract,
+Release, attempt and range to match. Only a newly accepted reservation permits sending;
+a duplicate, stale reservation or uncertain storage response does not authorise another
+request. Recording a fact separately from checking the lease would leave a race in which
+an expired coordinator could still send.
+
+```mermaid
+flowchart TD
+    C[Current claimed attempt] --> I{Persist dispatch intent}
+    I -->|Accepted once| S[Send worker request]
+    I -->|Rejected or uncertain| N[Do not send]
+    S --> V{Validate response and current authority}
+    V -->|Accepted| T[Commit terminal result]
+    V -->|No accepted result| U[Retain uncertain outcome]
+    I -->|Crash before send or settlement| R[Restart and inspect expired lease]
+    R --> U
+    U --> B[Block automatic resend and ordinary redrive]
+```
+
+### Recover uncertainty without repeating work
+
+An expired lease with unresolved paired dispatch intent is not ordinary retryable work.
+Both periodic recovery and direct queue redelivery must preserve
+`REMOTE_OUTCOME_UNKNOWN` and refuse another invocation. The rule also covers a crash
+between recording intent and actually sending: the durable evidence cannot prove whether
+the worker ran. This conservative outcome is not an exactly-once execution guarantee.
+
+A validated response may settle only the same retained intent under its current lease.
+A stale or duplicate result cannot overwrite terminal state, publish output or schedule
+another attempt. Generic retry and failure paths must not bypass the paired fence.
+Ordinary `allowFailed` redrive is insufficient for unresolved paired work; a future
+reconciliation policy needs its own explicit authority and evidence. Unmarked Java
+executions retain their existing recovery policy.
+
+This dispatch boundary remains separate from automatic worker registration, hosted
+payload admission and native worker endpoints. Qualifying coordinator storage and
+recovery does not establish deployed Node or Python execution. The existing pure LOCAL
+developer workflow is unaffected.
 
 ## Rationale
 
@@ -186,7 +219,7 @@ attempt selection. Examples owns shared cross-language conformance over the actu
 packaged consumers.
 
 The explicit paired binding adds no network listener or automatic coordinator dispatch
-and does not establish durable recovery behaviour.
+and does not by itself establish deployed native-worker recovery.
 Streaming, Connectors and durable Await remain requirements of the broader product.
 Evidence, remaining integration gates and scheduling belong to
 [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82)
