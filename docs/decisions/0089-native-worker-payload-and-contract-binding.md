@@ -169,11 +169,12 @@ an expired coordinator could still send.
 ```mermaid
 flowchart TD
     C[Current claimed attempt] --> I{Persist dispatch intent}
-    I -->|Accepted once| S[Send worker request]
+    I -->|Accepted and still live| S[Send worker request]
     I -->|Rejected or uncertain| N[Do not send]
     S --> V{Validate response and current authority}
     V -->|Accepted| T[Commit terminal result]
-    V -->|No accepted result| U[Retain uncertain outcome]
+    V -->|Lost channel or invalid active response| U[Retain uncertain outcome]
+    V -->|Stale or duplicate| D[Leave durable state unchanged]
     I -->|Crash before send or settlement| R[Restart and inspect expired lease]
     R --> U
     U --> B[Block automatic resend and ordinary redrive]
