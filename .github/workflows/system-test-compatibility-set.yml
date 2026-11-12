@@ -403,11 +403,19 @@ jobs:
             --repository "$local_repo" \
             --coordinationSha "${{ github.sha }}" \
             --outputResolvedSet resolved/resolved-set.json
+          native_hosted_args=()
+          request=intake/request/compatibility-set-request.json
+          examples_manifest="$RUNNER_TEMP/tpf-set-sources/examples/.github/tpf-system-tests.json"
+          if jq -e '[.requests[].component] | (index("runtime") != null and index("examples") != null)' "$request" >/dev/null \
+            && jq -e '.suites | has("native-hosted-worker")' "$examples_manifest" >/dev/null; then
+            native_hosted_args+=(--nativeHostedWorker)
+          fi
           node system-tests/scripts/select-set-suites.mjs \
             --components system-tests/components.yml \
             --policy system-tests/policy.yml \
             --resolvedSet resolved/resolved-set.json \
             --compatibilitySet intake/request/compatibility-set-request.json \
+            "${native_hosted_args[@]}" \
             --output resolved/suite-matrix.json
           node system-tests/scripts/sanitize-maven-repository.mjs \
             --repository "$local_repo"
@@ -419,6 +427,27 @@ jobs:
       - name: Export product-shard matrix
         id: matrix
         run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node for the native hosted worker packages
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.23.2'
+          package-manager-cache: false
+
+      - name: Setup Python for the native hosted worker packages
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Package native workers from the tested runtime tree
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        run: |
+          bash system-tests/scripts/package-native-host-workers.sh \
+            "$RUNNER_TEMP/tpf-set-sources/runtime" resolved/resolved-set.json \
+            manifests/runtime/compatibility-candidate-manifest.json \
+            "$RUNNER_TEMP/tpf-test-inputs/native-host-packages"
 
       - name: Preserve the exact bootstrapped candidate set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -478,7 +507,22 @@ jobs:
           name: tpf-materialized-compatibility-set-inputs
           path: inputs
 
+      - name: Setup Node for the native hosted worker proof
+        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker')
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.23.2'
+          package-manager-cache: false
+
+      - name: Setup Python for the native hosted worker proof
+        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker')
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.10'
+
       - name: Run product shard without privileged credentials
+        env:
+          TPF_NATIVE_HOST_PACKAGES: ${{ github.workspace }}/inputs/native-host-packages
         run: |
           mkdir -p "$RUNNER_TEMP/tpf-system-test-m2"
           tar -C "$RUNNER_TEMP/tpf-system-test-m2" -xzf inputs/tpf-system-test-m2.tar.gz
