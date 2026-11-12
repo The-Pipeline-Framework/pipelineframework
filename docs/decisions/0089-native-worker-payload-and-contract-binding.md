@@ -120,6 +120,46 @@ implement a worker endpoint. Network authentication, response-channel associatio
 uncertain-outcome handling must still satisfy ADR-0088 before transport integration can
 claim support.
 
+### Validate a response under its retained attempt
+
+The explicit paired client uses the existing REST worker request signature and the
+retained deployment endpoint over direct HTTPS. It does not follow redirects, select a
+decoder from response claims, or retry a request automatically. A configuration change
+cannot replace the endpoint, credential reference or result profile of an existing
+attempt.
+
+A completed response must contain exactly one value of the expected logical output
+type and payload encoding. A failed response must use the selected portable result
+profile, a step in the admitted range, and one of its closed codes with the fixed safe
+diagnostic. Keep this classification in the runtime result model; do not disguise it as
+a Java exception class in the legacy wire representation.
+
+For this bounded paired binding, all three portable failure codes are terminal at the
+coordinator. In particular, `TRANSIENT_EXHAUSTED` records that the native runtime has
+spent its local retry budget; it does not create another retry budget at the caller.
+Any future coordinator recovery policy needs a separately admitted choice. Existing
+Java failure handling keeps its current policy.
+
+The result remains an observation until the coordinator accepts it against the current
+attempt. A stale or duplicate response must not publish output, record a new terminal
+decision or enqueue another execution. Once sending may have started, a lost channel or
+invalid response cannot prove that the worker did nothing: preserve
+`REMOTE_OUTCOME_UNKNOWN` rather than silently retrying.
+
+### Separate response qualification from recovery activation
+
+An explicit client call and a successful state commit do not establish crash-safe
+dispatch. Before automatic native worker selection can be enabled, the durable owner
+must retain that an attempt may have been dispatched. Recovery must use that fact when
+a lease expires, rather than treating the absence of a result as permission to invoke
+the worker again. Persisted dispatch intent and settlement must be conditional on the
+same active attempt; an in-memory selection or a check followed by an unrelated write
+cannot provide that fence.
+
+The paired client therefore remains separate from automatic registration, hosted
+admission and recovery activation until those boundaries are qualified together.
+The existing pure LOCAL developer workflow is unaffected.
+
 ## Rationale
 
 Separate bindings avoid three accidental authorities: a payload choosing its decoder,
@@ -139,7 +179,8 @@ executable projections. Runtime owns the explicit bindings and eventual deployme
 attempt selection. Examples owns shared cross-language conformance over the actual
 packaged consumers.
 
-This gate adds no network listener, coordinator integration or durable recovery behaviour.
+The explicit paired binding adds no network listener or automatic coordinator dispatch
+and does not establish durable recovery behaviour.
 Streaming, Connectors and durable Await remain requirements of the broader product.
 Evidence, remaining integration gates and scheduling belong to
 [runtime #82](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/issues/82)
