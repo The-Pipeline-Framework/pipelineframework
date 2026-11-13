@@ -102,7 +102,7 @@ jobs:
       - name: Deploy snapshot to Maven Central
         run: |
           test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
-          ./mvnw -B -f framework/pom.xml clean deploy -Pcentral-publishing -DskipTests -U --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+          ./mvnw -B -f framework/pom.xml clean deploy -Pcentral-publishing -Dtpf.central.publishing.extension=false -DaltSnapshotDeploymentRepository=central::https://central.sonatype.com/repository/maven-snapshots/ -Daether.connector.http.retryHandler.count.central=5 -Daether.connector.http.retryHandler.interval.central=30000 -DskipTests -U --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
