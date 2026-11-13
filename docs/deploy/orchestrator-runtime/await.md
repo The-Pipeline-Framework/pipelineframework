@@ -120,6 +120,19 @@ results. Each record receives one unary completion interaction; the framework do
 not materialize the page or source into an aggregate Await request. `EXPANSION` remains
 the historical compatibility alias for the same emitted-result shape.
 
+## Proposed independently packaged workers
+
+The candidate uses a queue-async Coordinator with serialized payload materialization and registered remote workers. Package each worker with its compiled types, projector and generated boundary metadata. Keep application classes in the worker package and give the worker scoped access to the Coordinator lifecycle endpoint. The Coordinator holds the stores and the resume-token signing authority.
+
+```mermaid
+flowchart LR
+    C["Coordinator: claim, admit, commit, resume"] --> S["Durable state"]
+    C --> A["Typed worker for the pinned Release"]
+    A --> E["External participant"]
+    E --> C
+```
+
+Use matching compiler, contracts and runtime versions. The existing connector-specific HTTP callback ingress still requires its typed local assembly. For activation, capability checks and retained bindings, see [runtime layouts](/deploy/runtime-layouts/) and [ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority).
 ## Itemized Queue-Async Mechanics
 
 When a decorated operation emits a stream, TPF creates one owning await unit and one interaction per operation result. For a paged source, the unit belongs to the current page transition. The unit gives that boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and page-relative item index.

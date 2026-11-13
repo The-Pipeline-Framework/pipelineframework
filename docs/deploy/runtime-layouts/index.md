@@ -48,6 +48,27 @@ Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 In durable self-host HA, `orchestrator-svc` is a module/artifact name, not always the whole orchestration role. The durable coordinator and transition worker roles are selected by runtime config. See [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology).
 :::
 
+## Proposed independently packaged application runtimes
+
+The class-independent Coordinator mode keeps durable orchestration in one process and compiled application behaviour in separately packaged workers. Each admitted execution retains its own Release and immutable worker binding. Activating a newer Release changes new admissions; it does not redirect an execution already waiting for completion.
+
+```mermaid
+flowchart LR
+    C[Coordinator: state, scheduling and Await] --> A[Typed runtime: application A]
+    C --> B[Typed runtime: application B]
+    C --> S[Authoritative durable stores]
+```
+
+The candidate implementation opts in through `pipeline.orchestrator.control-plane.payload-materialization=SERIALIZED` with registered remote workers. The default `TYPED` mode preserves the existing local assembly. Use a compatible compiler, contracts and runtime set: the worker must advertise the required canonical boundary facts for its exact compiled Release. Metadata reads preserve canonical envelopes without loading application classes. Conversion and request-aware completion projection run in the original typed worker; the Coordinator validates and commits their results.
+
+A typed worker can keep `SYNC` process mode. Await is permitted there only while executing a scoped remote transition with a configured Coordinator authority endpoint; ordinary synchronous application calls do not gain durable Await semantics. The worker does not need to run a Coordinator scheduler.
+
+Keep application JARs and generated beans out of the Coordinator package. Workers receive scoped lifecycle credentials, not general access to authoritative stores or the Coordinator's resume-token signing key. Configure immutable trusted bindings through the existing Release registry; client input must not choose arbitrary worker endpoints.
+
+Older Releases without the required compiled boundary facts remain on their compatible typed runtime. This configuration does not migrate retained executions or enrich immutable Releases. Roll out compatible readers before writing records with dispatch pins. See [typed worker compatibility and authority](/decisions/0089-typed-worker-operations-preserve-coordinator-authority).
+
+The generic authenticated completion API supports this separation. The connector-specific HTTP callback resource still belongs to the existing typed local assembly; it cannot be installed as a class-independent Coordinator ingress. A connector adapter must separate provider authentication and mapping from Coordinator token/state authority before using that topology.
+
 ## Who this guide is for
 
 Application developers using the normal onboarding path:

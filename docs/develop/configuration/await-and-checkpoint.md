@@ -16,6 +16,11 @@ Await, command, and checkpoint configuration belongs to the runtime shell. It ke
 | Checkpoint handoff bindings | publication targets and subscriber admission | [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) |
 | Function handler context | context attributes captured at function boundaries | [Function Transport Context Attributes](/develop/configuration/all-settings#function-transport-context-attributes-function-handlersadapters) |
 
+## Authoring an Await that can resume elsewhere
+
+Put `await:` on the operation that produces the trusted request. Declare the reply and final output as canonical types. Use a deterministic projector when the final output depends on both the request and reply. The projector receives the retained request and admitted evidence, so it should avoid external effects and fresh reads.
+
+Keep transport settings in the runtime configuration and use references for secrets. The proposed independently packaged mode uses compiler-emitted boundary facts and keeps the transport configuration fingerprint in the compiled contract. Check the pinned release for supported transports and layout. [Await architecture](/architecture/await-boundaries#proposed-separation-of-coordination-and-typed-execution)
 ## Related Guides
 
 - [Await Boundaries](/architecture/await-boundaries)

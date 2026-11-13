@@ -163,6 +163,11 @@ attempt and due time. Native hosting may schedule bounded invocations, and provi
 may invoke them from events, wake-ups or reconciliation. Either host must continue driving
 pending work. See [queue-async recovery](/deploy/orchestrator-runtime/queue-async#durable-execution).
 
+## Diagnosing a remote Await in the proposed mode
+
+Start with the execution’s tenant, Release, worker binding and interaction version. A pending interaction and its Release metadata should remain readable while the worker is unavailable. If completion is blocked, distinguish the external reply from a failed conversion or projection in the original typed worker. A retried callback can recover a pending projection using retained evidence. If the interaction timed out while projection was running, the Coordinator rejects the stale result.
+
+For itemised work, check the unit seal and retained item count before diagnosing continuation dispatch. An incomplete unit can have individual completed interactions. For the sequence and ownership boundaries, see [ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority#await-operation-flow).
 ## Runtime Signals
 
 In `QUEUE_ASYNC`, itemised deferred completion has a live path and a durable fallback path.
