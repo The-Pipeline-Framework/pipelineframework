@@ -48,6 +48,28 @@ sequenceDiagram
 
 Shared value-only wire records belong in `pipelineframework-contracts`; compiler-produced facts belong in `pipelineframework-compiler`; lifecycle policy, stores, clients and authenticated endpoints belong in `pipelineframework-runtime`. Existing Release bindings and activation remain the identity authority. Running work retains its admitted binding and original Release across retries and recovery. The initial execution admission persists an `ExecutionDispatchPin` containing the selected declared entry identity and its immutable deployment observation. The existing tenant, pipeline, contract and Release identity supplies the rest of the binding key. Endpoint, artifact and credential identity come from that retained entry; changing current configuration cannot redirect an admitted execution. An immutable entry cannot be enriched or replaced in place.
 
+## Await operation flow
+
+The application pipeline is compiled from the application definition. The following is the control flow for its Await step. Each arrow carries the result needed by the next operation. A worker can return at a suspension, and a completion can arrive before the dispatch report.
+
+```mermaid
+flowchart TD
+    A["Worker: encode typed request as canonical value"] --> B["Coordinator: validate Release, lease and occurrence"]
+    B --> C["Coordinator: register unit and interaction"]
+    C --> D["Coordinator: conditionally grant dispatch"]
+    D --> E["Worker: perform external request"]
+    E --> F["Coordinator: record outcome or acknowledgement"]
+    E --> G["Coordinator: admit callback evidence"]
+    F --> H["Coordinator: read retained request, acknowledgement and reply"]
+    G --> H
+    H --> I["Pinned worker: normalise and project typed values"]
+    I --> J["Coordinator: compare version and commit canonical outcome"]
+    J --> K["Coordinator: release parent or seal itemized continuation"]
+    K --> L["Worker: decode canonical continuation into compiled types"]
+```
+
+`RemoteAwaitWorkerLifecycle` orders worker calls. `RestAwaitLifecycleResource` authenticates and routes each request. `AwaitTransitionAuthority` verifies scope and admission, and `AwaitCoordinator` applies the durable state transition. Value conversion and projection belong to `AwaitValueOperationExecutor` in the typed runtime. The transport configuration stays in that runtime. The compiled contract records its fingerprint. Endpoint-based admission for a remote transport requires a trusted endpoint binding.
+
 ## Compatibility
 
 The existing typed local path and released payload formats remain supported. Class-independent operation requires explicit compatible worker capabilities and the required compiled facts. Missing or unknown protocol versions must fail closed rather than falling back to unchecked payloads, guessed descriptor identities or local application loading.

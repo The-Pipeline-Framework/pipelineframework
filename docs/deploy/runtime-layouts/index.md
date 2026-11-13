@@ -48,7 +48,7 @@ Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 In durable self-host HA, `orchestrator-svc` is a module/artifact name, not always the whole orchestration role. The durable coordinator and transition worker roles are selected by runtime config. See [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology).
 :::
 
-## Independently packaged application runtimes
+## Proposed independently packaged application runtimes
 
 The class-independent Coordinator mode keeps durable orchestration in one process and compiled application behaviour in separately packaged workers. Each admitted execution retains its own Release and immutable worker binding. Activating a newer Release changes new admissions; it does not redirect an execution already waiting for completion.
 
@@ -59,7 +59,7 @@ flowchart LR
     C --> S[Authoritative durable stores]
 ```
 
-This mode is opt-in through `pipeline.orchestrator.control-plane.payload-materialization=SERIALIZED` with registered remote workers. The default `TYPED` mode preserves the existing local assembly. Use a compatible compiler, contracts and runtime set: the worker must advertise the required canonical boundary facts for its exact compiled Release. Metadata reads preserve canonical envelopes without loading application classes. Conversion and request-aware completion projection run in the original typed worker; the Coordinator validates and commits their results.
+The candidate implementation opts in through `pipeline.orchestrator.control-plane.payload-materialization=SERIALIZED` with registered remote workers. The default `TYPED` mode preserves the existing local assembly. Use a compatible compiler, contracts and runtime set: the worker must advertise the required canonical boundary facts for its exact compiled Release. Metadata reads preserve canonical envelopes without loading application classes. Conversion and request-aware completion projection run in the original typed worker; the Coordinator validates and commits their results.
 
 A typed worker can keep `SYNC` process mode. Await is permitted there only while executing a scoped remote transition with a configured Coordinator authority endpoint; ordinary synchronous application calls do not gain durable Await semantics. The worker does not need to run a Coordinator scheduler.
 
