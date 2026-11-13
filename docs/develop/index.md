@@ -19,7 +19,7 @@ flow before the compiler generates the imperative shell.
 Upgrading from 26.9.3? Start with the [26.9.4 upgrade guide](./upgrade-26.9.4) for the new product BOM,
 repository ownership boundaries, DSL v3 checks and committed IDL state.
 
-For current TPF development, select `org.pipelineframework:pipelineframework-bom:26.11.2-SNAPSHOT`
+For current TPF development, select `org.pipelineframework:pipelineframework-bom:26.11.3-SNAPSHOT`
 and omit versions from BOM-managed application dependencies. Use the configured Sonatype snapshot repository
 and Maven `-U` to refresh snapshots; `LATEST` does not mean the latest Git `main`.
 The TPF development repositories refresh snapshots automatically and publish Maven-producing components
