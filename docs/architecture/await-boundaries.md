@@ -218,6 +218,26 @@ Replay and topology metadata show one semantic operation with a deferred-complet
 overlay. Broker and external-provider actors may still appear because they are
 participants, not pipeline operations.
 
+## Proposed separation of coordination and typed execution
+
+[ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority) describes the proposed mode for independently packaged workers. The authored operation and its `await:` declaration keep the same meaning. The Coordinator retains the occurrence, request and Release and decides whether completion can commit. The pinned worker knows the application types and converts the reply or projects the final value.
+
+```mermaid
+sequenceDiagram
+    participant W as Pinned typed worker
+    participant C as Coordinator
+    participant E as External participant
+    W->>C: Register canonical request and request a dispatch grant
+    C-->>W: Authorised grant for the retained occurrence
+    W->>E: Dispatch external request
+    E->>C: Submit correlated completion
+    C->>W: Request conversion or projection with retained evidence
+    W-->>C: Return canonical proposed value
+    C->>C: Recheck version and commit completion
+    C->>W: Dispatch continuation under the original Release
+```
+
+A Command acknowledgement and callback can arrive in either order. The Coordinator keeps admitted evidence so it can retry an unavailable projector. Each item of an itemised Await has its own interaction, while the unit owns continuation. A new active Release changes new admissions. Waiting work retains its original binding.
 ## Deferred Completion Versus Checkpoint Handoff
 
 | Concern | Deferred completion | Checkpoint handoff |

@@ -160,6 +160,7 @@ Boundaries and I/O shells:
 - Business functions should stay focused on typed domain transformations. Persistence, transport, retries, correlation, polling, replay capture, and deployment wiring belong in the imperative shell.
 - Connectors model I/O admission/publication and captured external reality. Plugins model cross-cutting side effects. Do not blur connector semantics into generic plugin behavior or hide external I/O in business steps when a connector/runtime primitive exists.
 - Await boundaries must preserve durable wait state, correlation, completion admission, timeout, duplicate completion handling, and resume semantics. Transport adapters may vary; await semantics should not.
+- Keep Await authority with the Coordinator and application conversion and projection with the typed runtime. When those roles use separate packages, retain the admitted Release and worker binding, verify canonical evidence and recheck the durable fence before committing. Treat the independently packaged mode as proposed until its pinned component set is accepted. See [ADR-0089](docs/decisions/0089-typed-worker-operations-preserve-coordinator-authority.md).
 - Checkpoint handoff is a cross-pipeline ownership boundary. After admission, the downstream pipeline owns retry/DLQ and lifecycle semantics.
 - Persistence, caching, materialization, execution state, await state, and checkpoint handoff are separate state surfaces. Do not substitute one for another without explicit design rationale.
 
