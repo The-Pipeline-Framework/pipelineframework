@@ -236,7 +236,7 @@ sequenceDiagram
     C->>B: Execute parcel processing under B1
     B-->>C: Return parcel receipt
     C->>C: Commit parcel execution success
-    Note over A,C: A1 stops; Coordinator restarts from persisted state
+    Note over A,C: A1 stops. Coordinator restarts from persisted state
     C->>C: Activate expense A2 for new admissions
     Note over A,C: A1 becomes available again
     P->>C: Submit ApprovalReply for the retained interaction
