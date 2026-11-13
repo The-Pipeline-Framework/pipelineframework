@@ -222,20 +222,35 @@ participants, not pipeline operations.
 
 [ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority) describes the proposed mode for independently packaged workers. The authored operation and its `await:` declaration keep the same meaning. The Coordinator retains the occurrence, request and Release and decides whether completion can commit. The pinned worker knows the application types and converts the reply or projects the final value.
 
+The `shared-coordinator-proof` example runs an expense approval application alongside an unrelated parcel-processing application. Expense Release A1 prepares `Pending` request data, waits for an `ApprovalReply`, and uses its `ExpenseCompletionProjector` to produce `Approved` before `FinishService` creates the receipt. The proof harness supplies the approver's reply through the completion API.
+
 ```mermaid
 sequenceDiagram
-    participant W as Pinned typed worker
-    participant C as Coordinator
-    participant E as External participant
-    W->>C: Register canonical request and request a dispatch grant
-    C-->>W: Authorised grant for the retained occurrence
-    W->>E: Dispatch external request
-    E->>C: Submit correlated completion
-    C->>W: Request conversion or projection with retained evidence
-    W-->>C: Return canonical proposed value
-    C->>C: Recheck version and commit completion
-    C->>W: Dispatch continuation under the original Release
+    participant A as Expense worker A1
+    participant C as Shared Coordinator
+    participant P as Expense approver (proof harness)
+    participant B as Parcel worker B1
+    A->>C: Register Pending expense and retained A1 occurrence
+    C-->>A: Authorise the Await interaction
+    Note over A,C: Expense execution waits for approval
+    C->>B: Execute parcel processing under B1
+    B-->>C: Return parcel receipt
+    C->>C: Commit parcel execution success
+    Note over A,C: A1 stops. Coordinator restarts from persisted state
+    C->>C: Activate expense A2 for new admissions
+    Note over A,C: A1 becomes available again
+    P->>C: Submit ApprovalReply for the retained interaction
+    C->>A: Project Pending plus ApprovalReply under A1
+    A-->>C: Return canonical Approved value
+    C->>C: Recheck occurrence version and commit
+    C->>A: Run FinishService under A1
+    A-->>C: Return expense receipt marked A1
 ```
+
+The Coordinator uses neither application's Java classes. The parcel receipt can complete while expense approval is pending. Activating A2 does not change the projector or continuation selected for A1. The executable fixture uses separately packaged JVM processes; the independent AWS packaging work applies this boundary to deployment ownership.
+
+See the [shared Coordinator proof](https://github.com/The-Pipeline-Framework/pipelineframework-examples/tree/main/shared-coordinator-proof) for the application definitions and recovery assertions.
+
 
 A Command acknowledgement and callback can arrive in either order. The Coordinator keeps admitted evidence so it can retry an unavailable projector. Each item of an itemised Await has its own interaction, while the unit owns continuation. A new active Release changes new admissions. Waiting work retains its original binding.
 ## Deferred Completion Versus Checkpoint Handoff
