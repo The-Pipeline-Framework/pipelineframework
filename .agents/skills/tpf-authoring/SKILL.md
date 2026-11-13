@@ -7,7 +7,7 @@ description: Design, author, or migrate applications built with The Pipeline Fra
 
 Use this Skill as the architectural prior for TPF application work. It prevents ordinary Java, Spring, repository, and workflow-engine patterns from displacing a TPF mechanism that already owns the job. This is not API documentation, a support matrix, or guidance for maintaining TPF itself.
 
-This Skill defines architectural priors. Framework source, compiler behavior, focused tests, and documentation must match the application's exact pinned TPF release before they are used as evidence of syntax or capability. Do not infer support from newer `main`-branch material; verify release alignment before inventing an application workaround.
+This Skill defines architectural priors. Evidence for syntax or capability must match the application's exact pinned TPF release. Verify release support before inventing an application workaround.
 
 ## The TPF shape
 
@@ -181,20 +181,18 @@ specific owning repository when the boundary is already known.
 
 The Skill remains the architectural prior.
 
-Confirm the application's exact pinned TPF release before relying on a capability. Use framework source, compiler behavior, focused tests, and documentation from that same release; never substitute `main`, a different patch, or a different minor line. If matching released material is unavailable, report the evidence gap rather than inventing application infrastructure.
+Confirm the application's exact pinned TPF release before relying on a capability. Choose the smallest matching-release evidence that resolves the question. For declared shape, use the compiler and inspect the relevant generated contract when needed. For runtime behavior, use a focused test or reproduction. Consult matching docs or source for questions those checks leave open. If evidence is unavailable, record the gap.
 
 Implementation classes prove capability; they do not define application architecture. Prefer canonical authoring docs/ADRs/DSL examples for design.
 
-## Before you implement
+## Make the product runnable early
 
-1. Identify the data, effect, observation, and suspension involved.
-2. Classify each dependency using the TPF shape above.
-3. Inspect `pipeline.yaml` and the current typed state first.
-4. Load only the relevant reference; establish the application's pinned TPF release, then verify the primitive against matching-release framework source, compiler behavior, documentation, and focused tests.
-5. Draft or update `pipeline.yaml` and canonical types before inventing infrastructure.
-6. Compile and inspect generated diagnostics and artifacts.
-7. Only then write the smallest authored Java needed.
-8. If a framework gap remains, isolate and report it instead of hiding it in application infrastructure.
+1. Define one observable user outcome and a meaningful failure case. Sketch the complete journey from entry point to visible result in `pipeline.yaml` and canonical types. Identify the data, observations, effects and suspension, then choose their TPF boundaries.
+2. Use the pinned TPF release and load only the relevant reference. Compile the authored shape and probe the hardest uncertain behavior early. When the evidence answers the question, continue building. Isolate confirmed framework gaps in a focused reproduction and keep building the parts that can proceed independently.
+3. Connect the whole journey with the smallest authored Java and supported local bindings. Put a runnable version in front of the user as soon as they can exercise the flow. Label fixture bindings, known defects and pending acceptance checks so early feedback is grounded in what actually runs.
+4. Identify required deployment bindings and their owners early. Run focused checks during authoring, then run every applicable acceptance gate on the integrated slice, including full verification, packaging and hosted verification where required. Reuse evidence that still applies to the current inputs. Acceptance and release require all applicable gates to pass.
+
+For example, let a developer run a ready feature node, see its result and retry using the same receipt. Connect the typed Query, Command, Await and persistence aspect with local bindings. Probe nested Await continuation early if it is uncertain on the pinned Runtime. Run the full suite, PostgreSQL receipt proof and applicable package checks once the journey is connected.
 
 ## Common wrong-but-normal architecture
 
@@ -222,6 +220,8 @@ Do not overfit. TPF is not mandatory for simple local code; existing controllers
 
 ## Final self-check
 
+- What can the user run end to end now, and what defects or acceptance checks are still open?
+- Did every applicable acceptance gate pass on the integrated change before claiming completion?
 - Did I introduce hidden I/O into an authored step?
 - Did I query data the pipeline already knew?
 - Did I confuse result replay, observation replay, persistence, and effect authority?
