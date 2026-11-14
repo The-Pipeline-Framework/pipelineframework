@@ -116,6 +116,8 @@ explicit successor metadata for retrieval tools and agents.
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Definition-level `recur` declarations. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 | [0087](./0087-root-recurrence-preserves-durable-await.md) | Root-only durable recurrence. Formerly published under the root-recurrence ADR-0084 URL. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 
+| [0088](./0088-release-packaging-facts-share-the-immutable-descriptor.md) | Carry physical package associations in the immutable Release Descriptor. | [0064](./0064-release-descriptors-are-produced-after-packaging.md) |
+
 ## Maintenance
 
 These files use the Nygard/MADR sections understood by GitNexus: `Context`,
