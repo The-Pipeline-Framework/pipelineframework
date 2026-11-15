@@ -98,6 +98,7 @@ publication and the distinction from immutable test and release inputs.
 | [0084](./0084-runtime-owns-release-production-and-resolution.md) | Share release preparation and resolution across the CLI and Maven. |
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
+| [0090](./0090-release-packaging-facts-share-the-immutable-descriptor.md) | Draft: carry physical package associations in the immutable Release Descriptor, extending [ADR-0064](./0064-release-descriptors-are-produced-after-packaging.md). |
 
 ## Superseded decisions
 
@@ -111,8 +112,6 @@ explicit successor metadata for retrieval tools and agents.
 | [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Functional-core-only packaged Blocks. | [0028](./0028-block-connector-capabilities-are-application-bound.md) |
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Definition-level `recur` declarations. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 | [0087](./0087-root-recurrence-preserves-durable-await.md) | Root-only durable recurrence. Formerly published under the root-recurrence ADR-0084 URL. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
-
-| [0088](./0088-release-packaging-facts-share-the-immutable-descriptor.md) | Carry physical package associations in the immutable Release Descriptor. | [0064](./0064-release-descriptors-are-produced-after-packaging.md) |
 
 ## Maintenance
 

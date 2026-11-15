@@ -3,11 +3,11 @@ title: Release packaging facts share the immutable descriptor
 status: draft
 ---
 
-# ADR-0088: Release Packaging Facts Share the Immutable Descriptor
+# ADR-0090: Release Packaging Facts Share the Immutable Descriptor
 
 ## Context
 
-ADR-0064 defines a closed release over final artefact bytes and compiler-owned
+[ADR-0064](./0064-release-descriptors-are-produced-after-packaging.md) defines a closed release over final artefact bytes and compiler-owned
 semantics. A Java Lambda package can contain several framework entry classes,
 while two separate packages can embed the same application. Consumers need
 explicit physical entry associations to validate those packages independently.

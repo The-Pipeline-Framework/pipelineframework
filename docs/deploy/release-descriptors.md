@@ -105,6 +105,14 @@ Schema 2 adds an optional `deployment` section to the same immutable Release
 Descriptor. The Maven plugin accepts it as a `<deployment>` configuration
 element. Omitting it preserves the schema-1 output.
 
+For a complete Maven configuration of the `aws-durable-java21-v1` profile,
+see the [hosted Echo integration fixture](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/875b528a0e37d68c9dac35a07c4cd9cd67a1c06b/release-maven-plugin/src/it/hosted-aws-durable-echo/pom.xml#L10).
+Its `<deployment>` element sets `<profile>`, lists the required
+`<entries><entry>` associations, and declares an ingress `<check>` with
+its timeout, input and expected result. Maven Invoker replaces
+`@project.version@` in the fixture. Use your plugin version and the paths
+and identifiers from your own built package.
+
 A deployment section identifies a provider profile, entries and logical
 bindings. Each entry selects an existing artefact, compiled module, exact
 application and handler package locations, Java entry class and trigger.
@@ -127,7 +135,7 @@ are supplied through that target binding.
 
 A profile name and bounded declared check describe requirements. Physical
 delivery and successful execution of the check remain deployment acceptance
-steps. See [ADR-0088](../decisions/0088-release-packaging-facts-share-the-immutable-descriptor).
+steps. See [ADR-0090](../decisions/0090-release-packaging-facts-share-the-immutable-descriptor).
 
 ## Canonical artefact locations
 
