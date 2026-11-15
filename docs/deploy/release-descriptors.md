@@ -99,6 +99,44 @@ If no stable repository URI is configured, opt into a local-only descriptor expl
   -Dtpf.release.allowLocalUris=true
 ```
 
+## Physical package associations
+
+Schema 2 adds an optional `deployment` section to the same immutable Release
+Descriptor. The Maven plugin accepts it as a `<deployment>` configuration
+element. Omitting it preserves the schema-1 output.
+
+For a complete Maven configuration of the `aws-durable-java21-v1` profile,
+see the [hosted Echo integration fixture](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/blob/875b528a0e37d68c9dac35a07c4cd9cd67a1c06b/release-maven-plugin/src/it/hosted-aws-durable-echo/pom.xml#L10).
+Its `<deployment>` element sets `<profile>`, lists the required
+`<entries><entry>` associations, and declares an ingress `<check>` with
+its timeout, input and expected result. Maven Invoker replaces
+`@project.version@` in the fixture. Use your plugin version and the paths
+and identifiers from your own built package.
+
+A deployment section identifies a provider profile, entries and logical
+bindings. Each entry selects an existing artefact, compiled module, exact
+application and handler package locations, Java entry class and trigger.
+Several framework entries can use the same package while authored steps retain
+one owning artefact. The shared verifier checks the selected entry and compares
+the complete packaged Compiled Truth with the carrier.
+
+A Lambda ZIP can carry Compiled Truth in a declared nested JAR such as
+`lib/application.jar`. Extraction uses that exact location. Nested JARs must
+be complete archives, and selected entry classes must be readable. Verification
+also rejects a declared handler location when an earlier classpath entry would
+shadow it. Lambda orders its `lib` JARs by Unicode filename order; see
+[AWS Java packaging](https://docs.aws.amazon.com/lambda/latest/dg/java-package.html).
+
+Command and Query requirements come from compiler metadata. Runtime build
+metadata records the actual selected effect and capture stores. A deployment
+consumer must check those requirements against the target's grants and durable
+bindings. Tenant IDs, resource ARNs, endpoints, credentials and secret values
+are supplied through that target binding.
+
+A profile name and bounded declared check describe requirements. Physical
+delivery and successful execution of the check remain deployment acceptance
+steps. See [ADR-0090](../decisions/0090-release-packaging-facts-share-the-immutable-descriptor).
+
 ## Canonical artefact locations
 
 Release locations describe immutable artefact identity; resolver configuration supplies environment-specific access.
