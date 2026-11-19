@@ -70,8 +70,10 @@ flowchart LR
     end
 ```
 
-These are two execution segments. They can run on the same worker function in
-separate invocations. Two sequential deferred completions can create three segments;
+These are two execution segments. They can use the same typed worker function on
+both sides of the Await. The diagram expresses a placement goal; grouping their
+code does not guarantee a single physical invocation per segment. The selected
+host and dispatcher still determine transition granularity. Two sequential deferred completions can create three segments;
 two Await declarations on alternative branches do not mean an execution crosses both.
 
 For a single application module, this mapping explicitly keeps the authored Steps
@@ -102,7 +104,17 @@ above. Native work delivery controls suspension and resume, as described in
 Physical HTTP ingress, work and recovery functions are deployment roles; their
 number is independent of the number of execution segments. Hosting compiled
 `LOCAL` code in a native function is also distinct from generating per-Step
-`REST`/`FUNCTION` adapters.
+`REST`/`FUNCTION` adapters. With a registered REST worker, the remote boundary is
+between the Coordinator and that worker's transition endpoint; compiled calls
+inside the worker may remain `LOCAL`. Conversely, choose generated
+`REST`/`FUNCTION` adapters when those handlers are the actual intended remote
+boundaries. Verify the emitted Release entry and archive rather than inferring
+hosting from the application YAML defaults.
+
+An execution segment is guidance for deciding which work should stay together,
+not another runtime layout or a new mapping file. Keep using `modular`,
+`pipeline-runtime` or `monolith` and the existing module/runtime assignments.
+See [transport and platform settings](/develop/configuration/transport-and-platform).
 
 ### Account for I/O and handoff costs
 

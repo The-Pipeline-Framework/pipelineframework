@@ -1,6 +1,6 @@
 # Runtime Topology Strategy
 
-This guide is for software architects choosing how a pipeline is deployed.
+Choose the deployment topology around ownership, suspension and the work that should stay together.
 
 ## Decision model
 
@@ -28,7 +28,29 @@ Keeping the orchestrator isolated is usually a good default when you want:
 - Reduced attack surface for internal services/plugins
 - Stable migration path from grouped runtime to more modular layouts
 
-Current topologies still assume the generated application owns and runs the orchestrator host. For the internal target architecture that separates app/data-plane workers from a durable control plane, see [Durable Coordinator](/evolve/durable-coordinator/).
+The Coordinator and the typed Application Runtime have separate responsibilities.
+In serialized coordination mode, the Coordinator retains canonical envelopes and
+pinned Contracts without loading application business classes. The typed workers
+own those classes and execute their business transitions. Several unrelated
+applications can share that Coordinator while preserving separate tenants,
+immutable Releases and registered worker bindings.
+
+```mermaid
+flowchart TB
+    C[Shared Coordinator and authoritative execution state]
+    C -->|Release A1 binding| A[Expense application worker]
+    C -->|Release B1 binding| B[Parcel application worker]
+    A -->|Canonical result or Await suspension| C
+    B -->|Canonical result or Await suspension| C
+```
+
+Application-specific complete hosts remain supported. Sharing a Coordinator is a
+packaging and deployment choice over the same execution semantics; runtime mapping
+does not provision or select that service. Group work using
+[execution-segment guidance](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion),
+then choose the external worker and generated adapter boundaries explicitly.
+See [registered REST targeting](/deploy/orchestrator-runtime/queue-async#release-aware-rest-targets)
+and [AWS Durable deployment](/deploy/orchestrator-runtime/aws-durable).
 
 ## Plugin/synthetic placement
 

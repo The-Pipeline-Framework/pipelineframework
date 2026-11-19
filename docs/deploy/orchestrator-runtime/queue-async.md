@@ -26,12 +26,35 @@ grant a worker authority to choose its destination or replace these identities.
 The `(tenant-id, pipeline-id, worker-id)` tuple must be unique across target
 entries, including entries for different Releases.
 
-This mode requires one whole-bundle `application-archive` covering the Contract's
-steps and declared capabilities. The pinned Contract must equal the Coordinator's
-actual generated Contract, including its layout; equal labels or step counts are
-not enough. Different implementation Releases sharing that Contract are supported.
-Distributed artefact placement and differing Contract/layout coordination are not
-supported by this mode. The Compiled Truth carrier is not assumed to be runnable.
+Registered REST targeting requires one whole-bundle runnable archive covering the
+pinned Contract's steps and declared capabilities. The Compiled Truth carrier is
+not assumed to be runnable. Distributed placement across several archives remains
+unsupported by this mode.
+
+The default typed coordination path requires the pinned Contract to equal the
+Coordinator's generated Contract, including its layout. For an application-free
+Coordinator, select
+`pipeline.orchestrator.control-plane.payload-materialization=SERIALIZED`.
+That path validates the pinned canonical type catalogue and deferred-completion
+metadata from each Release, rather than loading its application classes or requiring
+one locally generated application Contract. It also accepts a qualifying whole-bundle
+`lambda-zip` alongside `application-archive`. It requires the corresponding immutable
+entry binding; a target URL alone is insufficient.
+
+```mermaid
+flowchart LR
+    E[Execution with original tenant and Release pin] --> B[Immutable entry and worker binding]
+    B --> W[Authenticated whole-bundle REST worker]
+    W --> T[Typed business transition]
+    T --> R[Canonical result or Await suspension]
+    R --> S[Coordinator commits authoritative state]
+```
+
+A worker can retain compiled `LOCAL` calls while serving the registered REST
+transition protocol through a function bridge. Generated per-Step `REST`/`FUNCTION`
+adapters are a separate boundary choice. Use
+[execution-segment placement guidance](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion)
+to decide which work should stay together; no new layout name is introduced.
 
 Availability and dispatch use the same target resolution. Both require a matching
 healthy, non-stale, non-draining lifecycle record and authenticated endpoint

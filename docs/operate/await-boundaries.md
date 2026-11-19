@@ -301,3 +301,33 @@ Await and checkpoint handoff both cross a process boundary, but they assign owne
 | Use when | the external result belongs to the same business flow | another pipeline should own the next lifecycle |
 
 Use await for human approvals, webhook callbacks, and brokered provider decisions that must resume the same execution. Use checkpoint handoff when the receiving workflow has separate ownership, scaling, or operational responsibility.
+
+## Provider replacement and retained execution identity
+
+A provider execution stopping does not by itself cancel or complete the TPF
+execution. With the AWS Durable recovery host, keep the permanently stopped
+original provider execution and its replacement distinct in the evidence.
+
+```mermaid
+flowchart LR
+    O[Original provider execution: STOPPED] --> R[Targeted recovery]
+    R --> N[Replacement provider execution: next generation]
+    E[Same TPF execution and original Release pin] --> R
+    N --> F[Old generation work is fenced]
+    N --> A[Observe retained Await and reconcile due work]
+```
+
+Record both provider ARNs, the unchanged semantic execution ID, original
+Pipeline/Contract/Release and worker pins, and the advanced generation. A late
+message from the stopped generation cannot commit work for the replacement.
+Provider acceptance, queue acknowledgement and callback delivery each require
+their corresponding authoritative TPF observation before reporting business
+completion.
+
+When reconstructing a client's execution context, use the original client key
+and Release to read semantic admission, then observe the current locator. Do not
+select today's active Release or assume generation 1. Missing admission, a claimed
+generation awaiting locator registration, or a concurrent successor remains
+pending evidence. It does not authorise another execution or a different Await
+token. The existing retained interaction and actor/token rules still govern
+completion. See the [Action observation contract](/deploy/orchestrator-runtime/aws-durable#observe-admission-and-results).
