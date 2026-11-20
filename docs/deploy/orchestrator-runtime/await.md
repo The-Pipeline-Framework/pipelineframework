@@ -133,6 +133,29 @@ flowchart LR
 ```
 
 Use matching compiler, contracts and runtime versions. The existing connector-specific HTTP callback ingress still requires its typed local assembly. For activation, capability checks and retained bindings, see [runtime layouts](/deploy/runtime-layouts/) and [ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority).
+## Exact interaction reads and trusted human completion
+
+[Runtime PR130](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/130)
+adds a candidate host boundary for reading one interaction under its exact
+execution, contract and Release checkpoint. The view carries the canonical
+pending request, completion input type, deadline and transport classification.
+For example, a restaurant approval screen can display the retained order and
+submit the corresponding decision without scanning a tenant's pending work.
+The retained Release supplies the request type; a newer application loaded in
+the process cannot change it. Missing retained type authority fails closed.
+
+The candidate `COMPLETE_HUMAN_AWAIT` Action accepts only an authoritatively
+classified `interaction-api`, non-Command interaction. Its trusted caller must
+establish scope and actor authority before invoking it. This does not grant
+assignee or group permissions merely because those fields exist. It neither
+issues nor recovers a callback token; signed Command/provider callbacks retain
+their original token requirement and existing completion route.
+
+`READ_AWAIT_INTERACTION` and `COMPLETE_HUMAN_AWAIT` require a matching published
+and qualified host/runtime version. Older Action enums reject them. The
+candidate adds no new interaction registry, transport or execution semantics;
+see [ADR-0089](/decisions/0089-typed-worker-operations-preserve-coordinator-authority).
+
 ## Itemized Queue-Async Mechanics
 
 When a decorated operation emits a stream, TPF creates one owning await unit and one interaction per operation result. For a paged source, the unit belongs to the current page transition. The unit gives that boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and page-relative item index.
