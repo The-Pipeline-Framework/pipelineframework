@@ -21,6 +21,22 @@ artefact, its compiled module, the exact application and handler package
 locations, Java entry class and trigger. A bounded declared check identifies
 its input and expected result.
 
+### Execution canary clarification — coordinated candidate
+
+[Contracts PR68](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/pull/68)
+proposes making that application execution canary optional in structural
+deployment validation. Physical package verification and runtime/protocol
+readiness remain mandatory for a supported delivery path; neither implies a
+deterministic terminal application result. Profile owners retain stricter
+requirements where applicable, including the complete host's ingress canary.
+When declared, a canary retains its entry, timeout and payload validation.
+
+The nullable schema-2 field and existing descriptors remain unchanged. Earlier
+validators reject omission, so this is not backwards-compatible acceptance by
+old readers. Use the qualified updated reader/producer closure before emitting
+a descriptor without a canary. Do not rewrite an existing immutable Release or
+fabricate an expected result for a long-lived human-facing application.
+
 The shared contracts validate entries and compare each selected package's
 complete Compiled Truth with the release carrier. Runtime's shared producer and
 Maven adapter emit the same model; the native CLI verifies its closure.

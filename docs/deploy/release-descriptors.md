@@ -133,9 +133,31 @@ consumer must check those requirements against the target's grants and durable
 bindings. Tenant IDs, resource ARNs, endpoints, credentials and secret values
 are supplied through that target binding.
 
-A profile name and bounded declared check describe requirements. Physical
-delivery and successful execution of the check remain deployment acceptance
-steps. See [ADR-0090](../decisions/0090-release-packaging-facts-share-the-immutable-descriptor).
+A profile name describes delivery requirements. An application execution
+canary, when declared, supplies bounded input and an expected result; producing
+or verifying the Release does not execute it. Runtime identity and protocol
+readiness are separate checks, not evidence that the application canary ran.
+
+The coordinated optional-canary change in
+[Contracts PR68](https://github.com/The-Pipeline-Framework/pipelineframework-contracts/pull/68)
+allows a physical deployment to omit `check`. It does not make entries,
+artefact associations, bindings or compiled semantic coverage optional. A
+declared canary still requires a valid entry, a timeout of at most 600 seconds,
+and valid serialized input and expected-result envelopes. A delivery profile
+may require it: the complete `aws-durable-java21-v1` host retains its ingress
+canary requirement, while an independently coordinated REST worker establishes
+its identity and protocol readiness separately.
+
+This distinction matters for a human approval or a service returning generated
+identifiers and timestamps: do not invent a fixed terminal result simply to
+describe its physical package. The application still needs acceptance tests
+and deployed readiness verification.
+
+Until that coordinated change is published and qualified, the existing reader
+requires `check`. Older readers reject a descriptor which omits it; pin a
+compatible reader and producer before using optional canaries. Existing Release
+identities and descriptors are not rewritten. See
+[ADR-0090](../decisions/0090-release-packaging-facts-share-the-immutable-descriptor).
 
 ## Canonical artefact locations
 
