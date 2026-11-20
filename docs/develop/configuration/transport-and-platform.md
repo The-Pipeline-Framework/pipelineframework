@@ -16,39 +16,46 @@ Transport controls how generated components call each other. Platform controls w
 | `COMPUTE` | service/resource runtime path |
 | `FUNCTION` | function-handler runtime path |
 
-Transport and platform are related, but they are not the same dimension. For generated HTTP function entry points, select `pipeline.platform=FUNCTION` with REST-oriented generated handlers. These settings describe generated application adapters. A separately packaged registered transition worker also has a host and a transport boundary; that boundary does not require a remote adapter between every authored Step.
+Transport and platform are separate choices. For independently invoked serverless
+runtime units communicating over HTTP, select `REST` transport and `FUNCTION`
+platform. Durable background execution uses
+`pipeline.orchestrator.mode=QUEUE_ASYNC`; this runtime setting is separate from
+the generated transport and platform settings.
 
 ## Place an execution segment, then select its adapters
 
 Start with the work that should remain together until suspension or completion: an
 [execution segment](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion).
-Use the existing runtime mapping to group its code, then select the required
-external adapters and deployment package. There is no `execution-segment` layout.
+Use the existing runtime mapping to group its code, then make its external
+invocation boundary explicit. There is no `execution-segment` layout.
 
 ```mermaid
 flowchart LR
-    C[Coordinator] -->|Registered REST transition protocol| H[Function HTTP bridge]
-    subgraph W[Typed application worker]
-        H --> R[Application Runtime]
-        R --> L[Compiled LOCAL calls]
-    end
-    R -->|Suspended Await or typed result| C
+    C[Coordinator: durable scheduling and state] -->|REST invocation| A[FUNCTION runtime unit: first segment]
+    A -->|Await suspension| C
+    E[Authorised external completion] --> C
+    C -->|REST continuation| B[FUNCTION runtime unit: next segment]
+    B -->|Typed result| C
 ```
 
-In this topology, `LOCAL` describes calls inside the compiled application runtime;
-`COMPUTE` selects its generated service/resource shape. The independently packaged
-worker exposes the registered REST protocol through a Lambda HTTP bridge. This is
-a supported alternative to generated per-Step `REST`/`FUNCTION` adapters, not a
-claim that the worker runs on the developer's machine. Its immutable Release
-must identify the actual executable package and supported entry point.
+For this deployment, align the application configuration, generated adapters,
+worker package and immutable Release with `REST`/`FUNCTION` and `QUEUE_ASYNC`.
+Local Java calls can remain inside a runtime unit. They do not make
+`LOCAL`/`COMPUTE` application defaults a qualified substitute for that deployment
+contract. An HTTP bridge around an archive establishes neither the intended
+generated platform nor correct durable execution.
 
-Choose `REST`/`FUNCTION` when the generated function-handler adapters are the
-intended callable boundary. Changing the YAML labels alone does not turn an
-archive into an independently registered worker, nor does grouping Steps promise
-that the current dispatcher fuses their transitions into one invocation. Qualify
-the chosen package, canonical payloads, Await projector and resumed execution.
-See [runtime mapping](/deploy/runtime-layouts/using-runtime-mapping) and
-[registered REST targets](/deploy/orchestrator-runtime/queue-async#release-aware-rest-targets).
+Qualification needs an admitted execution through the Coordinator, including
+Command execution, deferred completion, continuation and recovery. Commands need
+the admitted execution context and the configured durable effect authority.
+Selecting `QUEUE_ASYNC` does not give the typed worker ownership of scheduling
+or justify starting another Coordinator inside it. A package boot test or a
+successful individual transition proves only that tested boundary.
+
+Grouping code does not promise one invocation per segment or a separate function
+resource for each segment. Check the actual generated boundaries, dispatcher and
+Release entry points. See [runtime mapping](/deploy/runtime-layouts/using-runtime-mapping)
+and [registered REST targets](/deploy/orchestrator-runtime/queue-async#release-aware-rest-targets).
 
 ## Full Reference
 

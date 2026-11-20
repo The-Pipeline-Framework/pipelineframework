@@ -50,11 +50,19 @@ flowchart LR
     R --> S[Coordinator commits authoritative state]
 ```
 
-A worker can retain compiled `LOCAL` calls while serving the registered REST
-transition protocol through a function bridge. Generated per-Step `REST`/`FUNCTION`
-adapters are a separate boundary choice. Use
+For independently invoked serverless runtime units, the intended generated
+boundary is `REST`/`FUNCTION`, with `QUEUE_ASYNC` execution semantics. Local calls
+inside the typed runtime do not qualify a `LOCAL`/`COMPUTE` application as that
+serverless deployment. Registering a REST worker and successfully invoking one
+transition establish only those boundaries.
+
+Qualify the complete admitted path, including Commands with their durable effect
+authority, Await suspension, continuation and recovery. Preserve the Coordinator's
+scheduling ownership when configuring the worker; changing its execution mode
+alone is insufficient. The whole-bundle requirement above remains a placement
+constraint, and does not promise independently deployed segment archives. Use
 [execution-segment placement guidance](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion)
-to decide which work should stay together; no new layout name is introduced.
+with the existing supported layouts and verify the emitted Release entry points.
 
 Availability and dispatch use the same target resolution. Both require a matching
 healthy, non-stale, non-draining lifecycle record and authenticated endpoint

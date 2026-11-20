@@ -60,12 +60,12 @@ check its evidence when the job finishes:
 
 ```mermaid
 flowchart LR
-    subgraph First[First worker invocation]
+    subgraph First[First execution segment]
         Prepare[Prepare request] --> Dispatch[Dispatch external job]
     end
     Dispatch --> Wait[Durable scalar Await]
     Wait -->|Completion admitted| Check
-    subgraph Second[Later worker invocation]
+    subgraph Second[Continuation segment]
         Check[Check evidence] --> Report[Produce result]
     end
 ```
@@ -101,15 +101,19 @@ This groups compiled code; it does not create Lambda functions or select an
 `execution-segment` layout. The supported layout names remain the three listed
 above. Native work delivery controls suspension and resume, as described in
 [Await Runtime Setup](/deploy/orchestrator-runtime/await#scalar-completion-in-function-hosts).
-Physical HTTP ingress, work and recovery functions are deployment roles; their
-number is independent of the number of execution segments. Hosting compiled
-`LOCAL` code in a native function is also distinct from generating per-Step
-`REST`/`FUNCTION` adapters. With a registered REST worker, the remote boundary is
-between the Coordinator and that worker's transition endpoint; compiled calls
-inside the worker may remain `LOCAL`. Conversely, choose generated
-`REST`/`FUNCTION` adapters when those handlers are the actual intended remote
-boundaries. Verify the emitted Release entry and archive rather than inferring
-hosting from the application YAML defaults.
+Physical HTTP ingress, work and recovery functions are deployment roles. Their
+number is independent of the number of execution segments. For independently
+invoked serverless runtime units, use `REST`/`FUNCTION` with `QUEUE_ASYNC` and
+verify that configuration against the generated adapters, worker package and
+immutable Release. Local calls within a unit do not replace its remote deployment
+contract. A registered REST endpoint around an archive alone does not qualify
+Command execution, Await continuation or recovery.
+
+The mapping above groups code; it does not declare segment-specific function
+entry points or establish that several independently placed archives are supported
+by a particular worker profile. The current registered REST profile requires one
+whole-bundle runnable archive. Do not infer distributed segment placement from
+this example. Verify the selected profile and test the complete admitted path.
 
 An execution segment is guidance for deciding which work should stay together,
 not another runtime layout or a new mapping file. Keep using `modular`,
