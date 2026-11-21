@@ -86,3 +86,29 @@ test('CSV suites select dependencies through one tested BOM and separately pin t
   assert.match(pom, /<pipelineframework\.bom\.version>26\.9\.4-system-test\.1234567890ab<\/pipelineframework\.bom\.version>/);
   assert.match(pom, /<tpf\.release\.maven-plugin\.version>26\.9\.4-pr\.8\.fedcba654321<\/tpf\.release\.maven-plugin\.version>/);
 });
+
+
+test('Examples wrapper receives independent Contracts and materialized BOM pins from registered metadata', async () => {
+  const config = JSON.parse(await readFile(new URL('../components.yml', import.meta.url), 'utf8'));
+  const properties = config.components.examples.consumerVersionProperties;
+  const value = await fixture(['./wrapper.sh']);
+  const resolved = {
+    components: Object.fromEntries(Object.keys(properties).filter(name => name !== 'coordinationBom')
+      .map(name => [name, {mavenVersion: name === 'contracts' ? '26.9.4-pr.7.abcdef123456' : '26.9.4-pr.8.fedcba654321'}])),
+    coordinationBom: {mavenVersion: '26.9.4-system-test.1234567890ab'}
+  };
+  await writeFile(join(value.directory, 'resolved.json'), JSON.stringify(resolved));
+  await writeFile(join(value.directory, 'pom.xml'), `<project><properties>${Object.values(properties)
+    .map(property => `<${property}>26.10.1-SNAPSHOT</${property}>`).join('')}</properties></project>`);
+  const result = run(value, properties);
+  assert.equal(result.status, 0, result.stderr);
+  const captured = await readFile(value.capture, 'utf8');
+  assert.match(captured, /-Dpipelineframework\.contracts\.version=26\.9\.4-pr\.7\.abcdef123456/);
+  assert.match(captured, /-Dpipelineframework\.bom\.version=26\.9\.4-system-test\.1234567890ab/);
+  const pom = await readFile(join(value.directory, 'pom.xml'), 'utf8');
+  assert.match(pom, /<pipelineframework\.contracts\.version>26\.9\.4-pr\.7\.abcdef123456<\/pipelineframework\.contracts\.version>/);
+  await writeFile(join(value.directory, 'pom.xml'), pom.replace(/<pipelineframework\.contracts\.version>[^<]*<\/pipelineframework\.contracts\.version>/, ''));
+  const missingProperty = run(value, properties);
+  assert.notEqual(missingProperty.status, 0);
+  assert.match(missingProperty.stderr, /POM must declare pipelineframework\.contracts\.version exactly once; found 0/);
+});
