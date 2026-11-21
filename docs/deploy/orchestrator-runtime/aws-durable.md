@@ -116,6 +116,72 @@ completion and production conformance remain support gates below. A generation
 claim alone does not finish recovery. Normal wake-up uses Streams; reconciliation
 repairs exceptional failures.
 
+## Observe admission and results
+
+Durable ingress starts the provider execution. Its acknowledgement is not the
+TPF semantic admission receipt. A lost acknowledgement must be reconciled using
+the original client key and immutable Release identity.
+
+::: warning Version availability
+The Action operations below require a runtime version that includes
+`READ_EXECUTION_ADMISSION` and `READ_CURRENT_EXECUTION_LOCATOR`. Verify the selected
+runtime/model/host set before using them; the presence of these docs does not
+make an older published adapter support the operations.
+:::
+
+| Observation | Required identity | Meaning |
+| --- | --- | --- |
+| `READ_EXECUTION_ADMISSION` | Tenant, original client key, Pipeline, Contract and Release | Returns the canonical retained `ExecutionClientAdmission`, including semantic execution ID and optional original-input fingerprint. |
+| `READ_CURRENT_EXECUTION_LOCATOR` | Exact admitted tenant, execution, Pipeline, Contract and Release | Discovers the current provider generation and retained provider execution locator. The request generation is unused. |
+| `READ_EXECUTION_LOCATOR` | The same semantic pin and an explicit generation | Checks that the retained locator is still current for that generation. |
+| `TYPED_RESULT` | The same semantic pin and current generation | Returns the framework's `SerializedTransitionPayload` for the supported single terminal result, with generation checks around the read. |
+
+```mermaid
+sequenceDiagram
+    participant Client as Authorised execution client
+    participant Ingress as Durable ingress
+    participant Action as Regional Action host
+    participant State as TPF semantic and correlation stores
+    Client->>Ingress: Start with client key and immutable Release
+    Note over Client,Ingress: Response may be lost
+    Client->>Action: Read admission with original key and Release
+    Action->>State: Authorised non-mutating admission lookup
+    State-->>Client: Semantic admission or not yet observed
+    Client->>Action: Read current locator with exact semantic pin
+    Action->>State: Read generation claims and apply existing fence
+    State-->>Client: Current provider locator or pending
+    Client->>Action: Read typed result with retained pin and generation
+    Action->>State: Validate semantic identity and current generation
+    State-->>Client: Canonical typed result
+```
+
+JSON `null` from an admission/locator observation means the required retained
+evidence is absent or not yet observable. It does not establish failure or permit
+a new submission, re-drive or fallback to generation 1. Expired execution/key
+admission observations remain absent; this DynamoDB key lookup does not delete
+records or clean up a concurrently replaced admission. Existing point-read and
+write-path expiry cleanup remains separate from this observation.
+
+When the admission includes an input fingerprint, compare it with the intended
+canonical input before treating a retry as accepted. An absent fingerprint does
+not prove input equivalence. Retain the original Release through activation of a
+newer Release and validate the full returned scope before exposing the receipt or
+result. Authentication and tenant authority belong to the caller's existing
+trusted boundary; possession of an execution ID is not authorisation.
+
+Current-generation discovery uses strongly consistent reads of existing immutable
+schema-v2 generation claims. It adds no table, index or mutable pointer. Numeric
+claim keys are not lexically ordered: the bounded search uses at most 126 claim
+probes across the positive long domain, followed by the existing locator and
+current-generation checks. Use it when recovering admission context or refreshing
+a stale generation, rather than adding a lookup to every business transition.
+A claimed generation whose locator is not yet registered remains pending.
+
+`STATUS` alone is not a full Release/generation receipt. A scoped external reader
+can bracket it with equal, current locator observations. The driver's existing
+raw `RESULT` action retains its replay role; business-facing readers use the typed
+result contract. See [operating Await recovery](/operate/await-boundaries#provider-replacement-and-retained-execution-identity).
+
 ## Dependencies and build selection
 
 Import one `pipelineframework-bom` version. Declare the application runtime and AWS Durable host without versions; keep the compiler on the annotation-processor path using the BOM-managed version.
@@ -169,7 +235,8 @@ is 6 MB. Validate the generated server and matching client from the same release
 
 ## Deployment contract
 
-Deploy these resources together, applying the observation requirements for the selected profile:
+The complete-host template `aws-durable-queue-async.yaml` packages the application
+and coordination roles together. Its resource contract includes:
 
 - a versioned Lambda Durable coordinator and stable alias;
 - a generated Quarkus action/worker package containing the application pipeline and generated input decoder;
@@ -178,6 +245,15 @@ Deploy these resources together, applying the observation requirements for the s
 - SQS work, Await-completion and transition queues with DLQs;
 - the Await/binding and execution Stream wake-up handlers and the bounded terminal reconciliation handler;
 - for `HARDENED`, alarms for worker DLQs and Stream failure destinations with owned response routing; for `RESTRICTED_PILOT`, supervised failure checks for those same destinations.
+
+For independent workers, use the existing `aws-durable-shared-rest.yaml` regional
+host template and `aws-durable-pinned-worker.yaml` attachment template. The shared
+host operates without application business classes; each attachment supplies its
+own typed worker and immutable Release binding. Installing another application
+worker does not require another Coordinator or a new semantic resource graph.
+Complete-host profiles remain available for installations that choose them. Keep
+regional resources, application attachments and their lifecycle permissions
+separately owned, and retain old bindings until pinned executions drain.
 
 The reference SAM template processes transforms in this order:
 

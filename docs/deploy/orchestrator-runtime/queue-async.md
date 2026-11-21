@@ -26,12 +26,43 @@ grant a worker authority to choose its destination or replace these identities.
 The `(tenant-id, pipeline-id, worker-id)` tuple must be unique across target
 entries, including entries for different Releases.
 
-This mode requires one whole-bundle `application-archive` covering the Contract's
-steps and declared capabilities. The pinned Contract must equal the Coordinator's
-actual generated Contract, including its layout; equal labels or step counts are
-not enough. Different implementation Releases sharing that Contract are supported.
-Distributed artefact placement and differing Contract/layout coordination are not
-supported by this mode. The Compiled Truth carrier is not assumed to be runnable.
+Registered REST targeting requires one whole-bundle runnable archive covering the
+pinned Contract's steps and declared capabilities. The Compiled Truth carrier is
+not assumed to be runnable. Distributed placement across several archives remains
+unsupported by this mode.
+
+The default typed coordination path requires the pinned Contract to equal the
+Coordinator's generated Contract, including its layout. For an application-free
+Coordinator, select
+`pipeline.orchestrator.control-plane.payload-materialization=SERIALIZED`.
+That path validates the pinned canonical type catalogue and deferred-completion
+metadata from each Release, rather than loading its application classes or requiring
+one locally generated application Contract. It also accepts a qualifying whole-bundle
+`lambda-zip` alongside `application-archive`. It requires the corresponding immutable
+entry binding; a target URL alone is insufficient.
+
+```mermaid
+flowchart LR
+    E[Execution with original tenant and Release pin] --> B[Immutable entry and worker binding]
+    B --> W[Authenticated whole-bundle REST worker]
+    W --> T[Typed business transition]
+    T --> R[Canonical result or Await suspension]
+    R --> S[Coordinator commits authoritative state]
+```
+
+For independently invoked serverless runtime units, the intended generated
+boundary is `REST`/`FUNCTION`, with `QUEUE_ASYNC` execution semantics. Local calls
+inside the typed runtime do not qualify a `LOCAL`/`COMPUTE` application as that
+serverless deployment. Registering a REST worker and successfully invoking one
+transition establish only those boundaries.
+
+Qualify the complete admitted path, including Commands with their durable effect
+authority, Await suspension, continuation and recovery. Preserve the Coordinator's
+scheduling ownership when configuring the worker; changing its execution mode
+alone is insufficient. The whole-bundle requirement above remains a placement
+constraint, and does not promise independently deployed segment archives. Use
+[execution-segment placement guidance](/deploy/runtime-layouts/using-runtime-mapping#group-work-around-deferred-completion)
+with the existing supported layouts and verify the emitted Release entry points.
 
 Availability and dispatch use the same target resolution. Both require a matching
 healthy, non-stale, non-draining lifecycle record and authenticated endpoint
