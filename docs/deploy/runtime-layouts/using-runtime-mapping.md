@@ -102,12 +102,16 @@ This groups compiled code; it does not create Lambda functions or select an
 above. Native work delivery controls suspension and resume, as described in
 [Await Runtime Setup](/deploy/orchestrator-runtime/await#scalar-completion-in-function-hosts).
 Physical HTTP ingress, work and recovery functions are deployment roles. Their
-number is independent of the number of execution segments. For independently
-invoked serverless runtime units, use `REST`/`FUNCTION` with `QUEUE_ASYNC` and
-verify that configuration against the generated adapters, worker package and
-immutable Release. Local calls within a unit do not replace its remote deployment
-contract. A registered REST endpoint around an archive alone does not qualify
-Command execution, Await continuation or recovery.
+number is independent of the number of execution segments. Generated REST
+function handlers use `REST`/`FUNCTION`; verify those settings against the
+generated adapters, worker package and immutable Release. The existing registered
+REST transition-worker profile instead validates a Lambda HTTP bridge around a
+whole pipeline with canonical types and local transition execution. Its compiled
+inner calls may remain `LOCAL`/`COMPUTE`; the outer worker invocation is REST.
+Use the selected profile's actual requirements rather than inferring physical
+placement from those inner settings. Durable background execution remains
+`QUEUE_ASYNC`. Package/profile verification alone does not qualify Command
+execution, Await continuation or recovery.
 
 The mapping above groups code; it does not declare segment-specific function
 entry points or establish that several independently placed archives are supported

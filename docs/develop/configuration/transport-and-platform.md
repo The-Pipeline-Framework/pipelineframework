@@ -16,9 +16,9 @@ Transport controls how generated components call each other. Platform controls w
 | `COMPUTE` | service/resource runtime path |
 | `FUNCTION` | function-handler runtime path |
 
-Transport and platform are separate choices. For independently invoked serverless
-runtime units communicating over HTTP, select `REST` transport and `FUNCTION`
-platform. Durable background execution uses
+Transport and platform are separate choices. When using generated REST
+function handlers, select `REST` transport and `FUNCTION` platform.
+Durable background execution uses
 `pipeline.orchestrator.mode=QUEUE_ASYNC`; this runtime setting is separate from
 the generated transport and platform settings.
 
@@ -38,12 +38,19 @@ flowchart LR
     B -->|Typed result| C
 ```
 
-For this deployment, align the application configuration, generated adapters,
+For generated function handlers, align configuration, generated adapters,
 worker package and immutable Release with `REST`/`FUNCTION` and `QUEUE_ASYNC`.
-Local Java calls can remain inside a runtime unit. They do not make
-`LOCAL`/`COMPUTE` application defaults a qualified substitute for that deployment
-contract. An HTTP bridge around an archive establishes neither the intended
-generated platform nor correct durable execution.
+
+The registered REST transition-worker profile is a separate supported adapter
+boundary. Its `aws-durable-java21-rest-worker-v1` Release selects a Lambda HTTP
+bridge around one whole compiled pipeline with canonical types and local
+transition execution. The inner contract can truthfully declare
+`LOCAL`/`COMPUTE`: those settings describe generated calls inside the worker,
+while the registered transition protocol is REST and its host is Lambda.
+`AwsDurableHostedProfile.requireRestWorkerRelease` validates that package;
+the Release producer invokes the same check. Do not retag an inner contract
+to resemble physical placement, or infer profile support from an HTTP bridge
+alone. This profile does not establish independently placed segment archives.
 
 Qualification needs an admitted execution through the Coordinator, including
 Command execution, deferred completion, continuation and recovery. Commands need
