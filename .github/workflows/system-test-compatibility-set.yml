@@ -392,9 +392,13 @@ jobs:
           native_hosted_args=()
           request=intake/request/compatibility-set-request.json
           examples_manifest="$RUNNER_TEMP/tpf-set-sources/examples/.github/tpf-system-tests.json"
-          if jq -e '[.requests[].component] | (index("runtime") != null and index("examples") != null)' "$request" >/dev/null \
-            && jq -e '.suites | has("native-hosted-worker")' "$examples_manifest" >/dev/null; then
-            native_hosted_args+=(--nativeHostedWorker)
+          if jq -e '[.requests[].component] | (index("runtime") != null and index("examples") != null)' "$request" >/dev/null; then
+            if jq -e '.suites | has("native-hosted-worker")' "$examples_manifest" >/dev/null; then
+              native_hosted_args+=(--nativeHostedWorker)
+            fi
+            if jq -e '.suites | has("native-hosted-packaged-recovery")' "$examples_manifest" >/dev/null; then
+              native_hosted_args+=(--nativeHostedPackagedRecovery)
+            fi
           fi
           node system-tests/scripts/select-set-suites.mjs \
             --components system-tests/components.yml \
@@ -415,20 +419,20 @@ jobs:
         run: echo "matrix=$(jq -c . resolved/suite-matrix.json)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node for the native hosted worker packages
-        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"') || contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-packaged-recovery"')
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.23.2'
           package-manager-cache: false
 
       - name: Setup Python for the native hosted worker packages
-        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"') || contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-packaged-recovery"')
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14.10'
 
       - name: Package native workers from the tested runtime tree
-        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"')
+        if: contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-worker"') || contains(steps.matrix.outputs.matrix, '"suite":"examples-native-hosted-packaged-recovery"')
         run: |
           bash system-tests/scripts/package-native-host-workers.sh \
             "$RUNNER_TEMP/tpf-set-sources/runtime" resolved/resolved-set.json \
@@ -494,14 +498,14 @@ jobs:
           path: inputs
 
       - name: Setup Node for the native hosted worker proof
-        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker')
+        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker') || contains(toJSON(matrix.suites), 'examples-native-hosted-packaged-recovery')
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.23.2'
           package-manager-cache: false
 
       - name: Setup Python for the native hosted worker proof
-        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker')
+        if: contains(toJSON(matrix.suites), 'examples-native-hosted-worker') || contains(toJSON(matrix.suites), 'examples-native-hosted-packaged-recovery')
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14.10'

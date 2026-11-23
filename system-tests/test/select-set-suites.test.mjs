@@ -32,7 +32,8 @@ async function select(requestedSuites, includeCsv = true, options = {}) {
     await writeFile(compatibilitySet, JSON.stringify({schemaVersion: 1, requests, requestedSuites}));
     await execFileAsync(process.execPath, [script, '--components', components, '--policy', policy,
       '--resolvedSet', resolvedSet, '--compatibilitySet', compatibilitySet, '--output', output,
-      ...(options.nativeHostedWorker ? ['--nativeHostedWorker'] : [])]);
+      ...(options.nativeHostedWorker ? ['--nativeHostedWorker'] : []),
+      ...(options.nativeHostedPackagedRecovery ? ['--nativeHostedPackagedRecovery'] : [])]);
     return JSON.parse(await readFile(output, 'utf8'));
   } finally {
     await rm(root, {recursive: true, force: true});
@@ -69,11 +70,18 @@ test('the native hosted proof requires explicit opt-in and both owner candidates
   const hosted = await select([], false, {components, nativeHostedWorker: true});
   assert.deepEqual(hosted.include.find(({shard}) => shard === 'examples').suites
     .map(({suite}) => suite), ['examples-native-hosted-worker', 'examples-verify']);
+  const packaged = await select([], false, {components, nativeHostedWorker: true, nativeHostedPackagedRecovery: true});
+  assert.deepEqual(packaged.include.find(({shard}) => shard === 'examples').suites
+    .map(({suite}) => suite), ['examples-native-hosted-packaged-recovery', 'examples-native-hosted-worker', 'examples-verify']);
   await assert.rejects(select([], false, {nativeHostedWorker: true}),
+    /requires coordinated runtime and examples candidates/);
+  await assert.rejects(select([], false, {nativeHostedPackagedRecovery: true}),
     /requires coordinated runtime and examples candidates/);
   const commonPolicy = JSON.parse(await readFile(policy, 'utf8'));
   assert.ok(!Object.hasOwn(commonPolicy.suites, 'examples-native-hosted-worker'),
     'Singleton and nightly policy must not select the archive-dependent suite');
+  assert.ok(!Object.hasOwn(commonPolicy.suites, 'examples-native-hosted-packaged-recovery'),
+    'Singleton and nightly policy must not select the packaged recovery archive-dependent suite');
 });
 
 test('native archive staging rejects an untested runtime descendant before packaging', async () => {

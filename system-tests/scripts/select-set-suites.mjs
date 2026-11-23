@@ -10,6 +10,7 @@ const { values } = parseArgs({
     resolvedSet: {type: 'string'},
     compatibilitySet: {type: 'string'},
     nativeHostedWorker: {type: 'boolean', default: false},
+    nativeHostedPackagedRecovery: {type: 'boolean', default: false},
     output: {type: 'string'}
   },
   strict: true
@@ -43,14 +44,21 @@ if (requestedSuites.length > 0
   throw new Error('extra CSV suites require a CSV Payments candidate');
 }
 for (const suite of requestedSuites) selected.add(suite);
-if (values.nativeHostedWorker) {
+if (values.nativeHostedWorker || values.nativeHostedPackagedRecovery) {
   if (!['runtime', 'examples'].every(component => compatibilitySet.requests.some(request => request.component === component))) {
     throw new Error('Native hosted worker evidence requires coordinated runtime and examples candidates');
   }
   // Only this coordinator can stage native archives from the tested runtime tree.
-  const suite = 'examples-native-hosted-worker';
-  policy.suites[suite] = {owner: 'examples', entrypoint: 'native-hosted-worker', tier: 'pr', shard: 'examples'};
-  selected.add(suite);
+  if (values.nativeHostedWorker) {
+    const suite = 'examples-native-hosted-worker';
+    policy.suites[suite] = {owner: 'examples', entrypoint: 'native-hosted-worker', tier: 'pr', shard: 'examples'};
+    selected.add(suite);
+  }
+  if (values.nativeHostedPackagedRecovery) {
+    const suite = 'examples-native-hosted-packaged-recovery';
+    policy.suites[suite] = {owner: 'examples', entrypoint: 'native-hosted-packaged-recovery', tier: 'pr', shard: 'examples'};
+    selected.add(suite);
+  }
 }
 const matrix = shardMatrix([...selected].sort(), validatePolicy(policy, config), resolvedSet, config);
 await writeFile(values.output, `${JSON.stringify({include: matrix}, null, 2)}\n`);
