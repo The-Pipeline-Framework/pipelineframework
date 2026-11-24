@@ -337,8 +337,11 @@ credible product MVP.
 ## Consequences
 
 Acceptance of this qualification contract does not select a production runtime, create a Provider SDK or change existing
-Java execution. Existing Spring work remains intact. Production implementation is
-unscheduled and depends on acceptance of the relevant contracts.
+Java execution. Existing Spring work remains intact. A bounded, opt-in Node runtime
+evaluation may consume this contract without promoting it to supported-product status.
+The experimental dependency points towards canonical TPF contracts; existing Java paths
+must not depend on the experiment. Broader production implementation requires a separate
+decision and acceptance of the relevant contracts.
 
 The [polyglot architecture discussion](../evolve/polyglot-applications-assessment.md)
 explains the alternatives. Dated source audits, experiments, results, remaining decisions
