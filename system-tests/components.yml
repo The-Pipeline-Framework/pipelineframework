@@ -172,6 +172,7 @@
         "blocks": "pipelineframework.blocks.version",
         "coordinationBom": "pipelineframework.bom.version",
         "compiler": "pipelineframework.compiler.version",
+        "contracts": "pipelineframework.contracts.version",
         "connectors": "pipelineframework.connectors.version",
         "expansions": "pipelineframework.expansions.version",
         "runtime": "pipelineframework.runtime.version"
