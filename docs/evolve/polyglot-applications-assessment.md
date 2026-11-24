@@ -193,12 +193,17 @@ therefore relies on explicit structural boundaries and a default-disabled runtim
 
 ```mermaid
 flowchart TD
-    R[Incoming request or claimed work] --> K{"pipeline.orchestrator.experimental.native-worker.enabled?"}
-    K -->|false default| J[Ordinary Java coordinator path only]
-    K -->|true| B{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
-    B -->|No| J
-    B -->|Yes| N[Paired native admission and dispatch]
-    K -->|Flipped false with retained native work| F[Pre-intent failure oracle, zero Java fallback]
+    R[Incoming request or claimed work] --> N{"Retained native work (AdmittedInput)?"}
+    N -->|Yes| EK{"pipeline.orchestrator.experimental.native-worker.enabled?"}
+    EK -->|false default| F[Pre-intent failure oracle, zero Java fallback]
+    EK -->|true| EB{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
+    EB -->|No| F
+    EB -->|Yes| D[Paired native dispatch and settlement]
+    N -->|No| NK{"pipeline.orchestrator.experimental.native-worker.enabled?"}
+    NK -->|false default| J[Ordinary Java coordinator path only]
+    NK -->|true| NB{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
+    NB -->|No| J
+    NB -->|Yes| A[Paired native admission when deployment-bound]
 ```
 
 | Surface | Isolation boundary | Impact on ordinary Java users | Removal or disable path |
