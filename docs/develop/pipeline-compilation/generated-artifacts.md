@@ -29,8 +29,12 @@ The build also emits runtime metadata under `META-INF/pipeline/`:
   resolution records binding/provider/operation versions, application-selected Command authority,
   and a sanitized connector-configuration digest. Imported callable catalogues additionally record
   source step, alias, canonical contracts, trusted source/target mappings, and the resolved native
-  Query or Command target. Raw configuration, credentials, prompts containing application data, and
-  runtime context values are never emitted.
+  Query or Command target. When compiled placement resolves nested/self invocation locality or
+  colocated `REST`/`GRPC` execution segments, the contract also emits an additive `placement`
+  section recording per-invocation locality (`LOCAL_IN_SEGMENT` or `REMOTE_BOUNDARY`) and the
+  branch- and recursion-aware execution segment graph derived from actual Await boundaries (omitted
+  when absent to preserve legacy contract hashes). Raw configuration, credentials, prompts
+  containing application data, and runtime context values are never emitted.
 - `connector-operation-provenance.json`: source-owned schema 1 provenance for imported Connector
   operations. The compiler projects only referenced operations into `capabilityImports`; the full
   source contract is never copied into runtime metadata.

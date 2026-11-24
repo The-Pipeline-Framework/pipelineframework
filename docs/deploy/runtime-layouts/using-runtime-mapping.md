@@ -97,7 +97,14 @@ The compiler must receive the matching module identity (`-Apipeline.module=app`)
 and module directory (`-Apipeline.moduleDir=<application-module-directory>`).
 This groups compiled code; it does not create Lambda functions or select an
 `execution-segment` layout. The supported layout names remain the three listed
-above. Native work delivery controls suspension and resume, as described in
+above. When `transport: REST` and `platform: FUNCTION` are paired with an
+explicit `pipeline-runtime` mapping (or `monolith` under `platform: FUNCTION`)
+that places nested definitions, `pipeline: self` calls, and steps in the same
+compiled `(module, runtime)`, the compiler keeps those in-segment calls local
+while preserving the truthful `REST`/`FUNCTION` contract, `platform.json`, and
+root orchestrator adapters. Unmapped `REST`/`FUNCTION` or cross-module nested
+invocations fail compilation closed. Native work delivery controls suspension
+and resume, as described in
 [Await Runtime Setup](/deploy/orchestrator-runtime/await#scalar-completion-in-function-hosts).
 Physical HTTP ingress, work and recovery functions are deployment roles; their
 number is independent of the number of execution segments. Hosting compiled

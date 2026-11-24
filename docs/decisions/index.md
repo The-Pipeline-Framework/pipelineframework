@@ -101,6 +101,7 @@ publication and the distinction from immutable test and release inputs.
 | [0085](./0085-select-canonical-outcomes-for-await-and-observation.md) | Select canonical operation outcomes for Await and plugin observation while preserving typed routing. |
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
 | [0090](./0090-release-packaging-facts-share-the-immutable-descriptor.md) | Draft: carry physical package associations in the immutable Release Descriptor, extending [ADR-0064](./0064-release-descriptors-are-produced-after-packaging.md). |
+| [0091](./0091-placement-owns-nested-invocation-locality.md) | Make compiled placement own nested/self invocation locality and execution-segment boundaries without changing deployment transport/platform identity. |
 
 | [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. |
 
