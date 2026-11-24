@@ -185,8 +185,14 @@ A remote worker also needs qualification for the exact release artefact it runs.
 TPF's trusted Release Descriptor and verify both the runnable artefact and its named
 Compiled Truth carrier before binding the projection and execution profile to an
 authorised deployment target. Those artefacts may be separate. A worker's capability
-advertisement is a compatibility claim, not proof of that qualification. The outer
-worker envelope and the application payload have separate encoding identities.
+advertisement is a compatibility claim, not proof of that qualification. The paired
+HTTPS check also compares the host's loaded projection digest with the coordinator's
+verified Compiled Truth. This prevents separately prepared components from silently
+using different bindings under the same logical Contract. The outer worker envelope
+and the application payload have separate encoding identities.
+The [bounded native worker binding decision](../decisions/0089-native-worker-payload-and-contract-binding.md)
+proposes explicit logical-type checks for payloads and compiler-owned Contract metadata.
+Neither decoding a value nor matching metadata authorises execution on its own.
 
 Portable failures need an explicitly selected result representation. Java exception
 class names cannot stand in for shared failure classifications. The worker reports its
@@ -205,6 +211,45 @@ using the new failed-result representation. The selected finite unary/LOCAL rese
 baseline is not a product MVP. Streaming, Connector guarantees and durable Await remain
 required. The Node experiment qualifies changed-project generation and direct LOCAL
 execution separately from deployed recovery.
+
+## Java-ecosystem isolation and experimental killswitch
+
+The polyglot experiment lives inside the existing `pipelineframework-compiler` and
+`pipelineframework-runtime` artefacts rather than splitting per-language compiler modules
+prematurely. Keeping the experiment removable and isolated from ordinary Java applications
+therefore relies on explicit structural boundaries and a default-disabled runtime killswitch.
+
+```mermaid
+flowchart TD
+    R[Incoming request or claimed work] --> N{"Retained native work (AdmittedInput)?"}
+    N -->|Yes| EK{"pipeline.orchestrator.experimental.native-worker.enabled?"}
+    EK -->|false default| F[Pre-intent failure oracle, zero Java fallback]
+    EK -->|true| EB{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
+    EB -->|No| F
+    EB -->|Yes| D[Paired native dispatch and settlement]
+    N -->|No| NK{"pipeline.orchestrator.experimental.native-worker.enabled?"}
+    NK -->|false default| J[Ordinary Java coordinator path only]
+    NK -->|true| NB{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
+    NB -->|No| J
+    NB -->|Yes| A[Paired native admission when deployment-bound]
+```
+
+| Surface | Isolation boundary | Impact on ordinary Java users | Removal or disable path |
+|---|---|---|---|
+| Compiler (`pipelineframework-compiler`) | Standalone CLI entrypoints under `org.pipelineframework.compiler.{node,python,polyglot}`; never registered with JSR-269 or invoked by `PipelineStepProcessor` | Zero change to `javac` annotation processing or Maven builds; zero new transitive Maven dependencies | Delete the `node`, `python` and `polyglot` packages and standalone generation scripts |
+| Runtime coordinator (`pipelineframework-runtime`) | Two-layer opt-in: default-disabled boolean killswitch `pipeline.orchestrator.experimental.native-worker.enabled` (`false`) plus an explicit deployment-owned `NativeWorkerReleaseBinding` CDI bean (no default bean exists in the runtime) | Ordinary Java admissions and executions never enter the paired native path; untrusted JSON cannot deserialise the runtime-owned `AdmittedInput` marker | Set `pipeline.orchestrator.experimental.native-worker.enabled=false` (or omit it) to suppress paired native binding resolution immediately |
+| Native runtimes (`experimental/node-local/`, `experimental/python-local/`) | Packaged strictly under `experimental/` outside the Maven JAR closure | Never bundled into Java Maven artefacts or POM dependencies | Delete `experimental/node-local/` and `experimental/python-local/` |
+| Examples and CI (`research/native-local-projection/`, compatibility sets) | Lives outside the canonical Java Maven reactor; omitted from singleton and nightly `policy.yml` suites | Ordinary Java verify and release trains never build or run native worker proofs | Remove the research directory and coordinated-set suite hook |
+
+When `pipeline.orchestrator.experimental.native-worker.enabled` is `false` (its default),
+`NativeWorkerReleaseBinding.configured(...)` always returns empty even if a deployment leaves
+a `NativeWorkerReleaseBinding` CDI bean on the classpath:
+
+- Hosted admission does not admit new paired native executions.
+- Any already-admitted native execution carrying `AdmittedInput` fails safely before
+  dispatch intent under the pre-intent failure oracle rather than falling back to the generic
+  Java transition executor.
+- Existing Java pipelines, receipts and recovery behaviour remain unaffected.
 
 ## Alternatives and trade-offs
 
