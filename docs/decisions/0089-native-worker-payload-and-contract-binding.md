@@ -198,7 +198,12 @@ executions retain their existing recovery policy.
 ### Admit portable input through a trusted deployment binding
 
 A request's encoding or type name cannot opt an execution into a native runtime.
-The deployment explicitly supplies a prepared Release binding. Hosted admission
+The coordinator requires both the explicit runtime killswitch
+`pipeline.orchestrator.experimental.native-worker.enabled=true` (which defaults to `false`)
+and a deployment-supplied prepared Release binding. When the killswitch is disabled, paired
+binding resolution returns empty even if a binding bean remains present, so new paired
+admissions are blocked and retained native work fails before dispatch intent without falling
+back to Java. Hosted admission
 checks that binding against the registered Release and its compiler Contract, then
 validates the declared input shape, type, encoding and value before durable admission.
 Admission must also establish that the escaped worker envelope fits the host's

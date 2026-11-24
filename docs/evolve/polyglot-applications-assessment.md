@@ -184,6 +184,40 @@ baseline is not a product MVP. Streaming, Connector guarantees and durable Await
 required, while changed-project generation without local Java and deployed recovery still
 need implementation and qualification.
 
+## Java-ecosystem isolation and experimental killswitch
+
+The polyglot experiment lives inside the existing `pipelineframework-compiler` and
+`pipelineframework-runtime` artefacts rather than splitting per-language compiler modules
+prematurely. Keeping the experiment removable and isolated from ordinary Java applications
+therefore relies on explicit structural boundaries and a default-disabled runtime killswitch.
+
+```mermaid
+flowchart TD
+    R[Incoming request or claimed work] --> K{"pipeline.orchestrator.experimental.native-worker.enabled?"}
+    K -->|false default| J[Ordinary Java coordinator path only]
+    K -->|true| B{"Explicit NativeWorkerReleaseBinding CDI bean present?"}
+    B -->|No| J
+    B -->|Yes| N[Paired native admission and dispatch]
+    K -->|Flipped false with retained native work| F[Pre-intent failure oracle, zero Java fallback]
+```
+
+| Surface | Isolation boundary | Impact on ordinary Java users | Removal or disable path |
+|---|---|---|---|
+| Compiler (`pipelineframework-compiler`) | Standalone CLI entrypoints under `org.pipelineframework.compiler.{node,python,polyglot}`; never registered with JSR-269 or invoked by `PipelineStepProcessor` | Zero change to `javac` annotation processing or Maven builds; zero new transitive Maven dependencies | Delete the `node`, `python` and `polyglot` packages and standalone generation scripts |
+| Runtime coordinator (`pipelineframework-runtime`) | Two-layer opt-in: default-disabled boolean killswitch `pipeline.orchestrator.experimental.native-worker.enabled` (`false`) plus an explicit deployment-owned `NativeWorkerReleaseBinding` CDI bean (no default bean exists in the runtime) | Ordinary Java admissions and executions never enter the paired native path; untrusted JSON cannot deserialise the runtime-owned `AdmittedInput` marker | Set `pipeline.orchestrator.experimental.native-worker.enabled=false` (or omit it) to suppress paired native binding resolution immediately |
+| Native runtimes (`experimental/node-local/`, `experimental/python-local/`) | Packaged strictly under `experimental/` outside the Maven JAR closure | Never bundled into Java Maven artefacts or POM dependencies | Delete `experimental/node-local/` and `experimental/python-local/` |
+| Examples and CI (`research/native-local-projection/`, compatibility sets) | Lives outside the canonical Java Maven reactor; omitted from singleton and nightly `policy.yml` suites | Ordinary Java verify and release trains never build or run native worker proofs | Remove the research directory and coordinated-set suite hook |
+
+When `pipeline.orchestrator.experimental.native-worker.enabled` is `false` (its default),
+`NativeWorkerReleaseBinding.configured(...)` always returns empty even if a deployment leaves
+a `NativeWorkerReleaseBinding` CDI bean on the classpath:
+
+- Hosted admission does not admit new paired native executions.
+- Any already-admitted native execution carrying `AdmittedInput` fails safely before
+  dispatch intent under the pre-intent failure oracle rather than falling back to the generic
+  Java transition executor.
+- Existing Java pipelines, receipts and recovery behaviour remain unaffected.
+
 ## Alternatives and trade-offs
 
 | Approach | Benefit | Trade-off |
