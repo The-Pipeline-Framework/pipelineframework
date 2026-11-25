@@ -1,9 +1,18 @@
 ---
 title: Native worker payloads and compiler metadata have separate bindings
-status: draft
+status: deprecated
+superseded_by: ADR-0092
 ---
 
 # ADR-0089: Native worker payloads and compiler metadata have separate bindings
+
+::: warning Historical decision
+Superseded by [ADR-0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md).
+The experimental `tpf-polyglot-int32-json/1` encoding and paired whole-bundle worker seam are
+frozen (`pipeline.orchestrator.experimental.native-worker.enabled=false`) and scheduled for
+retirement once standard-path `CanonicalFunctionHost` steps match pre-send dispatch-intent,
+stale-settlement, and `REMOTE_OUTCOME_UNKNOWN` durability parity.
+:::
 
 ## Context
 

@@ -92,10 +92,7 @@ publication and the distinction from immutable test and release inputs.
 | [0077](./0077-provider-declared-application-projected-query-types.md) | Declare application-projected Query type contracts in provider metadata and keep one canonical template loader. |
 | [0078](./0078-chat-agent-command-handoffs-stay-inert.md) | Return release-pinned Command proposals from ChatAgent without granting the Block effect authority. |
 | [0079](./0079-command-completion-can-require-dispatch-acknowledgement.md) | Draft: retain a typed dispatch acknowledgement when Command completion must validate the provider-assigned identity. |
-| [0080](./0080-native-runtimes-consume-compiler-owned-execution-contracts.md) | Draft: native LOCAL runtimes consume compiler-owned execution contracts and reuse Java durable coordination. |
-| [0088](./0088-polyglot-contract-qualification-precedes-runtime-selection.md) | Adopt the bounded unary qualification contract, pinned result selection and worker trust boundary before production runtime selection; this is not the product MVP. |
 | [0089](./0089-typed-worker-operations-preserve-coordinator-authority.md) | Draft: preserve Coordinator authority across typed value operations and scoped Await dispatch admission. |
-| [0089](./0089-native-worker-payload-and-contract-binding.md) | Draft: bind native payload decoding to expected logical types and compiler metadata to verified release artefacts. |
 | [0081](./0081-one-authored-consumer-per-concrete-input.md) | Give each concrete canonical input one authored consumer per Pipeline definition, with definition-owned observer occurrences; the self-call clause is refined by [0086](./0086-explicit-self-invocation-and-nested-await.md). |
 | [0082](./0082-definition-output-completes-typed-branches.md) | Complete typed branches at their definition output boundary without an authored identity merge. |
 | [0084](./0084-runtime-owns-release-production-and-resolution.md) | Share release preparation and resolution across the CLI and Maven. |
@@ -103,6 +100,7 @@ publication and the distinction from immutable test and release inputs.
 | [0086](./0086-explicit-self-invocation-and-nested-await.md) | Explicit self-invocation and durable return through nested Await. |
 | [0090](./0090-release-packaging-facts-share-the-immutable-descriptor.md) | Draft: carry physical package associations in the immutable Release Descriptor, extending [ADR-0064](./0064-release-descriptors-are-produced-after-packaging.md). |
 | [0091](./0091-placement-owns-nested-invocation-locality.md) | Make compiled placement own nested/self invocation locality and execution-segment boundaries without changing deployment transport/platform identity. |
+| [0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md) | Execute polyglot TPF applications on one shared Java execution engine (distributed or via a standalone native `tpf` CLI) with thin foreign function hosts and a three-tier Connector architecture. |
 
 | [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. |
 
@@ -116,8 +114,11 @@ explicit successor metadata for retrieval tools and agents.
 | --- | --- | --- |
 | [0015](./0015-branch-routing-owns-await-projector-input.md) | Standalone Await-step routing. | [0036](./0036-await-is-orthogonal-deferred-completion.md) |
 | [0024](./0024-packaged-blocks-are-static-composition-imports.md) | Functional-core-only packaged Blocks. | [0028](./0028-block-connector-capabilities-are-application-bound.md) |
+| [0080](./0080-native-runtimes-consume-compiler-owned-execution-contracts.md) | Whole-bundle native LOCAL runtimes consuming compiler-owned execution contracts. | [0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md) |
 | [0083](./0083-definition-owned-bounded-recurrence.md) | Definition-level `recur` declarations. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
 | [0087](./0087-root-recurrence-preserves-durable-await.md) | Root-only durable recurrence. Formerly published under the root-recurrence ADR-0084 URL. | [0086](./0086-explicit-self-invocation-and-nested-await.md) |
+| [0088](./0088-polyglot-contract-qualification-precedes-runtime-selection.md) | Bounded unary whole-bundle native qualification profile and `tpf-polyglot-failed-result/1` paired binding. | [0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md) |
+| [0089](./0089-native-worker-payload-and-contract-binding.md) | Experimental `tpf-polyglot-int32-json/1` payload encoding and paired whole-bundle worker seam. | [0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md) |
 
 ## Maintenance
 

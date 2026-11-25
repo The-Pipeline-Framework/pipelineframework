@@ -1,9 +1,19 @@
 ---
 title: Polyglot contract qualification precedes runtime selection
-status: accepted
+status: deprecated
+superseded_by: ADR-0092
 ---
 
 # ADR-0088: Polyglot contract qualification precedes runtime selection
+
+::: warning Historical decision
+Superseded by [ADR-0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md).
+The whole-bundle native runtime evaluation and `tpf-polyglot-failed-result/1` paired-worker
+research profile below led to the redesign on
+[epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055).
+Canonical presence/precision, failure classification, secret isolation, and ADR-0014
+uncertainty invariants carry forward into ADR-0092 on the standard Java execution engine.
+:::
 
 ## Context
 
