@@ -7,10 +7,10 @@ superseded_by: ADR-0092
 # ADR-0080: Native runtimes consume compiler-owned execution contracts
 
 ::: warning Historical decision
-Superseded by [ADR-0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md).
-Polyglot TPF applications now execute on one shared Java execution engine (distributed or
-packaged as a standalone native `tpf` CLI) with thin foreign function and connector hosts
-rather than language-specific whole-bundle native runtimes.
+Superseded by [ADR-0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md),
+which proposes executing polyglot TPF applications on one shared Java execution engine
+(distributed or packaged as a standalone native `tpf` CLI) with thin foreign function and
+connector hosts rather than language-specific whole-bundle native runtimes.
 :::
 
 ## Context
