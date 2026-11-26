@@ -78,9 +78,12 @@ applications:
 
 ### 2. Thin Foreign Function Host boundary
 
-Java invokes foreign business functions per step over authenticated HTTP with HMAC-SHA256
-request signing (`X-TPF-Worker-Timestamp`, `X-TPF-Worker-Nonce`, `X-TPF-Worker-Signature`) and
-pinned step/type metadata (`X-TPF-Step-Id`, `X-TPF-Step-Index`):
+Java invokes foreign business functions per step over HTTPS with certificate and hostname
+validation for remote hosts (loopback-only HTTP is permitted for local `tpf dev`), plus
+HMAC-SHA256 request signing (`X-TPF-Worker-Timestamp`, `X-TPF-Worker-Nonce`,
+`X-TPF-Worker-Signature`) and pinned step/type metadata (`X-TPF-Step-Id`, `X-TPF-Step-Index`).
+HMAC authenticates requests and does not provide transport confidentiality or response
+authentication:
 
 - **Unary (`ONE_TO_ONE`):** Request and response bodies carry canonical v3 JSON validated
   fail-closed on both boundaries against the pinned `CanonicalTypeCatalogue`.
@@ -130,7 +133,7 @@ loading arbitrary JVM Connector JARs dynamically into the native `tpf` binary:
 | Tier | Mechanism | Authoring Experience | Credential & Durability Ownership |
 |---|---|---|---|
 | **Tier 1 — Built-in pinned Connectors** | Portable Connectors such as `http.client` v1 ([ADR-0034](./0034-pinned-http-operations-execute-as-ordinary-connector-capabilities.md), [ADR-0035](./0035-openapi-imports-release-pinned-capabilities-not-authority.md), [ADR-0038](./0038-openapi-callbacks-are-pinned-connector-completion-contracts.md)), and compatible portable providers (`mcp`, `object-ingest`), compiled directly into native `tpf` using class-free `JsonNode` / `DIRECT` boundaries. | **Zero foreign code** — declared in `pipeline.yaml` and release-pinned contracts. | 100% in Java/`tpf` via host `ConnectionResolver` ([ADR-0021](./0021-host-owned-connector-authentication.md)); credentials never leave the engine process. |
-| **Tier 2 — Polyglot Custom Connector Host SPI** | `PolyglotConnectorProvider` (standard `ConnectorProvider`) invoking app-authored Node/Python `QueryOperation` (`/query/{op}`) and `CommandOperation` (`/command/{op}/dispatch` and `/command/{op}/reconcile`) handlers over HTTPS with certificate and hostname validation plus HMAC-authenticated requests (local loopback-only `tpf dev` may use loopback HTTP). HMAC authenticates requests and does not provide confidentiality. | Developers write only provider-specific `query`, `dispatch`, and optional `reconcile` adapters in Node/Python using native SDKs. | Java owns 100% of `CommandEffectStore`, `QueryCaptureStore`, `providerIdempotencyKey`, pre-send `CommandRecoveryBinding`, `RETURN_RECORDED` replay, automatic `AMBIGUOUS` reconciliation, and fail-closed schema validation. Host `ConnectionResolver` delivers only scoped credentials to the authorized Connector host over that TLS-protected boundary — never to pure business functions. |
+| **Tier 2 — Polyglot Custom Connector Host SPI** | `PolyglotConnectorProvider` (standard `ConnectorProvider`) invoking app-authored Node/Python `QueryOperation` (`/query/{op}`) and `CommandOperation` (`/command/{op}/dispatch` and `/command/{op}/reconcile`) handlers over HTTPS with certificate and hostname validation plus HMAC-authenticated requests. HMAC authenticates requests and does not provide confidentiality or authenticate the listener; scoped credentials require HTTPS in all remote modes and must never be sent over loopback HTTP in `tpf dev` unless the engine first authenticates the listener (for example, via a parent-spawned process identity or mutual per-session challenge/response). | Developers write only provider-specific `query`, `dispatch`, and optional `reconcile` adapters in Node/Python using native SDKs. | Java owns 100% of `CommandEffectStore`, `QueryCaptureStore`, `providerIdempotencyKey`, pre-send `CommandRecoveryBinding`, `RETURN_RECORDED` replay, automatic `AMBIGUOUS` reconciliation, and fail-closed schema validation. Host `ConnectionResolver` delivers only scoped credentials to the authenticated Connector host — never to pure business functions. |
 | **Tier 3 — JVM Ecosystem Connectors** | Heavy Java Connector implementations (Hibernate/JPA, pgvector, LangChain4j, enterprise Java SDKs) deployed as ordinary Java TPF Connector services/containers. | Standard Java Connector deployment in distributed topologies. | Standard Java host ownership and durability. |
 
 ### 5. Retirement of superseded whole-bundle experiments
