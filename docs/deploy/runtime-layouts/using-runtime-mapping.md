@@ -60,18 +60,20 @@ check its evidence when the job finishes:
 
 ```mermaid
 flowchart LR
-    subgraph First[First worker invocation]
+    subgraph First[First execution segment]
         Prepare[Prepare request] --> Dispatch[Dispatch external job]
     end
     Dispatch --> Wait[Durable scalar Await]
     Wait -->|Completion admitted| Check
-    subgraph Second[Later worker invocation]
+    subgraph Second[Continuation segment]
         Check[Check evidence] --> Report[Produce result]
     end
 ```
 
-These are two execution segments. They can run on the same worker function in
-separate invocations. Two sequential deferred completions can create three segments;
+These are two execution segments. They can use the same typed worker function on
+both sides of the Await. The diagram expresses a placement goal; grouping their
+code does not guarantee a single physical invocation per segment. The selected
+host and dispatcher still determine transition granularity. Two sequential deferred completions can create three segments;
 two Await declarations on alternative branches do not mean an execution crosses both.
 
 For a single application module, this mapping explicitly keeps the authored Steps
@@ -106,10 +108,28 @@ root orchestrator adapters. Unmapped `REST`/`FUNCTION` or cross-module nested
 invocations fail compilation closed. Native work delivery controls suspension
 and resume, as described in
 [Await Runtime Setup](/deploy/orchestrator-runtime/await#scalar-completion-in-function-hosts).
-Physical HTTP ingress, work and recovery functions are deployment roles; their
-number is independent of the number of execution segments. Hosting compiled
-`LOCAL` code in a native function is also distinct from generating per-Step
-`REST`/`FUNCTION` adapters.
+Physical HTTP ingress, work and recovery functions are deployment roles. Their
+number is independent of the number of execution segments. Generated REST
+function handlers use `REST`/`FUNCTION`; verify those settings against the
+generated adapters, worker package and immutable Release. The existing registered
+REST transition-worker profile instead validates a Lambda HTTP bridge around a
+whole pipeline with canonical types and local transition execution. Its compiled
+inner calls may remain `LOCAL`/`COMPUTE`; the outer worker invocation is REST.
+Use the selected profile's actual requirements rather than inferring physical
+placement from those inner settings. Durable background execution remains
+`QUEUE_ASYNC`. Package/profile verification alone does not qualify Command
+execution, Await continuation or recovery.
+
+The mapping above groups code; it does not declare segment-specific function
+entry points or establish that several independently placed archives are supported
+by a particular worker profile. The current registered REST profile requires one
+whole-bundle runnable archive. Do not infer distributed segment placement from
+this example. Verify the selected profile and test the complete admitted path.
+
+An execution segment is guidance for deciding which work should stay together,
+not another runtime layout or a new mapping file. Keep using `modular`,
+`pipeline-runtime` or `monolith` and the existing module/runtime assignments.
+See [transport and platform settings](/develop/configuration/transport-and-platform).
 
 ### Account for I/O and handoff costs
 
