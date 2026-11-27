@@ -164,7 +164,8 @@ sequenceDiagram
 
     Client->>Coord: submit execution
     Coord->>Releases: resolve active release
-    Coord->>Workers: verify healthy worker + capabilities (await-authority-v1, command-authority-v1)
+    Coord->>Workers: verify healthy worker + Release-required capabilities
+    Note over Coord,Workers: Require await-authority-v1 only for Releases with await; command-authority-v1 only for Releases with Command steps
     Coord->>Queue: enqueue execution work
     Coord->>Queue: claim work + lease execution
     Coord->>Worker: TransitionCommandEnvelope (leased segment scope)
