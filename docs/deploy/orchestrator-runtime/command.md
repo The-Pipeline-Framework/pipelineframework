@@ -1,6 +1,6 @@
 # Command Steps
 
-Command steps record and dispatch external writes from a `QUEUE_ASYNC` pipeline. Use them when a retry or replay must not blindly call the external system again.
+Command steps record and dispatch external writes from a `QUEUE_ASYNC` pipeline, or from a registered `SYNC` transition worker executing an admitted leased segment on behalf of a shared `QUEUE_ASYNC` Coordinator. Use them when a retry or replay must not blindly call the external system again.
 
 Start here when you need to declare a command step in `pipeline.yaml`. For connector code, see [Writing Command Connectors](/develop/extension/command-connectors). For runtime signals, see [Replay & Live Topology](/operate/observability/replay) and [Metrics](/operate/observability/metrics).
 
@@ -19,7 +19,7 @@ For application logic that does not need an effect record, keep using a normal `
 
 ## YAML
 
-V1 command steps are `ONE_TO_ONE` and require `QUEUE_ASYNC`.
+V1 command steps are `ONE_TO_ONE` and require either `QUEUE_ASYNC` mode or an admitted, leased transition-worker segment backed by an explicit recoverable `CommandEffectStore`. Unscoped direct `SYNC` calls remain rejected.
 
 ```yaml
 steps:
@@ -68,7 +68,9 @@ connection and secret references.
 ## Callback Completion
 
 Version 3 operation-first Commands may select one callback declared by their
-provider. The operation remains `ONE_TO_ONE` and requires `QUEUE_ASYNC`:
+provider. The operation remains `ONE_TO_ONE` and runs either in `QUEUE_ASYNC`
+mode or on a registered `SYNC` transition worker configured with both remote
+Await authority and an explicit recoverable `CommandEffectStore`:
 
 ```yaml
 version: 3
@@ -190,6 +192,71 @@ The recovery-aware Command codec writes schema version 3 and reads versions 1, 2
 records remain readable but do not acquire an original recovery binding by inference. Older runtime
 readers cannot read version 3: coordinate all readers before enabling a writer that emits it, including
 when planning a rollback. Retaining the same table does not make mixed-version readers compatible.
+
+## Registered Transition Workers
+
+In a separated Coordinator and worker deployment, the shared `QUEUE_ASYNC` Coordinator owns execution leases, release pinning, Await admission, retries, and re-drive without loading application DTOs, Connector providers, or generated steps. The standalone registered transition worker runs with `pipeline.orchestrator.mode=SYNC` and `pipeline.orchestrator.worker.rest.server-enabled=true` so it does not start a second Coordinator or hold Coordinator signing keys.
+
+To execute `kind: command` steps in that topology safely, TPF enforces four linked gates from packaging through execution:
+
+1. **Verified leased worker scope**: `PipelineExecutionService` installs an immutable `CommandWorkerExecutionScope` (tenant, execution, pipeline, contract/release version, claimed execution version, transition key, leased segment step bounds, worker transport, artifact id, and digest) only for signed remote worker transitions. Unscoped direct `SYNC` calls remain rejected.
+2. **Explicit recoverable effect store**: in `SYNC` mode, `CommandStepSupport` requires a single explicit recoverable `CommandEffectStore` supporting recovery, native outcome snapshots, `RETRY`, and `REISSUE` (such as `DynamoCommandEffectStore`). Both `InMemoryCommandEffectStore` and `pipeline.command.effect-store.provider=memory` are rejected.
+3. **Capability advertisement and admission check**: `RestTransitionWorkerResource` advertises `command-authority-v1` only when a remote worker server is enabled and backed by a recoverable `CommandEffectStore`. `RegisteredRestWorkerTargets` checks the pinned Release contract for any `kind: command` step (root or nested) and rejects workers lacking `command-authority-v1` before admission or dispatch.
+4. **Release packaging gate**: for `aws-durable-java21-rest-worker-v1` Releases containing `kind: command` steps, `AwsDurableHostedProfile` requires the `aws:dynamodb:command-effects` binding on both deployment and entry, causing Release production to verify `META-INF/tpf/runtime-capabilities.properties` (`recoverySupported=true`). For pinned workers, `tpf.aws.durable.command-effect-table` maps directly to `pipeline.command.effect-store.*`.
+
+```mermaid
+sequenceDiagram
+    participant Coord as "App-free Coordinator (QUEUE_ASYNC)"
+    participant Worker as "Registered SYNC worker"
+    participant Store as "Recoverable CommandEffectStore"
+    participant Provider as "External provider"
+
+    Coord->>Worker: GET /pipeline/worker/capabilities
+    Worker-->>Coord: workerProtocols includes command-authority-v1
+    Note over Coord: Workers with memory store omit command-authority-v1 and fail admission
+    Coord->>Worker: POST /pipeline/worker/transitions/execute (signed leased envelope)
+    Worker->>Worker: Install CommandWorkerExecutionScope + CommandReexecutionScope
+    Worker->>Store: Read latest revision for tenant + commandId
+    alt First attempt, RETRY_FAILED_COMMAND, or REISSUE_COMMAND
+        Worker->>Provider: Dispatch with occurrenceId
+        Provider-->>Worker: Outcome / durable reference
+        Worker->>Store: Conditional immutable append
+    else Recorded SUCCEEDED (RETURN_RECORDED)
+        Store-->>Worker: Stored output (no redispatch)
+    else Retained AMBIGUOUS with recovery binding
+        Worker->>Provider: Reconcile without redispatch
+        Provider-->>Worker: Confirmed receipt
+        Worker->>Store: Conditional reconcileSucceeded revision
+    end
+    Worker-->>Coord: TransitionResultEnvelope (COMPLETED / FAILED)
+```
+
+When a Command step also declares `await.callback`, the registered `SYNC` worker coordinates Await registration, dispatch claim, and acknowledgement settlement with the app-free Coordinator over `RestAwaitLifecycleProtocol` while keeping external effect authority in its recoverable `CommandEffectStore`. `CommandDeferredCompletionSupport` preserves `CommandReexecutionScope` across those asynchronous calls, and the Coordinator delegates callback projection to the worker's pure `AwaitValueOperationExecutor` before resuming the execution without re-dispatching the settled Command:
+
+```mermaid
+sequenceDiagram
+    participant Coord as "App-free Coordinator"
+    participant Worker as "Registered SYNC worker"
+    participant Store as "Recoverable CommandEffectStore"
+    participant Provider as "External provider"
+
+    Coord->>Worker: Leased TransitionCommandEnvelope
+    Worker->>Coord: Register & claim Await interaction
+    Coord-->>Worker: Signed callback token
+    Worker->>Store: Conditional PENDING / DISPATCHING
+    Worker->>Provider: Dispatch Command with Coordinator callback URL
+    Provider-->>Worker: Immediate acknowledgement
+    Worker->>Store: Conditional SUCCEEDED revision
+    Worker->>Coord: Settle Command acknowledgement
+    Worker-->>Coord: WAITING_EXTERNAL
+    Provider->>Coord: Callback payload + signed token
+    Coord->>Worker: Pure AwaitValueOperation (normalise & project)
+    Worker-->>Coord: Projected canonical output
+    Coord->>Worker: Leased resume TransitionCommandEnvelope
+    Worker-->>Coord: COMPLETED (no second Command dispatch)
+```
+
+See [ADR-0093](/decisions/0093-registered-sync-worker-command-authority) for the architectural ownership boundary.
 
 ## Duplicate Policy
 

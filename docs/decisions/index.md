@@ -101,6 +101,7 @@ publication and the distinction from immutable test and release inputs.
 | [0090](./0090-release-packaging-facts-share-the-immutable-descriptor.md) | Draft: carry physical package associations in the immutable Release Descriptor, extending [ADR-0064](./0064-release-descriptors-are-produced-after-packaging.md). |
 | [0091](./0091-placement-owns-nested-invocation-locality.md) | Make compiled placement own nested/self invocation locality and execution-segment boundaries without changing deployment transport/platform identity. |
 | [0092](./0092-polyglot-java-execution-engine-and-foreign-function-host.md) | Execute polyglot TPF applications on one shared Java execution engine (distributed or via a standalone native `tpf` CLI) with thin foreign function hosts and a three-tier Connector architecture. |
+| [0093](./0093-registered-sync-worker-command-authority.md) | Execute admitted Commands in registered SYNC transition workers under a verified leased scope, `command-authority-v1` capability gating, and an explicit recoverable `CommandEffectStore`. |
 
 | [0088](./0088-build-census-is-compiler-owned.md) | Observe compiled applications through a compiler-owned, minimal build census. |
 

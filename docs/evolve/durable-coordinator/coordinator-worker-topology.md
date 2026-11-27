@@ -62,6 +62,7 @@ The coordinator is where durable orchestration lives. The worker is where busine
 | Worker lifecycle admission | yes | reports identity/health | no |
 | Business step execution | no | drives transition | yes |
 | Mapper/type/business code | no | yes, through packaged pipeline code | yes |
+| Command effect authority (`CommandEffectStore`) | no (verifies `command-authority-v1`) | yes, under verified leased scope + recoverable store | executes provider operation |
 | External side effects | no | possible through steps | yes |
 
 ## Role Versus Artifact
@@ -163,10 +164,11 @@ sequenceDiagram
 
     Client->>Coord: submit execution
     Coord->>Releases: resolve active release
-    Coord->>Workers: require healthy matching worker
+    Coord->>Workers: verify healthy worker + Release-required capabilities
+    Note over Coord,Workers: Require await-authority-v1 only for Releases with await; command-authority-v1 only for Releases with Command steps
     Coord->>Queue: enqueue execution work
     Coord->>Queue: claim work + lease execution
-    Coord->>Worker: TransitionCommandEnvelope
+    Coord->>Worker: TransitionCommandEnvelope (leased segment scope)
     alt await requires durable fallback
         Worker-->>Coord: WAITING_EXTERNAL
         Coord->>Await: persist await unit + pending interaction

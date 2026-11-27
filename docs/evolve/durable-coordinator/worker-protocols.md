@@ -12,6 +12,8 @@ sequenceDiagram
     participant Worker as "Transition worker"
     participant Steps as "Step/runtime services"
 
+    Coord->>Worker: GET /pipeline/worker/capabilities
+    Worker-->>Coord: PipelineWorkerCapability (rest, canonical-transition-values-v1, await-authority-v1, command-authority-v1)
     Coord->>Worker: TransitionCommandEnvelope + optional page context
     Worker->>Steps: execute bounded continuation
     alt await requires durable fallback
@@ -24,6 +26,12 @@ sequenceDiagram
 ```
 
 ## Contract
+
+Before admitting or dispatching transitions to a registered REST worker, the Coordinator probes `GET /pipeline/worker/capabilities` and verifies the required protocol capabilities for the pinned Release:
+
+- `canonical-transition-values-v1` when serialised coordination is enabled;
+- `await-authority-v1` when the pinned contract declares deferred completion (`await:`);
+- `command-authority-v1` when the pinned contract contains any `kind: command` step (advertised only when the worker server is enabled and wired to a single explicit recoverable `CommandEffectStore`, never `InMemoryCommandEffectStore`).
 
 The worker receives a `TransitionCommandEnvelope` containing:
 
