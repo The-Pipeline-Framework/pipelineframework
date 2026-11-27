@@ -19,10 +19,10 @@ flowchart LR
 Run `tpf generate` against your `pipeline.yaml`:
 
 ```sh
-tpf generate --pipeline pipeline.yaml --lang python --out ./generated
+tpf generate --pipeline pipeline.yaml --lang python --out ./invoice_pipeline
 ```
 
-`tpf generate` produces a self-contained Python package (named from your pipeline's `appName` in snake_case, such as `invoice_pipeline`) containing:
+`tpf generate` writes a self-contained Python package into `--out` containing:
 
 - `invoice_pipeline/types.py` — frozen `@dataclass` models for all canonical records and union variants, `FunctionContext`, `QueryConnectorContext`, `CommandDispatchContext`, `CommandReconcileContext`, and portable error classes (`TpfBusinessRejectionError`, `TpfTransientError`).
 - `invoice_pipeline/host.py` — `start_app_host(...)` implementing HMAC-SHA256 verification (with timezone-aware ISO-8601 timestamp skew validation), exact `Decimal` parsing (`parse_float=Decimal`), NDJSON streaming for `ONE_TO_MANY`, `MANY_TO_ONE`, and full-duplex `MANY_TO_MANY`, and loopback Connector listener authentication.
