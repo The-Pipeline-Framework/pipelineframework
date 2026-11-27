@@ -184,6 +184,8 @@ loading arbitrary JVM Connector JARs dynamically into the native `tpf` binary:
   stay strictly credential-free.
 
 See [epic #1055](https://github.com/The-Pipeline-Framework/pipelineframework/issues/1055),
+the [Polyglot Development Guide](/develop/polyglot/),
+[Deploying Polyglot Applications](/deploy/polyglot),
 [ADR-0014](./0014-remote-transition-outcome-uncertainty.md),
 [ADR-0021](./0021-host-owned-connector-authentication.md),
 [ADR-0034](./0034-pinned-http-operations-execute-as-ordinary-connector-capabilities.md), and

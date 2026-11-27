@@ -21,7 +21,8 @@ name one Compiled Truth carrier, and give an independent consumer one immutable 
 Use the [TPF CLI](./deployment-cli) to verify that input and deploy it to a named local or remote environment without
 rebuilding or rewriting the Release.
 Use [Orchestrator Runtime](./orchestrator-runtime/) for durable `QUEUE_ASYNC`, transition workers,
-checkpoint handoff, Command, and Await setup. Function-style entry points are deployment patterns
+checkpoint handoff, Command, and Await setup. For Node/TypeScript and Python foreign function and
+Connector hosts, see [Deploying Polyglot Applications](./polyglot). Function-style entry points are deployment patterns
 composed from a transport and platform; they are covered under [Function Platforms](./function-providers).
 
 Runtime mapping does not rewrite Maven modules, and `FUNCTION` is not a transport mode. Current

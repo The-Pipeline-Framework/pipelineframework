@@ -164,6 +164,17 @@ const mainSidebar = [
             },
             {text: 'Public OpenAPI Contract', link: '/develop/openapi-contract'},
             {
+                text: 'Polyglot (Node/TS & Python)',
+                link: '/develop/polyglot/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/polyglot/'},
+                    {text: 'Node and TypeScript', link: '/develop/polyglot/typescript'},
+                    {text: 'Python', link: '/develop/polyglot/python'},
+                    {text: 'Local Dev and Testing', link: '/develop/polyglot/testing-and-local-dev'}
+                ]
+            },
+            {
                 text: 'Examples',
                 link: '/develop/examples/',
                 collapsed: true,
@@ -305,6 +316,7 @@ const mainSidebar = [
             {text: 'Pipeline Parent POM Lifecycle', link: '/deploy/pipeline-parent-pom-lifecycle'},
             {text: 'CSV Payments POM Lifecycle', link: '/deploy/csv-payments-pom-lifecycle'},
             {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
+            {text: 'Polyglot Deployment', link: '/deploy/polyglot'},
             {text: 'Concurrency and Backpressure Sizing', link: '/deploy/concurrency-and-backpressure'}
         ]
     },
