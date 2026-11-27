@@ -77,7 +77,7 @@ steps:
 
 ## Reading order
 
-1. [Node and TypeScript](./typescript) — generate stubs, author unary/streaming handlers and Tier-2 custom Connectors, and run with Node 22+.
+1. [Node and TypeScript](./typescript) — generate stubs, author unary/streaming handlers and Tier-2 custom Connectors, and run with Node 22.18+.
 2. [Python](./python) — generate dataclasses and host stubs, author unary/streaming handlers and Tier-2 custom Connectors, and preserve `Decimal` precision.
 3. [Local Development and Testing without a JVM](./testing-and-local-dev) — use `tpf generate` and `tpf dev`, unit-test handlers natively, and verify crash recovery across `SIGKILL`.
 4. [Deploying Polyglot Applications](/deploy/polyglot) — run production Quarkus or Spring execution engines alongside remote TLS + HMAC foreign hosts and DynamoDB stores.

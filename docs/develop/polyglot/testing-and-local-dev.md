@@ -60,7 +60,11 @@ Pass `--port <port>` to bind a fixed loopback HTTP port (or omit it to use an ep
 - **Query captures:** persists external Query observations for deterministic replay.
 - **Pre-send foreign dispatch intents:** suppresses automatic blind resends after an uncertain crash or timeout.
 
-If you kill `tpf dev` with `SIGKILL` mid-execution or while an execution is waiting at an Await boundary, restarting `tpf dev` against the same `--data-dir` resumes from the exact last durable boundary.
+If you kill `tpf dev` with `SIGKILL` mid-execution or while an execution is waiting at an Await boundary, restarting `tpf dev` against the same `--data-dir` resumes from its recorded durable state:
+
+- `WAITING_EXTERNAL` Await units keep their correlation and completion idempotency keys intact across restarts.
+- A `PENDING` Command attempt is claimed and dispatched once.
+- A `DISPATCHING` or `AMBIGUOUS` Command attempt is never blindly re-dispatched; the engine only reconciles it and keeps the `AMBIGUOUS` barrier in place until authoritative provider evidence settles it.
 
 ## 3. Loopback security for local Tier-2 Connectors
 

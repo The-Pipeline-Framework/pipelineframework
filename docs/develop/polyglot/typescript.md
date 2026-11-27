@@ -1,6 +1,6 @@
 # Node and TypeScript
 
-Write TPF business steps and Tier-2 custom Connector adapters in TypeScript using **Node 22+** with zero runtime dependencies. The native `tpf` CLI generates strongly typed interfaces and an HTTP/1.1 host module directly from your canonical v3 `pipeline.yaml`.
+Write TPF business steps and Tier-2 custom Connector adapters in TypeScript using **Node 22.18+** (when built-in TypeScript type stripping became enabled by default; earlier Node 22.x releases require `--experimental-strip-types`) with zero runtime dependencies. The native `tpf` CLI generates strongly typed interfaces and an HTTP/1.1 host module directly from your canonical v3 `pipeline.yaml`.
 
 ```mermaid
 sequenceDiagram
@@ -132,7 +132,7 @@ export const connectors: ConnectorHandlers = {
 
 ## 5. Run and unit-test without a JVM
 
-Test business functions directly using Node's built-in test runner:
+Test business functions directly using Node 22.18+'s built-in test runner (pass `--experimental-strip-types` on Node 22.6–22.17):
 
 ```sh
 node --test src/handlers.test.ts
