@@ -59,20 +59,20 @@ types:
 steps:
   - name: "Validate Invoice"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "Invoice"
-    outputTypeName: "Invoice"
+    input: "Invoice"
+    output: "Invoice"
   - name: "Expand Lines"
     cardinality: "ONE_TO_MANY"
-    inputTypeName: "Invoice"
-    outputTypeName: "LineItem"
+    input: "Invoice"
+    output: "LineItem"
   - name: "Enrich Lines"
     cardinality: "MANY_TO_MANY"
-    inputTypeName: "LineItem"
-    outputTypeName: "LineItem"
+    input: "LineItem"
+    output: "LineItem"
   - name: "Summarise Invoice"
     cardinality: "MANY_TO_ONE"
-    inputTypeName: "LineItem"
-    outputTypeName: "InvoiceSummary"
+    input: "LineItem"
+    output: "InvoiceSummary"
 ```
 
 ## Reading order

@@ -33,7 +33,7 @@ tpf generate --pipeline pipeline.yaml --lang python --out ./generated
 | Canonical v3 type | Python type | Precision guarantee |
 | --- | --- | --- |
 | `string`, `uuid`, `timestamp`, `date`, `duration` | `str` | Exact UTF-8 / ISO-8601 string |
-| `boolean` | `bool` | Native `bool` |
+| `bool` | `bool` | Native `bool` |
 | `int32`, `int64` | `int` | Arbitrary-precision Python integer (exact `int64 > 2^53`) |
 | `decimal` | `decimal.Decimal` | Parsed directly from raw JSON token with `parse_float=Decimal` |
 | `float32`, `float64` | `float` | IEEE-754 floating point |

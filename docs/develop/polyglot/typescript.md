@@ -39,7 +39,7 @@ tpf generate --pipeline pipeline.yaml --lang typescript --out ./generated
 | Canonical v3 type | TypeScript type | Precision guarantee |
 | --- | --- | --- |
 | `string`, `uuid`, `timestamp`, `date`, `duration` | `string` | Exact UTF-8 / ISO-8601 string |
-| `boolean` | `boolean` | Native boolean |
+| `bool` | `boolean` | Native boolean |
 | `int32` | `number` | Exact signed 32-bit integer |
 | `int64` | `bigint` | Exact 64-bit integer (`> 2^53` preserved via `JSON.rawJSON`) |
 | `decimal` | `string` | Exact arbitrary-precision decimal string (no float64 rounding) |
