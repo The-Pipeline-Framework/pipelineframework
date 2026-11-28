@@ -2,6 +2,7 @@
   "org.pipelineframework:pipelineframework-contracts-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
   "org.pipelineframework:pipelineframework-aws-durable-coordination-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
   "org.pipelineframework:pipelineframework-runtime-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
+  "org.pipelineframework:pipelineframework-spring-host-starter:jar": "Staging registration prior to initial runtime publication; moved to framework BOM once published (ADR-0094 / #1126).",
   "org.pipelineframework:pipelineframework-cli-parent:pom": "Parent/aggregator POM, not an imported application dependency.",
   "org.pipelineframework:connector-maven-plugin:maven-plugin": "Maven build plugin; applications manage plugin versions explicitly.",
   "org.pipelineframework:connector-mcp-maven-plugin:maven-plugin": "Maven build plugin; applications manage plugin versions explicitly.",
