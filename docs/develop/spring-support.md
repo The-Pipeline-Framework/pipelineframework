@@ -22,12 +22,16 @@ flowchart LR
 
 ## Dependency
 
+> [!NOTE]
+> `pipelineframework-spring-host-starter` is staged for initial publication from `pipelineframework-runtime` (see [ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)) and will be managed by `pipelineframework-bom` once published. Until the BOM entry is released, specify the published snapshot or release version explicitly.
+
 Add `pipelineframework-spring-host-starter` to your Spring Boot WebFlux application:
 
 ```xml
 <dependency>
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipelineframework-spring-host-starter</artifactId>
+    <version>${pipelineframework.runtime.version}</version>
 </dependency>
 ```
 
@@ -121,9 +125,12 @@ public class BillingConnectors {
 
     @TpfCommandReconciler(operation = "charge-account")
     public TpfReconcileResult<ChargeReceipt> reconcileCharge(TpfReconcileContext ctx) {
-        return TpfReconcileResult.confirmedSucceeded(
-            new ChargeReceipt("chg-reconciled", ctx.providerIdempotencyKey()),
-            "rcpt-reconciled-" + ctx.commandId());
+        String apiKey = ctx.secret("apiKey").orElse("");
+        return billingClient.findChargeByIdempotencyKey(apiKey, ctx.providerIdempotencyKey())
+            .map(charge -> TpfReconcileResult.confirmedSucceeded(
+                new ChargeReceipt(charge.id(), ctx.providerIdempotencyKey()),
+                charge.receiptReference()))
+            .orElseGet(() -> TpfReconcileResult.unresolved("charge-not-confirmed"));
     }
 }
 ```

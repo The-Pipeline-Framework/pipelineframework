@@ -49,8 +49,9 @@ flowchart LR
 
 ### 1. Thin Spring Boot Foreign Function & Connector Host starter
 
-TPF publishes `org.pipelineframework:pipelineframework-spring-host-starter` from
-`pipelineframework-runtime`:
+TPF introduces `org.pipelineframework:pipelineframework-spring-host-starter` in
+`pipelineframework-runtime` (to be managed by `pipelineframework-bom` once its initial artifact is
+published):
 
 - Exposes the complete ADR-0092 Foreign Function Host contract:
   - `POST /tpf/functions/{stepId}` (`ONE_TO_ONE` canonical JSON)
