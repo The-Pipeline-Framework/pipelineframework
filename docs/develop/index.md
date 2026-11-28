@@ -29,6 +29,7 @@ that its snapshot is available. Stable releases select a frozen compatible compo
 Use the focused Guides when the flow crosses a boundary or introduces reusable composition:
 
 - [Examples](./examples/) — choose a current proof or reference application;
+- [Polyglot (Node/TypeScript & Python)](./polyglot/) — build and test TypeScript and Python pipelines on one Java execution engine using the native `tpf` CLI;
 - [Connectors](./connectors/) — model typed external observations, effects, and object I/O;
 - [Blocks](./blocks/) — consume or publish compile-time reusable Pipeline definitions;
 - [Expansions](./expansions/) — distribute related Blocks, Connectors, and supporting assets as one coherent package;
