@@ -197,6 +197,7 @@ test('configuration covers exactly the eleven extracted repositories', () => {
     'org.pipelineframework:pipelineframework-release-resolver:jar',
     'org.pipelineframework:pipelineframework-runtime-parent:pom',
     'org.pipelineframework:pipelineframework-runtime-spring:jar',
+    'org.pipelineframework:pipelineframework-spring-host-starter:jar',
     'org.pipelineframework:pipelineframework:jar',
     'org.pipelineframework:repository-plugin:jar'
   ]);
@@ -290,7 +291,7 @@ test('runtime candidates require the complete AWS Durable closure', () => {
   });
   runtime.provenance.build.repository = runtime.repository;
   runtime.provenance.publication.repository = runtime.repository;
-  assert.equal(validateCandidateManifest(runtime, config).mavenArtifacts.length, 14);
+  assert.equal(validateCandidateManifest(runtime, config).mavenArtifacts.length, 15);
   const previousResolver = structuredClone(runtime);
   const resolver = previousResolver.mavenArtifacts.find(a => a.artifactId === 'pipelineframework-release-resolver');
   resolver.artifactId = 'tpf-release-resolver';

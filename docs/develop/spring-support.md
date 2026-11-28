@@ -1,77 +1,150 @@
-# Spring Support Status
+# Spring Boot Integration
 
-Quarkus is the mature production runtime for TPF today.
+Spring Boot applications integrate with The Pipeline Framework through the **ADR-0092 Foreign Function & Connector Host** model ([ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)).
 
-Spring support has started, but it is intentionally limited. Treat it as an emerging adapter path, not as production parity with the Quarkus runtime.
+Instead of re-hosting TPF's durable execution engine inside Spring, TPF runs **one canonical execution engine** (the standalone native `tpf` CLI in local development, or Quarkus + `QueueAsyncCoordinator` in production) and invokes your ordinary Spring Boot `@Service` beans over authenticated HTTP/1.1 using `org.pipelineframework:pipelineframework-spring-host-starter`.
 
-## What Works Today
-
-Current Spring work proves a narrow generated application path:
-
-- YAML-declared unary local steps,
-- constrained `REST + COMPUTE` unary smoke coverage,
-- a generated unary `GRPC + COMPUTE` pipeline endpoint,
-- generated Spring `@Component` local step beans,
-- Spring WebFlux `@RestController` resources for the supported smoke path,
-- `Mono<Out>` and `CompletionStage<Out>` authored service methods for YAML-declared Spring-profile unary services,
-- unary delegated Spring bean steps for local pipeline execution,
-- unary `Class::method` Spring operator beans for local pipeline execution,
-- unary REST client-step boundaries for Spring WebFlux pipelines,
-- unary gRPC client steps using Spring-managed grpc-java future stubs, requiring the matching compiler development snapshot and a runtime development snapshot pending publication,
-- shared runner-core sequencing through the neutral runtime seam.
-
-## Not Yet Supported
-
-Spring does not yet have parity for:
-
-- streaming RPCs,
-- function handlers,
-- await, checkpoint, durable coordinator, or broker paths,
-- persistence providers,
-- non-local delegated/operator paths,
-- side effects and plugins,
-- streaming or non-unary shapes,
-- production Spring observability and deployment guidance.
-
-Unsupported combinations should fail at build time instead of silently falling back to Quarkus generation.
-
-## Authoring Guidance
-
-Use Quarkus for production TPF applications today.
-
-Use the Spring path only when you are validating the emerging renderer/runtime seam or contributing to portability work. Keep business contracts neutral: typed inputs, typed outputs, mappers, and YAML declarations should not rely on Quarkus-only application code unless the application is explicitly Quarkus-targeted.
-
-Spring-profile service steps are supported only for unary local steps declared from YAML. Normal `service:` beans can use `process(In): Mono<Out>`, `process(In): CompletionStage<Out>`, or `processBlocking(In): Out`.
-
-Delegated Spring beans are supported only for unary local steps declared from YAML with either a Spring bean class or an explicit `Class::method` operator reference. Class-only delegates use supported TPF-style service shapes such as `process(In): Mono<Out>` or `processBlocking(In): Out`. `Class::method` delegates support narrow unary Spring bean methods: `Out method(In)`, `Mono<Out> method(In)`, or `CompletionStage<Out> method(In)`.
-
-Spring REST client-step boundaries are supported only for unary `REST + COMPUTE` client-role steps. Configure each generated Spring REST client with `tpf.rest-client.<client-name>.url`; generated Spring REST resources and client steps forward the TPF version, replay, and cache-policy headers for unary REST hops.
-
-For a unary `GRPC + COMPUTE` pipeline, invoke `PipelineProtoGenerator` with `--spring-grpc-unary` before protobuf compilation. The opt-in `pipeline-unary.proto` declares `PipelineService.Run` from the first pipeline input message to the final pipeline output message. Compile it with grpc-java and pass the descriptor set to the annotation processor with `-Aprotobuf.descriptor.file`. Set `-Apipeline.codegen.rendererProfile=spring` and use `spring-boot-starter-grpc-server` (Spring Boot 4.1.2). The generated `@Service` extends the grpc-java `PipelineServiceImplBase`; Spring Boot registers it as a gRPC service. Request and response mapper pairs are checked against their exact domain and protobuf types at build time; field-level compatibility is not checked. The generated service runs the ordered local and client unary steps through `SpringPipelineRunner` and returns one response or a gRPC error.
-
-### Unary gRPC client steps
-
-For unary `GRPC + COMPUTE` client-role steps, add `spring-boot-starter-grpc-client` (Spring Boot 4.1.2). Compile the downstream per-step protobuf contract with grpc-java and supply its descriptor set to the annotation processor. The generated `@Component` implements `PipelineUnaryStep<In, Out>` and calls the downstream `Process…Service.remoteProcess` RPC asynchronously. Existing YAML discovery assigns the client role to a service declared outside the caller module; no client-specific DSL is required.
-
-Each boundary requires the exact `Mapper<DomainIn, ProtoRequest>` and `Mapper<DomainOut, ProtoResponse>` pairs, or the applicable generated canonical adapters. Explicit `Mapper` beans use `toExternal` for requests and `fromExternal` for responses. Generated canonical adapters use `toProto` for requests and `fromProto` for responses. Missing or incompatible mappings and non-unary descriptors fail the build.
-
-Configure an explicit target for every generated client. The client name follows the existing kebab-case service convention: `ProcessRemoteService` becomes `process-remote`.
-
-```properties
-spring.grpc.client.channel.process-remote.target=static://localhost:9090
+```mermaid
+flowchart LR
+    CLIENT["Clients / Triggers"] --> ENG["TPF Execution Engine (Native tpf dev / Quarkus + QueueAsyncCoordinator)"]
+    ENG --> STORES["Durable Stores (Local fsync / DynamoDB)"]
+    ENG -->|"HTTPS + HMAC + Canonical JSON/NDJSON"| STARTER["Spring Boot App (pipelineframework-spring-host-starter)"]
+    STARTER --> FN["@TpfFunction on Spring @Service Beans"]
+    STARTER --> CONN["@TpfQueryConnector / @TpfCommandConnector / @TpfCommandReconciler"]
 ```
 
-The generated configuration creates a qualified future-stub bean through Spring's `GrpcChannelFactory`. Spring owns channel lifecycle, TLS, and customisation. Missing, blank, unresolved, or invalid target configuration fails during bean creation and identifies the property and step. An unreachable downstream service fails the RPC; it does not prevent application startup. See [Spring Boot gRPC client configuration](https://docs.spring.io/spring-boot/reference/io/grpc.html#io.grpc.client).
+## Why this architecture
 
-Each outgoing call forwards the neutral TPF version, replay, and cache-policy values as gRPC metadata using `x-pipeline-version`, `x-pipeline-replay`, and `x-pipeline-cache-policy`. `SpringPipelineRunner` preserves these values across asynchronous step completion and restores the executing thread's previous context after each invocation. The protobuf payload is unchanged. Downstream services must consume these metadata keys to use the propagated context.
+- **Full durable parity immediately:** Spring Boot applications inherit `ONE_TO_ONE`, `ONE_TO_MANY`, `MANY_TO_ONE`, and full-duplex `MANY_TO_MANY` streaming, durable Await suspension and resume, Command effect idempotency and reconciliation, Query capture and replay, pre-send dispatch intents, and crash recovery.
+- **Zero Quarkus, Vert.x, or Mutiny dependencies:** `pipelineframework-spring-host-starter` depends only on Spring Boot WebFlux, Jackson, and `pipelineframework-runtime-core` (`TransitionWorkerSignature`).
+- **Idiomatic Spring Boot code:** Keep your existing `@SpringBootApplication`, Spring Data repositories, Spring Security configuration, and `@Service` beans (`sync`, `Mono`, `Flux`, `CompletionStage`, `Stream`, `Iterable`).
+- **Seamless composition:** Compose Spring Boot steps alongside Quarkus, Node/TypeScript, and Python steps in the same `pipeline.yaml`.
 
-Client-only compilations need the downstream per-step descriptors and do not require `PipelineService.Run` or emit a Spring pipeline server adapter. A pipeline containing local server steps can also expose the pipeline entry point described above. gRPC failures retain their status, mapper failures complete the stage exceptionally, and cancellation of a generated client step's returned future cancels its active RPC.
+## Dependency
 
-Streaming RPCs, function paths, durable orchestration, and broker paths remain unsupported. Spring support still does not imply production parity with the Quarkus runtime.
+> [!NOTE]
+> `pipelineframework-spring-host-starter` is staged for initial publication from `pipelineframework-runtime` (see [ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)) and will be managed by `pipelineframework-bom` once published. Until the BOM entry is released, specify the published snapshot or release version explicitly.
 
-## Deeper Architecture
+Add `pipelineframework-spring-host-starter` to your Spring Boot WebFlux application:
 
-- [Runtime Core Decoupling](/evolve/runtime-core-decoupling)
-- [Framework Portability Assessment](/evolve/framework-portability-assessment/)
-- [Runtime Split](/evolve/framework-portability-assessment/runtime-split)
-- [Code Generation Portability](/evolve/framework-portability-assessment/code-generation)
+```xml
+<dependency>
+    <groupId>org.pipelineframework</groupId>
+    <artifactId>pipelineframework-spring-host-starter</artifactId>
+    <version>${pipelineframework.runtime.version}</version>
+</dependency>
+```
+
+## Configuration
+
+Configure the shared HMAC-SHA256 secret (or pass `TPF_FUNCTION_HOST_SECRET` in the environment):
+
+```properties
+tpf.host.shared-secret=${TPF_FUNCTION_HOST_SECRET}
+tpf.host.max-clock-skew=PT5M
+tpf.host.max-request-bytes=4194304
+tpf.host.max-frame-bytes=4194304
+```
+
+The starter auto-configures the following ADR-0092 endpoints on your Spring WebFlux server:
+
+- `GET /tpf/health` — readiness probe
+- `POST /tpf/functions/{stepId}` — `ONE_TO_ONE` unary JSON
+- `POST /tpf/functions/{stepId}/stream` — `ONE_TO_MANY` NDJSON streaming
+- `POST /tpf/functions/{stepId}/reduce` — `MANY_TO_ONE` chunked NDJSON reducer
+- `POST /tpf/functions/{stepId}/duplex` — `MANY_TO_MANY` full-duplex interleaved NDJSON
+- `POST /tpf/connector/auth/challenge` — mutual HMAC loopback authentication for `tpf dev`
+- `POST /tpf/connector/query/{operation}` — Tier-2 Query Connector
+- `POST /tpf/connector/command/{operation}/dispatch` — Tier-2 Command Connector dispatch
+- `POST /tpf/connector/command/{operation}/reconcile` — Tier-2 Command Connector reconciliation
+
+## Authoring business functions
+
+Annotate methods on ordinary Spring `@Service` or `@Component` beans with `@TpfFunction`. Synchronous methods (`Out`, `Stream<Out>`, `Iterable<Out>`, `Out(Stream<In>)`) are automatically offloaded to Reactor's bounded elastic scheduler; reactive methods (`Mono`, `Flux`, `CompletionStage`) run natively on the WebFlux event loop.
+
+```java
+@Service
+public class PaymentFunctions {
+
+    @TpfFunction(stepId = "price-payment")
+    public PaymentReceipt pricePayment(PaymentInput input, TpfFunctionContext ctx) {
+        if (input.amount().compareTo(BigDecimal.ZERO) < 0) {
+            throw new TpfBusinessRejectionException("NEGATIVE_AMOUNT", "Amount must be non-negative");
+        }
+        return new PaymentReceipt(input.id(), input.amount(), ctx.versionTag().orElse("v1"));
+    }
+
+    @TpfFunction(stepId = "split-payment")
+    public Flux<LineItem> splitPayment(PaymentInput input) {
+        return Flux.just(new LineItem(input.id(), 1, input.amount()));
+    }
+
+    @TpfFunction(stepId = "sum-lines", outputTypeId = "BatchSummary")
+    public Mono<BatchSummary> sumLines(Flux<LineItem> lines) {
+        return lines.reduce(
+            new BatchSummary(0, BigDecimal.ZERO),
+            (acc, item) -> new BatchSummary(acc.count() + 1, acc.sum().add(item.portion())));
+    }
+
+    @TpfFunction(stepId = "transform-duplex", outputTypeId = "LineItem")
+    public Flux<LineItem> transformDuplex(Flux<LineItem> incoming) {
+        return incoming.map(item -> new LineItem(item.id(), item.index(), item.portion()));
+    }
+}
+```
+
+### Precision, failures, and secret isolation
+
+- **Exact numeric fidelity:** The starter's JSON codec preserves full arbitrary-precision `BigDecimal` values (including trailing zeroes) and odd 64-bit `long` values above $2^{53}$.
+- **Portable failures:** Throw `TpfBusinessRejectionException` for non-retryable rejections (`BUSINESS_REJECTION`) or `TpfTransientException` for retryable failures (`TRANSIENT`). Unhandled exceptions map to `UNCLASSIFIED`.
+- **Strict secret isolation:** `TpfFunctionContext` carries only non-secret step metadata (`stepId`, `stepIndex`, `versionTag`). Provider credentials are never delivered to `@TpfFunction` methods.
+
+## Authoring Tier-2 custom Connectors
+
+Expose provider-specific Query, Command, and Reconciliation operations using `@TpfQueryConnector`, `@TpfCommandConnector`, and `@TpfCommandReconciler`. TPF's execution engine retains authority over `CommandEffectStore`, `QueryCaptureStore`, `providerIdempotencyKey`, and host credential resolution (`ConnectionResolver`), delivering scoped secrets solely through `TpfConnectorContext`, `TpfCommandContext`, and `TpfReconcileContext`.
+
+```java
+@Service
+public class BillingConnectors {
+
+    @TpfQueryConnector(operation = "lookup-account")
+    public TpfQueryResult<AccountState> lookupAccount(AccountLookup input, TpfConnectorContext ctx) {
+        String apiKey = ctx.secret("apiKey").orElse("");
+        if (apiKey.isBlank()) {
+            return TpfQueryResult.authRequired("missing-api-key");
+        }
+        return TpfQueryResult.found(new AccountState(input.accountId(), "enterprise"));
+    }
+
+    @TpfCommandConnector(operation = "charge-account")
+    public Mono<TpfCommandResult<ChargeReceipt>> chargeAccount(ChargeRequest input, TpfCommandContext ctx) {
+        return Mono.just(TpfCommandResult.succeeded(
+            new ChargeReceipt("chg-" + input.accountId(), ctx.providerIdempotencyKey()),
+            "rcpt-" + ctx.commandId()));
+    }
+
+    @TpfCommandReconciler(operation = "charge-account")
+    public TpfReconcileResult<ChargeReceipt> reconcileCharge(TpfReconcileContext ctx) {
+        String apiKey = ctx.secret("apiKey").orElse("");
+        return billingClient.findChargeByIdempotencyKey(apiKey, ctx.providerIdempotencyKey())
+            .map(charge -> TpfReconcileResult.confirmedSucceeded(
+                new ChargeReceipt(charge.id(), ctx.providerIdempotencyKey()),
+                charge.receiptReference()))
+            .orElseGet(() -> TpfReconcileResult.unresolved("charge-not-confirmed"));
+    }
+}
+```
+
+> [!NOTE]
+> Deploy pure `@TpfFunction` hosts and Tier-2 custom Connector hosts in separate processes or services with distinct HMAC secrets in production so business logic remains strictly isolated from provider credentials.
+
+## Retirement of legacy Spring host-parity adapters
+
+The earlier `pipelineframework-runtime-spring` adapter and `rendererProfile=spring` compiler renderers are superseded by [ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host) and are being retired in favour of `pipelineframework-spring-host-starter`.
+
+## Related documentation
+
+- [ADR-0094: Non-Quarkus JVM Frameworks Use Foreign Function Host](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)
+- [ADR-0092: Polyglot Java Execution Engine and Foreign Function Host](/decisions/0092-polyglot-java-execution-engine-and-foreign-function-host)
+- [Polyglot Development Guide](/develop/polyglot/)
+- [Deploying Polyglot Applications](/deploy/polyglot)

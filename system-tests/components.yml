@@ -59,6 +59,7 @@
         "org.pipelineframework:pipelineframework-release-resolver:jar",
         "org.pipelineframework:pipelineframework-runtime-parent:pom",
         "org.pipelineframework:pipelineframework-runtime-spring:jar",
+        "org.pipelineframework:pipelineframework-spring-host-starter:jar",
         "org.pipelineframework:pipelineframework:jar",
         "org.pipelineframework:repository-plugin:jar"
       ],
