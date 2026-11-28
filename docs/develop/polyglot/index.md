@@ -79,7 +79,8 @@ steps:
 
 1. [Node and TypeScript](./typescript) — generate stubs, author unary/streaming handlers and Tier-2 custom Connectors, and run with Node 22.18+.
 2. [Python](./python) — generate dataclasses and host stubs, author unary/streaming handlers and Tier-2 custom Connectors, and preserve `Decimal` precision.
-3. [Local Development and Testing without a JVM](./testing-and-local-dev) — use `tpf generate` and `tpf dev`, unit-test handlers natively, and verify crash recovery across `SIGKILL`.
-4. [Deploying Polyglot Applications](/deploy/polyglot) — run production Quarkus or Spring execution engines alongside remote TLS + HMAC foreign hosts and DynamoDB stores.
+3. [Spring Boot Integration](/develop/spring-support) — expose ordinary Spring Boot `@Service` beans and Tier-2 Connectors over ADR-0092 with `pipelineframework-spring-host-starter` ([ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)).
+4. [Local Development and Testing without a JVM](./testing-and-local-dev) — use `tpf generate` and `tpf dev`, unit-test handlers natively, and verify crash recovery across `SIGKILL`.
+5. [Deploying Polyglot Applications](/deploy/polyglot) — run the Quarkus execution engine alongside remote TLS + HMAC Node, Python, and Spring Boot foreign hosts and DynamoDB stores.
 
-For the architectural rationale and ownership invariants behind this design, see [ADR-0092](/decisions/0092-polyglot-java-execution-engine-and-foreign-function-host).
+For the architectural rationale and ownership invariants behind this design, see [ADR-0092](/decisions/0092-polyglot-java-execution-engine-and-foreign-function-host) and [ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host).

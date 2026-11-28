@@ -1,15 +1,16 @@
 # Deploying Polyglot Applications
 
-In production, a polyglot TPF application runs **one Java execution engine** (Quarkus — or Spring where supported) paired with remote **Node/TypeScript** and **Python** foreign function and custom Connector hosts. Your application keeps the same durable execution guarantees as a pure-Java TPF deployment without rewriting your business steps.
+In production, a polyglot TPF application runs **one Java execution engine** (Quarkus + `QueueAsyncCoordinator`) paired with remote **Node/TypeScript**, **Python**, and **Spring Boot** foreign function and custom Connector hosts. Your application keeps the same durable execution guarantees as a pure-Quarkus TPF deployment without rewriting your business steps.
 
 ```mermaid
 flowchart TB
-    CLIENT["Clients / Triggers"] --> ENGINE["TPF Java Execution Engine (Quarkus or Spring + QueueAsyncCoordinator)"]
+    CLIENT["Clients / Triggers"] --> ENGINE["TPF Java Execution Engine (Quarkus + QueueAsyncCoordinator)"]
     ENGINE --> DDB["Durable Stores (DynamoDB: Execution, Await, Command Effect, Query Capture, Dispatch Intent)"]
     ENGINE -->|"HTTPS (TLS + SNI) + HMAC-SHA256"| NODE["Node / TypeScript Foreign Function Host"]
     ENGINE -->|"HTTPS (TLS + SNI) + HMAC-SHA256"| PY["Python Foreign Function Host"]
+    ENGINE -->|"HTTPS (TLS + SNI) + HMAC-SHA256"| SPRING["Spring Boot Foreign Function Host"]
     ENGINE -->|"Tier 1 Built-in"| T1["http.client v1 (Credentials Stay in Engine)"]
-    ENGINE -->|"Tier 2 HTTPS + HMAC + Scoped Secrets"| T2["Polyglot Custom Connector Host"]
+    ENGINE -->|"Tier 2 HTTPS + HMAC + Scoped Secrets"| T2["Polyglot / Spring Custom Connector Host"]
     ENGINE -->|"Tier 3 Distributed Service"| T3["JVM Ecosystem Connector Services"]
 ```
 
@@ -74,24 +75,27 @@ For durable long-running workflows combining foreign functions, Await boundaries
 3. Keep pure business function hosts and Tier-2 custom Connector hosts in **separate processes or services** with distinct HMAC secrets and least-privilege network policies so business logic cannot reach provider credentials.
 4. For heavy JVM ecosystem integrations (Hibernate/JPA, pgvector, enterprise Java SDKs), deploy them as Tier-3 JVM Connector services alongside your polyglot steps in the same pipeline topology.
 
-## 4. Spring-hosted polyglot configuration
+## 4. Spring Boot Foreign Function & Connector Host configuration
 
-When running on `pipelineframework-runtime-spring`, enable `SpringPolyglotAutoConfiguration` with the matching `pipeline.polyglot.*` properties:
+Per [ADR-0094](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host), Spring Boot services run as ADR-0092 foreign hosts using `pipelineframework-spring-host-starter` and are invoked by the same Quarkus execution engine (or `tpf dev` locally) via `pipeline.polyglot.step-uris.<step-id>`:
 
 ```properties
-pipeline.polyglot.enabled=true
-pipeline.polyglot.function-host-uri=https://node-functions.internal:8443
-pipeline.polyglot.step-uris.score-risk=https://python-functions.internal:8443
-pipeline.polyglot.shared-secret=${TPF_POLYGLOT_SHARED_SECRET}
-pipeline.polyglot.allow-loopback-http=false
-pipeline.polyglot.request-timeout=PT30S
-pipeline.polyglot.stream-idle-timeout=PT60S
+# On the Quarkus execution engine
+pipeline.polyglot.step-uris.price-payment=https://spring-billing.internal:8443
+
+# On the Spring Boot foreign host service
+tpf.host.shared-secret=${TPF_POLYGLOT_SHARED_SECRET}
+tpf.host.max-clock-skew=PT5M
+tpf.host.max-request-bytes=4194304
+tpf.host.max-frame-bytes=4194304
 ```
 
-Unary `ONE_TO_ONE` steps auto-wire directly into `SpringPipelineRunner`, while streaming steps (`ONE_TO_MANY`, `MANY_TO_ONE`, `MANY_TO_MANY`) are exposed through `SpringPolyglotStepRegistry` alongside `SpringAwaitResumeCoordinator` and `SpringCheckpointHandoffCodec`. See [Spring Support Status](/develop/spring-support) for the broader Spring runtime scope.
+See [Spring Boot Integration](/develop/spring-support) for `@TpfFunction`, `@TpfQueryConnector`, `@TpfCommandConnector`, and `@TpfCommandReconciler` authoring details.
 
 ## Related documentation
 
 - [Polyglot Development Guide](/develop/polyglot/)
+- [Spring Boot Integration](/develop/spring-support)
 - [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 - [ADR-0092: Polyglot Java Execution Engine and Foreign Function Host](/decisions/0092-polyglot-java-execution-engine-and-foreign-function-host)
+- [ADR-0094: Non-Quarkus JVM Frameworks Use Foreign Function Host](/decisions/0094-non-quarkus-jvm-frameworks-use-foreign-function-host)
